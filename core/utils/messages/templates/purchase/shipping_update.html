@@ -1,0 +1,90 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}Your Order Has Shipped - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🚚 Your Order Is On Its Way!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Exciting news! Your authentic African products from order 
+      <strong style="color: #61b482;">#{{ order_number }}</strong> have been shipped and are heading your way!
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">📦 Shipping Information</h3>
+      <table style="width: 100%; margin-top: 10px;">
+        <tr>
+          <td style="padding: 8px 0; font-weight: 600; color: #253d4e; font-size: 14px;">Tracking Number:</td>
+          <td style="padding: 8px 0; color: #61b482; font-weight: bold; word-break: break-all; font-size: 14px;">
+            {{ tracking_number | default("Processing") }}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-weight: 600; color: #253d4e; font-size: 14px;">Carrier:</td>
+          <td style="padding: 8px 0; color: #64748b; font-size: 14px;">{{ carrier_name | default("Standard Shipping") }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-weight: 600; color: #253d4e; font-size: 14px;">Estimated Delivery:</td>
+          <td style="padding: 8px 0; color: #64748b; font-size: 14px;">{{ estimated_delivery_date | default("3-5 business days") }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-weight: 600; color: #253d4e; font-size: 14px;">Shipping To:</td>
+          <td style="padding: 8px 0; color: #64748b; font-size: 14px;">
+            {{ shipping_address.line1 }}<br>
+            {{ shipping_address.city }}, {{ shipping_address.state_zip }}
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ tracking_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Track Your Package</a>
+    </div>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 25px 0; text-align: center;">
+      <div style="font-size: 24px; margin-bottom: 10px;">📱</div>
+      <p style="margin: 0; color: #166534; font-size: 15px;">
+        <strong>Stay Updated:</strong> You'll receive notifications as your package moves through each stage of delivery. 
+        Keep an eye on your email for updates!
+      </p>
+    </div>
+
+    <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">🌍 What's in Your Package?</h3>
+    <p style="color: #64748b; font-size: 14px; margin-bottom: 15px;">Your order contains:</p>
+    <ul style="list-style: none; padding: 0; margin: 0;">
+      {% for item in order_items %}
+      <li style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 14px;">
+        <strong>{{ item.name }}</strong> - Qty: {{ item.quantity }}
+      </li>
+      {% endfor %}
+    </ul>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 25px 0;">
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 15px; color: #253d4e; text-align: center;">💚 Thank You for Supporting African Farmers</h3>
+      <ul style="list-style: none; padding: 0; margin: 0; text-align: left;">
+        <li style="margin-bottom: 8px; color: #64748b; font-size: 14px;">✓ Your purchase directly supports local farmers and artisans</li>
+        <li style="margin-bottom: 8px; color: #64748b; font-size: 14px;">✓ All products are sourced through fair trade practices</li>
+        <li style="color: #64748b; font-size: 14px;">✓ You're helping preserve traditional African agriculture</li>
+      </ul>
+    </div>
+
+    <p style="margin-top: 30px; color: #64748b; font-size: 14px;">
+      We hope you enjoy your authentic African products! Once you receive your order, 
+      we'd love to hear your feedback.
+    </p>
+
+    <div style="margin-top: 25px;">
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 10px; color: #253d4e;">Questions about your shipment?</h3>
+      <p style="color: #64748b; font-size: 14px;">
+        Contact our support team at support@banwee.com
+      </p>
+    </div>
+  </td>
+</tr>
+{% endblock %}

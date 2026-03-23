@@ -1,0 +1,45 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}⚠️ Action Required: Your Payment for Order #{{ order_number | default('XYZ123') }} Failed{% endblock %}
+
+{% block content %}
+<div class="content">
+            <p>Hi {{ customer_name | default("there") }},</p>
+            <p>
+                We're writing to let you know that your recent payment for order #<strong style="color: #e67e22;">{{ order_number | default('N/A') }}</strong>
+                ({{ item_name | default("your item") }}) was unsuccessful.
+            </p>
+
+            <div class="alert-box">
+                <h3>What Happened?</h3>
+                <p>The payment for <strong style="color: #253d4e; font-weight: bold;">{{ item_name | default('your recent order') }}</strong> of <strong style="color: #253d4e; font-weight: bold;">{{ transaction_amount | default('$XX.XX') }}</strong>
+                   was declined by your bank or payment provider.
+                   The reason provided was: <strong style="color: #e67e22;">{{ failure_reason | default("Unknown error") }}</strong>.</p>
+                <p>This may be due to insufficient funds, an expired card, or an issue with your payment method details.</p>
+            </div>
+
+            <p>
+                To avoid any delays in your order or service, please update your payment information as soon as possible.
+            </p>
+
+            <div class="button-container">
+                <a href="{{ update_payment_url | default('https://www.yourstoreurl.com/update-payment') }}" class="button">Update Payment Details</a>
+            </div>
+
+            <p>
+                If you have any questions or continue to experience issues, please don't hesitate to contact our support team.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>
+                &copy; {{ current_year | default("2025") }} {{ company_name | default("Your Company Name") }}. All rights reserved.<br>
+                <a href="{{ unsubscribe_url | default('#') }}">Unsubscribe</a> |
+                <a href="{{ privacy_policy_url | default('#') }}">Privacy Policy</a>
+            </p>
+            <p>Stay connected:
+                {% if social_links and social_links.facebook %}<a href="{{ social_links.facebook }}">Facebook</a>{% endif %}
+                {% if social_links and social_links.twitter %}| <a href="{{ social_links.twitter }}">Twitter</a>{% endif %}
+                {% if social_links and social_links.instagram %}| <a href="{{ social_links.instagram }}">Instagram</a>{% endif %}
+            </p>
+{% endblock %}

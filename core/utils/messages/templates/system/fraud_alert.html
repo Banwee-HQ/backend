@@ -1,0 +1,49 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🚨 Urgent: Suspected Fraudulent Activity on Your Account{% endblock %}
+
+{% block content %}
+<div class="content">
+            <p>Dear {{ customer_name | default("Valued Customer") }},</p>
+            <p>
+                We have detected <strong style="color: #253d4e; font-weight: bold;">suspicious activity</strong> on your account or a recent transaction associated with
+                <strong style="color: #253d4e; font-weight: bold;">{{ company_name | default('our service') }}</strong>.
+            </p>
+
+            <div class="alert-details-box">
+                <h3>Details of Suspected Activity:</h3>
+                <p><strong>Activity:</strong> {{ activity_type | default("Unauthorized login attempt") }}</p>
+                <p><strong>Time:</strong> {{ activity_time | default("N/A") }}</p>
+                <p><strong>Location/IP:</strong> {{ activity_location | default("N/A") }}</p>
+                {% if transaction_details %}
+                <p><strong>Transaction Amount:</strong> <span style="color: #e67e22;">{{ transaction_details.amount }}</span></p>
+                <p><strong>Transaction Item:</strong> {{ transaction_details.item }}</p>
+                {% endif %}
+            </div>
+
+            <p>
+                For your security, we recommend taking immediate action to protect your account.
+            </p>
+
+            <div class="button-container">
+                <a href="{{ security_action_url | default('https://www.yourstoreurl.com/security') }}" class="button">Secure My Account Now</a>
+            </div>
+
+            <p>
+                If you initiated this activity, please disregard this email. If not, please click the button above
+                or contact our fraud prevention team directly at {{ fraud_contact_phone | default("N/A") }} or {{ fraud_contact_email | default("N/A") }}.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>
+                &copy; {{ current_year | default("2025") }} {{ company_name | default("Your Company Name") }}. All rights reserved.<br>
+                <a href="{{ unsubscribe_url | default('#') }}">Unsubscribe</a> |
+                <a href="{{ privacy_policy_url | default('#') }}">Privacy Policy</a>
+            </p>
+            <p>Stay safe:
+                {% if social_links and social_links.facebook %}<a href="{{ social_links.facebook }}">Facebook</a>{% endif %}
+                {% if social_links and social_links.twitter %}| <a href="{{ social_links.twitter }}">Twitter</a>{% endif %}
+                {% if social_links and social_links.instagram %}| <a href="{{ social_links.instagram }}">Instagram</a>{% endif %}
+            </p>
+{% endblock %}

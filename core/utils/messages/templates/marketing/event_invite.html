@@ -1,0 +1,52 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🗓️ You're Invited! Join Us for {{ event_name | default("Our Special Event") }}!{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🗓️ You're Invited! Join Us for {{ event_name | default("Our Special Event") }}!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We'd love for you to join us for our special upcoming event:
+      <strong>{{ event_name | default("an exclusive online workshop") }}</strong>!
+    </p>
+
+    {% if event_image_url %}
+    <div style="text-align: center; margin: 25px 0;">
+      <img src="{{ event_image_url }}" alt="{{ event_name }}" style="max-width: 100%; height: auto;  margin-bottom: 20px;">
+    </div>
+    {% endif %}
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Event Details:</h3>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>What:</strong> {{ event_name | default("Special Event") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>When:</strong> {{ event_date }} at {{ event_time }} ({{ event_timezone | default("Your Local Time") }})</p>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>Where:</strong> {{ event_location | default("Online via Zoom") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>Speakers/Hosts:</strong> {{ event_speakers | default("Our Experts") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 10px 0 0 0;">{{ event_description | default("Join us to learn exciting new tips and tricks!") }}</p>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Spaces are limited, so be sure to RSVP soon to secure your spot!
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ rsvp_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">RSVP Now!</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 14px;">
+      We can't wait to see you there!
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🎉 Looking forward to seeing you!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

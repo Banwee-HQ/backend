@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+
+    <title>{% block title %}Banwee - Authentic African Products{% endblock %}</title>
+
+    <style>
+        :root {
+            --color-main: #253d4e;
+            --color-primary: #61b482;
+            --color-background: #f8fafc;
+            --color-copy: #1e293b;
+            --color-copy-light: #64748b;
+            --color-border: #e2e8f0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--color-background);
+            color: var(--color-copy);
+            font-family: Arial, sans-serif;
+        }
+
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: var(--color-background);
+        }
+
+        .main-card {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid var(--color-border);
+            border-collapse: collapse;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        li {
+            margin: 0;
+        }
+        
+    </style>
+</head>
+
+<body>
+    <table class="wrapper" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+        <tr>
+            <td align="center">
+                <table class="main-card" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <!-- HEADER -->
+                    <tr>
+                        <td align="left" style="background-color: var(--color-main); padding: 12px 20px;">
+                            <img 
+                                src="https://cdn.jsdelivr.net/gh/Oahse/web@main/frontend/public/banwee_logo_text_green.png"
+                                alt="Banwee"
+                                height="50"
+                                style="display:block;"
+                            >
+                        </td>
+                    </tr>
+
+                    <!-- CONTENT -->
+                    <tr>
+                        <td style="padding: 0px 30px;">
+                            {% block content %}
+                            {% endblock %}
+                        </td>
+                    </tr>
+
+                    <!-- FOOTER -->
+                    <tr>
+                        <td style="background-color: var(--color-background); padding: 12px; border-top: 1px solid var(--color-border);">
+                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                                <tr>
+                                    <!-- LEFT COLUMN -->
+                                    <td width="60%" valign="top">
+                                        <img 
+                                            src="https://cdn.jsdelivr.net/gh/Oahse/web@main/frontend/public/banwee_logo_text_green.png"  
+                                            alt="Banwee" 
+                                            width="100" 
+                                            style="margin-bottom: 15px;"
+                                        >
+
+                                        <p style="font-size: 12px; color: var(--color-copy-light); margin: 0 0 10px 0;">
+                                            Ethically sourced and sustainably produced organic products from Africa.
+                                        </p>
+
+                                        <!-- Address -->
+                                        <p style="font-size: 11px; color: #94a3b8; line-height: 1.6; margin: 0;">
+                                            <span style="vertical-align: middle;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#94a3b8" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 6px;">
+                                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>
+                                                </svg>
+                                            </span>
+                                            1234 Fashion Street, Suite 567, New York, NY 10001
+                                        </p>
+
+                                        <!-- Email -->
+                                        <p style="font-size: 11px; color: #94a3b8; line-height: 1.6; margin: 0;">
+                                            <span style="vertical-align: middle;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#94a3b8" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 6px;">
+                                                    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
+                                                </svg>
+                                            </span>
+                                            info@banwee.com
+                                        </p>
+
+                                        <!-- Phone -->
+                                        <p style="font-size: 11px; color: #94a3b8; line-height: 1.6; margin: 0;">
+                                            <span style="vertical-align: middle;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#94a3b8" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 6px;">
+                                                    <path d="M6.62 10.79a15.91 15.91 0 006.59 6.59l2.2-2.2a1 1 0 011-.24 11.36 11.36 0 003.56.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.36 11.36 0 00.57 3.56 1 1 0 01-.24 1l-2.21 2.23z"/>
+                                                </svg>
+                                            </span>
+                                            (212) 555-1234
+                                        </p>
+
+                                        <!-- Get Direction -->
+                                        <p style="font-size: 11px; color: #94a3b8; line-height: 1.6; margin: 6px 0 0 0;">
+                                            <a href="https://www.google.com/maps/place/1234+Fashion+St,+New+York,+NY+10001" 
+                                                style="color: var(--color-copy-light); text-decoration: none;">
+                                                Get direction&nbsp;→
+                                            </a>
+                                        </p>
+                                    </td>
+
+                                    <!-- RIGHT COLUMN -->
+                                    <td width="40%" valign="top" style="padding-left: 20px;">
+                                        <h3 style="font-size: 13px;  margin: 0 0 15px 0; color: var(--color-main);">
+                                            Shop
+                                        </h3>
+
+                                        <ul style="font-size: 12px; color: var(--color-copy-light); line-height: 1.8;">
+                                            <li><a href="{{ frontend_url | default('https://banwee.com') }}/products?category=cereal-crops" style="color: var(--color-copy-light); text-decoration: none;">Cereal Crops</a></li>
+                                            <li><a href="{{ frontend_url | default('https://banwee.com') }}/products?category=legumes" style="color: var(--color-copy-light); text-decoration: none;">Legumes</a></li>
+                                            <li><a href="{{ frontend_url | default('https://banwee.com') }}/products?category=fruits-vegetables" style="color: var(--color-copy-light); text-decoration: none;">Fruits & Vegetables</a></li>
+                                            <li><a href="{{ frontend_url | default('https://banwee.com') }}/products?category=spices-herbs" style="color: var(--color-copy-light); text-decoration: none;">Spices and Herbs</a></li>
+                                            <li><a href="{{ frontend_url | default('https://banwee.com') }}/products?category=nuts-beverages" style="color: var(--color-copy-light); text-decoration: none;">Nuts & Beverages</a></li>
+                                        </ul>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- COPYRIGHT -->
+                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-top: 8px; border-top: 1px solid var(--color-border);">
+                                <tr>
+                                    <td align="left" style="padding-top: 8px; font-size: 10px; color: #94a3b8;  letter-spacing: 1px;">
+                                        &copy; 2026 Banwee Store. All Rights Reserved.
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- SOCIAL ICONS -->
+                            <table cellpadding="0" cellspacing="0" role="presentation" style="margin:8px auto; margin-top: 20px;">
+                                <tr>
+                                    <td style="padding-right:16px;">
+                                        <a href="https://facebook.com" target="_blank">
+                                            <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/facebook.svg"
+                                                width="18" height="18"
+                                                alt="Facebook"
+                                                style="display:block">
+                                        </a>
+                                    </td>
+
+                                    <td style="padding-right:16px;">
+                                        <a href="https://instagram.com" target="_blank">
+                                            <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/instagram.svg"
+                                                width="18" height="18"
+                                                alt="Instagram"
+                                                style="display:block">
+                                        </a>
+                                    </td>
+
+                                    <td style="padding-right:16px;">
+                                        <a href="https://twitter.com" target="_blank">
+                                            <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/x.svg"
+                                                width="18" height="18"
+                                                alt="X"
+                                                style="display:block">
+                                        </a>
+                                    </td>
+
+                                    <td>
+                                        <a href="https://linkedin.com" target="_blank">
+                                            <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/linkedin.svg"
+                                                width="18" height="18"
+                                                alt="LinkedIn"
+                                                style="display:block">
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

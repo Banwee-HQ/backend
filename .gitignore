@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+logs/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.DS_Store
+
+# Alembic
+# (keep versions tracked)

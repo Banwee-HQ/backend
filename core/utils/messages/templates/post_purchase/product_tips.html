@@ -1,0 +1,53 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}💡 Get the Most Out of Your New {{ product_name | default("Product") }}!{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">💡 Get the Most Out of Your New {{ product_name | default("Product") }}!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We hope you're loving your new <strong>{{ product_name | default("product") }}</strong> from
+      <strong>Banwee</strong>! To help you get the most out of it,
+      we've put together some helpful tips and tricks.
+    </p>
+
+    {% if product_image_url %}
+    <div style="text-align: center; margin: 25px 0;">
+      <img src="{{ product_image_url }}" alt="{{ product_name }}" style="max-width: 250px; height: auto;  margin-bottom: 20px;">
+    </div>
+    {% endif %}
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Top Tips for Your {{ product_name | default("Product") }}:</h3>
+      <ol style="color: #64748b; font-size: 14px; line-height: 1.6; padding-left: 20px; margin: 0;">
+        {% for tip in product_tips %}
+        <li style="margin-bottom: 10px;"><strong>{{ tip.title }}:</strong> {{ tip.description }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Want to dive deeper? Check out our full user guide or video tutorials.
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ support_page_url | default('https://banwee.com/support') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Visit Support Page</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 14px;">
+      If you have any questions, our support team is always here to help!
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🎯 Enjoy your new product!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

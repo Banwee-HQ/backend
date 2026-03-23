@@ -1,0 +1,47 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🤝 Share the Love! Refer a Friend to {{ company_name | default('Our Store') }}{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🤝 Share the Love! Refer a Friend</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We're so glad you're enjoying your experience with <strong>Banwee</strong>!
+      If you love our products as much as we do, why not share the joy with your friends and family?
+    </p>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 25px;  margin: 25px 0; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 15px;">🎁</div>
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Give {{ friend_discount | default("$10 Off") }}, Get {{ your_reward | default("$10 Credit") }}!</h3>
+      <p style="color: #166534; font-size: 15px; margin: 0;">
+        For every friend you refer who makes their first purchase,
+        they'll get <strong>{{ friend_discount | default("a special discount") }}</strong>, and you'll receive
+        <strong>{{ your_reward | default("a reward") }}</strong> as a thank you!
+      </p>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      It's quick, easy, and a win-win for everyone!
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ frontend_url | default('https://banwee.com') }}/account/referral" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Refer a Friend Now!</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 14px;">
+      Thank you for being a fantastic part of the Banwee community!
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🌍 Share the African experience!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

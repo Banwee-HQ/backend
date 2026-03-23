@@ -1,0 +1,63 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🍪 Cookie Settings - {{ company_name | default('Our Service') }}{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🍪 Cookie Settings</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We use cookies to improve your experience on our site. You can choose to accept or decline certain categories of cookies.
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Strictly Necessary Cookies</h3>
+      <p style="color: #64748b; font-size: 14px; margin-bottom: 15px;">These cookies are essential for the website to function and cannot be switched off in our systems. They are usually only set in response to actions made by you which amount to a request for services, such as setting your privacy preferences, logging in or filling in forms.</p>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background-color: #ffffff; ">
+        <span style="color: #64748b; font-size: 14px; font-weight: 500;">Always Active</span>
+        <span style="color: #61b482; font-size: 12px; background-color: #f0fdf4; padding: 4px 8px; ">ENABLED</span>
+      </div>
+    </div>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Performance Cookies</h3>
+      <p style="color: #64748b; font-size: 14px; margin-bottom: 15px;">These cookies allow us to count visits and traffic sources so we can measure and improve the performance of our site. They help us to know which pages are the most and least popular and see how visitors move around the site.</p>
+      <div style="text-align: center; margin-top: 15px;">
+        <a href="{{ performance_cookies_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 20px; text-decoration:none; font-weight:bold; font-size: 14px;">{% if performance_cookies_enabled %}Disable{% else %}Enable{% endif %} Performance Cookies</a>
+      </div>
+    </div>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Functional Cookies</h3>
+      <p style="color: #64748b; font-size: 14px; margin-bottom: 15px;">These cookies enable the website to provide enhanced functionality and personalization. They may be set by us or by third-party providers whose services we have added to our pages.</p>
+      <div style="text-align: center; margin-top: 15px;">
+        <a href="{{ functional_cookies_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 20px; text-decoration:none; font-weight:bold; font-size: 14px;">{% if functional_cookies_enabled %}Disable{% else %}Enable{% endif %} Functional Cookies</a>
+      </div>
+    </div>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Targeting Cookies</h3>
+      <p style="color: #64748b; font-size: 14px; margin-bottom: 15px;">These cookies may be set through our site by our advertising partners. They may be used by those companies to build a profile of your interests and show you relevant adverts on other sites.</p>
+      <div style="text-align: center; margin-top: 15px;">
+        <a href="{{ targeting_cookies_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 20px; text-decoration:none; font-weight:bold; font-size: 14px;">{% if targeting_cookies_enabled %}Disable{% else %}Enable{% endif %} Targeting Cookies</a>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ accept_all_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold; margin-right: 10px; margin-bottom: 10px; display: inline-block;">Accept All</a>
+      <a href="{{ save_preferences_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold; margin-right: 10px; margin-bottom: 10px; display: inline-block;">Save Preferences</a>
+      <a href="{{ reject_all_url | default('#') }}" style="color: #64748b; text-decoration: none; font-size: 14px; margin-bottom: 10px; display: inline-block;">Reject All</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 14px;">
+      For more information about how we use cookies, please visit our <a href="{{ cookie_policy_url | default('#') }}" style="color: #61b482;">Cookie Policy</a>.
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🔐 Your privacy is important</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🔄 Time to Reorder Your Favorite {{ product_name | default("Product") }}?{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🔄 Time to Reorder Your Favorite {{ product_name | default("Product") }}?</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      It might be time to restock your favorite <strong>{{ product_name | default("product") }}</strong>!
+      Based on your past purchase, we thought you might be running low.
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0; text-align: center;">
+      {% if product_image_url %}
+      <img src="{{ product_image_url }}" alt="{{ product_name }}" style="max-width: 200px;  margin-bottom: 16px;">
+      {% endif %}
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 10px; color: #253d4e;">{{ product_name | default("Product Name") }}</h3>
+      <p style="color: #61b482; font-size: 20px; font-weight: bold; margin: 10px 0;">{{ product_price | default("$XX.XX") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 0;">{{ product_description | default("A short description of the product.") }}</p>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Don't run out! Click below to easily reorder or set up a subscription for hassle-free delivery.
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ frontend_url | default('https://banwee.com') }}/products" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Reorder Now!</a>
+    </div>
+
+    {% if subscription_url %}
+    <p style="text-align: center; color: #64748b; font-size: 14px; margin-top: 20px;">
+      Or, consider setting up a <a href="{{ subscription_url }}" style="color: #61b482; text-decoration: none; font-weight: bold;">subscription</a> to ensure you never run out!
+    </p>
+    {% endif %}
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 14px; margin-top: 20px;">
+      We're here to make your life easier!
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🛒 Never run out of your favorites!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

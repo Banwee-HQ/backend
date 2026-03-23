@@ -1,0 +1,41 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}You've Been Unsubscribed - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">👋 You've Been Unsubscribed</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">Hi {{ customer_name | default("there") }},</p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      This confirms that you have successfully unsubscribed from our marketing emails from Banwee.
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">📧 What This Means:</h3>
+      <p style="color: #64748b; font-size: 14px; margin: 0;">You will no longer receive newsletters or promotional updates from us. You may still receive essential transactional emails (e.g., order confirmations, shipping updates) related to your purchases.</p>
+    </div>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 25px 0; text-align: center;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">💭 Changed Your Mind?</h3>
+      <p style="color: #166534; font-size: 14px; margin: 0;">You can always re-subscribe if you'd like to hear from us again and get updates on new African products, special offers, and more!</p>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ re_subscribe_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;; "margin-right: 10px; margin-bottom: 10px; display: inline-block;">Re-Subscribe</a>
+      <a href="{{ manage_preferences_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;; "margin-left: 10px; margin-bottom: 10px; display: inline-block;">Manage Preferences</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Thank you for your time with us. We hope to see you again soon!
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>Best Wishes,</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}Verify Your Email Address - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h2 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">Verify Your Email</h2>
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 35px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},<br/>
+      Thank you for joining <strong>Banwee</strong>. We bring the finest organic products from Africa straight to your door. Please verify your account to get started.
+    </p>
+    
+    <a href="{{ verification_link | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Verify Now</a>
+    
+    <div style="margin-top: 20px;">
+      <p style="margin: 0; font-size: 11px; color: #94a3b8;  letter-spacing: 1px;">Or copy this link into your browser:</p>
+      <p style="margin: 5px 0 0 0; font-size: 12px; color: #61b482; word-break: break-all;">
+        <a href="{{ verification_link | default('#') }}" style="word-break: break-all;">{{ verification_link | default('#') }}</a>
+      </p>
+      <p style="margin: 20; font-size: 11px; color: #94a3b8;  letter-spacing: 1px;"><strong>Quick Action Required:</strong> This verification link is valid for <strong>{{ expiry_time | default("24 hours") }}</strong>. 
+      Please verify your email soon to activate your account.</p>
+    </div>
+
+    <p style="text-align: center; color: var(--color-copy-light); font-size: 14px; margin-top: 30px;">
+      <strong>Didn't create an account?</strong><br>
+      If you didn't sign up for Banwee, you can safely ignore this email. No account will be created.
+    </p>
+    
+    <div style="margin-top: 20px;">
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 10px; color: #253d4e;">Need Help?</h3>
+      <p style="color: #64748b; font-size: 14px;">Our support team is here to assist you at support@banwee.com</p>
+    </div>
+  </td>
+</tr>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base_banwee.html" %}
+
+{% block content %}
+<tr>
+    <td style="padding: 40px 30px;">
+        <h1 style="color: #1a1a1a; font-size: 28px; margin: 0 0 20px 0; font-weight: 600;">
+            {% if is_paused %}
+            Subscription Paused - Payment Issue
+            {% else %}
+            Payment Failed - Action Required
+            {% endif %}
+        </h1>
+        
+        <p style="color: #4a5568; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            {{ message }}
+        </p>
+
+        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; ">
+            <p style="color: #856404; margin: 0; font-size: 14px;">
+                <strong>Subscription:</strong> {{ subscription_name }}<br>
+                <strong>Error:</strong> {{ error_message }}<br>
+                <strong>Attempts:</strong> {{ retry_count }} of 3
+            </p>
+        </div>
+
+        {% if is_paused %}
+        <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0; ">
+            <p style="color: #721c24; margin: 0; font-size: 14px;">
+                <strong>Your subscription has been paused.</strong><br>
+                To resume your subscription, please update your payment method and reactivate it.
+            </p>
+        </div>
+        {% else %}
+        <div style="background-color: #d1ecf1; border-left: 4px solid #17a2b8; padding: 15px; margin: 20px 0; ">
+            <p style="color: #0c5460; margin: 0; font-size: 14px;">
+                {% if retry_count == 1 %}
+                <strong>We'll retry in 6 hours.</strong><br>
+                No action needed if your payment method is valid.
+                {% elif retry_count == 2 %}
+                <strong>We'll retry in 24 hours.</strong><br>
+                Please ensure your payment method is up to date to avoid subscription pause.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+
+        <h2 style="color: #1a1a1a; font-size: 20px; margin: 30px 0 15px 0; font-weight: 600;">
+            What You Can Do
+        </h2>
+
+        <ul style="color: #4a5568; font-size: 15px; line-height: 1.8; margin: 0 0 25px 0; padding-left: 20px;">
+            <li>Check that your payment method has sufficient funds</li>
+            <li>Verify your card hasn't expired</li>
+            <li>Update your payment method if needed</li>
+            <li>Contact your bank if the issue persists</li>
+        </ul>
+
+        <table cellpadding="0" cellspacing="0" border="0" style="margin: 30px 0;">
+            <tr>
+                <td style="padding-right: 10px;">
+                    <a href="{{ update_payment_url }}" style="display: inline-block; padding: 14px 28px; background-color: #3b82f6; color: #ffffff; text-decoration: none;  font-weight: 600; font-size: 15px;">
+                        Update Payment Method
+                    </a>
+                </td>
+                <td>
+                    <a href="{{ subscription_url }}" style="display: inline-block; padding: 14px 28px; background-color: #6b7280; color: #ffffff; text-decoration: none;  font-weight: 600; font-size: 15px;">
+                        View Subscription
+                    </a>
+                </td>
+            </tr>
+        </table>
+
+        <div style="background-color: #f3f4f6; padding: 20px;  margin: 30px 0;">
+            <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                <strong>Need Help?</strong>
+            </p>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">
+                If you're having trouble updating your payment method or have questions about your subscription, 
+                our support team is here to help at <a href="mailto:{{ support_email }}" style="color: #3b82f6; text-decoration: none;">{{ support_email }}</a>
+            </p>
+        </div>
+
+        <p style="color: #9ca3af; font-size: 13px; line-height: 1.6; margin: 20px 0 0 0;">
+            This is an automated notification about your subscription. If you believe this is an error, 
+            please contact our support team.
+        </p>
+    </td>
+</tr>
+{% endblock %}

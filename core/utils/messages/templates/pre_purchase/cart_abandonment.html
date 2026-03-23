@@ -1,0 +1,68 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}Your Cart Is Waiting - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🛒 You Left Something Behind!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We noticed you were browsing our authentic African products but didn't complete your purchase. 
+      Your cart is still waiting for you with these amazing items:
+    </p>
+
+    {% if cart_items %}
+    <div style="background-color: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      {% for item in cart_items %}
+      <div style="display: flex; align-items: center; margin-bottom: 20px; padding-bottom: 20px;{% if not loop.last %} border-bottom: 1px solid #e2e8f0;{% endif %}">
+        {% if item.image_url %}
+        <img src="{{ item.image_url }}" alt="{{ item.name }}" style="width: 80px; height: 80px;   margin-right: 15px;">
+        {% endif %}
+        <div style="flex-grow: 1;">
+          <h3 style="margin: 0 0 5px 0; color: #253d4e; font-size: 16px;">{{ item.name }}</h3>
+          <p style="margin: 0; color: #64748b; font-size: 14px;">Quantity: {{ item.quantity }}</p>
+        </div>
+        <span style="font-weight: bold; color: #61b482; font-size: 18px;">{{ item.price }}</span>
+      </div>
+      {% endfor %}
+      
+      <div style="text-align: right; padding-top: 15px; border-top: 2px solid #61b482;">
+        <span style="font-size: 16px; color: #253d4e; font-weight: 600;">Total: </span>
+        <span style="font-size: 20px; color: #61b482; font-weight: bold;">{{ cart_total | default("$0.00") }}</span>
+      </div>
+    </div>
+    {% endif %}
+
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ cart_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Complete My Purchase</a>
+    </div>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 25px 0;">
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 15px; color: #253d4e; text-align: center;">🌍 Why Choose Banwee?</h3>
+      <ul style="list-style: none; padding: 0; margin: 0; text-align: left;">
+        <li style="margin-bottom: 8px; color: #64748b; font-size: 14px;">✓ 100% authentic African products</li>
+        <li style="margin-bottom: 8px; color: #64748b; font-size: 14px;">✓ Direct from trusted farmers and suppliers</li>
+        <li style="margin-bottom: 8px; color: #64748b; font-size: 14px;">✓ Fair trade practices supporting communities</li>
+        <li style="margin-bottom: 8px; color: #64748b; font-size: 14px;">✓ Fresh delivery with tracking</li>
+        <li style="color: #64748b; font-size: 14px;">✓ Secure payment and easy returns</li>
+      </ul>
+    </div>
+
+    <p style="text-align: center; margin-top: 30px; color: #64748b; font-size: 14px;">
+      <strong>Need help deciding?</strong><br>
+      Our support team is here to answer any questions about our products.
+    </p>
+
+    <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-top: 20px;">
+      Items in your cart are reserved for <strong>24 hours</strong>. 
+      Complete your purchase soon to secure these authentic African products!
+    </p>
+  </td>
+</tr>
+{% endblock %}

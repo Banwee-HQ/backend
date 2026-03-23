@@ -1,0 +1,55 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}❤️ Your Wishlist Awaits! Special Items at {{ company_name | default('Our Store') }}{% endblock %}
+
+{% block content %}
+<div class="content">
+            <p>Hi {{ customer_name | default("there") }},</p>
+            <p>
+                Just a friendly reminder about the amazing items you've saved in your wishlist at <strong style="color: #253d4e; font-weight: bold;">{{ company_name | default('our store') }}</strong>!
+            </p>
+
+            {% if wishlist_items %}
+            <div class="wishlist-items">
+                {% for item in wishlist_items %}
+                <div class="wishlist-item">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.name }}" class="item-image">
+                    {% endif %}
+                    <div class="item-details">
+                        <h3>{{ item.name }}</h3>
+                        <p>{{ item.description | default("") }}</p>
+                    </div>
+                    <span class="item-price">{{ item.price }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if special_offer_message %}
+            <p>
+                As a special treat, enjoy <span class="highlight-text">{{ special_offer_message }}</span> on your next purchase!
+            </p>
+            {% endif %}
+
+            <div class="button-container">
+                <a href="{{ wishlist_url | default('https://www.yourstoreurl.com/wishlist') }}" class="button">View My Wishlist</a>
+            </div>
+
+            <p>
+                Don't let your favorites slip away!
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>
+                &copy; {{ current_year | default("2025") }} {{ company_name | default("Your Company Name") }}. All rights reserved.<br>
+                <a href="{{ unsubscribe_url | default('#') }}">Unsubscribe</a> |
+                <a href="{{ privacy_policy_url | default('#') }}">Privacy Policy</a>
+            </p>
+            <p>Stay connected:
+                {% if social_links and social_links.facebook %}<a href="{{ social_links.facebook }}">Facebook</a>{% endif %}
+                {% if social_links and social_links.twitter %}| <a href="{{ social_links.twitter }}">Twitter</a>{% endif %}
+                {% if social_links and social_links.instagram %}| <a href="{{ social_links.instagram }}">Instagram</a>{% endif %}
+            </p>
+{% endblock %}

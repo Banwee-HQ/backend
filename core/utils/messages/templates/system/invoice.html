@@ -1,0 +1,97 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}📄 Your Invoice from {{ company_name | default('Our Company') }}{% endblock %}
+
+{% block content %}
+<div class="content">
+            <p>Hi {{ customer_name | default("there") }},</p>
+            <p>
+                Thank you for your business! Here is your invoice for your recent transaction with
+                <strong style="color: #253d4e; font-weight: bold;">{{ company_name | default('us') }}</strong>.
+            </p>
+
+            <div class="invoice-details">
+                <h2>Invoice #<span style="color: #e67e22;">{{ invoice_number }}</span></h2>
+                <p><strong>Invoice Date:</strong> {{ invoice_date }}</p>
+                <p><strong>Due Date:</strong> {{ due_date }}</p>
+                {% if order_number %}
+                <p><strong>Related Order:</strong> <a href="{{ order_tracking_url }}" style="color: #28a745; text-decoration: none;">#{{ order_number }}</a></p>
+                {% endif %}
+
+                <div class="address-block">
+                    <p><strong>Billed To:</strong><br>
+                        {{ billing_address.name }}<br>
+                        {{ billing_address.line1 }}<br>
+                        {% if billing_address.line2 %}{{ billing_address.line2 }}<br>{% endif %}
+                        {{ billing_address.city }}, {{ billing_address.state_zip }}<br>
+                        {{ billing_address.country }}
+                    </p>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item Description</th>
+                            <th>Qty</th>
+                            <th>Unit Price</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in invoice_items %}
+                        <tr>
+                            <td>{{ item.description }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>{{ item.unit_price }}</td>
+                            <td>{{ item.total }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if subtotal %}
+                        <tr>
+                            <td colspan="3" style="text-align: right;">Subtotal:</td>
+                            <td>{{ subtotal }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if tax_amount %}
+                        <tr>
+                            <td colspan="3" style="text-align: right;">Tax:</td>
+                            <td>{{ tax_amount }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if discount_amount %}
+                        <tr>
+                            <td colspan="3" style="text-align: right;">Discount:</td>
+                            <td>-{{ discount_amount }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="total-row">
+                            <td colspan="3" style="text-align: right;">Amount Due:</td>
+                            <td>{{ amount_due }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p><strong>Payment Status:</strong> <span style="font-weight: bold; color: {% if payment_status == 'Paid' %}#28a745{% else %}#e67e22{% endif %};">{{ payment_status }}</span></p>
+            </div>
+
+            <div class="button-container">
+                <a href="{{ view_invoice_url | default('https://www.yourstoreurl.com/invoice') }}" class="button">View Online Invoice</a>
+            </div>
+
+            <p>
+                Please keep this for your records. Contact us if you have any questions.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>
+                &copy; {{ current_year | default("2025") }} {{ company_name | default("Your Company Name") }}. All rights reserved.<br>
+                <a href="{{ unsubscribe_url | default('#') }}">Unsubscribe</a> |
+                <a href="{{ privacy_policy_url | default('#') }}">Privacy Policy</a>
+            </p>
+            <p>Stay connected:
+                {% if social_links and social_links.facebook %}<a href="{{ social_links.facebook }}">Facebook</a>{% endif %}
+                {% if social_links and social_links.twitter %}| <a href="{{ social_links.twitter }}">Twitter</a>{% endif %}
+                {% if social_links and social_links.instagram %}| <a href="{{ social_links.instagram }}">Instagram</a>{% endif %}
+            </p>
+{% endblock %}

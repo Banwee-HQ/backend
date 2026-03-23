@@ -1,0 +1,58 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}Order Delivered - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">✅ Your Order Has Been Delivered!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Great news! Your recent order <strong style="color: #61b482;">#{{ order_id | default('ABC-12345') }}</strong> has been successfully delivered.
+    </p>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 25px 0; text-align: center;">
+      <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 15px; color: #253d4e;">Delivery Confirmed</h3>
+      <p style="margin: 8px 0; color: #166534; font-size: 14px;"><strong>Tracking Number:</strong> {{ tracking_number | default('Not Available') }}</p>
+      <p style="margin: 8px 0; color: #166534; font-size: 14px;"><strong>Delivered On:</strong> {{ delivery_date | default('Today') }} at {{ delivery_time | default('your doorstep') }}</p>
+      <p style="margin: 8px 0; color: #166534; font-size: 14px;"><strong>Delivered To:</strong> {{ delivery_address | default('Your specified address') }}</p>
+      {% if delivery_notes %}
+      <p style="margin: 8px 0; color: #166534; font-size: 14px;"><strong>Notes:</strong> {{ delivery_notes }}</p>
+      {% endif %}
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      We hope you enjoy your authentic African products from Banwee!
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 20px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 15px; color: #253d4e; text-align: center;">💬 Share Your Experience</h3>
+      <p style="color: #64748b; font-size: 14px; text-align: center; margin: 0;">We'd love to hear what you think! Your feedback helps us improve and helps other customers make informed decisions.</p>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ review_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;; "margin-bottom: 15px; display: block;">Leave a Review</a>
+      {% if track_order_url %}
+      <a href="{{ track_order_url }}" style="color: #61b482; text-decoration: none; font-size: 14px;">View Order Details</a>
+      {% endif %}
+    </div>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; margin: 25px 0; text-align: center;">
+      <div style="font-size: 24px; margin-bottom: 10px;">🎁</div>
+      <p style="margin: 0; color: #166534; font-size: 15px;">
+        <strong>Enjoy Your Purchase!</strong> If you have any questions or concerns, please don't hesitate to contact our support team at support@banwee.com
+      </p>
+    </div>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>Thank you for shopping with Banwee!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

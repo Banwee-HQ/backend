@@ -1,0 +1,40 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🎉 Exciting News! {{ store_name | default("Our New Store") }} is Now Open! 🎉{% endblock %}
+
+{% block content %}
+<div class="content">
+            <p>Dear {{ customer_name | default("Valued Customer") }},</p>
+            <p>
+                We're absolutely delighted to announce the grand opening of <strong style="color: #253d4e; font-weight: bold;">{{ store_name | default("OUR BRAND NEW ONLINE STORE") }}</strong>!
+                Your new destination for quality products and a seamless shopping experience is now live.
+            </p>
+            <p>
+                To celebrate our exciting launch, we're offering a special <span class="highlight-text">{{ offer_details | default("special welcome offer") }}</span>
+                on your very first purchase!
+            </p>
+            {% if call_to_action_message %}
+            <p>{{ call_to_action_message }}</p>
+            {% endif %}
+            <div class="button-container">
+                <a href="{{ store_url | default('https://www.yourstoreurl.com') }}" class="button">Start Shopping Now!</a>
+            </div>
+            <p>
+                We've stocked up with a fantastic selection and can't wait for you to explore everything we have to offer.
+                Thank you for your incredible support!
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>
+                &copy; {{ current_year | default("2025") }} {{ company_name | default("Your Company Name") }}. All rights reserved.<br>
+                <a href="{{ unsubscribe_url | default('#') }}">Unsubscribe</a> |
+                <a href="{{ privacy_policy_url | default('#') }}">Privacy Policy</a>
+            </p>
+            <p>Connect with us:
+                {% if social_links and social_links.facebook %}<a href="{{ social_links.facebook }}">Facebook</a>{% endif %}
+                {% if social_links and social_links.twitter %}| <a href="{{ social_links.twitter }}">Twitter</a>{% endif %}
+                {% if social_links and social_links.instagram %}| <a href="{{ social_links.instagram }}">Instagram</a>{% endif %}
+                {% if social_links and social_links.pinterest %}| <a href="{{ social_links.pinterest }}">Pinterest</a>{% endif %}
+            </p>
+{% endblock %}

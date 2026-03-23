@@ -1,0 +1,60 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}🛡️ Your Warranty for {{ product_name | default("Your Product") }} - Don't Forget!{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">🛡️ Your Warranty for {{ product_name | default("Your Product") }} - Don't Forget!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      This is a friendly reminder about the warranty covering your recent purchase,
+      the <strong>{{ product_name | default("product you purchased") }}</strong>, from
+      <strong>Banwee</strong>.
+    </p>
+
+    {% if product_image_url %}
+    <div style="text-align: center; margin: 25px 0;">
+      <img src="{{ product_image_url }}" alt="{{ product_name }}" style="max-width: 200px; height: auto;  margin-bottom: 20px;">
+    </div>
+    {% endif %}
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e;">Your Warranty Details:</h3>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>Product:</strong> {{ product_name | default("N/A") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>Purchase Date:</strong> {{ purchase_date | default("N/A") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>Warranty Period:</strong> {{ warranty_period | default("N/A") }}</p>
+      <p style="color: #64748b; font-size: 14px; margin: 5px 0;"><strong>Warranty Expiry:</strong> {{ warranty_expiry_date | default("N/A") }}</p>
+      {% if registration_link %}
+      <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
+        <p style="color: #64748b; font-size: 14px; margin: 0 0 10px 0;">If you haven't already, please <strong>register your product</strong> to activate your full warranty benefits:</p>
+        <div style="text-align: center; margin-top: 10px;">
+          <a href="{{ registration_link }}" style="color: #61b482; text-decoration: none; font-weight: bold; font-size: 14px;">Register Your Product Here →</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We want to ensure your complete satisfaction and that you're covered in case of any issues.
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ frontend_url | default('https://banwee.com') }}/account/warranty" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Learn More About Your Warranty</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 14px;">
+      If you have any questions or need to make a claim, please visit our support page or contact us directly.
+    </p>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🔧 Your peace of mind matters!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

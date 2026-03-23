@@ -1,0 +1,88 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}Invoice - {{ bnw_invoice_ref }}{% endblock %}
+
+{% block content %}
+<div class="invoice-container">
+        <!-- Header -->
+        <div class="invoice-header">
+            <div class="invoice-title">
+                <h1>INVOICE.</h1>
+                <p class="invoice-date"><strong>Date:</strong> {{ bnw_invoice_issue_date }}</p>
+            </div>
+            <div class="company-logo">
+                {% if logo_url %}
+                <img src="{{ logo_url }}" alt="Company Logo">
+                {% else %}
+                <div style="font-size: 24px; font-weight: bold; color: #61b482;">BANWEE</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Company and Client Information -->
+        <div class="info-section">
+            <div class="info-block">
+                <h3>Office Address:</h3>
+                <div class="divider"></div>
+                <p>{{ company_address_line1 }}</p>
+                <p>{{ company_address_line2 }}</p>
+            </div>
+            <div class="info-block">
+                <h3>Client Name:</h3>
+                <p><strong>{{ bnw_customer_full_name }}</strong></p>
+                <p><strong>Phone:</strong> {{ bnw_customer_phone_number }}</p>
+            </div>
+        </div>
+
+        <!-- Items Table -->
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Items Description</th>
+                    <th>Unit Price</th>
+                    <th>QTA</th>
+                    <th>Total Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>
+                        <strong>{{ item.name }}</strong>
+                        <span class="item-description">{{ item.description }}</span>
+                    </td>
+                    <td>{{ item.unit_price }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.total_price }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Summary Section -->
+        <div class="summary-section">
+            <div class="total-due">
+                <div class="divider"></div>
+                <h2>TOTAL DUE:</h2>
+                <div class="total-amount">{{ bnw_grand_total_amount }}</div>
+            </div>
+            <div class="breakdown">
+                <div class="breakdown-row subtotal">
+                    <span class="label">Subtotal:</span>
+                    <span class="value">{{ bnw_order_subtotal_amount }}</span>
+                </div>
+                <div class="breakdown-row tax">
+                    <span class="label">Tax VAT {{ bnw_tax_rate }}%:</span>
+                    <span class="value">{{ bnw_tax_amount }}</span>
+                </div>
+                <div class="breakdown-row shipping">
+                    <span class="label">Shipping:</span>
+                    <span class="value">{{ bnw_shipping_amount }}</span>
+                </div>
+                {% if bnw_discount_amount %}
+                <div class="breakdown-row discount">
+                    <span class="label">Discount {{ discount_percentage }}%:</span>
+                    <span class="value">{{ bnw_discount_amount }}</span>
+                </div>
+                {% endif %}
+{% endblock %}

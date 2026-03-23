@@ -1,0 +1,62 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}📥 Your Digital Purchase is Ready! - {{ company_name | default('Our Store') }}{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">📥 Your Digital Purchase is Ready!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Thank you for your recent purchase from <strong>Banwee</strong>.
+      Your digital items are now available for download!
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0;">
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 20px; color: #253d4e;">Your Downloads:</h3>
+      {% for item in digital_products %}
+      <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e2e8f0;  margin-bottom: 15px;">
+        <h4 style="margin: 0 0 10px 0; color: #253d4e; font-size: 16px;">{{ item.name }}</h4>
+        {% if item.access_code %}
+        <p style="margin: 5px 0; color: #64748b; font-size: 14px;">Access Code: <span style="font-weight: bold; color: #61b482;">{{ item.access_code }}</span></p>
+        {% endif %}
+        {% if item.license_key %}
+        <p style="margin: 5px 0; color: #64748b; font-size: 14px;">License Key: <span style="font-weight: bold; color: #61b482;">{{ item.license_key }}</span></p>
+        {% endif %}
+        <div style="margin-top: 15px;">
+          <a href="{{ item.download_url }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;; "padding: 12px 25px; font-size: 14px;">Download Now →</a>
+        </div>
+      </div>
+      {% endfor %}
+      
+      <div style="background-color: #fef3c7; border: 1px solid #fbbf24; padding: 15px; margin-top: 20px; text-align: center;">
+        <div style="font-size: 20px; margin-bottom: 8px;">⏰</div>
+        <p style="margin: 0; color: #92400e; font-size: 13px;">
+          Your download links will expire on <strong>{{ download_expiry_date | default("N/A") }}</strong>.
+          Please download your files before then.
+        </p>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ frontend_url | default('https://banwee.com') }}/account" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Access My Account</a>
+    </div>
+
+    <div style="margin-top: 25px;">
+      <h3 class="heading" style="font-size: 16px; margin-bottom: 10px; color: #253d4e;">Need Help?</h3>
+      <p style="color: #64748b; font-size: 14px;">
+        If you have any questions or need assistance, please don't hesitate to contact our support team at support@banwee.com
+      </p>
+    </div>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>🎉 Thank you for your purchase!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

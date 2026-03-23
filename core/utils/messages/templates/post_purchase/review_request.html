@@ -1,0 +1,59 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}We'd Love Your Feedback - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">⭐ We'd Love Your Feedback!</h1>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      We hope you're enjoying your recent purchase from Banwee!
+      Your feedback is incredibly valuable to us and helps other shoppers make informed decisions.
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      Would you mind taking a moment to share your thoughts on the <strong>{{ product_name | default("product you purchased") }}</strong>?
+    </p>
+
+    <div style="background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;  margin: 25px 0; text-align: center;">
+      {% if product_image_url %}
+      <img src="{{ product_image_url }}" alt="{{ product_name }}" style="max-width: 200px;  margin-bottom: 16px;">
+      {% endif %}
+      <h3 class="heading" style="font-size: 18px; margin-bottom: 15px; color: #253d4e; margin-top: 0;">{{ product_name | default("Product Name") }}</h3>
+      <p style="color: #64748b; font-size: 14px; margin-bottom: 20px;">Click on the stars below to leave a quick rating:</p>
+      <div style="font-size: 32px; margin: 16px 0;">
+        <a href="{{ review_url }}&rating=1" style="text-decoration: none; color: #fbbf24;">⭐</a>
+        <a href="{{ review_url }}&rating=2" style="text-decoration: none; color: #fbbf24;">⭐</a>
+        <a href="{{ review_url }}&rating=3" style="text-decoration: none; color: #fbbf24;">⭐</a>
+        <a href="{{ review_url }}&rating=4" style="text-decoration: none; color: #fbbf24;">⭐</a>
+        <a href="{{ review_url }}&rating=5" style="text-decoration: none; color: #fbbf24;">⭐</a>
+      </div>
+    </div>
+
+    <p style="text-align: center; color: #64748b; font-size: 14px; margin-bottom: 25px;">
+      Or, click the button below to write a more detailed review:
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ review_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Write a Review</a>
+    </div>
+
+    <div style="background-color: #fef3c7; border: 1px solid #fbbf24; padding: 20px; margin: 25px 0; text-align: center;">
+      <div style="font-size: 24px; margin-bottom: 10px;">💡</div>
+      <p style="margin: 0; color: #92400e; font-size: 15px;">
+        <strong>Your Review Helps:</strong> Other customers discover great products and helps us improve our service!
+      </p>
+    </div>
+
+    <p style="text-align: center; margin-top: 30px; color: #253d4e; font-size: 16px;">
+      <strong>Thank you for helping us improve!</strong><br>
+      <span style="color: #64748b; font-size: 14px;">The Banwee Team</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}
