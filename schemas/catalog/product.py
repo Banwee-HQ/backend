@@ -89,17 +89,6 @@ class CategoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class SupplierResponse(BaseModel):
-    id: UUID
-    email: str
-    firstname: str
-    lastname: str
-    phone: Optional[str]
-    role: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class InventoryResponse(BaseModel):
     id: Optional[UUID] = None
     quantity_available: int = 0
@@ -152,7 +141,6 @@ class ProductResponse(BaseModel):
     name: str
     description: Optional[str]
     category_id: UUID
-    supplier_id: UUID
     featured: bool
     rating: float
     review_count: int
@@ -165,7 +153,6 @@ class ProductResponse(BaseModel):
     updated_at: Optional[str]
     # Relationships
     category: Optional[CategoryResponse] = None
-    supplier: Optional[SupplierResponse] = None
     variants: List[ProductVariantResponse] = []
     primary_variant: Optional[ProductVariantResponse] = None
 

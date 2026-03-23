@@ -10,7 +10,6 @@ class UserRole(str, Enum):
     MANAGER = "manager"
     SUPPORT = "support"
     CUSTOMER = "customer"
-    SUPPLIER = "supplier"
 
 class User(BaseModel):
     """Optimized User model with hard delete only"""
@@ -80,7 +79,6 @@ class User(BaseModel):
     subscriptions = relationship("Subscription", back_populates="user", lazy="select")
     payment_methods = relationship("PaymentMethod", back_populates="user", lazy="select")
     transactions = relationship("Transaction", back_populates="user", lazy="select")
-    supplied_products = relationship("Product", back_populates="supplier", lazy="select")
     payment_intents = relationship("PaymentIntent", back_populates="user", lazy="select")
     sessions = relationship("UserSession", back_populates="user", lazy="select")
     lifecycle_metrics = relationship("CustomerLifecycleMetrics", back_populates="user", lazy="select")

@@ -43,7 +43,6 @@ class Product(BaseModel):
     __table_args__ = (
         # Optimized indexes for product queries
         Index('idx_products_category_status', 'category_id', 'product_status'),
-        Index('idx_products_supplier_status', 'supplier_id', 'product_status'),
         Index('idx_products_published', 'published_at', 'product_status'),
         Index('idx_products_slug', 'slug'),
         {'extend_existing': True}
@@ -57,7 +56,6 @@ class Product(BaseModel):
 
     # Foreign key relationships
     category_id = Column(GUID(), ForeignKey("categories.id"), nullable=False)
-    supplier_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
 
     # Status fields as columns for indexing and fast filtering
     product_status = Column(String(50), default="active", nullable=False)  # active, inactive, draft, discontinued
@@ -76,7 +74,6 @@ class Product(BaseModel):
 
     # Relationships with optimized lazy loading
     category = relationship("Category", back_populates="products")
-    supplier = relationship("User", back_populates="supplied_products")
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="selectin")
     reviews = relationship("Review", back_populates="product", lazy="select")
     wishlist_items = relationship("WishlistItem", back_populates="product", lazy="select")
@@ -134,7 +131,6 @@ class Product(BaseModel):
             "description": self.description,
             "short_description": self.short_description,
             "category_id": str(self.category_id),
-            "supplier_id": str(self.supplier_id),
             "product_status": self.product_status,
             "rating_average": self.rating_average,
             "rating_count": self.rating_count,
@@ -252,7 +248,6 @@ class ProductVariant(BaseModel):
             "sale_price": self.sale_price,
             "current_price": self.current_price,
             "discount_percentage": self.discount_percentage,
-            "stock": self.inventory.quantity_available if self.inventory else 0,
             "attributes": self.attributes,
             "specifications": self.specifications,
             "dietary_tags": self.dietary_tags,
