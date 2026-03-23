@@ -20,13 +20,13 @@ from core.errors import (
 )
 
 from api import (
-    admin_router, analytics_router, auth_router, cart_router,
-    categories_router, health_router, inventory_router, oauth_router,
-    orders_router, payments_router, products_router, promocodes_router,
-    refunds_router, review_router, search_router, shipping_router,
-    subscriptions_router, tax_router, user_router, webhooks_router, wishlist_router,
+    auth_router, oauth_router, user_router,
+    products_router, categories_router, search_router, review_router, inventory_router, wishlist_router,
+    cart_router, orders_router, payments_router, refunds_router, shipping_router,
+    shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router,
+    admin_router, analytics_router,
+    health_router, contact_messages_router,
 )
-from api.contact_messages import router as contact_messages_router
 
 logger = get_structured_logger(__name__)
 
@@ -94,26 +94,27 @@ if hasattr(settings, 'ALLOWED_HOSTS'):
 
 v1_router = APIRouter(prefix="/v1")
 v1_router.include_router(auth_router)
+v1_router.include_router(oauth_router)
 v1_router.include_router(user_router)
 v1_router.include_router(products_router)
+v1_router.include_router(categories_router)
+v1_router.include_router(search_router)
+v1_router.include_router(review_router)
+v1_router.include_router(inventory_router)
+v1_router.include_router(wishlist_router)
 v1_router.include_router(cart_router)
 v1_router.include_router(orders_router)
-v1_router.include_router(admin_router)
-v1_router.include_router(oauth_router)
-v1_router.include_router(subscriptions_router)
-v1_router.include_router(review_router)
 v1_router.include_router(payments_router)
-v1_router.include_router(promocodes_router)
-v1_router.include_router(wishlist_router)
-v1_router.include_router(health_router)
-v1_router.include_router(search_router)
-v1_router.include_router(inventory_router)
-v1_router.include_router(analytics_router)
 v1_router.include_router(refunds_router)
 v1_router.include_router(shipping_router)
+v1_router.include_router(shipping_tracking_router)
 v1_router.include_router(tax_router)
+v1_router.include_router(promocodes_router)
+v1_router.include_router(subscriptions_router)
 v1_router.include_router(webhooks_router)
-v1_router.include_router(categories_router)
+v1_router.include_router(admin_router)
+v1_router.include_router(analytics_router)
+v1_router.include_router(health_router)
 v1_router.include_router(contact_messages_router)
 
 app.include_router(v1_router)

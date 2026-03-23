@@ -1,48 +1,13 @@
-# Consolidated route imports
-from .admin import router as admin_router
-from .analytics import router as analytics_router 
-from .auth import router as auth_router
-from .cart import router as cart_router
-from .categories import router as categories_router
-from .health import router as health_router
-from .inventory import router as inventory_router
-from .oauth import router as oauth_router
-from .orders import router as orders_router
-from .payments import router as payments_router
-from .promocodes import router as promocodes_router
-from .products import router as products_router
-from .refunds import router as refunds_router
-from .review import router as review_router
-from .search import router as search_router
-from .shipping import router as shipping_router
-from .subscriptions import router as subscriptions_router
-from .tax import router as tax_router
-from .user import router as user_router
-from .webhooks import router as webhooks_router
-from .wishlist import router as wishlist_router
+from .auth import auth_router, oauth_router, user_router
+from .catalog import products_router, categories_router, search_router, review_router, inventory_router, wishlist_router
+from .commerce import cart_router, orders_router, payments_router, refunds_router, shipping_router, shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router
+from .admin import admin_router, analytics_router
+from .system import health_router, contact_messages_router
 
-# Export all routers for easy importing
 __all__ = [
-    "admin_router",
-    "analytics_router",
-    "auth_router",
-    "cart_router",
-    "categories_router",
-    "health_router",
-    "inventory_router",
-    "oauth_router",
-    "orders_router",
-    "payments_router",
-    "products_router",
-    "promocodes_router",
-    "refunds_router",
-    "review_router",
-    "search_router",
-    "shipping_router",
-    "subscriptions_router",
-    "tax_router",
-    "user_router",
-    "webhooks_router",
-    "wishlist_router",
+    "auth_router", "oauth_router", "user_router",
+    "products_router", "categories_router", "search_router", "review_router", "inventory_router", "wishlist_router",
+    "cart_router", "orders_router", "payments_router", "refunds_router", "shipping_router", "shipping_tracking_router", "tax_router", "promocodes_router", "subscriptions_router", "webhooks_router",
+    "admin_router", "analytics_router",
+    "health_router", "contact_messages_router",
 ]
-
