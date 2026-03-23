@@ -17,13 +17,11 @@ class User(BaseModel):
     __tablename__ = "users"
     __table_args__ = (
         # Optimized indexes for common queries
-        Index('idx_users_email_is_active', 'email', 'is_active'),
-        Index('idx_users_role_verified', 'role', 'verified'),
+        Index('idx_users_email_account_status', 'email', 'account_status'),
+        Index('idx_users_role_verification_status', 'role', 'verification_status'),
         Index('idx_users_country_language', 'country', 'language'),
         Index('idx_users_last_login', 'last_login'),
         Index('idx_users_stripe_customer', 'stripe_customer_id'),
-        # Partial index for active users only
-        Index('idx_users_is_active_only', 'email', 'role', postgresql_where='is_active = true'),
         {'extend_existing': True}
     )
 
@@ -35,12 +33,9 @@ class User(BaseModel):
     
     # Status fields as columns for fast filtering
     role = Column(String(50), default=UserRole.CUSTOMER, nullable=False)
-    account_status = Column(String(50), default="active", nullable=False)
-    verification_status = Column(String(50), default="unverified", nullable=False)
+    account_status = Column(String(50), default="active", nullable=False)  # active, inactive, suspended
+    verification_status = Column(String(50), default="unverified", nullable=False)  # unverified, verified, pending
     
-    # Legacy fields (keep for backward compatibility)
-    verified = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
     
     # Contact information
     phone = Column(String(20), nullable=True)
@@ -75,9 +70,6 @@ class User(BaseModel):
     reset_token = Column(String(255), nullable=True)
     reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     
-    # Legacy profile fields (consider moving to preferences JSONB)
-    age = Column(String(10), nullable=True)
-    gender = Column(String(50), nullable=True)
 
     # Relationships with optimized lazy loading
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
@@ -112,15 +104,6 @@ class User(BaseModel):
         """Get user's default address"""
         return next((addr for addr in self.addresses if addr.is_default), None)
 
-    @property
-    def is_active_verified(self) -> bool:
-        """Check if user is both active and verified"""
-        return self.is_active and self.verified
-
-    @property
-    def active(self) -> bool:
-        """Backward compatibility property for is_active field"""
-        return self.is_active
 
     def to_dict(self) -> dict:
         """Convert user to dictionary for API responses"""
@@ -133,9 +116,6 @@ class User(BaseModel):
             "role": self.role.value,
             "account_status": self.account_status,
             "verification_status": self.verification_status,
-            "verified": self.verified,  # Legacy field
-            "is_active": self.is_active,  # Primary field
-            "is_active": self.is_active,  # Legacy compatibility
             "phone": self.phone,
             "phone_verified": self.phone_verified,
             "avatar_url": self.avatar_url,

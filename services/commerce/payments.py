@@ -6,7 +6,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.payments import PaymentMethod, PaymentIntent, Transaction
-from models.orders import Order, OrderItem
+from models.orders import Order, OrderItem, OrderStatus, PaymentStatus
 from models.subscriptions import Subscription
 from models.inventories import Inventory
 from models.user import User
@@ -1268,7 +1268,8 @@ class PaymentService:
                 return recovery_actions
             
             # Update order status
-            order.status = "payment_failed"
+            order.order_status = OrderStatus.CANCELLED
+            order.payment_status = PaymentStatus.FAILED
             order.version += 1
             
             # Store failure details in order metadata

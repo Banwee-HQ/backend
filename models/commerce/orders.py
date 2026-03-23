@@ -114,14 +114,10 @@ class Order(BaseModel):
     idempotency_key = Column(String(255), unique=True, nullable=True)
     source = Column(SQLEnum(OrderSource), default=OrderSource.WEB, nullable=False)  # web, mobile, api
     
-    # Legacy fields for backward compatibility
-    status = Column(String(50), default="pending")  # Keep for existing code
-    shipping_address_id = Column(GUID(), nullable=True)  # Legacy FK
-    shipping_method_id = Column(GUID(), nullable=True)  # Legacy FK
-    payment_method_id = Column(GUID(), nullable=True)  # Legacy FK
-    promocode_id = Column(GUID(), nullable=True)  # Legacy FK
-    carrier_name = Column(String(100), nullable=True)  # Legacy field
-    notes = Column(Text, nullable=True)  # Legacy field
+    # Legacy fields for backward compatibility — REMOVED
+    # All status tracking uses order_status, payment_status, fulfillment_status
+    # All carrier info uses carrier column
+    # All notes use customer_notes / internal_notes
 
     # Relationships with optimized lazy loading
     user = relationship("User", back_populates="orders")

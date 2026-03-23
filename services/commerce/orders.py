@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc, delete
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
-from models.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus
+from models.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
 from models.user import User
 from services.email import send_order_confirmation_email
 from models.cart import Cart, CartItem
@@ -27,7 +27,7 @@ from services.discounts import DiscountEngine
 from models.inventories import Inventory
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from decimal import Decimal, ROUND_HALF_UP
 from core.config import settings
@@ -1029,7 +1029,7 @@ class OrderService:
 
                     if payment_result.get("status") != "succeeded":
                         # Payment failed - update order status and restore inventory
-                        order.status = "payment_failed"
+                        order.order_status = OrderStatus.CANCELLED
                         order.failure_reason = payment_result.get("error", "Payment processing failed")
                         
                         # Restore inventory for all items
@@ -1049,12 +1049,13 @@ class OrderService:
                         raise HTTPException(status_code=400, detail=f"Payment failed: {error_message}")
 
                     # Payment succeeded - update order status
-                    order.status = "confirmed"
+                    order.order_status = OrderStatus.CONFIRMED
+                    order.confirmed_at = datetime.now(tz=timezone.utc)
                     order.version += 1  # Optimistic locking increment
                     
                 except Exception as payment_error:
                     # Payment processing failed - update order and restore inventory
-                    order.status = "payment_failed"
+                    order.order_status = OrderStatus.CANCELLED
                     order.failure_reason = str(payment_error)
                     
                     # Restore inventory for all items
@@ -1162,7 +1163,7 @@ class OrderService:
             )
 
             if status_filter:
-                query = query.where(Order.status == status_filter)
+                query = query.where(Order.order_status == status_filter)
 
             query = query.order_by(desc(Order.created_at))
 
@@ -1173,7 +1174,7 @@ class OrderService:
             from sqlalchemy import func
             count_query = select(func.count(Order.id)).where(Order.user_id == user_id)
             if status_filter:
-                count_query = count_query.where(Order.status == status_filter)
+                count_query = count_query.where(Order.order_status == status_filter)
 
             total_result = await self.db.execute(count_query)
             total = total_result.scalar() or 0
@@ -1296,13 +1297,16 @@ class OrderService:
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        if order.status not in ["pending", "confirmed"]:
+        if order.order_status not in [OrderStatus.PENDING, OrderStatus.CONFIRMED]:
             raise HTTPException(status_code=400, detail="Order cannot be cancelled")
 
         # Use transaction for order cancellation
         try:
             async with self.db.begin():
-                order.status = "cancelled"
+                now = datetime.now(tz=timezone.utc)
+                order.order_status = OrderStatus.CANCELLED
+                order.fulfillment_status = FulfillmentStatus.CANCELLED
+                order.cancelled_at = now
 
                 # Increment stock for cancelled order items
                 query_items = select(OrderItem).where(OrderItem.order_id == order.id).options(
@@ -1367,11 +1371,41 @@ class OrderService:
             order.order_status = status_enum
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid order status: {status}")
-        
+
+        # Set lifecycle timestamps
+        now = datetime.now(tz=timezone.utc)
+        if status_enum == OrderStatus.CONFIRMED and not order.confirmed_at:
+            order.confirmed_at = now
+        elif status_enum == OrderStatus.SHIPPED:
+            order.shipped_at = now
+            if not order.confirmed_at:
+                order.confirmed_at = now
+        elif status_enum == OrderStatus.DELIVERED:
+            order.delivered_at = now
+            if not order.shipped_at:
+                order.shipped_at = now
+            if not order.confirmed_at:
+                order.confirmed_at = now
+        elif status_enum == OrderStatus.CANCELLED:
+            order.cancelled_at = now
+
+        # Auto-update fulfillment_status
+        fulfillment_map = {
+            OrderStatus.PENDING: FulfillmentStatus.UNFULFILLED,
+            OrderStatus.CONFIRMED: FulfillmentStatus.UNFULFILLED,
+            OrderStatus.PROCESSING: FulfillmentStatus.UNFULFILLED,
+            OrderStatus.SHIPPED: FulfillmentStatus.PARTIAL,
+            OrderStatus.DELIVERED: FulfillmentStatus.FULFILLED,
+            OrderStatus.CANCELLED: FulfillmentStatus.CANCELLED,
+            OrderStatus.REFUNDED: FulfillmentStatus.CANCELLED,
+        }
+        order.fulfillment_status = fulfillment_map.get(status_enum, order.fulfillment_status)
+
         if tracking_number:
             order.tracking_number = tracking_number
+            order.carrier = carrier_name or order.carrier
         if carrier_name:
-            order.carrier_name = carrier_name
+            order.carrier = carrier_name
 
         # Generate appropriate description based on status
         if not description:
@@ -1430,7 +1464,7 @@ class OrderService:
                         customer_name=user.firstname or "Customer",
                         order_number=order.order_number or str(order.id)[:8],
                         tracking_number=order.tracking_number or "N/A",
-                        carrier=order.carrier_name or order.carrier or "N/A",
+                        carrier=order.carrier or "N/A",
                         estimated_delivery=order.delivered_at or datetime.utcnow() + timedelta(days=3),
                         tracking_url=None
                     )
@@ -1527,14 +1561,15 @@ class OrderService:
 
         # Calculate estimated delivery
         estimated_delivery = None
-        if order.status in ["confirmed", "shipped"]:
+        current_status = (order.order_status.value if hasattr(order.order_status, 'value') else str(order.order_status or '')).lower()
+        if current_status in ["confirmed", "shipped"]:
             estimated_days = 5  # Default, could be from shipping method
             estimated_delivery = (order.created_at + timedelta(days=estimated_days)).isoformat()
 
         return OrderResponse(
             id=str(order.id),
             user_id=str(order.user_id),
-            status=order.status,
+            status=current_status,
             total_amount=corrected_total,  # Use corrected total instead of order.total_amount
             subtotal=display_subtotal,
             tax_amount=order.tax_amount,

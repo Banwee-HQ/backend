@@ -100,7 +100,7 @@ def parse_cors(value: str) -> List[str]:
             "https://www.banwee.ca",
             "https://www.banwee.co.uk",
             "https://www.banwee.ng",
-            "https://banwee.com"
+            "https://www.banwee.com"
         ]
     
     if isinstance(value, str):

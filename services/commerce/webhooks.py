@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from fastapi import HTTPException, Request
 from models.payments import Transaction, PaymentIntent
-from models.orders import Order
+from models.orders import Order, OrderStatus, PaymentStatus
 from services.payments import PaymentService
 from services.inventory import InventoryService
 from core.auth.webhook import verify_stripe_webhook_request, WebhookSecurityError
@@ -139,7 +139,8 @@ class WebhookService:
                 
                 if order:
                     # Update order status to confirmed atomically
-                    order.status = "confirmed"
+                    order.order_status = OrderStatus.CONFIRMED
+                    order.confirmed_at = datetime.utcnow()
                     order.version += 1  # Optimistic locking increment
                     
             
@@ -188,7 +189,8 @@ class WebhookService:
                 )
                 order = order_result.scalar_one_or_none()
                 if order:
-                    order.status = "payment_failed"
+                    order.order_status = OrderStatus.CANCELLED
+                    order.payment_status = PaymentStatus.FAILED
                     order.version += 1  # Optimistic locking increment
             
             await self.db.commit()
@@ -266,7 +268,8 @@ class WebhookService:
                 )
                 order = order_result.scalar_one_or_none()
                 if order:
-                    order.status = "cancelled"
+                    order.order_status = OrderStatus.CANCELLED
+                    order.cancelled_at = datetime.utcnow()
                     order.version += 1
             
             await self.db.commit()

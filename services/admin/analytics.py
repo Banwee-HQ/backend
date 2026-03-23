@@ -736,7 +736,7 @@ class AnalyticsService:
                     and_(
                         Order.created_at >= start_date,
                         Order.created_at <= end_date,
-                        Order.status.in_(["completed", "shipped", "delivered"])
+                        Order.order_status.in_(["shipped", "delivered"])
                     )
                 )
             )
@@ -748,7 +748,7 @@ class AnalyticsService:
                     and_(
                         Order.created_at >= start_date,
                         Order.created_at <= end_date,
-                        Order.status.in_(["completed", "shipped", "delivered"])
+                        Order.order_status.in_(["shipped", "delivered"])
                     )
                 )
             )
@@ -767,7 +767,7 @@ class AnalyticsService:
                     and_(
                         Order.created_at >= start_date,
                         Order.created_at <= end_date,
-                        Order.status.in_(["completed", "shipped", "delivered"])
+                        Order.order_status.in_(["shipped", "delivered"])
                     )
                 ).group_by(func.date(Order.created_at))
             )

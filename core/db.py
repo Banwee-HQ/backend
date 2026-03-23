@@ -17,7 +17,7 @@ from datetime import datetime as dt
 
 from core.logging import structured_logger
 from core.utils.uuid_utils import uuid7
-from core.errors.api_exceptions import DatabaseException, APIException
+from core.exceptions import DatabaseException, APIException
 
 logger = get_structured_logger(__name__)
 

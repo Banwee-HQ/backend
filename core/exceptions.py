@@ -1,8 +1,27 @@
 from fastapi import HTTPException
 from datetime import datetime
-from core.utils.uuid_utils import uuid7
 from typing import Any, Dict, Optional
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import SQLAlchemyError
+from core.utils.uuid_utils import uuid7
+import traceback
 
+def format_error_response(
+    message: str,
+    status_code: int = 500,
+    error_code: Optional[str] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """Format a standardized error response"""
+    return {
+        "success": False,
+        "message": message,
+        "error_code": error_code or f"ERR_{status_code}",
+        "timestamp": datetime.now().isoformat(),
+        **kwargs
+    }
 
 class APIException(HTTPException):
     """Custom API exception with enhanced error details"""
@@ -13,13 +32,11 @@ class APIException(HTTPException):
         message: str = "An unexpected API error occurred",  # Provide a default value
         detail: Optional[str] = None,
         error_code: Optional[str] = None,
-        correlation_id: Optional[str] = None,
         **kwargs
     ):
         self.message = message
         self.detail = detail or message
         self.error_code = error_code or f"ERR_{status_code}"
-        self.correlation_id = correlation_id or str(uuid7())
         self.timestamp = datetime.now().isoformat()
 
         super().__init__(status_code=status_code, detail=self.detail, **kwargs)
@@ -115,3 +132,85 @@ class ExternalServiceException(APIException):
             message=message,
             error_code="EXTERNAL_SERVICE_ERROR"
         )
+
+async def api_exception_handler(request: Request, exc: APIException) -> JSONResponse:
+    """Handle custom API exceptions"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": exc.message,
+            "error_code": exc.error_code,
+            "timestamp": exc.timestamp,
+            "detail": exc.detail if exc.detail != exc.message else None
+        }
+    )
+
+
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Handle standard HTTP exceptions"""
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": exc.detail,
+            "error_code": f"HTTP_{exc.status_code}",
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Handle validation errors"""
+    # Format validation errors
+    errors = {}
+    for error in exc.errors():
+        field = ".".join(str(loc)
+                         for loc in error["loc"][1:])  # Skip 'body' prefix
+        errors[field] = error["msg"]
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "message": "Validation failed",
+            "error_code": "VALIDATION_ERROR",
+            "timestamp": datetime.now().isoformat(),
+            "errors": errors
+        }
+    )
+
+
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    """Handle SQLAlchemy database errors"""
+
+    # Log the full error for debugging
+    print(traceback.format_exc())
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "A database error occurred",
+            "error_code": "DATABASE_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+
+async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle unexpected exceptions"""
+
+    # Log the full error for debugging
+    print(traceback.format_exc())
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "An unexpected error occurred",
+            "error_code": "INTERNAL_ERROR",
+            "timestamp": datetime.now().isoformat()
+        }
+    )

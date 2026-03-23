@@ -803,7 +803,7 @@ class ProductService:
             barcode_service = BarcodeService(self.db)
             
             # Generate QR code data for this specific variant
-            qr_data = f"https://banwee.com/products/variant/{db_variant.id}"
+            qr_data = f"https://www.banwee.com/products/variant/{db_variant.id}"
             
             try:
                 barcode_b64 = barcode_service.generate_barcode(final_sku)

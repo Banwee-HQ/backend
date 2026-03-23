@@ -44,7 +44,6 @@ class Product(BaseModel):
         # Optimized indexes for product queries
         Index('idx_products_category_status', 'category_id', 'product_status'),
         Index('idx_products_supplier_status', 'supplier_id', 'product_status'),
-        Index('idx_products_featured_rating', 'is_featured', 'rating_average'),
         Index('idx_products_published', 'published_at', 'product_status'),
         Index('idx_products_slug', 'slug'),
         {'extend_existing': True}
@@ -71,15 +70,9 @@ class Product(BaseModel):
     # Marketing flags as columns for fast filtering
     is_featured = Column(Boolean, default=False)
     is_bestseller = Column(Boolean, default=False)
-    featured = Column(Boolean, default=False)  # Legacy field
-    rating = Column(Float, default=0.0)  # Legacy field
-    is_active = Column(Boolean, default=True)  # Legacy field
 
     # Dates for lifecycle management
     published_at = Column(DateTime(timezone=True), nullable=True)
-
-    # Legacy fields for backward compatibility
-    origin = Column(String(100), nullable=True)
 
     # Relationships with optimized lazy loading
     category = relationship("Category", back_populates="products")
@@ -151,13 +144,9 @@ class Product(BaseModel):
             "price_range": self.price_range,
             "availability_status": self.availability_status,
             "in_stock": self.in_stock,
-            "origin": self.origin,
+            "published_at": self.published_at.isoformat() if self.published_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            # Legacy fields
-            "featured": self.featured,
-            "rating": self.rating,
-            "is_active": self.is_active,
         }
 
         if include_variants:
@@ -167,7 +156,7 @@ class Product(BaseModel):
             data["seo"] = {
                 "meta_title": self.meta_title,
                 "meta_description": self.meta_description,
-                "canonical_url": f"https://banwee.com/products/{self.slug}",
+                "canonical_url": f"https://www.banwee.com/products/{self.slug}",
                 "og_image": self.primary_variant.primary_image.url if self.primary_variant and self.primary_variant.primary_image else None,
             }
 
