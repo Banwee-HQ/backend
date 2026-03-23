@@ -314,43 +314,6 @@ async def get_order_tracking(
         )
 
 
-@router.get("/supplier/orders")
-async def get_supplier_orders(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    status_filter: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """Get supplier's orders"""
-    try:
-        # Check if user is a supplier
-        if current_user.role != "supplier":
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Access denied. Supplier role required."
-            )
-        
-        orders = await order_service.get_supplier_orders(
-            supplier_id=current_user.id,
-            page=page,
-            limit=limit,
-            status_filter=status_filter,
-            date_from=date_from,
-            date_to=date_to
-        )
-        return Response.success(data=orders)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch supplier orders: {str(e)}"
-        )
-
-
 @router.get("/track/{order_id}")
 async def track_order_public(
     order_id: UUID,

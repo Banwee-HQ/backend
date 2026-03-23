@@ -840,7 +840,6 @@ class AdminService:
         search: Optional[str] = None,
         category: Optional[str] = None,
         status: Optional[str] = None,
-        supplier: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get all products with complete data including images, SKU, category, price, stock status, and variants"""
         try:
@@ -853,7 +852,6 @@ class AdminService:
             # Build query with all necessary joins
             query = select(Product).options(
                 selectinload(Product.category),
-                selectinload(Product.supplier),
                 selectinload(Product.variants).selectinload(ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             )
@@ -884,17 +882,6 @@ class AdminService:
                     conditions.append(Product.product_status == "draft")
                 elif status == "discontinued":
                     conditions.append(Product.product_status == "discontinued")
-            
-            if supplier:
-                # Join with User to filter by supplier name or email
-                supplier_subquery = select(User.id).where(
-                    or_(
-                        User.email.ilike(f"%{supplier}%"),
-                        User.firstname.ilike(f"%{supplier}%"),
-                        User.lastname.ilike(f"%{supplier}%")
-                    )
-                )
-                conditions.append(Product.supplier_id.in_(supplier_subquery))
             
             if conditions:
                 query = query.where(and_(*conditions))
@@ -996,7 +983,6 @@ class AdminService:
                     "total_stock": total_stock,
                     "stock_status": stock_status,
                     "category": product.category.name if product.category else None,
-                    "supplier": f"{product.supplier.firstname} {product.supplier.lastname}".strip() if product.supplier else None,
                     "variants": variants_data,
                     "primary_variant": variants_data[0] if variants_data else None,
                     "created_at": product.created_at.isoformat() if product.created_at else None,

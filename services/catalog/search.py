@@ -479,7 +479,7 @@ class SearchService:
         Args:
             query: Search query string
             limit: Maximum number of results
-            role_filter: Filter by user role (Customer, Supplier, Admin)
+            role_filter: Filter by user role (Customer, Admin)
             
         Returns:
             List of users with relevance scores

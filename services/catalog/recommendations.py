@@ -352,7 +352,6 @@ class RecommendationService:
         
         query = select(Product).options(
             selectinload(Product.category),
-            selectinload(Product.supplier),
             selectinload(Product.variants).selectinload(ProductVariant.images),
             selectinload(Product.variants).selectinload(ProductVariant.inventory)
         ).where(
@@ -386,7 +385,6 @@ class RecommendationService:
         try:
             query = select(Product).options(
                 selectinload(Product.category),
-                selectinload(Product.supplier),
                 selectinload(Product.variants).selectinload(ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             ).where(

@@ -7,15 +7,31 @@ from core.db import get_db
 from core.utils.response import Response
 from core.errors import APIException
 from core.logging import get_logger
-from core.dependencies import require_admin_or_supplier, get_inventory_service
 from models.user import User
-
+from services.auth import AuthService
+from fastapi.security import OAuth2PasswordBearer
 from schemas.inventory import (
     WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
     InventoryCreate, InventoryUpdate, InventoryResponse,
     StockAdjustmentCreate, StockAdjustmentResponse
 )
 from services.inventory import InventoryService
+
+logger = get_logger(__name__)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
+    auth_service = AuthService(db)
+    return await auth_service.get_current_user(token)
+
+def require_admin(current_user: User = Depends(get_current_auth_user)):
+    if current_user.role not in ["Admin", "admin"]:
+        raise APIException(status_code=403, message="Admin access required")
+    return current_user
+
+def get_inventory_service(db: AsyncSession = Depends(get_db)):
+    return InventoryService(db)
 
 logger = get_logger(__name__)
 
@@ -121,10 +137,10 @@ async def check_bulk_stock_availability(
 @router.post("/locations")
 async def create_warehouse_location(
     location_data: WarehouseLocationCreate,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Create a new warehouse location (Admin/Supplier access)."""
+    """Create a new warehouse location (Admin access)."""
     try:
         location = await inventory_service.create_warehouse_location(location_data)
         return Response.success(data=location, message="Warehouse location created successfully", status_code=status.HTTP_201_CREATED)
@@ -136,10 +152,10 @@ async def create_warehouse_location(
 
 @router.get("/locations")
 async def get_all_warehouse_locations(
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get all warehouse locations (Admin/Supplier access)."""
+    """Get all warehouse locations (Admin access)."""
     try:
         locations = await inventory_service.get_warehouse_locations()
         return Response.success(data=locations)
@@ -150,10 +166,10 @@ async def get_all_warehouse_locations(
 @router.get("/locations/{location_id}")
 async def get_warehouse_location(
     location_id: UUID,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get a specific warehouse location by ID (Admin/Supplier access)."""
+    """Get a specific warehouse location by ID (Admin access)."""
     try:
         location = await inventory_service.get_warehouse_location_by_id(location_id)
         if not location:
@@ -169,10 +185,10 @@ async def get_warehouse_location(
 async def update_warehouse_location(
     location_id: UUID,
     location_data: WarehouseLocationUpdate,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Update a warehouse location (Admin/Supplier access)."""
+    """Update a warehouse location (Admin access)."""
     try:
         location = await inventory_service.update_warehouse_location(location_id, location_data)
         return Response.success(data=location, message="Warehouse location updated successfully")
@@ -185,10 +201,10 @@ async def update_warehouse_location(
 @router.delete("/locations/{location_id}")
 async def delete_warehouse_location(
     location_id: UUID,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Delete a warehouse location (Admin/Supplier access)."""
+    """Delete a warehouse location (Admin access)."""
     try:
         await inventory_service.delete_warehouse_location(location_id)
         return Response.success(message="Warehouse location deleted successfully")
@@ -203,10 +219,10 @@ async def delete_warehouse_location(
 @router.post("/")
 async def create_inventory_item(
     inventory_data: InventoryCreate,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Create a new inventory item (Admin/Supplier access)."""
+    """Create a new inventory item (Admin access)."""
     try:
         item = await inventory_service.create_inventory_item(inventory_data)
         return Response.success(data=item, message="Inventory item created successfully", status_code=status.HTTP_201_CREATED)
@@ -226,10 +242,10 @@ async def get_all_inventory_items(
     search: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get all inventory items with filters (Admin/Supplier access)."""
+    """Get all inventory items with filters (Admin access)."""
     try:
         logger.info(f"API endpoint received params: page={page}, limit={limit}, sort_by={sort_by}, sort_order={sort_order}, low_stock={low_stock}, search={search}")
         items = await inventory_service.get_all_inventory_items(
@@ -253,10 +269,10 @@ async def get_all_inventory_items(
 @router.get("/{inventory_id}")
 async def get_inventory_item(
     inventory_id: UUID,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get a specific inventory item by ID (Admin/Supplier access)."""
+    """Get a specific inventory item by ID (Admin access)."""
     try:
         item = await inventory_service.get_inventory_item_by_id_serialized(inventory_id)
         if not item:
@@ -272,10 +288,10 @@ async def get_inventory_item(
 async def update_inventory_item(
     inventory_id: UUID,
     inventory_data: InventoryUpdate,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Update an inventory item (Admin/Supplier access)."""
+    """Update an inventory item (Admin access)."""
     try:
         item = await inventory_service.update_inventory_item(inventory_id, inventory_data)
         return Response.success(data=item, message="Inventory item updated successfully")
@@ -288,10 +304,10 @@ async def update_inventory_item(
 @router.delete("/{inventory_id}")
 async def delete_inventory_item(
     inventory_id: UUID,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Delete an inventory item (Admin/Supplier access)."""
+    """Delete an inventory item (Admin access)."""
     try:
         await inventory_service.delete_inventory_item(inventory_id)
         return Response.success(message="Inventory item deleted successfully")
@@ -305,10 +321,10 @@ async def delete_inventory_item(
 @router.post("/adjustments")
 async def adjust_stock(
     adjustment_data: StockAdjustmentCreate,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Adjust stock quantity for an inventory item (Admin/Supplier access)."""
+    """Adjust stock quantity for an inventory item (Admin access)."""
     try:
         updated_inventory = await inventory_service.adjust_stock(adjustment_data, adjusted_by_user_id=current_user.id)
         return Response.success(data=updated_inventory, message="Stock adjusted successfully")
@@ -321,10 +337,10 @@ async def adjust_stock(
 @router.get("/{inventory_id}/adjustments")
 async def get_stock_adjustments(
     inventory_id: UUID,
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get all stock adjustments for an inventory item (Admin/Supplier access)."""
+    """Get all stock adjustments for an inventory item (Admin access)."""
     try:
         adjustments = await inventory_service.get_stock_adjustments_for_inventory(inventory_id)
         return Response.success(data=adjustments)
@@ -336,10 +352,10 @@ async def get_stock_adjustments(
 
 @router.get("/adjustments/all")
 async def get_all_stock_adjustments(
-    current_user: User = Depends(require_admin_or_supplier),
+    current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get all stock adjustments across all inventory items (Admin/Supplier access)."""
+    """Get all stock adjustments across all inventory items (Admin access)."""
     try:
         adjustments = await inventory_service.get_all_stock_adjustments()
         return Response.success(data=adjustments)

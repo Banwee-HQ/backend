@@ -1232,62 +1232,6 @@ class OrderService:
 
         return await self._format_order_response(order)
 
-    async def get_supplier_orders(self, supplier_id: UUID, page: int = 1, limit: int = 10, status_filter: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> Dict[str, Any]:
-        """Get paginated list of supplier's orders (orders containing supplier's products)"""
-        
-        # Query orders that contain items from this supplier's products
-        query = select(Order).join(OrderItem).join(ProductVariant).join(Product).where(Product.supplier_id == supplier_id).options(
-            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
-            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
-        ).distinct()
-
-        if status_filter:
-            query = query.where(Order.order_status == status_filter)
-
-        if date_from:
-            query = query.where(Order.created_at >= date_from)
-        
-        if date_to:
-            query = query.where(Order.created_at <= date_to)
-
-        query = query.order_by(desc(Order.created_at))
-
-        # Calculate offset
-        offset = (page - 1) * limit
-
-        # Get total count
-        count_query = select(func.count(Order.id)).join(OrderItem).join(ProductVariant).join(Product).where(Product.supplier_id == supplier_id).distinct()
-        
-        if status_filter:
-            count_query = count_query.where(Order.order_status == status_filter)
-        
-        if date_from:
-            count_query = count_query.where(Order.created_at >= date_from)
-        
-        if date_to:
-            count_query = count_query.where(Order.created_at <= date_to)
-
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
-
-        # Get paginated results
-        result = await self.db.execute(query.offset(offset).limit(limit))
-        orders = result.scalars().all()
-
-        formatted_orders = []
-        for order in orders:
-            formatted_orders.append(await self._format_order_response(order))
-
-        return {
-            "orders": formatted_orders,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": (total + limit - 1) // limit
-            }
-        }
-
     async def cancel_order(self, order_id: UUID, user_id: UUID) -> OrderResponse:
         """Cancel an order with transaction safety"""
         query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).with_for_update()

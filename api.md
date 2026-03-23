@@ -221,17 +221,14 @@ Get variant QR code.
 ### GET /products/categories/{id}
 Get products by category ID.
 
-### GET /products/suppliers/products
-Get supplier products. 🔒 Supplier
-
 ### POST /products
-Create product. 🔒 Admin/Supplier
+Create product. 🔒 Admin
 
 ### PUT /products/{id}
-Update product. 🔒 Admin/Supplier
+Update product. 🔒 Admin
 
 ### DELETE /products/{id}
-Delete product. 🔒 Admin/Supplier
+Delete product. 🔒 Admin
 
 ---
 
@@ -418,9 +415,6 @@ Cancel order. 🔒
 
 ### GET /orders/{id}/tracking
 Get order tracking. 🔒
-
-### GET /orders/supplier/orders
-Get supplier orders. 🔒 Supplier
 
 ### GET /orders/track/{id}
 Public order tracking.

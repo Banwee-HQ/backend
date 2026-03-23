@@ -394,38 +394,6 @@ async def get_variant_qrcode(
         )
 
 
-@router.get("/suppliers/products")
-async def get_supplier_products(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_auth_user)
-):
-    """Get supplier's own products"""
-    try:
-        # Check if user is a supplier or admin
-        if current_user.role not in ["Supplier", "Admin"]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Access denied. Supplier or Admin role required."
-            )
-        
-        # Get products for this supplier
-        products = await product_service.get_products(
-            page=page,
-            limit=limit,
-            filters={"supplier_id": str(current_user.id)} if current_user.role == "Supplier" else {}
-        )
-        return Response.success(data=products)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch supplier products: {str(e)}"
-        )
-
-
 @router.get("/{product_id}")
 async def get_product(
     product_id: UUID,
@@ -483,12 +451,12 @@ async def create_product(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new product (suppliers only)."""
+    """Create a new product (admin only)."""
     try:
-        if current_user.role not in ["Supplier", "Admin"]:
+        if current_user.role not in ["Admin"]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                message="Only suppliers can create products"
+                message="Only admins can create products"
             )
 
         product_service = ProductService(db)
@@ -510,7 +478,7 @@ async def update_product(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update a product (suppliers only)."""
+    """Update a product (admin only)."""
     try:
         product_service = ProductService(db)
         product = await product_service.update_product(product_id, product_data, current_user.id)
@@ -530,7 +498,7 @@ async def delete_product(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a product (suppliers only)."""
+    """Delete a product (admin only)."""
     try:
         product_service = ProductService(db)
         await product_service.delete_product(product_id, current_user.id)

@@ -27,9 +27,6 @@
             <p>SKU: {{ product.sku }}</p>
             <p>Current Stock: <span style="color: #dc3545; font-weight: bold;">{{ product.current_stock }}</span></p>
             <p>Minimum Threshold: {{ product.min_threshold }}</p>
-            {% if product.supplier %}
-            <p>Supplier: {{ product.supplier }}</p>
-            {% endif %}
         </div>
         {% endfor %}
         {% endif %}
@@ -38,7 +35,7 @@
             <p><strong>Recommended Actions:</strong></p>
             <ul>
                 <li>Review current inventory levels</li>
-                <li>Contact suppliers for restocking</li>
+                <li>Arrange restocking as needed</li>
                 <li>Consider adjusting minimum stock thresholds</li>
                 <li>Update product availability on the website if needed</li>
             </ul>

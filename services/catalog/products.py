@@ -14,7 +14,7 @@ from models.review import Review
 from models.wishlist import WishlistItem
 from schemas.product import (
     ProductCreate, ProductUpdate, ProductResponse, ProductListResponse,
-    ProductVariantResponse, CategoryResponse, SupplierResponse,
+    ProductVariantResponse, CategoryResponse,
     ProductImageResponse, PriceRange
 )
 from core.errors import APIException
@@ -107,22 +107,6 @@ class ProductService:
                     print(f"Error converting category: {e}")
                     category = None
 
-            # Convert supplier
-            supplier = None
-            if include_relationships and product.supplier:
-                try:
-                    supplier = SupplierResponse(
-                        id=product.supplier.id,
-                        email=product.supplier.email,
-                        firstname=product.supplier.firstname,
-                        lastname=product.supplier.lastname,
-                        phone=product.supplier.phone,
-                        role=product.supplier.role
-                    )
-                except Exception as e:
-                    print(f"Error converting supplier: {e}")
-                    supplier = None
-
             # Convert variants using model's to_dict method
             variants = []
             for variant in (product.variants or []):
@@ -142,7 +126,6 @@ class ProductService:
                 name=product.name,
                 description=product.description,
                 category_id=product.category_id,
-                supplier_id=product.supplier_id,
                 featured=product.featured,
                 rating=product.rating,
                 review_count=product.review_count,
@@ -155,7 +138,6 @@ class ProductService:
                 created_at=product.created_at.isoformat() if product.created_at else "",
                 updated_at=product.updated_at.isoformat() if product.updated_at else None,
                 category=category,
-                supplier=supplier,
                 variants=variants,
                 primary_variant=primary_variant
             )
@@ -167,7 +149,6 @@ class ProductService:
                 name=getattr(product, 'name', ''),
                 description=getattr(product, 'description', ''),
                 category_id=product.category_id,
-                supplier_id=product.supplier_id,
                 featured=getattr(product, 'featured', False),
                 rating=getattr(product, 'rating', 0.0),
                 review_count=getattr(product, 'review_count', 0),
@@ -179,7 +160,6 @@ class ProductService:
                 created_at=product.created_at.isoformat() if product.created_at else "",
                 updated_at=product.updated_at.isoformat() if product.updated_at else None,
                 category=None,
-                supplier=None,
                 variants=[],
                 primary_variant=None
             )
@@ -284,7 +264,6 @@ class ProductService:
             .where(and_(*base_conditions))
             .options(
                 selectinload(Product.category),
-                selectinload(Product.supplier),
                 selectinload(Product.variants).selectinload(ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             )
@@ -343,7 +322,6 @@ class ProductService:
             select(Product)
             .options(
                 selectinload(Product.category),
-                selectinload(Product.supplier),
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
@@ -379,7 +357,6 @@ class ProductService:
             .limit(limit)
             .options(
                 selectinload(Product.category),
-                selectinload(Product.supplier),
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
@@ -393,7 +370,6 @@ class ProductService:
         if not rows:
             fallback_query = select(Product).options(
                 selectinload(Product.category),
-                selectinload(Product.supplier),
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
@@ -480,7 +456,6 @@ class ProductService:
         """Get product by ID."""
         query = select(Product).options(
             selectinload(Product.category),
-            selectinload(Product.supplier),
             selectinload(Product.variants).selectinload(ProductVariant.images),
             selectinload(Product.variants).selectinload(ProductVariant.inventory)
         ).where(Product.id == product_id)
@@ -750,7 +725,7 @@ class ProductService:
             logger.error(f"Error in search_categories: {e}")
             return []
 
-    async def create_product(self, product_data: ProductCreate, supplier_id: UUID) -> ProductResponse:
+    async def create_product(self, product_data: ProductCreate, created_by: UUID) -> ProductResponse:
         """Create a new product."""
         # Create product
         db_product = Product(
@@ -760,7 +735,6 @@ class ProductService:
             description=product_data.description,
             short_description=product_data.short_description,
             category_id=product_data.category_id,
-            supplier_id=supplier_id,
             origin=product_data.origin,
             is_featured=product_data.is_featured,
             is_bestseller=product_data.is_bestseller
@@ -898,8 +872,8 @@ class ProductService:
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Check if user owns the product (for suppliers) or is admin
-        if not is_admin and product.supplier_id != user_id:
+        # Check if user is admin (only admins can update products)
+        if not is_admin:
             raise HTTPException(
                 status_code=403, detail="Not authorized to update this product")
 
@@ -1113,8 +1087,8 @@ class ProductService:
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        # Check if user owns the product (for suppliers) or is admin
-        if not is_admin and product.supplier_id != user_id:
+        # Check if user is admin (only admins can delete products)
+        if not is_admin:
             raise HTTPException(
                 status_code=403, detail="Not authorized to delete this product")
         

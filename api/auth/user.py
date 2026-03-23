@@ -158,7 +158,7 @@ async def update_user_profile(
 async def search_users(
     q: str = Query(..., min_length=2, description="Search query (minimum 2 characters)"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
-    role: Optional[str] = Query(None, regex="^(Customer|Supplier|Admin)$", description="Filter by user role"),
+    role: Optional[str] = Query(None, regex="^(Customer|Admin)$", description="Filter by user role"),
     db: AsyncSession = Depends(get_db)
 ):
     """

@@ -553,7 +553,6 @@ def upgrade() -> None:
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('short_description', sa.String(length=500), nullable=True),
     sa.Column('category_id', core.db.GUID(), nullable=False),
-    sa.Column('supplier_id', core.db.GUID(), nullable=False),
     sa.Column('product_status', sa.String(length=50), nullable=False),
     sa.Column('availability_status', sa.String(length=50), nullable=False),
     sa.Column('min_price', sa.Float(), nullable=True),
@@ -580,7 +579,6 @@ def upgrade() -> None:
     sa.Column('updated_by', core.db.GUID(), nullable=True),
     sa.Column('version', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['category_id'], ['categories.id'], ),
-    sa.ForeignKeyConstraint(['supplier_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('slug')
     )
@@ -591,7 +589,6 @@ def upgrade() -> None:
     op.create_index('idx_products_published', 'products', ['published_at', 'product_status'], unique=False)
     op.create_index('idx_products_slug', 'products', ['slug'], unique=False)
     op.create_index('idx_products_specifications', 'products', ['specifications'], unique=False, postgresql_using='gin')
-    op.create_index('idx_products_supplier_status', 'products', ['supplier_id', 'product_status'], unique=False)
     op.create_index(op.f('ix_products_created_at'), 'products', ['created_at'], unique=False)
     op.create_index(op.f('ix_products_created_by'), 'products', ['created_by'], unique=False)
     op.create_index(op.f('ix_products_id'), 'products', ['id'], unique=False)
@@ -1909,7 +1906,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_products_id'), table_name='products')
     op.drop_index(op.f('ix_products_created_by'), table_name='products')
     op.drop_index(op.f('ix_products_created_at'), table_name='products')
-    op.drop_index('idx_products_supplier_status', table_name='products')
     op.drop_index('idx_products_specifications', table_name='products', postgresql_using='gin')
     op.drop_index('idx_products_slug', table_name='products')
     op.drop_index('idx_products_published', table_name='products')

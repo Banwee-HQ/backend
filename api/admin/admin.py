@@ -859,7 +859,6 @@ async def get_all_products_admin(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    supplier: Optional[str] = Query(None),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -867,7 +866,7 @@ async def get_all_products_admin(
     logger.debug(f"Fetching products: page={page}, limit={limit}, search={search}")
     try:
         admin_service = AdminService(db)
-        products = await admin_service.get_all_products(page, limit, search, category, status, supplier)
+        products = await admin_service.get_all_products(page, limit, search, category, status)
         logger.debug(f"Successfully fetched {len(products.get('data', []))} products")
         return Response.success(data=products)
     except Exception as e:
@@ -916,7 +915,6 @@ async def get_product_by_id_admin(
             selectinload(Product.variants).selectinload(ProductVariant.images),
             selectinload(Product.variants).selectinload(ProductVariant.inventory).selectinload(Inventory.location),
             selectinload(Product.category),
-            selectinload(Product.supplier)
         ).where(Product.id == product_id)
         
         result = await db.execute(query)
@@ -967,28 +965,6 @@ async def get_product_by_id_admin(
             except Exception as cat_error:
                 logger.warning(f"Error processing category for product {product.id}: {cat_error}")
                 product_data["category"] = {"error": "Failed to load category data"}
-        
-        # Add supplier details with error handling
-        if product.supplier:
-            try:
-                supplier = product.supplier
-                # Handle different possible name field combinations
-                supplier_name = (
-                    getattr(supplier, 'name', None) or 
-                    getattr(supplier, 'firstname', None) and getattr(supplier, 'lastname', None) and 
-                    f"{supplier.firstname} {supplier.lastname}".strip() or 
-                    supplier.email
-                )
-                
-                product_data["supplier"] = {
-                    "id": str(supplier.id),
-                    "name": supplier_name,
-                    "email": getattr(supplier, 'email', None),
-                    "phone": getattr(supplier, 'phone', None),
-                }
-            except Exception as sup_error:
-                logger.warning(f"Error processing supplier for product {product.id}: {sup_error}")
-                product_data["supplier"] = {"error": "Failed to load supplier data"}
         
         return Response.success(data=product_data)
     except APIException:
