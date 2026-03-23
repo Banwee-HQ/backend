@@ -2,11 +2,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, desc
 from typing import Optional, List
-from models.review import Review
-from models.product import Product
-from models.user import User
-from schemas.review import ReviewCreate, ReviewUpdate, ReviewResponse
-from core.errors import APIException
+from models.catalog.review import Review
+from models.catalog.product import Product
+from models.auth.user import User
+from schemas.catalog.review import ReviewCreate, ReviewUpdate, ReviewResponse
+from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7
 from uuid import UUID
 from datetime import datetime

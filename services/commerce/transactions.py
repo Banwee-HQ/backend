@@ -5,7 +5,7 @@ Implements atomic operations for product removal and ensures data consistency
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional, Dict, Any, Callable, TypeVar, Generic
+from typing import AsyncGenerator, Optional, Dict, Any, Callable, TypeVar, Generic, List
 from uuid import UUID
 from datetime import datetime
 from core.logging import get_structured_logger

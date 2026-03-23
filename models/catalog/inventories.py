@@ -133,7 +133,7 @@ class Inventory(BaseModel):
         
         # Validate stock levels
         if new_available < 0:
-            from core.errors import APIException
+            from core.exceptions import APIException
             raise APIException(
                 status_code=400,
                 message=f"Insufficient stock. Available: {self.quantity_available}, Requested: {abs(quantity_change)}"
@@ -245,7 +245,7 @@ async def atomic_stock_operation(
         inventory = await Inventory.get_with_lock(db, variant_id)
         
         if not inventory:
-            from core.errors import APIException
+            from core.exceptions import APIException
             raise APIException(
                 status_code=404,
                 message=f"Inventory not found for variant {variant_id}"
@@ -267,7 +267,7 @@ async def atomic_stock_operation(
             }
         
         else:
-            from core.errors import APIException
+            from core.exceptions import APIException
             raise APIException(
                 status_code=400,
                 message=f"Unknown operation: {operation}"
@@ -315,7 +315,7 @@ async def atomic_bulk_stock_update(
             
             inventory = inventory_map.get(variant_id)
             if not inventory:
-                from core.errors import APIException
+                from core.exceptions import APIException
                 raise APIException(
                     status_code=404,
                     message=f"Inventory not found for variant {variant_id}"

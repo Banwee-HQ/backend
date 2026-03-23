@@ -10,17 +10,17 @@ from uuid import UUID
 from core.db import get_db
 from core.dependencies import get_current_auth_user
 from core.utils.response import Response
-from models.user import User
-from models.refunds import RefundStatus
-from schemas.refunds import (
+from models.auth.user import User
+from models.commerce.refunds import RefundStatus
+from schemas.commerce.refunds import (
     RefundRequest, 
     RefundResponse, 
     RefundListResponse,
     RefundEligibilityResponse,
     RefundStatsResponse
 )
-from services.refunds import RefundService
-from core.errors import APIException
+from services.commerce.refunds import RefundService
+from core.exceptions import APIException
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 

@@ -7,10 +7,10 @@ from core.utils.uuid_utils import uuid7
 from typing import List, Optional
 from core.logging import get_structured_logger
 
-from models.wishlist import Wishlist, WishlistItem
+from models.catalog.wishlist import Wishlist, WishlistItem
 # Import Product and ProductVariant
-from models.product import Product, ProductVariant
-from schemas.wishlist import WishlistCreate, WishlistUpdate, WishlistItemCreate
+from models.catalog.product import Product, ProductVariant
+from schemas.catalog.wishlist import WishlistCreate, WishlistUpdate, WishlistItemCreate
 
 # Configure logger
 logger = get_structured_logger(__name__)

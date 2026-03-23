@@ -6,14 +6,14 @@ from uuid import UUID
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from models.variant_tracking import (
+from models.catalog.variant_tracking import (
     VariantTrackingEntry, VariantPriceHistory, 
     VariantAnalytics, VariantSubstitution
 )
-from models.product import ProductVariant, Product
-from models.subscriptions import Subscription
-from models.inventories import Inventory
-from core.errors import APIException
+from models.catalog.product import ProductVariant, Product
+from models.commerce.subscriptions import Subscription
+from models.catalog.inventories import Inventory
+from core.exceptions import APIException
 
 
 class VariantTrackingService:

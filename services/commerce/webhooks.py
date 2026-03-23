@@ -5,11 +5,11 @@ Processes Stripe webhooks with signature verification, rate limiting, and secure
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from fastapi import HTTPException, Request
-from models.payments import Transaction, PaymentIntent
-from models.orders import Order, OrderStatus, PaymentStatus
-from services.payments import PaymentService
-from services.inventory import InventoryService
-from core.auth.webhook import verify_stripe_webhook_request, WebhookSecurityError
+from models.commerce.payments import Transaction, PaymentIntent
+from models.commerce.orders import Order, OrderStatus, PaymentStatus
+from services.commerce.payments import PaymentService
+from services.catalog.inventory import InventoryService
+from core.webhook import verify_stripe_webhook_request, WebhookSecurityError
 from uuid import UUID
 from datetime import datetime
 from typing import Dict, Any, Optional

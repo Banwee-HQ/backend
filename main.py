@@ -9,8 +9,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from core.db import initialize_db
-from core.config import settings, validate_startup_environment, get_setup_instructions
-from core.errors import (
+from core.config import settings, validate_startup_environment
+from core.exceptions import (
     APIException,
     api_exception_handler,
     http_exception_handler,

@@ -3,9 +3,9 @@ from sqlalchemy import select, update, delete
 from typing import List, Optional
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.promocode import Promocode
-from schemas.promos import PromocodeCreate, PromocodeUpdate
-from core.errors import APIException
+from models.commerce.promocode import Promocode
+from schemas.commerce.promos import PromocodeCreate, PromocodeUpdate
+from core.exceptions import APIException
 
 
 class PromocodeService:

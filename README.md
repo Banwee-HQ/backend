@@ -1,760 +1,259 @@
-# Banwee Backend - FastAPI Server
+# Banwee API
 
-Complete guide for running and managing the Banwee backend server and ARQ worker.
-
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Running the Backend](#running-the-backend)
-- [Running the ARQ Worker](#running-the-arq-worker)
-- [Environment Configuration](#environment-configuration)
-- [Database Management](#database-management)
-- [API Documentation](#api-documentation)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
+REST API for Banwee — premium organic products from Africa. Built with FastAPI, PostgreSQL, and Stripe.
 
 ---
 
-## Overview
+## Tech Stack
 
-The Banwee backend is built with FastAPI and provides:
-
-- **24 API Routers** - Complete REST API for e-commerce operations
-- **Async Operations** - Full async/await support for high performance
-- **Background Jobs** - ARQ worker for scheduled tasks
-- **Smart Features** - AI recommendations, auto-scheduling
-- **Security** - JWT auth, password hashing, CORS protection
-- **Caching** - Redis for improved performance
-- **Testing** - 80%+ test coverage
-
-### Key Components
-
-- **FastAPI Server** - Main API server (port 8000)
-- **ARQ Worker** - Background task processor (required)
-- **PostgreSQL** - Database (Neon cloud)
-- **Redis** - Cache (Upstash cloud)
+| Layer | Technology |
+|---|---|
+| Framework | FastAPI 0.111 + Uvicorn |
+| Database | PostgreSQL (async via asyncpg, Alembic migrations) |
+| Auth | JWT (python-jose) + bcrypt/argon2 + OAuth (Google, Facebook) |
+| Payments | Stripe |
+| Email | Brevo (SendinBlue) |
+| Background Jobs | asyncio scheduler (subscriptions, promocodes) |
+| Documents | WeasyPrint (PDF invoices), Jinja2 |
+| Barcodes | qrcode + python-barcode |
 
 ---
 
-## Prerequisites
+## Project Structure
 
-### Required Software
-
-- **Python 3.11+** - [Download](https://www.python.org/downloads/)
-- **pip** - Python package manager (included with Python)
-- **Git** - Version control
-
-### Cloud Services (Pre-configured)
-
-- ✅ **Neon PostgreSQL** - Database URL in `.env`
-- ✅ **Upstash Redis** - Cache URL in `.env`
-
-### Optional Services
-
-- **Stripe** - Payment processing (optional for development)
-- **Mailgun** - Email notifications (optional for development)
-
----
-
-## Quick Start
-
-### One-Command Setup
-
-```bash
-# From project root
-./start-app.sh
+```
+backend/
+├── api/              # Route handlers (auth, catalog, commerce, admin, system)
+├── models/           # SQLAlchemy ORM models
+├── schemas/          # Pydantic request/response schemas
+├── core/             # Config, DB, logging, exceptions, utils, background jobs
+├── alembic/          # Database migrations
+├── main.py           # App entry point
+├── start-app.sh      # Startup script (dev / prod)
+├── .env.dev          # Development environment variables
+└── .env.prod         # Production environment variables
 ```
 
-This starts both the backend server and ARQ worker.
+---
 
-### Manual Setup
+## Local Setup
+
+**1. Create and activate a virtual environment**
 
 ```bash
-# Navigate to backend directory
-cd backend
-
-# Create virtual environment
 python3 -m venv .venv
+source .venv/bin/activate
+```
 
-# Activate virtual environment
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+**2. Install dependencies**
 
-# Install dependencies
+```bash
 pip install -r requirements.txt
+```
 
-# Initialize database
-python init_db.py
+**3. Configure environment**
 
-# Start backend server
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```bash
+cp .env.dev.example .env.dev   # then fill in your secrets
+```
+
+See [Environment Variables](#environment-variables) for details.
+
+**4. Run database migrations**
+
+```bash
+alembic upgrade head
 ```
 
 ---
 
-## Running the Backend
+## Running the App
 
-### Development Mode (with auto-reload)
-
-```bash
-cd backend
-source .venv/bin/activate
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Features:**
-- ✅ Auto-reload on code changes
-- ✅ Detailed error messages
-- ✅ Debug mode enabled
-- ✅ CORS configured for localhost
-
-**Access:**
-- API: http://localhost:8000
-- Swagger Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-### Production Mode
+The `start-app.sh` script handles both modes. Run it from inside the `backend/` directory.
 
 ```bash
 cd backend
-source .venv/bin/activate
-
-# Using Uvicorn (single worker)
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
-
-# Using Gunicorn (multiple workers - recommended)
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+chmod +x start-app.sh
 ```
 
-**Production Configuration:**
-- Multiple workers for better performance
-- No auto-reload
-- Production error handling
-- Strict CORS origins
-- Rate limiting enabled
-
-### Server Options
-
-| Option | Description | Example |
-|--------|-------------|---------|
-| `--host` | Bind address | `0.0.0.0` (all interfaces) |
-| `--port` | Port number | `8000` |
-| `--reload` | Auto-reload on changes | Development only |
-| `--workers` | Number of worker processes | `4` (production) |
-| `--log-level` | Logging level | `info`, `debug`, `warning` |
-
-### Checking Server Status
+### Development
 
 ```bash
-# Check if server is running
-curl http://localhost:8000/
-
-# Expected response:
-{
-  "service": "Banwee API",
-  "status": "Running",
-  "version": "1.0.0"
-}
-
-# Check health endpoint
-curl http://localhost:8000/v1/health
-
-# Expected response:
-{
-  "status": "healthy",
-  "database": "connected",
-  "redis": "connected"
-}
+./start-app.sh dev
 ```
+
+- Loads `.env.dev`
+- Uvicorn with hot reload and debug logging
+- CORS open to `localhost:5173` / `localhost:3000`
+
+### Production
+
+```bash
+./start-app.sh prod
+```
+
+- Loads `.env.prod`
+- Gunicorn + UvicornWorker, 4 workers by default
+- Override workers: `WORKERS=8 ./start-app.sh prod`
+
+> Host and port are read from `BACKEND_URL` in the env file.
 
 ---
 
-## Running the ARQ Worker
+## API
 
-### What is the ARQ Worker?
+All routes are versioned under `/v1`.
 
-The ARQ worker is a **required** background task processor that handles:
+| Module | Prefix | Description |
+|---|---|---|
+| Auth | `/v1/auth` | Register, login, refresh, logout, password change |
+| OAuth | `/v1/auth/oauth` | Google & Facebook login |
+| Users | `/v1/users` | Profile, addresses |
+| Products | `/v1/products` | Catalog, search, reviews, inventory, wishlist |
+| Categories | `/v1/categories` | Category tree |
+| Cart | `/v1/cart` | Cart management |
+| Orders | `/v1/orders` | Order lifecycle |
+| Payments | `/v1/payments` | Stripe payment methods & intents |
+| Subscriptions | `/v1/subscriptions` | Recurring orders, auto-renewal |
+| Promocodes | `/v1/promocodes` | Discount codes |
+| Shipping | `/v1/shipping` | Methods, rates, tracking |
+| Tax | `/v1/tax` | Tax rate management |
+| Refunds | `/v1/refunds` | Refund requests |
+| Webhooks | `/v1/webhooks` | Stripe webhook handler |
+| Admin | `/v1/admin` | Admin operations & analytics |
+| System | `/v1/health` | Health check, contact messages |
 
-1. **Subscription Renewals** - Daily at 2:00 AM UTC
-   - Processes recurring subscription orders
-   - Handles payment processing
-   - Sends renewal notifications
-   - Updates subscription status
+**Interactive docs** (available when the server is running):
 
-2. **Promocode Auto-Scheduling** - Daily at 12:00 AM (midnight) UTC
-   - Activates promocodes when `valid_from` date is reached
-   - Deactivates promocodes when `valid_until` date is passed
-   - Deactivates promocodes when usage limit is reached
-
-3. **Background Email Sending** - As needed
-   - Order confirmations
-   - Shipping notifications
-   - Password reset emails
-   - Subscription updates
-
-4. **Inventory Synchronization** - Periodic
-   - Stock level updates
-   - Low stock alerts
-
-### Starting the ARQ Worker
-
-#### Method 1: Using the Startup Script (Recommended)
-
-```bash
-cd backend
-source .venv/bin/activate
-python start_arq_worker.py
-```
-
-**Output:**
-```
-Starting ARQ worker...
-Worker started successfully
-Listening for tasks...
-```
-
-#### Method 2: Direct ARQ Command
-
-```bash
-cd backend
-source .venv/bin/activate
-arq core.arq_worker.WorkerSettings
-```
-
-#### Method 3: Using the Shell Script
-
-```bash
-cd backend
-./start_arq_worker.sh
-```
-
-### ARQ Worker Configuration
-
-The worker is configured in `backend/core/arq_worker.py`:
-
-```python
-# Subscription renewal - Daily at 2 AM UTC
-cron(
-    process_subscription_renewals_task,
-    hour=2,
-    minute=0,
-    run_at_startup=False,
-    unique=True,
-    timeout=600  # 10 minutes
-)
-
-# Promocode scheduling - Daily at midnight UTC
-cron(
-    update_promocode_statuses_task,
-    hour=0,
-    minute=0,
-    run_at_startup=False,
-    unique=True,
-    timeout=300  # 5 minutes
-)
-```
-
-### Monitoring the ARQ Worker
-
-#### Check Worker Status
-
-```bash
-# View worker logs
-tail -f logs/arq_worker.log
-
-# View error logs
-tail -f logs/arq_worker_error.log
-
-# Check if worker is running
-ps aux | grep arq
-```
-
-#### Worker Logs
-
-The worker logs all activities:
-
-```
-[2026-02-13 02:00:00] Starting subscription renewal task
-[2026-02-13 02:00:01] Processing 15 subscriptions due for renewal
-[2026-02-13 02:00:05] Successfully renewed 14 subscriptions
-[2026-02-13 02:00:05] Failed to renew 1 subscription (payment failed)
-[2026-02-13 02:00:05] Subscription renewal task completed
-```
-
-### Production Deployment
-
-#### Using Supervisor (Recommended)
-
-Create `/etc/supervisor/conf.d/banwee-arq.conf`:
-
-```ini
-[program:banwee-arq]
-command=/path/to/backend/.venv/bin/python start_arq_worker.py
-directory=/path/to/backend
-user=www-data
-autostart=true
-autorestart=true
-redirect_stderr=true
-stdout_logfile=/path/to/backend/logs/arq_worker.log
-stderr_logfile=/path/to/backend/logs/arq_worker_error.log
-```
-
-Start the worker:
-
-```bash
-sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl start banwee-arq
-```
-
-#### Using systemd
-
-Create `/etc/systemd/system/banwee-arq.service`:
-
-```ini
-[Unit]
-Description=Banwee ARQ Worker
-After=network.target
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/path/to/backend
-Environment="PATH=/path/to/backend/.venv/bin"
-ExecStart=/path/to/backend/.venv/bin/python start_arq_worker.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Start the worker:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable banwee-arq
-sudo systemctl start banwee-arq
-sudo systemctl status banwee-arq
-```
-
-#### Using Docker
-
-```dockerfile
-# In docker-compose.yml
-services:
-  arq-worker:
-    build: ./backend
-    command: python start_arq_worker.py
-    environment:
-      - POSTGRES_DB_URL=${POSTGRES_DB_URL}
-      - REDIS_URL=${REDIS_URL}
-    depends_on:
-      - backend
-    restart: always
-```
-
-### Troubleshooting ARQ Worker
-
-#### Worker Not Starting
-
-```bash
-# Check Python version
-python --version  # Should be 3.11+
-
-# Check dependencies
-pip list | grep arq
-
-# Reinstall dependencies
-pip install -r requirements.txt
-
-# Check Redis connection
-python -c "import redis; r=redis.from_url('your-redis-url'); r.ping()"
-```
-
-#### Tasks Not Running
-
-```bash
-# Check worker logs
-tail -f logs/arq_worker.log
-
-# Verify cron schedule
-python -c "from core.arq_worker import WorkerSettings; print(WorkerSettings.cron_jobs)"
-
-# Manually trigger task (for testing)
-python -c "
-from core.arq_worker import enqueue_subscription_renewal
-import asyncio
-asyncio.run(enqueue_subscription_renewal())
-"
-```
-
-#### High Memory Usage
-
-```bash
-# Monitor worker memory
-ps aux | grep arq
-
-# Restart worker
-sudo supervisorctl restart banwee-arq
-
-# Or with systemd
-sudo systemctl restart banwee-arq
-```
+- Swagger UI → `{BACKEND_URL}/docs`
+- ReDoc → `{BACKEND_URL}/redoc`
 
 ---
 
-## Environment Configuration
+## Environment Variables
 
-### Required Environment Variables
+| Variable | Required | Description |
+|---|---|---|
+| `ENVIRONMENT` | ✅ | `dev` or `production` |
+| `BACKEND_URL` | ✅ | Base URL of this API (e.g. `http://localhost:8000`) |
+| `FRONTEND_URL` | ✅ | Frontend origin for CORS |
+| `BACKEND_CORS_ORIGINS` | — | Comma-separated allowed origins (defaults per env) |
+| `POSTGRES_DB_URL` | ✅ | Full PostgreSQL connection URL |
+| `SECRET_KEY` | ✅ | JWT signing key (min 32 chars in dev, 64 in prod) |
+| `ALGORITHM` | — | JWT algorithm, default `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | — | Default `1440` (24h) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | — | Default `7` |
+| `STRIPE_SECRET_KEY` | ✅ | `sk_test_...` (dev) / `sk_live_...` (prod) |
+| `STRIPE_WEBHOOK_SECRET` | ✅ | Stripe webhook signing secret |
+| `BREVO_API_KEY` | ✅ | Brevo (SendinBlue) API key |
+| `BREVO_FROM_EMAIL` | — | Sender address, default `Banwee <noreply@banwee.com>` |
+| `GOOGLE_CLIENT_ID` | — | OAuth — Google |
+| `GOOGLE_CLIENT_SECRET` | — | OAuth — Google |
+| `FACEBOOK_APP_ID` | — | OAuth — Facebook |
+| `FACEBOOK_APP_SECRET` | — | OAuth — Facebook |
+| `ADMIN_USER_ID` | — | UUID of the admin user |
 
-Create `backend/.env` from `backend/.env.example`:
-
-```env
-# Database (Required)
-POSTGRES_DB_URL=postgresql+asyncpg://user:pass@host:5432/db
-
-# Redis (Required)
-REDIS_URL=rediss://default:***@upstash.io:6379
-
-# Security (Required)
-SECRET_KEY=your-secret-key-min-32-chars
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# Application
-ENVIRONMENT=local
-DEBUG=true
-FRONTEND_URL=http://localhost:5173
-BACKEND_CORS_ORIGINS=http://localhost:5173
-```
-
-### Optional Environment Variables
-
-```env
-# Stripe (for payments)
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLIC_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-
-# Mailgun (for emails)
-MAILGUN_API_KEY=your-api-key
-MAILGUN_DOMAIN=your-domain.com
-MAILGUN_FROM_EMAIL=noreply@your-domain.com
-
-# OAuth (optional)
-GOOGLE_CLIENT_ID=your-client-id
-GOOGLE_CLIENT_SECRET=your-client-secret
-FACEBOOK_APP_ID=your-app-id
-FACEBOOK_APP_SECRET=your-app-secret
-```
-
-### Generating SECRET_KEY
+Generate a secure `SECRET_KEY`:
 
 ```bash
-# Using OpenSSL
-openssl rand -hex 32
-
-# Using Python
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 ---
 
-## Database Management
+## Database Migrations
 
-### Initialize Database
+### First time / fresh setup
 
 ```bash
-cd backend
-source .venv/bin/activate
-python init_db.py
+alembic upgrade head
 ```
 
-This will:
-1. Create all database tables
-2. Seed initial data (admin user, categories, products)
-3. Set up indexes and constraints
+### After changing a model (add column, alter type, new table, etc.)
 
-### Database Migrations
+1. Edit your SQLAlchemy model in `models/`
+2. Generate a migration — Alembic diffs your models against the DB:
 
 ```bash
-# Create new migration
-alembic revision --autogenerate -m "Description of changes"
+alembic revision --autogenerate -m "add phone to users"
+```
 
-# Apply migrations
+3. Review the generated file in `alembic/versions/` — autogenerate isn't perfect, always check it.
+
+4. Apply it:
+
+```bash
 alembic upgrade head
+```
 
-# Rollback one migration
+### Other useful commands
+
+```bash
+# Roll back one migration
 alembic downgrade -1
 
-# Check current version
+# Roll back to a specific revision
+alembic downgrade <revision_id>
+
+# Check what's applied
 alembic current
 
-# View migration history
-alembic history
+# See full history
+alembic history --verbose
+
+# Show pending (unapplied) migrations
+alembic history -r current:head
 ```
 
-### Database Backup
+### Writing a manual migration
+
+If autogenerate misses something (e.g. renaming a column, custom SQL, data migrations):
 
 ```bash
-# Backup database (if using local PostgreSQL)
-pg_dump -U username -d banwee_db > backup.sql
-
-# Restore database
-psql -U username -d banwee_db < backup.sql
+alembic revision -m "backfill order totals"
 ```
 
----
+Then edit the generated file manually:
 
-## API Documentation
+```python
+def upgrade():
+    op.execute("UPDATE orders SET total = subtotal + tax WHERE total IS NULL")
 
-### Interactive Documentation
-
-Once the server is running:
-
-- **Swagger UI**: http://localhost:8000/docs
-  - Interactive API testing
-  - Request/response examples
-  - Authentication testing
-
-- **ReDoc**: http://localhost:8000/redoc
-  - Clean, readable documentation
-  - Detailed schemas
-  - Code examples
-
-### API Endpoints Overview
-
-| Category | Endpoints | Description |
-|----------|-----------|-------------|
-| **Auth** | `/v1/auth/*` | Login, register, password reset |
-| **Users** | `/v1/users/*` | User profile, addresses |
-| **Products** | `/v1/products/*` | Product catalog, search, recommendations |
-| **Cart** | `/v1/cart/*` | Shopping cart operations |
-| **Orders** | `/v1/orders/*` | Order management, tracking |
-| **Payments** | `/v1/payments/*` | Payment processing, methods |
-| **Subscriptions** | `/v1/subscriptions/*` | Subscription management |
-| **Promocodes** | `/v1/promocodes/*` | Promo code operations |
-| **Admin** | `/v1/admin/*` | Admin operations, analytics |
-| **Wishlist** | `/v1/wishlist/*` | Wishlist management |
-| **Reviews** | `/v1/reviews/*` | Product reviews |
-| **Inventory** | `/v1/inventory/*` | Stock management |
-| **Shipping** | `/v1/shipping/*` | Shipping methods, tracking |
-| **Analytics** | `/v1/analytics/*` | Sales analytics, reports |
-| **Webhooks** | `/v1/webhooks/*` | External webhooks (Stripe) |
-
-### Testing API Endpoints
-
-```bash
-# Health check
-curl http://localhost:8000/v1/health
-
-# Login
-curl -X POST http://localhost:8000/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@banwee.com","password":"admin123"}'
-
-# Get products
-curl http://localhost:8000/v1/products?page=1&limit=10
-
-# Get product recommendations
-curl http://localhost:8000/v1/products/{product_id}/recommendations?limit=4
+def downgrade():
+    pass
 ```
 
 ---
 
 ## Testing
 
-### Running Tests
-
 ```bash
-cd backend
-source .venv/bin/activate
-
 # Run all tests
 pytest
 
-# Run with coverage
+# With coverage
 pytest --cov=. --cov-report=html
 
-# Run specific test file
-pytest tests/unit/test_auth_service.py
-
-# Run specific test
-pytest tests/unit/test_auth_service.py::test_login
-
-# Run with verbose output
-pytest -v
-
-# Run and stop on first failure
-pytest -x
-```
-
-### Test Categories
-
-```bash
-# Unit tests
-pytest tests/unit/
-
-# Integration tests
-pytest tests/integration/
-
-# API tests
-pytest tests/api/
-
-# Service tests
-pytest tests/services/
-```
-
-### Test Coverage
-
-View coverage report:
-
-```bash
-pytest --cov=. --cov-report=html
-open htmlcov/index.html  # On macOS
-# Or navigate to htmlcov/index.html in browser
-```
-
-Current coverage: **80%+**
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. Server Won't Start
-
-```bash
-# Check if port is in use
-lsof -i :8000
-
-# Kill process using port
-kill -9 <PID>
-
-# Check Python version
-python --version  # Should be 3.11+
-
-# Reinstall dependencies
-pip install -r requirements.txt
-```
-
-#### 2. Database Connection Error
-
-```bash
-# Check database URL in .env
-cat .env | grep POSTGRES_DB_URL
-
-# Test database connection
-python -c "
-from sqlalchemy import create_engine
-engine = create_engine('your-db-url')
-conn = engine.connect()
-print('Connected!')
-"
-```
-
-#### 3. Redis Connection Error
-
-```bash
-# Check Redis URL in .env
-cat .env | grep REDIS_URL
-
-# Test Redis connection
-python -c "
-import redis
-r = redis.from_url('your-redis-url')
-r.ping()
-print('Connected!')
-"
-```
-
-#### 4. Import Errors
-
-```bash
-# Ensure virtual environment is activated
-source .venv/bin/activate
-
-# Reinstall dependencies
-pip install -r requirements.txt
-
-# Check Python path
-python -c "import sys; print(sys.path)"
-```
-
-#### 5. ARQ Worker Not Processing Tasks
-
-```bash
-# Check worker is running
-ps aux | grep arq
-
-# Check worker logs
-tail -f logs/arq_worker.log
-
-# Restart worker
-# If using supervisor:
-sudo supervisorctl restart banwee-arq
-
-# If using systemd:
-sudo systemctl restart banwee-arq
-```
-
-### Logs
-
-```bash
-# Application logs
-tail -f logs/banwee.log
-
-# Error logs
-tail -f logs/banwee_error.log
-
-# ARQ worker logs
-tail -f logs/arq_worker.log
-
-# Service-specific logs
-tail -f logs/services.orders.log
-tail -f logs/services.products.log
-```
-
-### Performance Issues
-
-```bash
-# Check database query performance
-# Enable SQL logging in .env
-SQLALCHEMY_ECHO=true
-
-# Monitor Redis cache
-redis-cli --stat
-
-# Check memory usage
-ps aux | grep python
-
-# Profile application
-python -m cProfile -o profile.stats main.py
+# Single file
+pytest tests/path/to/test_file.py -v
 ```
 
 ---
 
-## Additional Resources
+## Health Check
 
-- **[Main README](../README.md)** - Project overview
-- **[Subscription Flow](SUBSCRIPTION_FLOW.md)** - Subscription system details
-- **[API Cleanup](../API_CLEANUP_SUMMARY.md)** - API documentation
-- **[Smart Recommendations](../SMART_RECOMMENDATIONS_COMPLETE.md)** - Recommendation engine
+```bash
+curl {BACKEND_URL}/v1/health
+```
 
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/Oahse/banweemvp/issues)
-- **Email**: support@banwee.com
+```json
+{ "status": "healthy" }
+```
 
 ---
 
-<div align="center">
-  <p>Made with ❤️ by the Banwee Team</p>
-</div>
+## Notes
+
+- Never commit `.env.dev` or `.env.prod` — they are gitignored.
+- In production, inject secrets via your CI/CD or hosting platform's secret store.
+- Subscription renewals and promocode scheduling run automatically via the asyncio scheduler on startup.

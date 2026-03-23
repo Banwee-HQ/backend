@@ -12,10 +12,10 @@ from uuid import UUID
 from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_logger
-from models.user import User
-from models.product import Category
+from models.auth.user import User
+from models.catalog.product import Category
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/categories", tags=["categories"])

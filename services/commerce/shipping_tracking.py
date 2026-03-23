@@ -14,11 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 from sqlalchemy.orm import selectinload
 
-from models.shipping_tracking import (
-    ShipmentTracking, TrackingEvent, ShippingProvider, 
+from models.commerce.shipping_tracking import (
+    ShipmentTracking, ShipmentTrackingEvent as TrackingEvent, ShippingProvider, 
     ShippingCarrier, TrackingStatus, ShipmentType
 )
-from core.errors import APIException
+from core.exceptions import APIException
 from core.config import settings
 
 class ShippingTrackingService:

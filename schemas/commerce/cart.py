@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
-from schemas.product import ProductVariantResponse, ProductImageResponse
+from schemas.catalog.product import ProductVariantResponse, ProductImageResponse
 
 
 class AddToCartRequest(BaseModel):

@@ -5,8 +5,8 @@ Requirements: 3.1, 3.2, 3.5
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
-from models.discounts import Discount, SubscriptionDiscount
-from models.subscriptions import Subscription
+from models.commerce.discounts import Discount, SubscriptionDiscount
+from models.commerce.subscriptions import Subscription
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from decimal import Decimal

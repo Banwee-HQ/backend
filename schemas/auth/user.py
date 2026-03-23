@@ -6,7 +6,7 @@ from datetime import datetime
 from uuid import UUID
 from enum import Enum
 
-from models.user import UserRole
+from models.auth.user import UserRole
 
 class AddressBase(BaseModel):
     street: str

@@ -8,15 +8,15 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta
-from models.inventories import Inventory, WarehouseLocation, StockAdjustment
-from models.product import ProductVariant, Product, ProductImage
-from models.user import User
-from schemas.inventory import (
+from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
+from models.catalog.product import ProductVariant, Product, ProductImage
+from models.auth.user import User
+from schemas.catalog.inventory import (
     WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
     InventoryCreate, InventoryUpdate, InventoryResponse,
     StockAdjustmentCreate, StockAdjustmentResponse
 )
-from core.errors import APIException
+from core.exceptions import APIException
 import asyncio
 from core.logging import get_structured_logger
 
@@ -506,7 +506,7 @@ class InventoryService:
         """Internal method to perform stock adjustment with database lock"""
         try:
             # Use atomic stock operation from model
-            from models.inventories import Inventory
+            from models.catalog.inventories import Inventory
             
             # Get inventory with database lock
             inventory = await Inventory.get_with_lock(self.db, adjustment_data.variant_id)
@@ -1071,7 +1071,7 @@ class InventoryService:
         Atomically update multiple stock levels using SELECT ... FOR UPDATE
         """
         try:
-            from models.inventories import atomic_bulk_stock_update
+            from models.catalog.inventories import atomic_bulk_stock_update
             
             results = await atomic_bulk_stock_update(
                 db=self.db,

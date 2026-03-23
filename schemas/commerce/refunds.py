@@ -7,7 +7,7 @@ from uuid import UUID
 from datetime import datetime
 from enum import Enum
 
-from models.refunds import RefundStatus, RefundReason, RefundType
+from models.commerce.refunds import RefundStatus, RefundReason, RefundType
 
 
 class RefundItemRequest(BaseModel):

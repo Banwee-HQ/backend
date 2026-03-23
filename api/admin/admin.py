@@ -8,24 +8,24 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, Dict, Any, List
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_logger
-from services.admin import AdminService
-from services.orders import OrderService
-from services.shipping import ShippingService
-from services.products import ProductService
-from services.review import ReviewService
-from models.user import User
-from models.subscriptions import Subscription
-from models.product import ProductVariant
-from models.refunds import Refund, RefundStatus, RefundItem
-from models.orders import Order
-from models.payments import PaymentIntent, Transaction
-from services.auth import AuthService
+from services.admin.admin import AdminService
+from services.commerce.orders import OrderService
+from services.commerce.shipping import ShippingService
+from services.catalog.products import ProductService
+from services.catalog.review import ReviewService
+from models.auth.user import User
+from models.commerce.subscriptions import Subscription
+from models.catalog.product import ProductVariant
+from models.commerce.refunds import Refund, RefundStatus, RefundItem
+from models.commerce.orders import Order
+from models.commerce.payments import PaymentIntent, Transaction
+from services.auth.auth import AuthService
 from schemas.auth import UserCreate
-from schemas.user import UserUpdate
-from schemas.product import ProductCreate, ProductUpdate
-from schemas.shipping import ShippingMethodCreate, ShippingMethodUpdate
+from schemas.auth.user import UserUpdate
+from schemas.catalog.product import ProductCreate, ProductUpdate
+from schemas.commerce.shipping import ShippingMethodCreate, ShippingMethodUpdate
 from core.dependencies import get_current_auth_user
 
 logger = get_logger(__name__)
@@ -563,7 +563,7 @@ async def update_order_status(
 ):
     """Update order status with tracking information (admin only)."""
     try:
-        from services.orders import OrderService
+        from services.commerce.orders import OrderService
         
         order_service = OrderService(db)
         order = await order_service.update_order_status(
@@ -598,7 +598,7 @@ async def get_order_invoice_admin(
 ):
     """Get order invoice (admin only)."""
     from fastapi.responses import StreamingResponse, FileResponse
-    from services.orders import OrderService as OrderService
+    from services.commerce.orders import OrderService as OrderService
     import os
     import io
     
@@ -905,8 +905,8 @@ async def get_product_by_id_admin(
 ):
     """Get a single product by ID with all related data (admin only)."""
     try:
-        from models.product import Product, ProductVariant, ProductImage, Category
-        from models.inventories import Inventory
+        from models.catalog.product import Product, ProductVariant, ProductImage, Category
+        from models.catalog.inventories import Inventory
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
         
@@ -1046,7 +1046,7 @@ async def update_variant_stock_admin(
 ):
     """Update variant stock (admin only)."""
     try:
-        from models.inventories import Inventory
+        from models.catalog.inventories import Inventory
         from sqlalchemy import select
         
         stock = stock_data.get("stock")
@@ -1409,7 +1409,7 @@ async def list_tax_rates(
     db: AsyncSession = Depends(get_db)
 ):
     """List all tax rates with filtering and pagination"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select, and_, or_
     
     try:
@@ -1478,7 +1478,7 @@ async def list_countries(
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of unique countries with tax rates"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select, func
     
     try:
@@ -1517,7 +1517,7 @@ async def get_tax_rate(
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific tax rate by ID"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select
     
     try:
@@ -1562,7 +1562,7 @@ async def create_tax_rate(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new tax rate"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select, and_
     
     try:
@@ -1630,7 +1630,7 @@ async def update_tax_rate(
     db: AsyncSession = Depends(get_db)
 ):
     """Update an existing tax rate"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select
     
     try:
@@ -1691,7 +1691,7 @@ async def delete_tax_rate(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a tax rate"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select
     
     try:
@@ -1728,7 +1728,7 @@ async def bulk_update_tax_rates(
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk update multiple tax rates"""
-    from models.tax_rates import TaxRate
+    from models.commerce.tax_rates import TaxRate
     from sqlalchemy import select
     
     try:
@@ -1787,7 +1787,7 @@ async def sync_all_inventory(
     Admin only - for data consistency maintenance.
     """
     try:
-        from services.inventory import InventoryService
+        from services.catalog.inventory import InventoryService
         inventory_service = InventoryService(db)
         result = await inventory_service.sync_all_products_availability()
         
@@ -1814,7 +1814,7 @@ async def sync_product_inventory(
     """
     try:
         from uuid import UUID as UUIDType
-        from services.inventory import InventoryService
+        from services.catalog.inventory import InventoryService
         
         product_id_uuid = UUIDType(product_id)
         inventory_service = InventoryService(db)
@@ -1953,7 +1953,7 @@ async def get_admin_categories(
 ):
     """Get all categories for admin management."""
     try:
-        from models.product import Category
+        from models.catalog.product import Category
         
         query = select(Category)
         count_query = select(func.count()).select_from(Category)
@@ -2035,7 +2035,7 @@ async def create_category(
 ):
     """Create a new category (admin only)."""
     try:
-        from models.product import Category
+        from models.catalog.product import Category
         from core.utils.uuid_utils import uuid7
         from slugify import slugify
         
@@ -2094,7 +2094,7 @@ async def update_category(
 ):
     """Update a category (admin only)."""
     try:
-        from models.product import Category
+        from models.catalog.product import Category
         from slugify import slugify
         
         category = await db.get(Category, category_id)
@@ -2166,7 +2166,7 @@ async def delete_category(
 ):
     """Delete a category (admin only)."""
     try:
-        from models.product import Category, Product
+        from models.catalog.product import Category, Product
         
         category = await db.get(Category, category_id)
         if not category:

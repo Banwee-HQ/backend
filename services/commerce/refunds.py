@@ -10,11 +10,11 @@ from sqlalchemy import select, and_, or_, desc
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
-from models.refunds import Refund, RefundItem, RefundStatus, RefundReason, RefundType
-from models.orders import Order, OrderItem
-from models.payments import Transaction
-from models.user import User
-from schemas.refunds import RefundRequest, RefundResponse, RefundItemRequest
+from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason, RefundType
+from models.commerce.orders import Order, OrderItem
+from models.commerce.payments import Transaction
+from models.auth.user import User
+from schemas.commerce.refunds import RefundRequest, RefundResponse, RefundItemRequest
 from core.config import settings
 from core.logging import get_structured_logger
 import stripe
@@ -403,7 +403,7 @@ class RefundService:
     async def _restore_inventory_for_refund(self, refund: Refund):
         """Restore inventory when refund is confirmed"""
         try:
-            from services.inventory import InventoryService
+            from services.catalog.inventory import InventoryService
             
             inventory_service = InventoryService(self.db)
             

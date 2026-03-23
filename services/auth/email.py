@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from fastapi import BackgroundTasks
 
-from models.user import User, Address
-from models.orders import Order
-from models.product import ProductVariant
-from services.templates import JinjaTemplateService
+from models.auth.user import User, Address
+from models.commerce.orders import Order
+from models.catalog.product import ProductVariant
+from services.system.templates import JinjaTemplateService
 from core.config import settings
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

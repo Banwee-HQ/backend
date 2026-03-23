@@ -8,14 +8,14 @@ from typing import Optional
 from core.logging import get_logger
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
-from services.orders import OrderService
-from models.user import User, Address
-from models.orders import Order
-from models.shipping import ShippingMethod
-from models.payments import PaymentMethod
-from services.auth import AuthService
-from schemas.orders import OrderCreate, CheckoutRequest
+from core.exceptions import APIException
+from services.commerce.orders import OrderService
+from models.auth.user import User, Address
+from models.commerce.orders import Order
+from models.commerce.shipping import ShippingMethod
+from models.commerce.payments import PaymentMethod
+from services.auth.auth import AuthService
+from schemas.commerce.orders import OrderCreate, CheckoutRequest
 from core.dependencies import get_current_auth_user, get_order_service
 
 logger = get_logger(__name__)
@@ -37,7 +37,7 @@ async def create_order(
     """Create a new order from OrderCreate request."""
     try:
         # First, create or get shipping address
-        from services.user import AddressService
+        from services.auth.user import AddressService
         address_service = AddressService(db)
         
         # Create shipping address
@@ -52,7 +52,7 @@ async def create_order(
         )
         
         # Get a default shipping method
-        from models.shipping import ShippingMethod
+        from models.commerce.shipping import ShippingMethod
         shipping_method_result = await db.execute(
             select(ShippingMethod).where(ShippingMethod.is_active == True).limit(1)
         )
@@ -65,7 +65,7 @@ async def create_order(
             )
         
         # Get or create a payment method (simplified for testing)
-        from models.payments import PaymentMethod
+        from models.commerce.payments import PaymentMethod
         payment_method_result = await db.execute(
             select(PaymentMethod).where(PaymentMethod.user_id == current_user.id).limit(1)
         )
@@ -87,7 +87,7 @@ async def create_order(
             await db.refresh(payment_method)
         
         # Add items to cart first
-        from services.cart import CartService
+        from services.commerce.cart import CartService
         cart_service = CartService(db)
         
         for item in request.items:
@@ -129,7 +129,7 @@ async def create_payment_intent(
 ):
     """Create payment intent for order"""
     try:
-        from services.payments import PaymentService
+        from services.commerce.payments import PaymentService
         payment_service = PaymentService(db)
         
         payment_intent = await payment_service.create_payment_intent(

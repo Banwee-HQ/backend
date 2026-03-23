@@ -4,8 +4,8 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
-from services.search import SearchService
+from core.exceptions import APIException
+from services.catalog.search import SearchService
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
@@ -23,7 +23,7 @@ async def search_products(
     Search for products with fuzzy matching and weighted ranking.
     """
     try:
-        from services.products import ProductService
+        from services.catalog.products import ProductService
         product_service = ProductService(db)
         
         # Build filters

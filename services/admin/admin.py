@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, desc, String
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.user import User
-from models.orders import Order, OrderItem
-from models.product import Product, ProductVariant
+from models.auth.user import User
+from models.commerce.orders import Order, OrderItem
+from models.catalog.product import Product, ProductVariant
 from uuid import UUID
 from datetime import datetime, timedelta, date
 from typing import Optional, List, Dict, Any
@@ -151,9 +151,9 @@ class AdminService:
     ) -> Dict[str, Any]:
         """Get admin dashboard statistics with optional filters"""
         try:
-            from models.orders import Order
-            from models.product import Product
-            from models.subscriptions import Subscription
+            from models.commerce.orders import Order
+            from models.catalog.product import Product
+            from models.commerce.subscriptions import Subscription
             from datetime import datetime, timedelta
             
             logger.info(f"📊 Dashboard stats request: date_from={date_from}, date_to={date_to}, status={status}, category={category}")
@@ -449,8 +449,8 @@ class AdminService:
         category: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Generate daily metrics for chart data between date range"""
-        from models.orders import Order
-        from models.product import Product
+        from models.commerce.orders import Order
+        from models.catalog.product import Product
         
         chart_data = []
         current_date = start_date
@@ -594,7 +594,7 @@ class AdminService:
         try:
 
 
-            from models.orders import Order
+            from models.commerce.orders import Order
             
             offset = (page - 1) * limit
             
@@ -720,8 +720,8 @@ class AdminService:
     async def get_order_by_id(self, order_id: str) -> Optional[Dict[str, Any]]:
         """Get a single order by ID with items, product, variant, and variant images"""
         try:
-            from models.orders import Order, OrderItem
-            from models.product import ProductVariant, Product, ProductImage
+            from models.commerce.orders import Order, OrderItem
+            from models.catalog.product import ProductVariant, Product, ProductImage
 
             result = await self.db.execute(
                 select(Order)
@@ -843,9 +843,9 @@ class AdminService:
     ) -> Dict[str, Any]:
         """Get all products with complete data including images, SKU, category, price, stock status, and variants"""
         try:
-            from models.product import Product, Category, ProductVariant, ProductImage
-            from models.inventories import Inventory
-            from models.user import User
+            from models.catalog.product import Product, Category, ProductVariant, ProductImage
+            from models.catalog.inventories import Inventory
+            from models.auth.user import User
             
             offset = (page - 1) * limit
             
@@ -1020,7 +1020,7 @@ class AdminService:
     ) -> Dict[str, Any]:
         """Get all product variants with filtering"""
         try:
-            from models.product import ProductVariant, Product
+            from models.catalog.product import ProductVariant, Product
             from services.barcode import BarcodeService
             
             offset = (page - 1) * limit
@@ -1097,7 +1097,7 @@ class AdminService:
     async def create_user(self, user_data, background_tasks) -> Dict[str, Any]:
         """Create a new user (admin only)"""
         try:
-            from services.auth import AuthService
+            from services.auth.auth import AuthService
             
             # Use AuthService to create user
             auth_service = AuthService()

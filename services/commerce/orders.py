@@ -7,24 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc, delete
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
-from models.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
-from models.user import User
-from services.email import send_order_confirmation_email
-from models.cart import Cart, CartItem
-from models.user import User, Address
-from models.product import ProductVariant
-from models.shipping import ShippingMethod
-from models.payments import PaymentMethod
-from models.tax_rates import TaxRate
-from schemas.orders import OrderResponse, OrderItemResponse, CheckoutRequest, OrderCreate
-from schemas.inventory import StockAdjustmentCreate
-from services.cart import CartService
-from services.payments import PaymentService
-from services.inventory import InventoryService 
-from services.tax import TaxService
-from services.shipping import ShippingService
-from services.discounts import DiscountEngine
-from models.inventories import Inventory
+from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
+from models.auth.user import User
+from services.auth.email import send_order_confirmation_email
+from models.commerce.cart import Cart, CartItem
+from models.auth.user import User, Address
+from models.catalog.product import ProductVariant
+from models.commerce.shipping import ShippingMethod
+from models.commerce.payments import PaymentMethod
+from models.commerce.tax_rates import TaxRate
+from schemas.commerce.orders import OrderResponse, OrderItemResponse, CheckoutRequest, OrderCreate
+from schemas.catalog.inventory import StockAdjustmentCreate
+from services.commerce.cart import CartService
+from services.commerce.payments import PaymentService
+from services.catalog.inventory import InventoryService 
+from services.commerce.tax import TaxService
+from services.commerce.shipping import ShippingService
+from services.commerce.discounts import DiscountEngine
+from models.catalog.inventories import Inventory
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta, timezone
@@ -653,8 +653,8 @@ class OrderService:
         Delegates to the RefundService for comprehensive refund processing
         """
         try:
-            from services.refunds import RefundService
-            from schemas.refunds import RefundRequest
+            from services.commerce.refunds import RefundService
+            from schemas.commerce.refunds import RefundRequest
             
             # Create refund service
             refund_service = RefundService(self.db)
@@ -1205,7 +1205,7 @@ class OrderService:
             })
             
             # Re-raise with more context
-            from core.errors import APIException
+            from core.exceptions import APIException
             raise APIException(
                 message=f"Failed to fetch orders: {str(e)}",
                 metadata={
@@ -1391,7 +1391,7 @@ class OrderService:
         
         # Send shipping update email for shipped/delivered orders
         if status in ['shipped', 'delivered'] and background_tasks:
-            from services.email import send_shipping_update_email, send_order_delivered_email
+            from services.auth.email import send_shipping_update_email, send_order_delivered_email
             
             # Get user details for email
             user_result = await self.db.execute(
@@ -1650,7 +1650,7 @@ class OrderService:
             shipping_cost = 0.0
             if shipping_method:
                 # Use ShippingService for proper calculation
-                from services.shipping import ShippingService
+                from services.commerce.shipping import ShippingService
                 shipping_service = ShippingService(self.db)
                 
                 # Extract address info for shipping calculation
@@ -1699,7 +1699,7 @@ class OrderService:
             for item in cart_items:
                 if hasattr(item, 'promocode') and item.promocode:
                     # Get promocode details
-                    from models.promocode import Promocode
+                    from models.commerce.promocode import Promocode
                     result = await self.db.execute(
                         select(Promocode).where(
                             and_(
@@ -1919,8 +1919,8 @@ class OrderService:
         Delegates to the RefundService for comprehensive refund processing
         """
         try:
-            from services.refunds import RefundService
-            from schemas.refunds import RefundRequest
+            from services.commerce.refunds import RefundService
+            from schemas.commerce.refunds import RefundRequest
             
             # Create refund service
             refund_service = RefundService(self.db)

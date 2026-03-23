@@ -5,14 +5,14 @@ from sqlalchemy import select
 from typing import List
 from core.db import get_db
 from core.utils.response import Response as APIResponse
-from core.errors import APIException
+from core.exceptions import APIException
 from core.config import settings
 from core.logging import get_logger
 from schemas.auth import UserCreate, UserLogin, RefreshTokenRequest, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
-from schemas.user import AddressCreate, AddressUpdate, AddressResponse
-from services.auth import AuthService
-from services.user import UserService, AddressService
-from models.user import User
+from schemas.auth.user import AddressCreate, AddressUpdate, AddressResponse
+from services.auth.auth import AuthService
+from services.auth.user import UserService, AddressService
+from models.auth.user import User
 from uuid import UUID
 import time
 

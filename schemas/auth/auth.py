@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 from datetime import datetime
-from schemas.user import UserBase
+from schemas.auth.user import UserBase
 from uuid import UUID
 
 

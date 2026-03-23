@@ -10,9 +10,9 @@ from datetime import datetime
 from core.db import get_db
 from core.dependencies import get_current_user
 from core.utils.response import Response
-from models.user import User
-from services.payments import PaymentService
-from schemas.payments import (
+from models.auth.user import User
+from services.commerce.payments import PaymentService
+from schemas.commerce.payments import (
     PaymentMethodResponse,
     PaymentMethodCreate,
     PaymentMethodUpdate,
@@ -341,7 +341,7 @@ async def abandon_failed_payment(
 ):
     """Abandon a failed payment (mark as permanently failed)"""
     try:
-        from models.payments import PaymentIntent
+        from models.commerce.payments import PaymentIntent
         from sqlalchemy import select
         
         # Get payment intent with lock
@@ -397,9 +397,9 @@ async def get_failure_analytics(
 ):
     """Get analytics on payment failure reasons for the user"""
     try:
-        from models.payments import PaymentIntent
+        from models.commerce.payments import PaymentIntent
         from sqlalchemy import select, func
-        from services.payments import PaymentFailureReason
+        from services.commerce.payments import PaymentFailureReason
         
         # Get failure reason distribution
         result = await db.execute(

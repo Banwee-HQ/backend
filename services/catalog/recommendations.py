@@ -10,11 +10,11 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from core.logging import get_structured_logger
 
-from models.product import Product, ProductVariant
-from models.orders import Order, OrderItem
-from models.cart import CartItem
-from models.review import Review
-from schemas.product import ProductResponse
+from models.catalog.product import Product, ProductVariant
+from models.commerce.orders import Order, OrderItem
+from models.commerce.cart import CartItem
+from models.catalog.review import Review
+from schemas.catalog.product import ProductResponse
 
 logger = get_structured_logger(__name__)
 
@@ -365,7 +365,7 @@ class RecommendationService:
         products = result.scalars().all()
         
         # Convert to response format
-        from services.products import ProductService
+        from services.catalog.products import ProductService
         product_service = ProductService(self.db)
         
         # Maintain order from product_ids
@@ -398,7 +398,7 @@ class RecommendationService:
             result = await self.db.execute(query)
             products = result.scalars().all()
             
-            from services.products import ProductService
+            from services.catalog.products import ProductService
             product_service = ProductService(self.db)
             
             return [product_service._convert_product_to_response(p) for p in products]

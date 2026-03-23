@@ -5,17 +5,17 @@ from uuid import UUID
 
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_logger
-from models.user import User
-from services.auth import AuthService
+from models.auth.user import User
+from services.auth.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
-from schemas.inventory import (
+from schemas.catalog.inventory import (
     WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
     InventoryCreate, InventoryUpdate, InventoryResponse,
     StockAdjustmentCreate, StockAdjustmentResponse
 )
-from services.inventory import InventoryService
+from services.catalog.inventory import InventoryService
 
 logger = get_logger(__name__)
 

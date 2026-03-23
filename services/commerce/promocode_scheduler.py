@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 from core.logging import get_structured_logger
 
-from models.promocode import Promocode
+from models.commerce.promocode import Promocode
 from core.db import get_db
 
 logger = get_structured_logger(__name__)

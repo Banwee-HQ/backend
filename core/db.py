@@ -14,8 +14,6 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from core.logging import get_structured_logger
 from datetime import datetime as dt
-
-from core.logging import structured_logger
 from core.utils.uuid_utils import uuid7
 from core.exceptions import DatabaseException, APIException
 
@@ -413,7 +411,7 @@ class DatabaseManager:
                 response_time = (time.time() - start_time) * \
                     1000  # Convert to milliseconds
 
-                structured_logger.info(
+                logger.info(
                     message="Database health check successful",
                     metadata={
                         "response_time_ms": response_time,
@@ -435,7 +433,7 @@ class DatabaseManager:
             self._connection_failures += 1
             response_time = (time.time() - start_time) * 1000
 
-            structured_logger.error(
+            logger.error(
                 message="Database health check failed",
                 metadata={
                     "response_time_ms": response_time,
@@ -495,7 +493,7 @@ class DatabaseManager:
             try:
                 async with self.session_factory() as session:
                     if attempt > 0:
-                        structured_logger.info(
+                        logger.info(
                             message=f"Database connection successful on attempt {attempt + 1}",
                             metadata={"attempt": attempt + 1,
                                       "max_retries": max_retries}
@@ -514,7 +512,7 @@ class DatabaseManager:
                 self._connection_failures += 1
 
                 if attempt == max_retries:
-                    structured_logger.error(
+                    logger.error(
                         message=f"Database connection failed after {max_retries + 1} attempts",
                         metadata={
                             "attempt": attempt + 1,
@@ -534,7 +532,7 @@ class DatabaseManager:
                 # Calculate delay with exponential backoff
                 delay = retry_delay * (backoff_factor ** attempt)
 
-                structured_logger.warning(
+                logger.warning(
                     message=f"Database connection failed on attempt {attempt + 1}, retrying in {delay}s",
                     metadata={
                         "attempt": attempt + 1,
@@ -580,7 +578,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
     try:
         async with db_manager.get_session_with_retry() as session:
-            structured_logger.info(
+            logger.info(
                 message="Database session created successfully",
             )
             try:
@@ -605,7 +603,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         raise
     except SQLAlchemyError as e:
         # Handle database-specific errors
-        structured_logger.error(
+        logger.error(
             message=f"Database error in session: {str(e)}",
             exception=e,
         )
@@ -614,7 +612,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         )
     except Exception as e:
         # Handle any other unexpected exceptions (but not HTTP/API exceptions)
-        structured_logger.error(
+        logger.error(
             message=f"Unexpected error in database session: {str(e)}",
             exception=e,
         )

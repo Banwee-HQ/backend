@@ -12,12 +12,12 @@ from core.logging import get_logger
 
 from core.db import get_db
 from core.dependencies import get_current_user, require_admin
-from core.errors import APIException
+from core.exceptions import APIException
 from core.utils.response import Response
-from models.user import User
-from models.tax_rates import TaxRate
-from services.tax import TaxService
-from schemas.tax import (
+from models.auth.user import User
+from models.commerce.tax_rates import TaxRate
+from services.commerce.tax import TaxService
+from schemas.commerce.tax import (
     Currency,
     TaxCalculationRequest,
     TaxCalculationResponse,

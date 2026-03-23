@@ -10,9 +10,9 @@ import secrets
 from core.logging import get_structured_logger
 from core.utils.uuid_utils import uuid7
 from core.config import settings
-from models.user import User
+from models.auth.user import User
 from schemas.auth import UserCreate, Token, UserResponse, AuthResponse
-from services.user import UserService
+from services.auth.user import UserService
 from core.db import get_db
 from core.utils.messages.email import send_email
 from core.utils.encryption import PasswordManager

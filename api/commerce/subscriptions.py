@@ -7,8 +7,8 @@ from uuid import UUID
 from typing import List
 from core.db import get_db,logger
 from core.utils.response import Response
-from core.errors import APIException
-from schemas.subscriptions import (
+from core.exceptions import APIException
+from schemas.commerce.subscriptions import (
     CreateSubscription, 
     UpdateSubscription, 
     SubscriptionResponse,
@@ -19,11 +19,12 @@ from schemas.subscriptions import (
     SubscriptionQuantityChange,
     DiscountApplicationRequest
 )
-from services.subscriptions import SubscriptionService, SubscriptionScheduler
-from models.user import User
-from models.product import Product, ProductVariant, Category, ProductImage
-from models.subscriptions import Subscription
-from services.auth import AuthService
+from services.commerce.subscriptions import SubscriptionService
+from services.commerce.subscriptions_scheduler import SubscriptionScheduler
+from models.auth.user import User
+from models.catalog.product import Product, ProductVariant, Category, ProductImage
+from models.commerce.subscriptions import Subscription
+from services.auth.auth import AuthService
 
 
 from fastapi.security import OAuth2PasswordBearer
@@ -125,7 +126,7 @@ async def calculate_subscription_cost(
         # Get customer address for tax calculation
         customer_address = None
         if cost_request.delivery_address_id:
-            from models.user import Address
+            from models.auth.user import Address
             address_result = await db.execute(
                 select(Address).where(
                     and_(Address.id == cost_request.delivery_address_id, Address.user_id == current_user.id)

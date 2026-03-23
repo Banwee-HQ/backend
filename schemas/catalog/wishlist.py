@@ -3,7 +3,7 @@ from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 
-from schemas.product import ProductResponse, ProductVariantResponse
+from schemas.catalog.product import ProductResponse, ProductVariantResponse
 
 
 class WishlistItemBase(BaseModel):

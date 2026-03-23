@@ -11,7 +11,7 @@ import math
 
 from core.db import get_db
 from core.dependencies import get_current_user, require_admin
-from schemas.contact_message import (
+from schemas.system.contact_message import (
     ContactMessageCreate,
     ContactMessageUpdate,
     ContactMessageResponse,
@@ -20,8 +20,8 @@ from schemas.contact_message import (
     MessagePriority
 )
 from core.utils.response import Response
-from core.errors import APIException
-from services.contact_message import ContactMessageService
+from core.exceptions import APIException
+from services.system.contact_message import ContactMessageService
 from core.logging import get_logger
 
 logger = get_logger(__name__)

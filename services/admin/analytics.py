@@ -12,13 +12,13 @@ from sqlalchemy import select, func, and_, or_, desc, asc, text, Integer
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
-from models.analytics import (
+from models.admin.analytics import (
     UserSession, AnalyticsEvent, ConversionFunnel, CustomerLifecycleMetrics,
     EventType, TrafficSource 
 )
-from models.orders import Order
-from models.user import User
-from models.refunds import Refund, RefundStatus
+from models.commerce.orders import Order
+from models.auth.user import User
+from models.commerce.refunds import Refund, RefundStatus
 from core.config import settings
 from core.logging import get_structured_logger
 
@@ -593,8 +593,8 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get comprehensive sales overview data for dashboard"""
         try:
-            from models.product import Product, Category
-            from models.orders import OrderItem
+            from models.catalog.product import Product, Category
+            from models.commerce.orders import OrderItem
             
             # Base query for orders
             base_query = select(Order).where(

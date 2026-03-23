@@ -12,11 +12,11 @@ from core.logging import get_logger
 
 from core.db import get_db
 from core.utils.response import Response
-from models.user import User
-from models.analytics import EventType, TrafficSource
-from services.analytics import AnalyticsService
-from core.errors import APIException
-from services.auth import AuthService
+from models.auth.user import User
+from models.admin.analytics import EventType, TrafficSource
+from services.admin.analytics import AnalyticsService
+from core.exceptions import APIException
+from services.auth.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

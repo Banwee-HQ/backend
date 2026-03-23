@@ -4,11 +4,11 @@ from typing import Optional
 from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
-from schemas.review import ReviewCreate, ReviewUpdate
-from services.review import ReviewService
-from models.user import User
-from services.auth import AuthService
+from core.exceptions import APIException
+from schemas.catalog.review import ReviewCreate, ReviewUpdate
+from services.catalog.review import ReviewService
+from models.auth.user import User
+from services.auth.auth import AuthService
 
 from fastapi.security import OAuth2PasswordBearer
 

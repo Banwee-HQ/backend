@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.subscriptions import Subscription
-from models.product import ProductVariant
-from models.user import Address
-from models.promocode import Promocode
+from models.commerce.subscriptions import Subscription
+from models.catalog.product import ProductVariant
+from models.auth.user import Address
+from models.commerce.promocode import Promocode
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
@@ -128,7 +128,7 @@ class SubscriptionService:
         await self.db.flush()
         
         # Add products to association table
-        from models.subscriptions import subscription_product_association
+        from models.commerce.subscriptions import subscription_product_association
         for variant in variants:
             await self.db.execute(
                 subscription_product_association.insert().values(
@@ -184,7 +184,7 @@ class SubscriptionService:
         
         if customer_address:
             try:
-                from services.tax import TaxService
+                from services.commerce.tax import TaxService
                 tax_service = TaxService(self.db)
                 
                 country = customer_address.get('country', '')
@@ -249,7 +249,7 @@ class SubscriptionService:
 
     async def _get_shipping_cost(self, delivery_type: str) -> Decimal:
         """Get shipping cost from database"""
-        from models.shipping import ShippingMethod
+        from models.commerce.shipping import ShippingMethod
         
         result = await self.db.execute(
             select(ShippingMethod).where(ShippingMethod.is_active == True)
@@ -334,7 +334,7 @@ class SubscriptionService:
             subscription.variant_ids = variant_ids
             
             # Update association table
-            from models.subscriptions import subscription_product_association
+            from models.commerce.subscriptions import subscription_product_association
             await self.db.execute(
                 subscription_product_association.delete().where(
                     subscription_product_association.c.subscription_id == subscription.id

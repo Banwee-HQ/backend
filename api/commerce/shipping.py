@@ -11,10 +11,10 @@ from core.logging import get_logger
 from core.db import get_db
 from core.dependencies import get_current_user, require_admin
 from core.utils.response import Response
-from core.errors import APIException
-from models.user import User
-from services.shipping import ShippingService
-from schemas.shipping import (
+from core.exceptions import APIException
+from models.auth.user import User
+from services.commerce.shipping import ShippingService
+from schemas.commerce.shipping import (
     ShippingMethodCreate,
     ShippingMethodUpdate,
     ShippingMethodInDB

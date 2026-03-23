@@ -5,11 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.payments import PaymentMethod, PaymentIntent, Transaction
-from models.orders import Order, OrderItem, OrderStatus, PaymentStatus
-from models.subscriptions import Subscription
-from models.inventories import Inventory
-from models.user import User
+from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction
+from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus
+from models.commerce.subscriptions import Subscription
+from models.catalog.inventories import Inventory
+from models.auth.user import User
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta
@@ -920,7 +920,7 @@ class PaymentService:
         Validate order pricing by recalculating from backend data
         Never trust frontend prices - always validate against backend
         """
-        from models.product import ProductVariant
+        from models.catalog.product import ProductVariant
         
         total_items_cost = 0.0
         validated_items = []
@@ -1285,7 +1285,7 @@ class PaymentService:
             })
             
             # Restore inventory for failed payment
-            from services.inventory import InventoryService
+            from services.catalog.inventory import InventoryService
             inventory_service = InventoryService(self.db)
             inventory_restored = []
             

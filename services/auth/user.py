@@ -5,10 +5,10 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.user import Address, User
-from models.orders import Order
-from core.errors import APIException
-from schemas.user import UserCreate, UserUpdate
+from models.auth.user import Address, User
+from models.commerce.orders import Order
+from core.exceptions import APIException
+from schemas.auth.user import UserCreate, UserUpdate
 from datetime import datetime, timedelta, timezone
 import secrets
 from core.utils.messages.email import send_email

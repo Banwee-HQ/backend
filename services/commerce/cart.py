@@ -13,10 +13,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from core.logging import get_structured_logger
 
-from models.cart import Cart, CartItem
-from models.product import ProductVariant, Product
-from models.user import User
-from services.tax import TaxService
+from models.commerce.cart import Cart, CartItem
+from models.catalog.product import ProductVariant, Product
+from models.auth.user import User
+from services.commerce.tax import TaxService
 from core.config import settings
 
 logger = get_structured_logger(__name__)
@@ -346,7 +346,7 @@ class CartService:
             
             # Check stock availability
             try:
-                from services.inventory import InventoryService
+                from services.catalog.inventory import InventoryService
                 inventory_service = InventoryService(self.db)
                 stock_check = await inventory_service.check_stock_availability(item.variant_id, item.quantity)
                 
@@ -860,7 +860,7 @@ class CartService:
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get shipping options for cart from database"""
-        from models.shipping import ShippingMethod
+        from models.commerce.shipping import ShippingMethod
         from sqlalchemy import select
         
         try:

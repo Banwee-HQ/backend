@@ -4,13 +4,13 @@ from typing import Optional
 from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_logger
-from schemas.product import ProductCreate, ProductUpdate
-from services.products import ProductService
-from services.search import SearchService
-from models.user import User
-from services.auth import AuthService
+from schemas.catalog.product import ProductCreate, ProductUpdate
+from services.catalog.products import ProductService
+from services.catalog.search import SearchService
+from models.auth.user import User
+from services.auth.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
 
 logger = get_logger(__name__)

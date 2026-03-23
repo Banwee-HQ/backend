@@ -6,18 +6,18 @@ from fastapi import HTTPException
 import uuid
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.product import Product, ProductVariant, Category, ProductImage
-from models.inventories import Inventory
-from models.cart import CartItem
-from models.user import User
-from models.review import Review
-from models.wishlist import WishlistItem
-from schemas.product import (
+from models.catalog.product import Product, ProductVariant, Category, ProductImage
+from models.catalog.inventories import Inventory
+from models.commerce.cart import CartItem
+from models.auth.user import User
+from models.catalog.review import Review
+from models.catalog.wishlist import WishlistItem
+from schemas.catalog.product import (
     ProductCreate, ProductUpdate, ProductResponse, ProductListResponse,
     ProductVariantResponse, CategoryResponse,
     ProductImageResponse, PriceRange
 )
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)
@@ -792,7 +792,7 @@ class ProductService:
                 # Leave as None if generation fails
             
             # ALWAYS create inventory record for the variant (even if stock is 0)
-            from models.inventories import Inventory, WarehouseLocation
+            from models.catalog.inventories import Inventory, WarehouseLocation
             
             # Get warehouse location from variant data if provided, otherwise use default
             warehouse_location_id = None
@@ -834,7 +834,7 @@ class ProductService:
             
             # Create variant images from CDN URLs
             if variant_data.image_urls:
-                from models.product import ProductImage
+                from models.catalog.product import ProductImage
                 for img_idx, image_url in enumerate(variant_data.image_urls):
                     db_image = ProductImage(
                         id=uuid7(),
@@ -858,7 +858,7 @@ class ProductService:
         is_admin: bool = False
     ) -> ProductResponse:
         """Update a product and its variants."""
-        from models.inventories import Inventory
+        from models.catalog.inventories import Inventory
         
         logger.info(f"Updating product {product_id} with data: {product_data.dict(exclude_unset=True)}")
         
@@ -1078,7 +1078,7 @@ class ProductService:
 
     async def delete_product(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
         """Delete a product and all its associated data (variants, inventory, reviews, cart items, wishlist items)."""
-        from models.orders import OrderItem
+        from models.commerce.orders import OrderItem
         
         query = select(Product).where(Product.id == product_id)
         result = await self.db.execute(query)

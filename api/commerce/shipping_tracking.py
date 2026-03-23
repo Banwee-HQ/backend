@@ -9,14 +9,15 @@ from typing import List, Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.errors import APIException, APIResponse
+from core.exceptions import APIException
+from core.utils.response import Response as APIResponse
 from core.dependencies import get_current_auth_user, get_current_admin_user
-from models.user import User
-from models.shipping_tracking import (
+from models.auth.user import User
+from models.commerce.shipping_tracking import (
     ShipmentTracking, ShippingProvider, ShippingCarrier, 
     TrackingStatus, ShipmentType
 )
-from services.shipping_tracking import ShippingTrackingService
+from services.commerce.shipping_tracking import ShippingTrackingService
 from pydantic import BaseModel, Field
 from datetime import datetime
 

@@ -27,20 +27,20 @@ class StructuredLogger:
     def __init__(self, name: str):
         self.name = name
 
-    def debug(self, message: str, **kwargs) -> None:
-        _print("DEBUG", self.name, message)
+    def debug(self, message: str, *args, **kwargs) -> None:
+        _print("DEBUG", self.name, message % args if args else message)
 
-    def info(self, message: str, **kwargs) -> None:
-        _print("INFO", self.name, message)
+    def info(self, message: str, *args, **kwargs) -> None:
+        _print("INFO", self.name, message % args if args else message)
 
-    def warning(self, message: str, **kwargs) -> None:
-        _print("WARNING", self.name, message)
+    def warning(self, message: str, *args, **kwargs) -> None:
+        _print("WARNING", self.name, message % args if args else message)
 
-    def error(self, message: str, **kwargs) -> None:
-        _print("ERROR", self.name, message)
+    def error(self, message: str, *args, **kwargs) -> None:
+        _print("ERROR", self.name, message % args if args else message)
 
-    def critical(self, message: str, **kwargs) -> None:
-        _print("CRITICAL", self.name, message)
+    def critical(self, message: str, *args, **kwargs) -> None:
+        _print("CRITICAL", self.name, message % args if args else message)
 
     # Compat shims for any callers using extended methods
     def log_request(self, *args, **kwargs) -> None:

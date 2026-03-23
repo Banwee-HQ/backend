@@ -33,7 +33,7 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
         return "failed"
 
     try:
-        from services.email import EmailService
+        from services.auth.email import EmailService
         async with factory() as db:
             email_service = EmailService(db)
 
@@ -195,7 +195,7 @@ async def enqueue_sync_product_availability(product_id: str = None):
     if not factory:
         return
     try:
-        from services.inventory import InventoryService
+        from services.catalog.inventory import InventoryService
         from uuid import UUID
         async with factory() as db:
             svc = InventoryService(db, None)

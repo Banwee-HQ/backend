@@ -4,10 +4,10 @@ from typing import Optional, List
 from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
-from core.errors import APIException
-from schemas.promos import PromocodeCreate, PromocodeUpdate
-from services.promocode import PromocodeService
-from models.user import User
+from core.exceptions import APIException
+from schemas.commerce.promos import PromocodeCreate, PromocodeUpdate
+from services.commerce.promocode import PromocodeService
+from models.auth.user import User
 from core.dependencies import get_current_auth_user
 from fastapi.security import OAuth2PasswordBearer
 

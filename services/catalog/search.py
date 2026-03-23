@@ -3,10 +3,10 @@ from sqlalchemy import select, func, text, and_, or_
 from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
-from models.product import Product, Category
-from models.user import User
-from schemas.product import ProductResponse, CategoryResponse
-from schemas.user import UserResponse
+from models.catalog.product import Product, Category
+from models.auth.user import User
+from schemas.catalog.product import ProductResponse, CategoryResponse
+from schemas.auth.user import UserResponse
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

@@ -3,18 +3,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional, List
 from core.utils.response import Response
-from core.errors import APIException
+from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_logger
-from services.user import UserService, AddressService
-from services.search import SearchService
+from services.auth.user import UserService, AddressService
+from services.catalog.search import SearchService
 # Import AddressResponse
-from schemas.user import UserCreate, UserUpdate, AddressResponse
-from schemas.user import AddressCreate, AddressUpdate
+from schemas.auth.user import UserCreate, UserUpdate, AddressResponse
+from schemas.auth.user import AddressCreate, AddressUpdate
 # Import AuthService and oauth2_scheme
-from services.auth import AuthService
+from services.auth.auth import AuthService
 from core.dependencies import get_current_auth_user
-from models.user import User  # Import User model
+from models.auth.user import User  # Import User model
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["Users & Addresses"])
@@ -31,7 +31,7 @@ async def get_current_user_me(
 ):
     """Get current user profile (alias for /profile)"""
     try:
-        from schemas.user import UserResponse
+        from schemas.auth.user import UserResponse
         
         user_data = {
             "id": current_user.id,
@@ -68,7 +68,7 @@ async def get_user_profile(
 ):
     """Get current user's profile"""
     try:
-        from schemas.user import UserResponse
+        from schemas.auth.user import UserResponse
         
         # Convert User model to UserResponse
         user_data = {
@@ -109,7 +109,7 @@ async def update_user_profile(
 ):
     """Update current user's profile"""
     try:
-        from schemas.user import UserResponse
+        from schemas.auth.user import UserResponse
         service = UserService(db)
         updated_user = await service.update_user(current_user.id, payload)
         if not updated_user:
@@ -450,7 +450,7 @@ async def get_user_wishlists(
             message="You can only access your own wishlists",
         )
     try:
-        from services.wishlist import WishlistService
+        from services.catalog.wishlist import WishlistService
         wishlist_service = WishlistService(db)
         wishlists = await wishlist_service.get_wishlists(user_id)
         data = [_serialize_wishlist(w) for w in wishlists]
@@ -479,8 +479,8 @@ async def create_user_wishlist(
             message="You can only create wishlists for yourself",
         )
     try:
-        from services.wishlist import WishlistService
-        from schemas.wishlist import WishlistCreate
+        from services.catalog.wishlist import WishlistService
+        from schemas.catalog.wishlist import WishlistCreate
         wishlist_service = WishlistService(db)
         payload = WishlistCreate(
             name=data.get("name", "My Wishlist"),
@@ -513,9 +513,9 @@ async def add_item_to_user_wishlist(
             message="You can only modify your own wishlists",
         )
     try:
-        from services.wishlist import WishlistService
-        from schemas.wishlist import WishlistItemCreate
-        from models.product import ProductVariant
+        from services.catalog.wishlist import WishlistService
+        from schemas.catalog.wishlist import WishlistItemCreate
+        from models.catalog.product import ProductVariant
         from sqlalchemy import select
         wishlist_service = WishlistService(db)
         product_id = data.get("product_id")
@@ -583,7 +583,7 @@ async def remove_item_from_user_wishlist(
             message="You can only modify your own wishlists",
         )
     try:
-        from services.wishlist import WishlistService
+        from services.catalog.wishlist import WishlistService
         wishlist_service = WishlistService(db)
         success = await wishlist_service.remove_item_from_wishlist(wishlist_id, item_id)
         if not success:
@@ -616,7 +616,7 @@ async def set_user_wishlist_default(
             message="You can only modify your own wishlists",
         )
     try:
-        from services.wishlist import WishlistService
+        from services.catalog.wishlist import WishlistService
         wishlist_service = WishlistService(db)
         updated = await wishlist_service.set_default_wishlist(user_id, wishlist_id)
         if not updated:

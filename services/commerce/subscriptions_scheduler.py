@@ -11,11 +11,11 @@ from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from core.logging import get_structured_logger
 
-from models.subscriptions import Subscription
-from models.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus, OrderSource
-from models.product import ProductVariant
-from models.user import User, Address
-from models.payments import PaymentMethod
+from models.commerce.subscriptions import Subscription
+from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus, OrderSource
+from models.catalog.product import ProductVariant
+from models.auth.user import User, Address
+from models.commerce.payments import PaymentMethod
 from core.db import get_db
 
 logger = get_structured_logger(__name__)
@@ -130,7 +130,7 @@ class SubscriptionScheduler:
             # ========================================
             # STEP 1: PROCESS PAYMENT FIRST
             # ========================================
-            from services.payments import PaymentService
+            from services.commerce.payments import PaymentService
             
             # Get user's default payment method
             payment_method_result = await self.db.execute(
@@ -195,7 +195,7 @@ class SubscriptionScheduler:
                     
                     # Send email notification about paused subscription
                     try:
-                        from services.email import EmailService
+                        from services.auth.email import EmailService
                         email_service = EmailService(self.db)
                         await email_service.send_subscription_payment_failed(
                             user_email=user.email,
@@ -277,8 +277,8 @@ class SubscriptionScheduler:
             # ========================================
             # STEP 4: UPDATE INVENTORY
             # ========================================
-            from services.inventory import InventoryService
-            from schemas.inventory import StockAdjustmentCreate
+            from services.catalog.inventory import InventoryService
+            from schemas.catalog.inventory import StockAdjustmentCreate
             
             inventory_service = InventoryService(self.db, None)
             

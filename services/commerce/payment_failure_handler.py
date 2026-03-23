@@ -10,7 +10,7 @@ from core.logging import get_structured_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from models.payments import PaymentIntent
+from models.commerce.payments import PaymentIntent
 
 logger = get_structured_logger(__name__)
 

@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, status, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from core.db import get_db
-from core.errors import APIException
+from core.exceptions import APIException
 from core.logging import get_logger
-from services.cart import CartService
-from models.user import User
+from services.commerce.cart import CartService
+from models.auth.user import User
 from core.utils.response import Response
-from schemas.cart import AddToCartRequest, ApplyPromocodeRequest, UpdateCartItemRequest
+from schemas.commerce.cart import AddToCartRequest, ApplyPromocodeRequest, UpdateCartItemRequest
 from core.dependencies import get_current_auth_user
 from typing import Optional
 

@@ -4,12 +4,12 @@ from uuid import UUID
 
 from core.db import get_db
 from core.logging import get_logger
-from services.wishlist import WishlistService
-from schemas.wishlist import WishlistCreate, WishlistUpdate, WishlistResponse, WishlistItemCreate, WishlistItemResponse
-from models.user import User
+from services.catalog.wishlist import WishlistService
+from schemas.catalog.wishlist import WishlistCreate, WishlistUpdate, WishlistResponse, WishlistItemCreate, WishlistItemResponse
+from models.auth.user import User
 from core.dependencies import get_current_auth_user
 from core.utils.response import Response
-from core.errors import APIException
+from core.exceptions import APIException
 
 logger = get_logger(__name__)
 
@@ -73,7 +73,7 @@ async def add_to_wishlist(
         
         # If variant_id is not provided, get the first available variant for the product
         if not variant_id:
-            from models.product import ProductVariant
+            from models.catalog.product import ProductVariant
             from sqlalchemy import select
             
             variant_query = select(ProductVariant).where(

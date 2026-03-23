@@ -14,7 +14,7 @@ from core.logging import get_logger
 
 from core.db import get_db, DatabaseOptimizer
 from core.dependencies import get_current_user
-from models.user import User
+from models.auth.user import User
 
 router = APIRouter(prefix="/health", tags=["health"])
 logger = get_logger(__name__)
