@@ -7,18 +7,8 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.9
 alembic==1.13.1
 
-# Redis (Async)
-redis==5.0.3
-redis[hiredis]==5.0.3
-
-# Background Tasks (ARQ)
-arq==0.25.0
-
 # HTTP Client (Async)
 aiohttp==3.9.5
-
-# Scheduling
-APScheduler==3.10.1
 
 # Document Processing
 openpyxl==3.1.2

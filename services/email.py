@@ -337,22 +337,14 @@ class EmailService:
 
 class EmailQueue:
     """
-    Handles queuing of emails via ARQ.
-    All application code should use this class to send emails.
+    Handles sending emails via FastAPI BackgroundTasks (ARQ/Redis removed).
     """
-    
+
     @staticmethod
-    async def _queue_via_arq(email_type: str, recipient: str, **kwargs):
-        """Helper to queue email via ARQ"""
-        from core.arq_worker import get_arq_pool
-        try:
-            pool = await get_arq_pool()
-            if pool:
-                await pool.enqueue_job('send_email_task', email_type, recipient, **kwargs)
-            else:
-                print(f"⚠️ ARQ pool not available, email not queued: {email_type} to {recipient}")
-        except Exception as e:
-            print(f"❌ Failed to queue email via ARQ: {e}")
+    async def _send_direct(email_type: str, recipient: str, **kwargs):
+        """Send email directly without a queue."""
+        from core.arq_worker import send_email_task
+        await send_email_task(email_type, recipient, **kwargs)
 
     @classmethod
     def send_order_confirmation(
@@ -368,7 +360,7 @@ class EmailQueue:
     ):
         """Queue order confirmation email"""
         background_tasks.add_task(
-            cls._queue_via_arq,
+            cls._send_direct,
             "order_confirmation",
             to_email,
             customer_name=customer_name,
@@ -393,7 +385,7 @@ class EmailQueue:
     ):
         """Queue shipping update email"""
         background_tasks.add_task(
-            cls._queue_via_arq,
+            cls._send_direct,
             "shipping_update",
             to_email,
             customer_name=customer_name,
@@ -413,7 +405,7 @@ class EmailQueue:
     ):
         """Queue welcome email"""
         background_tasks.add_task(
-            cls._queue_via_arq,
+            cls._send_direct,
             "welcome",
             to_email,
             user_name=user_name
@@ -429,7 +421,7 @@ class EmailQueue:
     ):
         """Queue password reset email"""
         background_tasks.add_task(
-            cls._queue_via_arq,
+            cls._send_direct,
             "password_reset",
             to_email,
             reset_token=reset_token,
@@ -451,7 +443,7 @@ class EmailQueue:
     ):
         """Queue order delivered email"""
         background_tasks.add_task(
-            cls._queue_via_arq,
+            cls._send_direct,
             "order_delivered",
             to_email,
             customer_name=customer_name,

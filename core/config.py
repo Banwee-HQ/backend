@@ -225,10 +225,9 @@ class ApplicationConfig(BaseSettings):
         description="CORS origins"
     )
     
-    # Email Configuration (optional in development)
-    MAILJET_API_KEY: Optional[str] = Field(None, description="Mailjet API key")
-    MAILJET_API_SECRET: Optional[str] = Field(None, description="Mailjet API secret")
-    MAILJET_FROM_EMAIL: str = Field(
+    # Email Configuration (Brevo)
+    BREVO_API_KEY: Optional[str] = Field(None, description="Brevo API key")
+    BREVO_FROM_EMAIL: str = Field(
         default="Banwee <noreply@banwee.com>",
         description="From email address"
     )
@@ -243,7 +242,7 @@ class ApplicationConfig(BaseSettings):
             raise ValueError('URLs must start with http:// or https://')
         return v
     
-    @field_validator('MAILJET_API_KEY', 'MAILJET_API_SECRET')
+    @field_validator('BREVO_API_KEY')
     @classmethod
     def validate_email_config(cls, v):
         """Validate email configuration in production"""
@@ -333,7 +332,7 @@ class PydanticConfigValidator:
                 field = error['loc'][0]
                 msg = error['msg']
                 # Email config warnings are not critical in development
-                if field in ['MAILJET_API_KEY', 'MAILJET_API_SECRET'] and os.getenv('ENVIRONMENT') != 'production':
+                if field in ['BREVO_API_KEY'] and os.getenv('ENVIRONMENT') != 'production':
                     self.warnings.append(f"Application config - {field}: {msg}")
                 else:
                     self.errors.append(f"Application config - {field}: {msg}")
@@ -423,15 +422,8 @@ class VariableDefinitions:
         
         # Email Configuration
         EnvironmentVariable(
-            name="MAILJET_API_KEY",
-            description="Mailjet API key for email sending",
-            variable_type=VariableType.SECRET,
-            required=False,
-            sensitive=True
-        ),
-        EnvironmentVariable(
-            name="MAILJET_API_SECRET",
-            description="Mailjet API secret for email sending",
+            name="BREVO_API_KEY",
+            description="Brevo API key for email sending",
             variable_type=VariableType.SECRET,
             required=False,
             sensitive=True
@@ -517,34 +509,14 @@ class Settings:
         # Session Security
         self.FORCE_LOGOUT_ON_PASSWORD_CHANGE: bool = os.getenv('FORCE_LOGOUT_ON_PASSWORD_CHANGE', 'true').lower() == 'true'
         
-        # --- Redis Configuration ---
-        self.ENABLE_REDIS: bool = os.getenv('ENABLE_REDIS', 'true').lower() == 'true'
-        self.REDIS_URL: str = os.getenv('REDIS_URL')
-        self.REDIS_CACHE_ENABLED: bool = os.getenv('REDIS_CACHE_ENABLED', 'true').lower() == 'true'
-        self.REDIS_RATELIMIT_ENABLED: bool = os.getenv('REDIS_RATELIMIT_ENABLED', 'true').lower() == 'true'
-        self.REDIS_CACHE_TTL: int = int(os.getenv('REDIS_CACHE_TTL', '3600'))
-        self.REDIS_CART_TTL_GUEST: int = int(os.getenv('REDIS_CART_TTL_GUEST', '1800'))  # 30 minutes for guests
-        self.REDIS_CART_TTL_USER: int = int(os.getenv('REDIS_CART_TTL_USER', '259200'))  # 3 days for users
-        self.REDIS_CART_EXTEND_ON_ADD: bool = os.getenv('REDIS_CART_EXTEND_ON_ADD', 'true').lower() == 'true'
-        
-        # --- Background Tasks Configuration (ARQ + FastAPI) ---
-        self.ENABLE_ARQ: bool = os.getenv('ENABLE_ARQ', 'true').lower() == 'true'
-        self.ARQ_REDIS_URL: str = os.getenv('ARQ_REDIS_URL', 'redis://redis:6379/0')
-        
         # --- CORS Configuration ---
         self.BACKEND_CORS_ORIGINS: List[str] = parse_cors(cors_origins)
         
         # ... (rest of the settings)
-        self.MAILJET_API_KEY: str = os.getenv('MAILJET_API_KEY', '')
-        self.MAILJET_API_SECRET: str = os.getenv('MAILJET_API_SECRET', '')
-        self.MAILJET_FROM_EMAIL: str = os.getenv('MAILJET_FROM_EMAIL', 'Banwee <noreply@banwee.com>')
-        self.TELEGRAM_BOT_TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN', '')
-        self.WHATSAPP_ACCESS_TOKEN: str = os.getenv('WHATSAPP_ACCESS_TOKEN', '')
-        self.PHONE_NUMBER_ID: str = os.getenv('PHONE_NUMBER_ID', '')
+        self.BREVO_API_KEY: str = os.getenv('BREVO_API_KEY', '')
+        self.BREVO_FROM_EMAIL: str = os.getenv('BREVO_FROM_EMAIL', 'Banwee <noreply@banwee.com>')
         self.FACEBOOK_APP_ID: str = os.getenv('FACEBOOK_APP_ID')
         self.FACEBOOK_APP_SECRET: str = os.getenv('FACEBOOK_APP_SECRET')
-        self.TIKTOK_CLIENT_KEY: str = os.getenv('TIKTOK_CLIENT_KEY')
-        self.TIKTOK_CLIENT_SECRET: str = os.getenv('TIKTOK_CLIENT_SECRET')
         self.ADMIN_USER_ID: str = os.getenv('ADMIN_USER_ID', 'your_admin_uuid_here')
         self.NOTIFICATION_CLEANUP_DAYS: int = int(os.getenv('NOTIFICATION_CLEANUP_DAYS', 30))
         self.NOTIFICATION_CLEANUP_INTERVAL_SECONDS: int = int(os.getenv('NOTIFICATION_CLEANUP_INTERVAL_SECONDS', 86400))
@@ -615,12 +587,6 @@ class Settings:
         
         if not self.STRIPE_WEBHOOK_SECRET:
             missing_settings.append("STRIPE_WEBHOOK_SECRET is required for webhook signature verification")
-        
-        if self.ENABLE_REDIS and not self.REDIS_URL:
-            missing_settings.append("REDIS_URL is required for Redis connection")
-        
-        if self.ENABLE_ARQ and not self.ARQ_REDIS_URL:
-            missing_settings.append("ARQ_REDIS_URL is required for background tasks")
         
         if not self.POSTGRES_DB_URL:
             missing_settings.append("POSTGRES_DB_URL is required for database connection")
@@ -748,7 +714,7 @@ class EnvironmentValidator:
         # Adjust rules based on context
         if self.context.is_development:
             for rule in rules:
-                if rule.name in ['MAILJET_API_KEY', 'MAILJET_API_SECRET']:
+                if rule.name in ['BREVO_API_KEY']:
                     rule.required = False
         
         return rules
