@@ -33,7 +33,7 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
     
     try:
         from services.auth.email import EmailService
-        async with session() as db:
+        async with session as db:
             email_service = EmailService(db)
 
             if email_type == "verification":
@@ -118,8 +118,8 @@ async def process_subscription_orders_task() -> str:
         return "failed: no db"
     
     try:
-        from services.subscriptions.scheduler import SubscriptionScheduler
-        async with session() as db:
+        from services.commerce.subscriptions_scheduler import SubscriptionScheduler
+        async with session as db:
             scheduler = SubscriptionScheduler(db)
             result = await scheduler.process_due_subscriptions()
         return f"subscriptions: {result.get('processed_count', 0)} ok, {result.get('failed_count', 0)} failed"
@@ -139,7 +139,7 @@ async def update_promocode_statuses_task() -> str:
     
     try:
         from services.promocode.scheduler import PromoCodeScheduler
-        async with session() as db:
+        async with session as db:
             scheduler = PromoCodeScheduler(db)
             result = await scheduler.update_promocode_statuses()
         return f"promocodes: {result.get('activated_count', 0)} activated, {result.get('deactivated_count', 0)} deactivated"
@@ -215,7 +215,7 @@ async def enqueue_sync_product_availability(product_id: str = None):
     try:
         from services.catalog.inventory import InventoryService
         from uuid import UUID
-        async with session() as db:
+        async with session as db:
             svc = InventoryService(db, None)
             if product_id:
                 await svc.sync_product_availability_status(UUID(product_id))

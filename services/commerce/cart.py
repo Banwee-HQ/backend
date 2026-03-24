@@ -144,7 +144,7 @@ class CartService:
                         "name": item.product.name,
                         "slug": item.product.slug,
                         "short_description": item.product.short_description,
-                        "category_id": str(item.product.category_id),
+                        "category": item.product.category if item.product else None,
                         "is_featured": item.product.is_featured,
                         "rating_average": item.product.rating_average,
                         "availability_status": item.product.availability_status
@@ -512,7 +512,7 @@ class CartService:
                         'product_description': product.description,
                         'product_short_description': product.short_description,
                         'product_slug': product.slug,
-                        'product_category_id': str(product.category_id),
+                        'product_category': product.category if product.category else None,
                         'product_rating_average': product.rating_average,
                         'product_rating_count': product.rating_count,
                         'product_is_featured': product.is_featured,

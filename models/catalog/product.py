@@ -7,42 +7,12 @@ from sqlalchemy.orm import relationship
 from core.db import BaseModel, CHAR_LENGTH, GUID, Index
 
 
-class Category(BaseModel):
-    """Product categories with hard delete only"""
-    __tablename__ = "categories"
-    __table_args__ = (
-        Index('idx_categories_name', 'name'),
-        Index('idx_categories_active', 'is_active'),
-        {'extend_existing': True}
-    )
-
-    name = Column(String(CHAR_LENGTH), unique=True, nullable=False)
-    description = Column(Text, nullable=True)
-    image_url = Column(String(500), nullable=True)
-    is_active = Column(Boolean, default=True)
-
-    # Relationships
-    products = relationship("Product", back_populates="category")
-
-    def to_dict(self) -> dict:
-        """Convert category to dictionary for API responses"""
-        return {
-            "id": str(self.id),
-            "name": self.name,
-            "description": self.description,
-            "image_url": self.image_url,
-            "is_active": self.is_active,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-
 class Product(BaseModel):
     """Optimized product model with hard delete only and strategic JSONB usage"""
     __tablename__ = "products"
     __table_args__ = (
         # Optimized indexes for product queries
-        Index('idx_products_category_status', 'category_id', 'product_status'),
+        Index('idx_products_category_status', 'category', 'product_status'),
         Index('idx_products_published', 'published_at', 'product_status'),
         Index('idx_products_slug', 'slug'),
         {'extend_existing': True}
@@ -54,8 +24,8 @@ class Product(BaseModel):
     description = Column(Text, nullable=True)
     short_description = Column(String(500), nullable=True)
 
-    # Foreign key relationships
-    category_id = Column(GUID(), ForeignKey("categories.id"), nullable=False)
+    # Category as string field
+    category = Column(String(100), nullable=False)
 
     # Status fields as columns for indexing and fast filtering
     product_status = Column(String(50), default="active", nullable=False)  # active, inactive, draft, discontinued
@@ -73,7 +43,6 @@ class Product(BaseModel):
     published_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships with optimized lazy loading
-    category = relationship("Category", back_populates="products")
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="selectin")
     reviews = relationship("Review", back_populates="product", lazy="select")
     wishlist_items = relationship("WishlistItem", back_populates="product", lazy="select")
@@ -135,7 +104,7 @@ class Product(BaseModel):
             "slug": self.slug,
             "description": self.description,
             "short_description": self.short_description,
-            "category_id": str(self.category_id),
+            "category": self.category,
             "product_status": self.product_status,
             "rating_average": self.rating_average,
             "rating_count": self.rating_count,

@@ -38,7 +38,7 @@ class ProductCreate(BaseModel):
     slug: str
     description: Optional[str] = None
     short_description: Optional[str] = None
-    category_id: UUID
+    category: str
     variants: List[ProductVariantCreate]
     origin: Optional[str] = None
     is_featured: bool = False
@@ -72,19 +72,6 @@ class ProductUpdate(BaseModel):
     is_featured: Optional[bool] = None
     is_bestseller: Optional[bool] = None
     variants: Optional[List[ProductVariantUpdate]] = None
-
-
-class CategoryResponse(BaseModel):
-    id: UUID
-    name: str
-    description: Optional[str]
-    image_url: Optional[str]
-    is_active: bool
-    product_count: int = 0
-    created_at: str
-    updated_at: Optional[str]
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class InventoryResponse(BaseModel):
@@ -136,7 +123,7 @@ class ProductResponse(BaseModel):
     id: UUID
     name: str
     description: Optional[str]
-    category_id: UUID
+    category: Optional[str] = None
     featured: bool
     rating: float
     review_count: int
@@ -148,7 +135,6 @@ class ProductResponse(BaseModel):
     created_at: str
     updated_at: Optional[str]
     # Relationships
-    category: Optional[CategoryResponse] = None
     variants: List[ProductVariantResponse] = []
     primary_variant: Optional[ProductVariantResponse] = None
 

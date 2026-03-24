@@ -1,4 +1,4 @@
-from .product import Product, ProductVariant, ProductImage, Category
+from .product import Product, ProductVariant, ProductImage
 from .review import Review
 from .inventories import Inventory, WarehouseLocation, StockAdjustment
 from .wishlist import Wishlist, WishlistItem

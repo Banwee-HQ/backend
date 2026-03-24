@@ -6,7 +6,7 @@ from fastapi import HTTPException
 import uuid
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.catalog.product import Product, ProductVariant, Category, ProductImage
+from models.catalog.product import Product, ProductVariant, ProductImage
 from models.catalog.inventories import Inventory
 from models.commerce.cart import CartItem
 from models.auth.user import User
@@ -14,11 +14,11 @@ from models.catalog.review import Review
 from models.catalog.wishlist import WishlistItem
 from schemas.catalog.product import (
     ProductCreate, ProductUpdate, ProductResponse, ProductListResponse,
-    ProductVariantResponse, CategoryResponse,
-    ProductImageResponse, PriceRange
+    ProductVariantResponse, ProductImageResponse, PriceRange
 )
 from core.exceptions import APIException
 from core.logging import get_structured_logger
+from datetime import datetime, date
 
 logger = get_structured_logger(__name__)
 
@@ -43,6 +43,12 @@ class ProductService:
 
     def _convert_image_to_response(self, image: ProductImage) -> ProductImageResponse:
         """Convert ProductImage model to response format."""
+        created_at_val = image.created_at
+        if isinstance(created_at_val, (datetime, date)):
+            created_at_str = created_at_val.isoformat()
+        else:
+            created_at_str = created_at_val or ""
+
         return ProductImageResponse(
             id=image.id,
             variant_id=image.variant_id,
@@ -51,7 +57,7 @@ class ProductService:
             is_primary=image.is_primary,
             sort_order=image.sort_order,
             format=image.format,
-            created_at=image.created_at.isoformat() if image.created_at else ""
+            created_at=created_at_str
         )
 
     def _convert_variant_to_response(self, variant: ProductVariant) -> ProductVariantResponse:
@@ -78,88 +84,134 @@ class ProductService:
                 is_active=getattr(variant, 'is_active', True),
                 images=[],
                 primary_image=None,
-                created_at=variant.created_at.isoformat() if variant.created_at else "",
-                updated_at=variant.updated_at.isoformat() if variant.updated_at else None
+                created_at=variant.created_at.isoformat() if isinstance(variant.created_at, (datetime, date)) else (variant.created_at or ""),
+                updated_at=variant.updated_at.isoformat() if isinstance(variant.updated_at, (datetime, date)) else variant.updated_at
             )
 
-    def _convert_product_to_response(self, product: Product, include_relationships: bool = True) -> ProductResponse:
+    def _convert_product_to_response(self, product: Product) -> ProductResponse:
         """Convert Product model to response format."""
         try:
-            # Use the model's built-in to_dict method and then convert to response
-            product_dict = product.to_dict(include_variants=True)
-
-            # Convert category
-            category = None
-            if include_relationships and product.category:
-                try:
-                    category = CategoryResponse(
-                        id=product.category.id,
-                        name=product.category.name,
-                        description=product.category.description,
-                        image_url=product.category.image_url,
-                        is_active=product.category.is_active,
-                        created_at=product.category.created_at.isoformat(
-                        ) if product.category.created_at else "",
-                        updated_at=product.category.updated_at.isoformat(
-                        ) if product.category.updated_at else None
-                    )
-                except Exception as e:
-                    print(f"Error converting category: {e}")
-                    category = None
-
-            # Convert variants using model's to_dict method
+            # Convert variants using model's to_dict method with proper validation
             variants = []
             for variant in (product.variants or []):
                 try:
                     variant_dict = variant.to_dict(include_images=True)
-                    variants.append(
-                        ProductVariantResponse.model_validate(variant_dict))
+                    
+                    # Fix datetime fields (only call isoformat on datetime objects)
+                    if 'created_at' in variant_dict and variant_dict['created_at']:
+                        if isinstance(variant_dict['created_at'], (datetime, date)):
+                            variant_dict['created_at'] = variant_dict['created_at'].isoformat()
+                    if 'updated_at' in variant_dict and variant_dict['updated_at']:
+                        if isinstance(variant_dict['updated_at'], (datetime, date)):
+                            variant_dict['updated_at'] = variant_dict['updated_at'].isoformat()
+                    
+                    # Fix dietary_tags - convert string to list
+                    if 'dietary_tags' in variant_dict and isinstance(variant_dict['dietary_tags'], str):
+                        variant_dict['dietary_tags'] = [tag.strip() for tag in variant_dict['dietary_tags'].split(',') if tag.strip()]
+                    
+                    # Fix tags - convert string to list  
+                    if 'tags' in variant_dict and isinstance(variant_dict['tags'], str):
+                        variant_dict['tags'] = [tag.strip() for tag in variant_dict['tags'].split(',') if tag.strip()]
+                    
+                    # Fix images datetime fields
+                    if 'images' in variant_dict:
+                        for img in variant_dict['images']:
+                            if 'created_at' in img and img['created_at']:
+                                if isinstance(img['created_at'], (datetime, date)):
+                                    img['created_at'] = img['created_at'].isoformat()
+                            if 'updated_at' in img and img['updated_at']:
+                                if isinstance(img['updated_at'], (datetime, date)):
+                                    img['updated_at'] = img['updated_at'].isoformat()
+                    
+                    # Add stock from inventory
+                    if hasattr(variant, 'inventory') and variant.inventory:
+                        variant_dict['stock'] = variant.inventory.quantity_available
+                    else:
+                        variant_dict['stock'] = 0
+                    
+                    variants.append(ProductVariantResponse.model_validate(variant_dict))
                 except Exception as e:
-                    print(f"Error converting variant {variant.id}: {e}")
+                    logger.error(f"Error converting variant {variant.id}: {e}")
                     continue
-
+            
             # Get primary variant
-            primary_variant = variants[0] if variants else None
-
+            primary_variant = None
+            if product.variants:
+                primary_variant = min(product.variants, key=lambda v: v.current_price)
+                try:
+                    primary_variant_dict = primary_variant.to_dict(include_images=True)
+                    
+                    # Fix datetime fields (only call isoformat on datetime objects)
+                    if 'created_at' in primary_variant_dict and primary_variant_dict['created_at']:
+                        if isinstance(primary_variant_dict['created_at'], (datetime, date)):
+                            primary_variant_dict['created_at'] = primary_variant_dict['created_at'].isoformat()
+                    if 'updated_at' in primary_variant_dict and primary_variant_dict['updated_at']:
+                        if isinstance(primary_variant_dict['updated_at'], (datetime, date)):
+                            primary_variant_dict['updated_at'] = primary_variant_dict['updated_at'].isoformat()
+                    
+                    # Fix dietary_tags and tags
+                    if 'dietary_tags' in primary_variant_dict and isinstance(primary_variant_dict['dietary_tags'], str):
+                        primary_variant_dict['dietary_tags'] = [tag.strip() for tag in primary_variant_dict['dietary_tags'].split(',') if tag.strip()]
+                    if 'tags' in primary_variant_dict and isinstance(primary_variant_dict['tags'], str):
+                        primary_variant_dict['tags'] = [tag.strip() for tag in primary_variant_dict['tags'].split(',') if tag.strip()]
+                    
+                    # Fix images datetime fields
+                    if 'images' in primary_variant_dict:
+                        for img in primary_variant_dict['images']:
+                            if 'created_at' in img and img['created_at']:
+                                if isinstance(img['created_at'], (datetime, date)):
+                                    img['created_at'] = img['created_at'].isoformat()
+                            if 'updated_at' in img and img['updated_at']:
+                                if isinstance(img['updated_at'], (datetime, date)):
+                                    img['updated_at'] = img['updated_at'].isoformat()
+                    
+                    # Add stock from inventory
+                    if hasattr(primary_variant, 'inventory') and primary_variant.inventory:
+                        primary_variant_dict['stock'] = primary_variant.inventory.quantity_available
+                    else:
+                        primary_variant_dict['stock'] = 0
+                    
+                    primary_variant = ProductVariantResponse.model_validate(primary_variant_dict)
+                except Exception as e:
+                    logger.error(f"Error converting primary variant: {e}")
+                    primary_variant = None
+            
             return ProductResponse(
                 id=product.id,
                 name=product.name,
                 description=product.description,
-                category_id=product.category_id,
-                featured=product.featured,
-                rating=product.rating,
+                featured=product.is_featured,
+                rating=product.rating_average,
                 review_count=product.review_count,
-                origin=product.origin,
+                origin=getattr(product, 'origin', ''),
                 is_active=product.is_active,
-                price_range=PriceRange(
-                    min=product.price_range["min"], max=product.price_range["max"]),
-                in_stock=product.in_stock,
                 availability_status=product.availability_status,
-                created_at=product.created_at.isoformat() if product.created_at else "",
-                updated_at=product.updated_at.isoformat() if product.updated_at else None,
-                category=category,
+                price_range=product.price_range,
+                in_stock=product.in_stock,
+                created_at=product.created_at.isoformat() if isinstance(product.created_at, (datetime, date)) else (product.created_at or ""),
+                updated_at=product.updated_at.isoformat() if isinstance(product.updated_at, (datetime, date)) else product.updated_at,
+                category=product.category,
                 variants=variants,
                 primary_variant=primary_variant
             )
         except Exception as e:
-            print(f"Error converting product {product.id}: {e}")
+            logger.error(f"Error converting product {product.id}: {e}")
             # Return minimal product data
             return ProductResponse(
                 id=product.id,
                 name=getattr(product, 'name', ''),
                 description=getattr(product, 'description', ''),
-                category_id=product.category_id,
-                featured=getattr(product, 'featured', False),
-                rating=getattr(product, 'rating', 0.0),
+                featured=getattr(product, 'is_featured', False),
+                rating=getattr(product, 'rating_average', 0.0),
                 review_count=getattr(product, 'review_count', 0),
                 origin=getattr(product, 'origin', ''),
                 is_active=getattr(product, 'is_active', True),
                 availability_status="out_of_stock",
                 price_range=PriceRange(min=0, max=0),
                 in_stock=False,
-                created_at=product.created_at.isoformat() if product.created_at else "",
-                updated_at=product.updated_at.isoformat() if product.updated_at else None,
-                category=None,
+                created_at=product.created_at.isoformat() if isinstance(product.created_at, (datetime, date)) else (product.created_at or ""),
+                updated_at=product.updated_at.isoformat() if isinstance(product.updated_at, (datetime, date)) else product.updated_at,
+                category=getattr(product, 'category', ''),
                 variants=[],
                 primary_variant=None
             )
@@ -199,14 +251,9 @@ class ProductService:
             if filters.get("featured"):
                 base_conditions.append(or_(Product.is_featured.is_(True), Product.featured.is_(True)))
         
-        # Build subquery for filtering by category
+        # Build subquery for filtering by category (now it's a string)
         if filters and filters.get("category"):
-            # Get category first
-            cat_query = select(Category.id).where(Category.name == filters['category'])
-            cat_result = await self.db.execute(cat_query)
-            category_id = cat_result.scalar_one_or_none()
-            if category_id:
-                base_conditions.append(Product.category_id == category_id)
+            base_conditions.append(Product.category == filters['category'])
         
         # Build subquery for filtering by variant properties
         if filters:
@@ -258,14 +305,12 @@ class ProductService:
                 )
                 base_conditions.append(variant_subquery)
         
-        # Build the main query
+        # Build the main query with simpler eager loading
         query = (
             select(Product)
             .where(and_(*base_conditions))
             .options(
-                selectinload(Product.category),
-                selectinload(Product.variants).selectinload(ProductVariant.images),
-                selectinload(Product.variants).selectinload(ProductVariant.inventory)
+                selectinload(Product.variants)
             )
         )
 
@@ -290,9 +335,6 @@ class ProductService:
         result = await self.db.execute(query)
         products = result.scalars().all()
 
-        print(f"Found {len(products)} products in database")
-        print(f"Total count from count query: {total}")
-
         # Convert to response format
         products_data = []
         for product in products:
@@ -300,10 +342,8 @@ class ProductService:
                 product_response = self._convert_product_to_response(product)
                 products_data.append(product_response)
             except Exception as e:
-                print(f"Error converting product {product.id}: {e}")
+                logger.error(f"Error converting product {product.id}: {e}")
                 continue
-
-        print(f"Successfully converted {len(products_data)} products")
 
         return {
             "data": products_data,
@@ -321,7 +361,6 @@ class ProductService:
         query = (
             select(Product)
             .options(
-                selectinload(Product.category),
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
@@ -356,7 +395,6 @@ class ProductService:
             .order_by(func.count(CartItem.id).desc())
             .limit(limit)
             .options(
-                selectinload(Product.category),
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
@@ -369,7 +407,6 @@ class ProductService:
         # If no products found (no cart items), fallback to highest rated products
         if not rows:
             fallback_query = select(Product).options(
-                selectinload(Product.category),
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
@@ -391,71 +428,50 @@ class ProductService:
         - Similar (alternative): Same category, similar price range
         - Behavioral (social proof): Popular based on orders and reviews
         """
-        from services.products.recommendations import RecommendationService
+        from services.catalog.recommendations import RecommendationService
         
         recommendation_service = RecommendationService(self.db)
         return await recommendation_service.get_smart_recommendations(product_id, limit)
 
-    async def get_categories(self) -> List[CategoryResponse]:
-        """Get all categories with their product counts."""
+    async def get_category_by_slug(self, slug: str) -> Optional[ProductResponse]:
+        """Get category by slug and return products in that category."""
+        # Find products in this category
         query = (
-            select(
-                Category,
-                func.count(Product.id).label("product_count")
+            select(Product)
+            .options(
+                selectinload(Product.variants).selectinload(
+                    ProductVariant.images),
+                selectinload(Product.variants).selectinload(
+                    ProductVariant.inventory)
             )
-            .outerjoin(Product, Product.category_id == Category.id)
-            .where(Category.is_active == True)
-            .group_by(Category.id)
+            .where(Product.category == slug)
+            .where(Product.product_status == "active")
         )
         result = await self.db.execute(query)
-        categories_with_counts = result.all()
-
-        categories = []
-        for category, product_count in categories_with_counts:
-            categories.append(CategoryResponse(
-                id=category.id,
-                name=category.name,
-                description=category.description,
-                image_url=category.image_url,
-                is_active=category.is_active,
-                product_count=product_count,
-                created_at=category.created_at.isoformat() if category.created_at else "",
-                updated_at=category.updated_at.isoformat() if category.updated_at else None
-            ))
-
-        return categories
-
-    async def get_category_by_id(self, category_id: UUID) -> Optional[CategoryResponse]:
-        """Get Category by ID."""
-        query = select(Category).where(Category.id == category_id)
-        result = await self.db.execute(query)
-        category = result.scalar_one_or_none()
-
-        if category:
-            # Get product count for this category
-            product_count_query = select(func.count(Product.id)).where(
-                Product.category_id == category.id,
-                Product.is_active == True
-            )
-            product_count_result = await self.db.execute(product_count_query)
-            product_count = product_count_result.scalar()
-            
-            return CategoryResponse(
-                id=category.id,
-                name=category.name,
-                description=category.description,
-                image_url=category.image_url,
-                is_active=category.is_active,
-                product_count=product_count,
-                created_at=category.created_at.isoformat() if category.created_at else "",
-                updated_at=category.updated_at.isoformat() if category.updated_at else None
-            )
+        products = result.scalars().all()
+        
+        print(f"Found {len(products)} products")
+        for product in products:
+            print(f"Product: {product.name}, variants count: {len(product.variants) if product.variants else 0}")
+        
+        # Convert to responses
+        product_responses = []
+        for product in products:
+            product_responses.append(
+                self._convert_product_to_response(product, include_relationships=True))
+        
+        return ProductListResponse(
+            products=product_responses,
+            total=len(product_responses),
+            page=1,
+            limit=len(product_responses),
+            has_more=False
+        )
         return None
 
     async def get_product_by_id(self, product_id: UUID) -> Optional[ProductResponse]:
         """Get product by ID."""
         query = select(Product).options(
-            selectinload(Product.category),
             selectinload(Product.variants).selectinload(ProductVariant.images),
             selectinload(Product.variants).selectinload(ProductVariant.inventory)
         ).where(Product.id == product_id)
@@ -528,9 +544,9 @@ class ProductService:
         
         # Add filters
         if filters:
-            if filters.get("category_id"):
-                base_conditions.append("p.category_id = :category_id")
-                params["category_id"] = filters["category_id"]
+            if filters.get("category"):
+                base_conditions.append("p.category = :category")
+                params["category"] = filters["category"]
                 
             if filters.get("min_price") is not None:
                 base_conditions.append("""
@@ -561,24 +577,20 @@ class ProductService:
                 p.description,
                 p.rating,
                 p.review_count,
-                c.name as category_name,
+                p.category,
                 -- Calculate weighted relevance score
                 (
-                    -- Name matching (highest weight)
-                    CASE WHEN LOWER(p.name) = :query THEN CAST(:exact_weight AS FLOAT) * CAST(:name_weight AS FLOAT)
-                         WHEN LOWER(p.name) LIKE CONCAT(:query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:name_weight AS FLOAT) * 0.9
-                         WHEN LOWER(p.name) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:name_weight AS FLOAT) * 0.7
-                         ELSE similarity(LOWER(p.name), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:name_weight AS FLOAT)
+                    -- Boost for exact name match
+                    CASE 
+                        WHEN LOWER(p.name) LIKE CONCAT(:query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:name_weight AS FLOAT)
+                        WHEN LOWER(p.name) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:name_weight AS FLOAT) * 0.7
+                        ELSE similarity(LOWER(p.name), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:name_weight AS FLOAT)
                     END +
-                    -- Description matching
-                    CASE WHEN LOWER(p.description) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:desc_weight AS FLOAT)
-                         ELSE similarity(LOWER(p.description), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:desc_weight AS FLOAT)
-                    END +
-                    -- Category matching
-                    CASE WHEN LOWER(c.name) = :query THEN CAST(:exact_weight AS FLOAT) * CAST(:cat_weight AS FLOAT)
-                         WHEN LOWER(c.name) LIKE CONCAT(:query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:cat_weight AS FLOAT)
-                         WHEN LOWER(c.name) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:cat_weight AS FLOAT) * 0.7
-                         ELSE similarity(LOWER(c.name), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:cat_weight AS FLOAT)
+                    -- Boost for description match
+                    CASE 
+                        WHEN LOWER(p.description) LIKE CONCAT(:query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:desc_weight AS FLOAT)
+                        WHEN LOWER(p.description) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:desc_weight AS FLOAT) * 0.7
+                        ELSE similarity(LOWER(p.description), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:desc_weight AS FLOAT)
                     END +
                     -- Boost for higher rated products
                     (COALESCE(p.rating, 0) / 5.0) * 0.1 +
@@ -586,15 +598,12 @@ class ProductService:
                     LEAST(COALESCE(p.review_count, 0) / 100.0, 0.1)
                 ) as relevance_score
             FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
             WHERE {where_clause}
             AND (
                 LOWER(p.name) LIKE CONCAT('%', :query, '%')
                 OR LOWER(p.description) LIKE CONCAT('%', :query, '%')
-                OR LOWER(c.name) LIKE CONCAT('%', :query, '%')
                 OR similarity(LOWER(p.name), :query) > :similarity_threshold
                 OR similarity(LOWER(p.description), :query) > :similarity_threshold
-                OR similarity(LOWER(c.name), :query) > :similarity_threshold
             )
             ORDER BY relevance_score DESC, p.rating DESC, p.review_count DESC
             LIMIT :limit
@@ -627,61 +636,39 @@ class ProductService:
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         """
-        Search categories with simple text matching.
+        Search hardcoded categories with simple text matching.
         """
         if not query or len(query.strip()) < 2:
             return []
             
+        # Hardcoded categories since we moved to string-based system
+        categories = [
+            {"name": "Grains, Cereals & Beans", "slug": "grains-pulses"},
+            {"name": "Fruits & Vegetables", "slug": "fruits-vegetables"},
+            {"name": "Meat, Poultry & Seafood", "slug": "meat-seafood"},
+            {"name": "Dairy, Eggs & Fats", "slug": "dairy-fats"},
+            {"name": "Spices, Herbs & Seasonings", "slug": "spices-herbs"},
+            {"name": "Pantry & Sweeteners", "slug": "pantry-sweeteners"},
+            {"name": "Nuts, Seeds & Snacks", "slug": "nuts-seeds-snacks"},
+            {"name": "Beverages, Tea & Coffee", "slug": "beverages"},
+            {"name": "Bakery & Prepared Foods", "slug": "bakery"},
+            {"name": "Fibers & Industrial Crops", "slug": "fibers"}
+        ]
+        
         query = query.strip().lower()
         
-        # Build simple query without similarity function
-        base_query = select(
-            Category.id,
-            Category.name,
-            Category.description,
-            Category.image_url,
-            func.count(Product.id).label('product_count')
-        ).select_from(
-            Category.__table__.outerjoin(Product.__table__, 
-                and_(Category.id == Product.category_id, Product.is_active == True)
-            )
-        ).where(
-            and_(
-                Category.is_active == True,
-                or_(
-                    func.lower(Category.name).like(f'%{query}%'),
-                    func.lower(Category.description).like(f'%{query}%')
-                )
-            )
-        ).group_by(
-            Category.id, Category.name, Category.description, Category.image_url
-        ).order_by(
-            func.count(Product.id).desc(),
-            Category.name
-        ).limit(limit)
+        # Filter categories by name
+        filtered_categories = [
+            {
+                "id": cat["slug"],
+                "name": cat["name"],
+                "description": f"Products in {cat['name']} category",
+            }
+            for cat in categories
+            if query in cat["name"].lower()
+        ]
         
-        try:
-            result = await self.db.execute(base_query)
-            categories = result.fetchall()
-            
-            # Convert to dict format
-            category_list = []
-            for category in categories:
-                category_dict = {
-                    "id": str(category.id),
-                    "name": category.name,
-                    "description": category.description,
-                    "image_url": category.image_url,
-                    "product_count": category.product_count,
-                    "type": "category"
-                }
-                category_list.append(category_dict)
-            
-            return category_list
-            
-        except Exception as e:
-            logger.error(f"Error in search_categories: {e}")
-            return []
+        return filtered_categories[:limit]
 
     async def create_product(self, product_data: ProductCreate, created_by: UUID) -> ProductResponse:
         """Create a new product."""
@@ -692,7 +679,7 @@ class ProductService:
             slug=product_data.slug,
             description=product_data.description,
             short_description=product_data.short_description,
-            category_id=product_data.category_id,
+            category=product_data.category,
             origin=product_data.origin,
             is_featured=product_data.is_featured,
             is_bestseller=product_data.is_bestseller

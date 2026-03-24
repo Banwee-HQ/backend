@@ -22,7 +22,7 @@ from schemas.commerce.subscriptions import (
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
 from models.auth.user import User
-from models.catalog.product import Product, ProductVariant, Category, ProductImage
+from models.catalog.product import Product, ProductVariant, ProductImage
 from models.commerce.subscriptions import Subscription
 from services.auth.auth import AuthService
 

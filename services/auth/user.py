@@ -260,7 +260,6 @@ class UserService:
             lastname=user_data.lastname,
             hashed_password=hashed_password,
             role=user_data.role,
-            verified=False,
             verification_token=verification_token,
             token_expiration=token_expiration
         )
@@ -315,7 +314,9 @@ class UserService:
                 message="Invalid or expired verification token",
             )
 
-        user.verified = True
+        # Set verification status column instead of assigning to the read-only
+        # `verified` property which is computed from `verification_status`.
+        user.verification_status = 'verified'
         user.verification_token = None
         user.token_expiration = None
         await self.db.commit()

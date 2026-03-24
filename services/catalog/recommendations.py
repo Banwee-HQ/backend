@@ -180,7 +180,7 @@ class RecommendationService:
                 .join(ProductVariant, Product.id == ProductVariant.product_id)
                 .where(
                     and_(
-                        Product.category_id == source_product.category_id,
+                        Product.category == source_product.category,
                         Product.id != source_product.id,
                         Product.is_active == True
                     )
@@ -226,7 +226,7 @@ class RecommendationService:
         """
         try:
             # Get source product's category
-            product_query = select(Product.category_id).where(Product.id == product_id)
+            product_query = select(Product.category).where(Product.id == product_id)
             product_result = await self.db.execute(product_query)
             category_id = product_result.scalar_one_or_none()
             
@@ -273,7 +273,7 @@ class RecommendationService:
                 .outerjoin(review_scores, Product.id == review_scores.c.product_id)
                 .where(
                     and_(
-                        Product.category_id == category_id,
+                        Product.category == category_id,
                         Product.id != product_id,
                         Product.is_active == True
                     )
@@ -389,7 +389,7 @@ class RecommendationService:
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             ).where(
                 and_(
-                    Product.category_id == source_product.category_id,
+                    Product.category == source_product.category,
                     Product.id != source_product.id,
                     Product.is_active == True
                 )

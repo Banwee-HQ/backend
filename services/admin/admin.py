@@ -62,7 +62,9 @@ class AdminService:
                 conditions.append(User.is_active == False)
                 
         if verified is not None:
-            conditions.append(User.verified == verified)
+            # `User.verified` is a read-only property; filter against the
+            # underlying `verification_status` column instead.
+            conditions.append(User.verification_status == ('verified' if verified else 'unverified'))
         
         # Exclude soft-deleted users by default
         conditions.append(User.account_status != "deleted")
@@ -843,7 +845,7 @@ class AdminService:
     ) -> Dict[str, Any]:
         """Get all products with complete data including images, SKU, category, price, stock status, and variants"""
         try:
-            from models.catalog.product import Product, Category, ProductVariant, ProductImage
+            from models.catalog.product import Product, ProductVariant, ProductImage
             from models.catalog.inventories import Inventory
             from models.auth.user import User
             
@@ -851,7 +853,6 @@ class AdminService:
             
             # Build query with all necessary joins
             query = select(Product).options(
-                selectinload(Product.category),
                 selectinload(Product.variants).selectinload(ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             )
@@ -867,11 +868,6 @@ class AdminService:
                         Product.slug.ilike(f"%{search}%")
                     )
                 )
-            
-            if category:
-                # Join with Category to filter by category name
-                category_subquery = select(Category.id).where(Category.name.ilike(f"%{category}%"))
-                conditions.append(Product.category_id.in_(category_subquery))
             
             if status:
                 if status == "active":
@@ -982,7 +978,7 @@ class AdminService:
                     "purchase_count": total_purchases,
                     "total_stock": total_stock,
                     "stock_status": stock_status,
-                    "category": product.category.name if product.category else None,
+                    "category": product.category if product.category else None,
                     "variants": variants_data,
                     "primary_variant": variants_data[0] if variants_data else None,
                     "created_at": product.created_at.isoformat() if product.created_at else None,
@@ -1178,7 +1174,6 @@ class AdminService:
             user.is_active = False
             user.account_status = "deleted"
             user.verification_status = "deleted"
-            user.verified = False
 
             await self.db.commit()
             await self.db.refresh(user)

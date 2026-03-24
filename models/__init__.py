@@ -2,7 +2,7 @@ from core.db import Base
 
 from .auth import User, Address
 from .catalog import (
-    Product, ProductVariant, ProductImage, Category,
+    Product, ProductVariant, ProductImage,
     Review, Inventory, WarehouseLocation, StockAdjustment,
     Wishlist, WishlistItem,
     VariantTrackingEntry, VariantPriceHistory, VariantAnalytics, VariantSubstitution,

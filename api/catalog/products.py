@@ -22,6 +22,20 @@ async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSe
     auth_service = AuthService(db)
     return await auth_service.get_current_user(token)
 
+# Hardcoded categories since we moved to string-based system
+CATEGORIES = [
+    {"name": "Grains, Cereals & Beans", "slug": "grains-pulses"},
+    {"name": "Fruits & Vegetables", "slug": "fruits-vegetables"},
+    {"name": "Meat, Poultry & Seafood", "slug": "meat-seafood"},
+    {"name": "Dairy, Eggs & Fats", "slug": "dairy-fats"},
+    {"name": "Spices, Herbs & Seasonings", "slug": "spices-herbs"},
+    {"name": "Pantry & Sweeteners", "slug": "pantry-sweeteners"},
+    {"name": "Nuts, Seeds & Snacks", "slug": "nuts-seeds-snacks"},
+    {"name": "Beverages, Tea & Coffee", "slug": "beverages"},
+    {"name": "Bakery & Prepared Foods", "slug": "bakery"},
+    {"name": "Fibers & Industrial Crops", "slug": "fibers"}
+]
+
 router = APIRouter(prefix="/products", tags=["Products"])
 # /products?sort_by=created_at&sort_order=desc&page=1&limit=12
 
@@ -30,7 +44,6 @@ router = APIRouter(prefix="/products", tags=["Products"])
 async def search_products(
     q: str = Query(..., min_length=2, description="Search query (minimum 2 characters)"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
-    category_id: Optional[UUID] = Query(None, description="Filter by category ID"),
     min_price: Optional[float] = Query(None, ge=0, description="Minimum price filter"),
     max_price: Optional[float] = Query(None, ge=0, description="Maximum price filter"),
     db: AsyncSession = Depends(get_db)
@@ -43,8 +56,6 @@ async def search_products(
         
         # Build filters
         filters = {}
-        if category_id:
-            filters["category_id"] = category_id
         if min_price is not None:
             filters["min_price"] = min_price
         if max_price is not None:
@@ -102,6 +113,18 @@ async def search_categories(
         )
 
 
+@router.get("/categories")
+async def get_categories():
+    """Get all categories (hardcoded list)."""
+    try:
+        return Response.success(data=CATEGORIES)
+    except Exception as e:
+        logger.exception("Error fetching categories")
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch categories: {str(e)}"
+        )
+
 @router.get("/home")
 async def get_home_data(
     db: AsyncSession = Depends(get_db)
@@ -110,49 +133,51 @@ async def get_home_data(
     try:
         product_service = ProductService(db)
         
-        # Fetch categories (limit to 10 for home page carousel)
-        categories = await product_service.get_categories()
-        
         # Fetch featured products (4 items)
         featured = await product_service.get_featured_products(limit=4)
         
         # Fetch popular/recent products (20 items for filtering by category)
-        popular_result = await product_service.get_products(
-            page=1,
-            limit=20,
-            filters={},
-            sort_by="created_at",
-            sort_order="desc"
-        )
-        
-        # Fetch products on sale for deals section (10 items)
-        deals_result = await product_service.get_products(
-            page=1,
-            limit=10,
-            filters={"sale": True},
-            sort_by="created_at",
-            sort_order="desc"
-        )
-
-        # Fallbacks if featured/deals are empty
-        if not featured:
-            featured = (popular_result.get("data") or [])[:4]
-
-        if not deals_result.get("data"):
-            deals_result = await product_service.get_products(
+        try:
+            popular_result = await product_service.get_products(
                 page=1,
-                limit=10,
+                limit=20,
                 filters={},
                 sort_by="created_at",
                 sort_order="desc"
             )
+            popular_products = popular_result.get("data", [])
+        except Exception as e:
+            logger.warning(f"Failed to fetch popular products: {e}")
+            popular_products = []
+        
+        # Fetch products on sale for deals section (10 items)
+        try:
+            deals_result = await product_service.get_products(
+                page=1,
+                limit=10,
+                filters={"sale": True},
+                sort_by="created_at",
+                sort_order="desc"
+            )
+            deals_products = deals_result.get("data", [])
+        except Exception as e:
+            logger.warning(f"Failed to fetch deals: {e}")
+            deals_products = []
+
+        # Fallbacks if featured/deals are empty
+        if not featured:
+            featured = popular_products[:4]
+
+        if not deals_products:
+            # Use recent products as deals fallback
+            deals_products = popular_products[:10] if popular_products else featured[:10]
         
         return Response.success(
             data={
-                "categories": categories[:10] if categories else [],  # Limit to 10 for home page
+                "categories": CATEGORIES,
                 "featured": featured,
-                "popular": popular_result["data"],
-                "deals": deals_result["data"]
+                "popular": popular_products,
+                "deals": deals_products
             }
         )
     except Exception as e:
@@ -167,10 +192,9 @@ async def get_home_data(
 async def get_products(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    category: Optional[str] = None,
-    q: Optional[str] = None,
-    min_price: Optional[float] = None,
-    max_price: Optional[float] = None,
+    q: Optional[str] = Query(None, description="Search query for filtering"),
+    min_price: Optional[float] = Query(None, ge=0, description="Minimum price filter"),
+    max_price: Optional[float] = Query(None, ge=0, description="Maximum price filter"),
     min_rating: Optional[int] = Query(None, ge=1, le=5),
     max_rating: Optional[int] = Query(None, ge=1, le=5),
     sort_by: Optional[str] = Query("created_at"),
@@ -188,26 +212,20 @@ async def get_products(
         if q and len(q.strip()) >= 2 and search_mode == "advanced":
             search_service = SearchService(db)
             
-            # Build search filters
-            search_filters = {}
+            # Build filters
+            filters = {}
+            if q:
+                filters["q"] = q
             if min_price is not None:
-                search_filters["min_price"] = min_price
+                filters["min_price"] = min_price
             if max_price is not None:
-                search_filters["max_price"] = max_price
-            
-            # Get category ID if category name is provided
-            if category:
-                product_service = ProductService(db)
-                categories = await product_service.get_categories()
-                category_match = next((cat for cat in categories if cat.name.lower() == category.lower()), None)
-                if category_match:
-                    search_filters["category_id"] = category_match.id
+                filters["max_price"] = max_price
             
             # Use advanced search
             search_results = await search_service.fuzzy_search_products(
                 query=q.strip(),
                 limit=limit,
-                filters=search_filters if search_filters else None
+                filters=filters if filters else None
             )
             
             # Convert search results to match the expected format
@@ -226,7 +244,6 @@ async def get_products(
             product_service = ProductService(db)
 
             filters = {
-                "category": category,
                 "q": q,
                 "min_price": min_price,
                 "max_price": max_price,
@@ -255,60 +272,25 @@ async def get_products(
         )
 
 @router.get("/categories")
-async def get_categories(
-    q: Optional[str] = Query(None, description="Search query for category name"),
-    limit: int = Query(50, ge=1, le=100, description="Maximum number of categories"),
-    search_mode: Optional[str] = Query("basic", regex="^(basic|advanced)$", description="Search mode: basic or advanced"),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get product categories with optional search functionality."""
-    try:
-        # If there's a search query and advanced search is requested, use the search service
-        if q and len(q.strip()) >= 2 and search_mode == "advanced":
-            search_service = SearchService(db)
-            
-            # Use advanced search
-            search_results = await search_service.search_categories(
-                query=q.strip(),
-                limit=limit
-            )
-            
-            return Response.success( 
-                data={
-                    "categories": search_results,
-                    "count": len(search_results),
-                    "search_mode": "advanced"
-                }
-            )
-        else:
-            # Use basic product service for regular queries
-            product_service = ProductService(db)
-            categories = await product_service.get_categories()
-            
-            # Apply basic filtering if search query is provided
-            if q and len(q.strip()) >= 2:
-                query_lower = q.strip().lower()
-                categories = [
-                    cat for cat in categories 
-                    if query_lower in cat.name.lower() or 
-                       (cat.description and query_lower in cat.description.lower())
-                ]
-            
-            # Apply limit
-            categories = categories[:limit]
-            
-            return Response.success( 
-                data={
-                    "categories": categories,
-                    "count": len(categories),
-                    "search_mode": "basic"
-                }
-            )
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch categories {str(e)}"
-        )
+async def get_categories():
+    """Get categories - now returns hardcoded list since we use string categories."""
+    from services.catalog.search import SearchService
+    
+    # Return hardcoded categories since we don't use Category model anymore
+    categories = [
+        {"name": "Grains, Cereals & Beans"},
+        {"name": "Fruits & Vegetables"},
+        {"name": "Meat, Poultry & Seafood"},
+        {"name": "Dairy, Eggs & Fats"},
+        {"name": "Spices, Herbs & Seasonings"},
+        {"name": "Pantry & Sweeteners"},
+        {"name": "Nuts, Seeds & Snacks"},
+        {"name": "Beverages, Tea & Coffee"},
+        {"name": "Bakery & Prepared Foods"},
+        {"name": "Fibers & Industrial Crops"}
+    ]
+    
+    return Response.success(data=categories)
 
 
 @router.get("/{product_id}/recommendations")
@@ -396,30 +378,6 @@ async def get_product(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch product: {str(e)}"
-        )
-
-
-@router.get("/categories/{category_id}")
-async def get_category(
-    category_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific category by ID."""
-    try:
-        category_service = ProductService(db)
-        category = await category_service.get_category_by_id(category_id)
-        if not category:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Category not found"
-            )
-        return Response(success=True, data=category)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to fetch category"
         )
 
 
