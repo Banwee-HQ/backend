@@ -25,7 +25,7 @@ async def get_all_promocodes(
 ):
     """Get all promocodes (Admin only)."""
     try:
-        if current_user.role != "Admin":
+        if current_user.role not in ["admin", "Admin", "manager", "SuperAdmin"]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Only admins can view promocodes"
@@ -87,7 +87,7 @@ async def get_promocode_by_id(
 ):
     """Get promocode by ID (Admin only)."""
     try:
-        if current_user.role != "Admin":
+        if current_user.role not in ["admin", "Admin", "manager", "SuperAdmin"]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Only admins can view promocodes"
@@ -135,7 +135,7 @@ async def create_promocode(
 ):
     """Create new promocode (Admin only)."""
     try:
-        if current_user.role != "Admin":
+        if current_user.role not in ["admin", "Admin", "manager", "SuperAdmin"]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Only admins can create promocodes"
@@ -178,7 +178,7 @@ async def update_promocode(
 ):
     """Update promocode (Admin only)."""
     try:
-        if current_user.role != "Admin":
+        if current_user.role not in ["admin", "Admin", "manager", "SuperAdmin"]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Only admins can update promocodes"
@@ -220,7 +220,7 @@ async def delete_promocode(
 ):
     """Delete promocode (Admin only)."""
     try:
-        if current_user.role != "Admin":
+        if current_user.role not in ["admin", "Admin", "manager", "SuperAdmin"]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Only admins can delete promocodes"

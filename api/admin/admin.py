@@ -130,8 +130,8 @@ async def get_all_subscriptions(
             "created_at": Subscription.created_at,
             "status": Subscription.status,
             "next_billing_date": Subscription.next_billing_date,
-            "total": Subscription.total,
-            "price": Subscription.price
+            "total": Subscription.price_at_creation,
+            "price": Subscription.price_at_creation
         }
         sort_column = sort_columns.get(sort_by, Subscription.created_at)
         base_query = base_query.order_by(sort_column.asc() if sort_order == "asc" else sort_column.desc())
