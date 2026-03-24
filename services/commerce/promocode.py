@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
-from typing import List, Optional
+from sqlalchemy import select, update, delete, func
+from typing import List, Optional, Tuple
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from models.commerce.promocode import Promocode
@@ -30,9 +30,25 @@ class PromocodeService:
         result = await self.db.execute(select(Promocode).where(Promocode.id == promocode_id))
         return result.scalars().first()
 
-    async def get_all_promocodes(self) -> List[Promocode]:
-        result = await self.db.execute(select(Promocode))
-        return result.scalars().all()
+    async def get_all_promocodes(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        is_active: Optional[bool] = None
+    ) -> Tuple[List[Promocode], int]:
+        query = select(Promocode)
+        count_query = select(func.count()).select_from(Promocode)
+
+        if is_active is not None:
+            query = query.where(Promocode.is_active == is_active)
+            count_query = count_query.where(Promocode.is_active == is_active)
+
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        query = query.order_by(Promocode.created_at.desc()).offset((page - 1) * limit).limit(limit)
+        result = await self.db.execute(query)
+        return result.scalars().all(), total
 
     async def update_promocode(self, promocode_id: UUID, promocode_data: PromocodeUpdate) -> Optional[Promocode]:
         promocode = await self.get_promocode_by_id(promocode_id)

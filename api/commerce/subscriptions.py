@@ -214,18 +214,17 @@ async def get_subscriptions(
     """Get user's subscriptions."""
     try:
         subscription_service = SubscriptionService(db)
-        subscriptions = await subscription_service.get_user_subscriptions(user_id=current_user.id)
-        print(current_user.id,'current_user_id---',subscriptions)
-        # Simple pagination
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        paginated_subscriptions = subscriptions[start_idx:end_idx]
+        subscriptions, total = await subscription_service.get_user_subscriptions(
+            user_id=current_user.id, page=page, limit=limit
+        )
         return Response.success(data={
-            "subscriptions": [sub.to_dict(include_products=True) for sub in paginated_subscriptions],
-            "total": len(subscriptions),
-            "page": page,
-            "limit": limit,
-            "has_more": end_idx < len(subscriptions)
+            "subscriptions": [sub.to_dict(include_products=True) for sub in subscriptions],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": max(1, (total + limit - 1) // limit)
+            }
         })
     except APIException:
         raise APIException(

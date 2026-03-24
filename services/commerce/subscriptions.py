@@ -283,20 +283,28 @@ class SubscriptionService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_user_subscriptions(self, user_id: UUID, status: Optional[str] = None) -> List[Subscription]:
-        """Get all subscriptions for a user"""
-        query = select(Subscription).where(Subscription.user_id == user_id).options(
+    async def get_user_subscriptions(
+        self, user_id: UUID, status: Optional[str] = None,
+        page: int = 1, limit: int = 10
+    ):
+        """Get paginated subscriptions for a user"""
+        from sqlalchemy import func
+        base_query = select(Subscription).where(Subscription.user_id == user_id).options(
             selectinload(Subscription.products).selectinload(ProductVariant.product),
             selectinload(Subscription.products).selectinload(ProductVariant.images)
         )
-        
+        count_query = select(func.count()).select_from(Subscription).where(Subscription.user_id == user_id)
+
         if status:
-            query = query.where(Subscription.status == status)
-        
-        query = query.order_by(Subscription.created_at.desc())
-        
-        result = await self.db.execute(query)
-        return result.scalars().all()
+            base_query = base_query.where(Subscription.status == status)
+            count_query = count_query.where(Subscription.status == status)
+
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        base_query = base_query.order_by(Subscription.created_at.desc()).offset((page - 1) * limit).limit(limit)
+        result = await self.db.execute(base_query)
+        return result.scalars().all(), total
 
     async def update(
         self,

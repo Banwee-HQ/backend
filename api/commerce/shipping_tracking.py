@@ -221,21 +221,46 @@ async def get_supported_carriers(
 
 @router.get("/shipments")
 async def list_user_shipments(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List shipments visible to the current user"""
     try:
-        from sqlalchemy import select as sa_select
+        from sqlalchemy import select as sa_select, func
         from models.commerce.orders import Order
-        # Get shipments for orders belonging to this user
-        result = await db.execute(
+
+        base_query = (
             sa_select(ShipmentTracking)
             .join(Order, ShipmentTracking.order_id == Order.id)
             .where(Order.user_id == current_user.id)
         )
+        count_query = (
+            sa_select(func.count())
+            .select_from(ShipmentTracking)
+            .join(Order, ShipmentTracking.order_id == Order.id)
+            .where(Order.user_id == current_user.id)
+        )
+
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        result = await db.execute(
+            base_query.order_by(ShipmentTracking.created_at.desc())
+            .offset((page - 1) * limit).limit(limit)
+        )
         shipments = result.scalars().all()
-        return APIResponse.success(data=[s.to_dict() for s in shipments])
+
+        return APIResponse.success(data={
+            "shipments": [s.to_dict() for s in shipments],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": max(1, (total + limit - 1) // limit)
+            }
+        })
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to list shipments: {str(e)}")
 

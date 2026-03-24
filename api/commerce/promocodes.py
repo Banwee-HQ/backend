@@ -32,16 +32,9 @@ async def get_all_promocodes(
             )
         
         promocode_service = PromocodeService(db)
-        promocodes = await promocode_service.get_all_promocodes()
-        
-        # Filter by active status if provided
-        if is_active is not None:
-            promocodes = [p for p in promocodes if p.is_active == is_active]
-        
-        # Simple pagination
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_promocodes = promocodes[start:end]
+        promocodes, total = await promocode_service.get_all_promocodes(
+            page=page, limit=limit, is_active=is_active
+        )
         
         return Response.success(data={
             "promocodes": [
@@ -61,13 +54,13 @@ async def get_all_promocodes(
                     "created_at": p.created_at.isoformat() if p.created_at else None,
                     "updated_at": p.updated_at.isoformat() if p.updated_at else None
                 }
-                for p in paginated_promocodes
+                for p in promocodes
             ],
             "pagination": {
-                "current_page": page,
+                "page": page,
                 "limit": limit,
-                "total": len(promocodes),
-                "pages": (len(promocodes) + limit - 1) // limit
+                "total": total,
+                "pages": max(1, (total + limit - 1) // limit)
             }
         })
     except APIException:
