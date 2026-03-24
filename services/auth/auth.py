@@ -232,24 +232,6 @@ class AuthService:
 
         print(f"Password verified for {email}. Proceeding to token creation.")
 
-        # Send login alert email
-        context = {
-            "customer_name": user.firstname,
-            "login_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "company_name": "Banwee",
-            "security_page_url": f"{settings.FRONTEND_URL}/account/security",
-        }
-        try:
-            background_tasks.add_task(
-                send_email,
-                to_email=user.email,
-                mail_type='login_alert',
-                context=context
-            )
-            print(f"Login alert email task added for {user.email}.")
-        except Exception as e:
-            print(f"Failed to add login alert email task for {user.email}. Error: {e}")
-
         # Create token data
         token_data = {
             "sub": str(user.id),

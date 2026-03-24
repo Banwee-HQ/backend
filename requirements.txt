@@ -51,4 +51,4 @@ hypothesis==6.92.1
 # Barcode and QR Code generation
 qrcode[pil]==7.4.2
 python-barcode[images]==0.15.1
-Pillow==10.3.0
+Pillow>=10.3.0

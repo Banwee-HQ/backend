@@ -8,9 +8,17 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from pydantic import BaseModel
 
-# Import Jinja2 and WeasyPrint
+# Import Jinja2
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from weasyprint import HTML, CSS
+
+# WeasyPrint requires system libraries (pango, gobject) — import lazily
+try:
+    from weasyprint import HTML, CSS
+    _WEASYPRINT_AVAILABLE = True
+except OSError:
+    HTML = None  # type: ignore
+    CSS = None   # type: ignore
+    _WEASYPRINT_AVAILABLE = False
 
 
 class ExportFilters(BaseModel):
@@ -128,6 +136,11 @@ class ExportService:
     @staticmethod
     def export_orders_to_pdf(orders: List[Dict[str, Any]]) -> io.BytesIO:
         """Export orders to PDF format using Jinja2 and WeasyPrint"""
+        if not _WEASYPRINT_AVAILABLE:
+            raise RuntimeError(
+                "WeasyPrint is not available. Install system dependencies (pango, gobject) "
+                "or use CSV/Excel export instead."
+            )
         # Basic HTML template for the order export
         # In a real application, this would likely be loaded from a separate .html file
         template_string = """

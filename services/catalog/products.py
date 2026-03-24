@@ -326,7 +326,7 @@ class ProductService:
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             )
-            .where(or_(Product.is_featured.is_(True), Product.featured.is_(True)))  # support new and legacy flags
+            .where(Product.is_featured.is_(True))
             .order_by(Product.created_at.desc())
             .limit(limit)
         )
@@ -337,7 +337,7 @@ class ProductService:
         print(f"Found {len(products)} featured products in DB.")
         for p in products:
             print(
-                f"  - {p.name} (Featured: {p.is_featured or p.featured}, Variants: {len(p.variants)})")
+                f"  - {p.name} (Featured: {p.is_featured}, Variants: {len(p.variants)})")
 
         if not products:
             print(

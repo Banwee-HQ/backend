@@ -42,6 +42,11 @@ class StructuredLogger:
     def critical(self, message: str, *args, **kwargs) -> None:
         _print("CRITICAL", self.name, message % args if args else message)
 
+    def exception(self, message: str, *args, **kwargs) -> None:
+        import traceback
+        _print("ERROR", self.name, message % args if args else message)
+        traceback.print_exc()
+
     # Compat shims for any callers using extended methods
     def log_request(self, *args, **kwargs) -> None:
         _print("INFO", self.name, f"request: {args} {kwargs}")

@@ -503,9 +503,7 @@ class DatabaseManager:
                     except GeneratorExit:
                         # Normal generator exit, let it propagate
                         raise
-                    finally:
-                        # Ensure session is properly cleaned up after yield
-                        await session.rollback()
+                    # Session cleanup is handled by the session factory context manager
                     return
 
             except (SQLAlchemyError, DisconnectionError, OperationalError) as e:

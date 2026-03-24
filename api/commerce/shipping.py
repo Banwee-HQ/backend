@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
+from pydantic import BaseModel
 from core.logging import get_logger
 
 from core.db import get_db
@@ -180,36 +181,34 @@ async def delete_shipping_method(
         )
 
 
+class ShippingCalculateRequest(BaseModel):
+    order_amount: float
+    shipping_method_id: Optional[UUID] = None
+    destination_country: Optional[str] = "US"
+
+
 @router.post("/calculate")
 async def calculate_shipping_cost(
-    order_amount: float = Query(..., description="Order subtotal amount"),
-    shipping_method_id: Optional[UUID] = Query(None, description="Specific shipping method ID"),
+    body: ShippingCalculateRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Calculate shipping cost for a specific order amount and method
-    """
+    """Calculate shipping cost for a specific order amount and method"""
     try:
         shipping_service = ShippingService(db)
-        
-        # Create simple address dict (country not needed for simple calculation)
-        address = {'country': 'US'}
-        
+        address = {'country': body.destination_country or 'US'}
         cost = await shipping_service.calculate_shipping_cost(
-            cart_subtotal=order_amount,
+            cart_subtotal=body.order_amount,
             address=address,
-            shipping_method_id=shipping_method_id
+            shipping_method_id=body.shipping_method_id
         )
-        
         return Response.success(
             data={
                 "shipping_cost": cost,
-                "order_amount": order_amount,
-                "shipping_method_id": shipping_method_id
+                "order_amount": body.order_amount,
+                "shipping_method_id": body.shipping_method_id
             },
             message="Shipping cost calculated successfully"
         )
-        
     except Exception as e:
         logger.error(f"Error calculating shipping cost: {e}")
         raise APIException(

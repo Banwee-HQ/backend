@@ -80,6 +80,11 @@ class Product(BaseModel):
     cart_items = relationship("CartItem", back_populates="product", lazy="select")
 
     @property
+    def is_active(self) -> bool:
+        """Compatibility property — True when product_status is 'active'."""
+        return self.product_status == "active"
+
+    @property
     def primary_variant(self):
         """Get the primary variant (first one or cheapest)"""
         if not self.variants:

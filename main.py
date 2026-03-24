@@ -37,17 +37,18 @@ async def lifespan(app: FastAPI):
     logger.info("Validating environment configuration...")
     validation_result = validate_startup_environment()
 
-    if not validation_result.is_valid:
+    if not validation_result["is_valid"]:
         logger.error("Environment validation failed!")
-        if validation_result.error_message:
-            logger.error(validation_result.error_message)
+        missing = validation_result.get("missing", [])
+        if missing:
+            logger.error("Missing required vars: %s", missing)
         if os.getenv("ENVIRONMENT", "local").lower() in ["local", "development", "dev"]:
             logger.warning("Continuing with invalid environment in development mode")
         else:
             raise RuntimeError("Invalid environment configuration. Check your .env file.")
 
     logger.info("Environment validation passed ✅")
-    for warning in (validation_result.warnings or []):
+    for warning in (validation_result.get("warnings") or []):
         logger.warning(warning)
 
     # Initialize database
@@ -109,7 +110,7 @@ v1_router.include_router(refunds_router)
 v1_router.include_router(shipping_router)
 v1_router.include_router(shipping_tracking_router)
 v1_router.include_router(tax_router)
-v1_router.include_router(promocodes_router)
+v1_router.include_router(promocodes_router, prefix="/promocodes")
 v1_router.include_router(subscriptions_router)
 v1_router.include_router(webhooks_router)
 v1_router.include_router(admin_router)

@@ -83,7 +83,7 @@ echo ""
 
 case "$MODE" in
   dev|development)
-    uvicorn main:app --host "$HOST" --port "$PORT" --reload --log-level debug
+    uvicorn main:app --host "$HOST" --port "$PORT" --reload
     ;;
   prod|production)
     WORKERS="${WORKERS:-4}"

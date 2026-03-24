@@ -5,6 +5,7 @@ Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, et
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 from uuid import UUID
 
@@ -191,17 +192,15 @@ async def update_shipment_status(
 
 @router.get("/carriers")
 async def get_supported_carriers(
-    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get list of supported shipping carriers"""
+    """Get list of supported shipping carriers (public)"""
     try:
-        # Get active providers
         result = await db.execute(
             select(ShippingProvider).where(ShippingProvider.is_active == True)
         )
         providers = result.scalars().all()
-        
+
         carriers = []
         for provider in providers:
             carriers.append({
@@ -210,14 +209,35 @@ async def get_supported_carriers(
                 "api_url": provider.api_url,
                 "tracking_url_template": provider.tracking_url_template
             })
-        
+
         return APIResponse.success(data=carriers)
-    
+
     except Exception as e:
         raise APIException(
             status_code=500,
             message=f"Failed to get supported carriers: {str(e)}"
         )
+
+
+@router.get("/shipments")
+async def list_user_shipments(
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List shipments visible to the current user"""
+    try:
+        from sqlalchemy import select as sa_select
+        from models.commerce.orders import Order
+        # Get shipments for orders belonging to this user
+        result = await db.execute(
+            sa_select(ShipmentTracking)
+            .join(Order, ShipmentTracking.order_id == Order.id)
+            .where(Order.user_id == current_user.id)
+        )
+        shipments = result.scalars().all()
+        return APIResponse.success(data=[s.to_dict() for s in shipments])
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to list shipments: {str(e)}")
 
 @router.post("/providers")
 async def create_shipping_provider(

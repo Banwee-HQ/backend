@@ -10,7 +10,9 @@ class UserRole(str, Enum):
     MANAGER = "manager"
     SUPPORT = "support"
     CUSTOMER = "customer"
-
+class Gender(str, Enum):
+    MALE = "male"
+    FEMALE ="female"
 class User(BaseModel):
     """Optimized User model with hard delete only"""
     __tablename__ = "users"
@@ -21,6 +23,8 @@ class User(BaseModel):
         Index('idx_users_country_language', 'country', 'language'),
         Index('idx_users_last_login', 'last_login'),
         Index('idx_users_stripe_customer', 'stripe_customer_id'),
+        Index('idx_users_age', 'age'),
+        Index('idx_users_gender', 'gender'),
         {'extend_existing': True}
     )
 
@@ -45,6 +49,9 @@ class User(BaseModel):
     language = Column(String(10), default="en")
     timezone = Column(String(100), nullable=True)
     avatar_url = Column(String(500), nullable=True)
+    # Optional profile fields
+    age = Column(Integer, nullable=True)
+    gender = Column(String(20), nullable=True)
     
     # Activity tracking
     last_login = Column(DateTime(timezone=True), nullable=True)
@@ -98,9 +105,22 @@ class User(BaseModel):
         return f"{self.firstname} {self.lastname}"
 
     @property
+    def verified(self) -> bool:
+        """Compatibility property — True when verification_status is 'verified'."""
+        return self.verification_status == "verified"
+
+    @property
+    def is_active(self) -> bool:
+        """Compatibility property — True when account_status is 'active'."""
+        return self.account_status == "active"
+
+    @property
     def default_address(self):
         """Get user's default address"""
         return next((addr for addr in self.addresses if addr.is_default), None)
+
+
+    
 
 
     def to_dict(self) -> dict:
