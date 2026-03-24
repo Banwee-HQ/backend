@@ -195,6 +195,9 @@ class SubscriptionScheduler:
                     
                     # Send email notification about paused subscription
                     try:
+                        from services.auth.email import EmailQueue
+                        # Note: This needs BackgroundTasks, but scheduler runs in background
+                        # For now, send directly via EmailService (already handled)
                         from services.auth.email import EmailService
                         email_service = EmailService(self.db)
                         await email_service.send_subscription_payment_failed(

@@ -91,38 +91,92 @@ class EmailService:
         
         html_content = await self.render_email_with_template("purchase/order_confirmation.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=recipient_email,
             subject=f"Order Confirmation - {order_number}",
             html_content=html_content
         )
         print(f"📧 Order confirmation email sent to {recipient_email}")
 
-    async def send_welcome_email(
+    async def send_verification_email(
         self,
         recipient_email: str,
-        user_name: str
+        firstname: str,
+        verification_token: str
     ):
-        """Send welcome email (called from ARQ worker)"""
+        """Send verification email (called from ARQ worker)"""
+        from core.config import settings
+        verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
+        
         context = {
-            "user_name": user_name,
-            "email": recipient_email,
-            "store_url": settings.FRONTEND_URL,
+            "customer_name": firstname,
+            "verification_link": verification_link,
+            "company_name": "Banwee",
+            "expiry_time": "24 hours",
+            "current_year": datetime.now().year,
+        }
+        
+        html_content = await self.render_email_with_template("account/activation.html", context)
+        
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
+            to_email=recipient_email,
+            subject="Verify Your Email Address - Banwee",
+            html_content=html_content
+        )
+        print(f"📧 Verification email sent to {recipient_email}")
+
+    
+    async def send_thank_you_email(
+        self,
+        recipient_email: str,
+        customer_name: str,
+        order_number: str = None
+    ):
+        """Send thank you email (called from ARQ worker)"""
+        context = {
+            "customer_name": customer_name,
+            "order_number": order_number or "Your recent order",
             "company_name": "Banwee",
             "support_email": "support@banwee.com",
             "current_year": datetime.now().year
         }
         
-        html_content = await self.render_email_with_template("account/welcome.html", context)
+        html_content = await self.render_email_with_template("post_purchase/thank_you.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=recipient_email,
-            subject="Welcome to Banwee!",
+            subject="🙏 Thank You for Your Purchase!",
             html_content=html_content
         )
-        print(f"📧 Welcome email sent to {recipient_email}")
+        print(f"📧 Thank you email sent to {recipient_email}")
+
+    async def send_review_request_email(
+        self,
+        recipient_email: str,
+        customer_name: str,
+        order_number: str = None
+    ):
+        """Send review request email (called from ARQ worker)"""
+        context = {
+            "customer_name": customer_name,
+            "order_number": order_number or "Your recent order",
+            "company_name": "Banwee",
+            "support_email": "support@banwee.com",
+            "current_year": datetime.now().year
+        }
+        
+        html_content = await self.render_email_with_template("post_purchase/review_request.html", context)
+        
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
+            to_email=recipient_email,
+            subject="⭐ Tell Us What You Think",
+            html_content=html_content
+        )
+        print(f"📧 Review request email sent to {recipient_email}")
 
     async def send_password_reset_email(
         self,
@@ -142,8 +196,8 @@ class EmailService:
         
         html_content = await self.render_email_with_template("account/password_reset.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=recipient_email,
             subject="Reset Your Password",
             html_content=html_content
@@ -181,8 +235,8 @@ class EmailService:
         
         html_content = await self.render_email_with_template("purchase/shipping_update.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=recipient_email,
             subject=f"Your Order {order_number} Has Shipped!",
             html_content=html_content
@@ -214,8 +268,8 @@ class EmailService:
         
         html_content = await self.render_email_with_template("system/low_stock_alert.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=recipient_email,
             subject=f"Low Stock Alert: {product_name}",
             html_content=html_content
@@ -260,8 +314,8 @@ class EmailService:
         
         html_content = await self.render_email_with_template("purchase/order_delivered.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=recipient_email,
             subject=f"Your Order {order_number} Has Been Delivered!",
             html_content=html_content
@@ -309,8 +363,8 @@ class EmailService:
         
         html_content = await self.render_email_with_template("system/subscription_payment_failed.html", context)
         
-        from core.utils.messages.email import send_email_mailjet
-        await send_email_mailjet(
+        from core.utils.messages.email import send_email_brevo
+        await send_email_brevo(
             to_email=user_email,
             subject=subject,
             html_content=html_content
@@ -397,18 +451,54 @@ class EmailQueue:
         )
 
     @classmethod
-    def send_welcome(
+    def send_verification(
         cls,
         background_tasks: BackgroundTasks,
         to_email: str,
-        user_name: str
+        firstname: str,
+        verification_token: str
     ):
-        """Queue welcome email"""
+        """Queue verification email"""
         background_tasks.add_task(
             cls._send_direct,
-            "welcome",
+            "verification",
             to_email,
-            user_name=user_name
+            firstname=firstname,
+            verification_token=verification_token
+        )
+
+    @classmethod
+    def send_thank_you(
+        cls,
+        background_tasks: BackgroundTasks,
+        to_email: str,
+        customer_name: str,
+        order_number: str = None
+    ):
+        """Queue thank you email"""
+        background_tasks.add_task(
+            cls._send_direct,
+            "thank_you",
+            to_email,
+            customer_name=customer_name,
+            order_number=order_number
+        )
+
+    @classmethod
+    def send_review_request(
+        cls,
+        background_tasks: BackgroundTasks,
+        to_email: str,
+        customer_name: str,
+        order_number: str = None
+    ):
+        """Queue review request email"""
+        background_tasks.add_task(
+            cls._send_direct,
+            "review_request",
+            to_email,
+            customer_name=customer_name,
+            order_number=order_number
         )
 
     @classmethod
@@ -470,9 +560,6 @@ def send_shipping_update_email(background_tasks: BackgroundTasks, to_email: str,
     EmailQueue.send_shipping_update(background_tasks, to_email, **kwargs)
 
 
-def send_welcome_email(background_tasks: BackgroundTasks, to_email: str, **kwargs):
-    """Legacy wrapper - use EmailQueue.send_welcome instead"""
-    EmailQueue.send_welcome(background_tasks, to_email, **kwargs)
 
 
 def send_password_reset_email(background_tasks: BackgroundTasks, to_email: str, **kwargs):

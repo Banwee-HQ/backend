@@ -1183,6 +1183,513 @@ async def export_orders(
             message=f"Failed to export orders: {str(e)}"
         )
 
+@router.put("/orders/{order_id}/deliver")
+async def mark_order_as_delivered(
+    order_id: str,
+    request: dict = {},
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark order as delivered (admin only)."""
+    try:
+        order_service = OrderService(db)
+        order = await order_service.mark_order_as_delivered(
+            UUID(order_id),
+            current_user.id
+        )
+        return Response.success(data=order, message="Order marked as delivered")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to mark order as delivered: {str(e)}"
+        )
+
+
+@router.get("/orders/statistics")
+async def get_order_statistics(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order statistics for admin dashboard."""
+    try:
+        order_service = OrderService(db)
+        stats = await order_service.get_order_statistics(
+            date_from=date_from,
+            date_to=date_to,
+            status=status
+        )
+        return Response.success(data=stats)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get order statistics: {str(e)}"
+        )
+
+
+@router.get("/orders/all")
+async def get_all_orders_admin(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    customer_id: Optional[UUID] = Query(None),
+    status: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("created_at"),
+    sort_order: Optional[str] = Query("desc"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all orders for admin management with advanced filtering."""
+    try:
+        order_service = OrderService(db)
+        orders = await order_service.get_all_orders(
+            page=page,
+            limit=limit,
+            customer_id=customer_id,
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        return Response.success(data=orders)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch orders: {str(e)}"
+        )
+
+
+# User Management Enhancement Routes
+@router.put("/users/{user_id}")
+async def update_user_admin(
+    user_id: str,
+    user_data: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user details (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        user = await admin_service.update_user(user_id, user_data)
+        return Response.success(data=user, message="User updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update user: {str(e)}"
+        )
+
+@router.put("/users/{user_id}/verify")
+async def verify_user_admin(
+    user_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify user (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        user = await admin_service.verify_user(user_id)
+        return Response.success(data=user, message="User verified successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to verify user: {str(e)}"
+        )
+
+@router.get("/users/{user_id}/activity")
+async def get_user_activity_admin(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user activity log (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        activity = await admin_service.get_user_activity(user_id, page, limit)
+        return Response.success(data=activity)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get user activity: {str(e)}"
+        )
+
+@router.get("/users/export")
+async def export_users_admin(
+    format: str = Query("csv", regex="^(csv|excel|json)$"),
+    role: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export users data (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        export_data = await admin_service.export_users(
+            format=format,
+            role=role,
+            status=status,
+            date_from=date_from,
+            date_to=date_to
+        )
+        
+        from fastapi.responses import StreamingResponse
+        import io
+        
+        if format == "csv":
+            return StreamingResponse(
+                io.StringIO(export_data.get("data", "")),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=users_export.csv"}
+            )
+        elif format == "json":
+            return StreamingResponse(
+                io.StringIO(export_data.get("data", "")),
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename=users_export.json"}
+            )
+        else:
+            return Response.success(data=export_data)
+            
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to export users: {str(e)}"
+        )
+
+
+# Product Management Enhancement Routes
+@router.get("/products/create")
+async def get_product_create_data_admin(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get product creation form data (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        create_data = await admin_service.get_product_create_data()
+        return Response.success(data=create_data)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get product create data: {str(e)}"
+        )
+
+@router.put("/products/{product_id}/moderate")
+async def moderate_product_admin(
+    product_id: UUID,
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Approve/reject product (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        product = await admin_service.moderate_product(
+            product_id,
+            request.get("action"),
+            request.get("reason"),
+            current_user.id
+        )
+        return Response.success(data=product, message=f"Product {request.get('action')}ed successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to moderate product: {str(e)}"
+        )
+
+@router.put("/products/{product_id}/feature")
+async def toggle_product_feature_admin(
+    product_id: UUID,
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Feature/unfeature product (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        product = await admin_service.toggle_product_feature(
+            product_id,
+            request.get("featured"),
+            current_user.id
+        )
+        return Response.success(data=product, message="Product feature status updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update product feature status: {str(e)}"
+        )
+
+@router.get("/products/export")
+async def export_products_admin(
+    format: str = Query("csv", regex="^(csv|excel|json)$"),
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export products data (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        export_data = await admin_service.export_products(
+            format=format,
+            status=status,
+            category=category,
+            date_from=date_from,
+            date_to=date_to
+        )
+        
+        from fastapi.responses import StreamingResponse
+        import io
+        
+        if format == "csv":
+            return StreamingResponse(
+                io.StringIO(export_data.get("data", "")),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=products_export.csv"}
+            )
+        elif format == "json":
+            return StreamingResponse(
+                io.StringIO(export_data.get("data", "")),
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename=products_export.json"}
+            )
+        else:
+            return Response.success(data=export_data)
+            
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to export products: {str(e)}"
+        )
+# Analytics Routes
+@router.get("/analytics/dashboard")
+async def get_analytics_dashboard_admin(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get comprehensive analytics dashboard (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        analytics = await admin_service.get_analytics_dashboard(date_from, date_to)
+        return Response.success(data=analytics)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get analytics dashboard: {str(e)}"
+        )
+
+@router.get("/analytics/categories")
+async def get_category_analytics_admin(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get category analytics (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        analytics = await admin_service.get_category_analytics(date_from, date_to)
+        return Response.success(data=analytics)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get category analytics: {str(e)}"
+        )
+
+@router.get("/analytics/sales")
+async def get_sales_analytics_admin(
+    period: str = Query("30d"),
+    group_by: str = Query("day"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get sales analytics (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        analytics = await admin_service.get_sales_analytics(period, group_by, date_from, date_to)
+        return Response.success(data=analytics)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get sales analytics: {str(e)}"
+        )
+
+@router.get("/analytics/user-growth")
+async def get_user_growth_analytics_admin(
+    period: str = Query("30d"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user growth analytics (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        analytics = await admin_service.get_user_growth_analytics(period, date_from, date_to)
+        return Response.success(data=analytics)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get user growth analytics: {str(e)}"
+        )
+
+
+# Inventory Management Routes
+@router.get("/inventory")
+async def get_inventory_admin(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    low_stock: bool = Query(False),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get inventory list (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        inventory = await admin_service.get_inventory(page, limit, search, low_stock)
+        return Response.success(data=inventory)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get inventory: {str(e)}"
+        )
+
+@router.get("/inventory/{variant_id}")
+async def get_inventory_details_admin(
+    variant_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get inventory details for variant (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        details = await admin_service.get_inventory_details(variant_id)
+        return Response.success(data=details)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get inventory details: {str(e)}"
+        )
+
+@router.put("/inventory/{variant_id}")
+async def update_inventory_admin(
+    variant_id: UUID,
+    inventory_data: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update inventory (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        inventory = await admin_service.update_inventory(variant_id, inventory_data)
+        return Response.success(data=inventory, message="Inventory updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update inventory: {str(e)}"
+        )
+
+
+# Subscription Management Enhancement Routes
+@router.put("/subscriptions/{subscription_id}")
+async def update_subscription_admin(
+    subscription_id: UUID,
+    subscription_data: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update subscription (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        subscription = await admin_service.update_subscription(subscription_id, subscription_data)
+        return Response.success(data=subscription, message="Subscription updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update subscription: {str(e)}"
+        )
+
+@router.post("/subscriptions/{subscription_id}/cancel")
+async def cancel_subscription_admin(
+    subscription_id: UUID,
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Cancel subscription (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        subscription = await admin_service.cancel_subscription(
+            subscription_id,
+            request.get("reason"),
+            current_user.id
+        )
+        return Response.success(data=subscription, message="Subscription cancelled successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to cancel subscription: {str(e)}"
+        )
+
+@router.get("/subscriptions/export")
+async def export_subscriptions_admin(
+    format: str = Query("csv", regex="^(csv|excel|json)$"),
+    status: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export subscriptions data (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        export_data = await admin_service.export_subscriptions(
+            format=format,
+            status=status,
+            date_from=date_from,
+            date_to=date_to
+        )
+        
+        from fastapi.responses import StreamingResponse
+        import io
+        
+        if format == "csv":
+            return StreamingResponse(
+                io.StringIO(export_data.get("data", "")),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=subscriptions_export.csv"}
+            )
+        elif format == "json":
+            return StreamingResponse(
+                io.StringIO(export_data.get("data", "")),
+                media_type="application/json",
+                headers={"Content-Disposition": f"attachment; filename=subscriptions_export.json"}
+            )
+        else:
+            return Response.success(data=export_data)
+            
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to export subscriptions: {str(e)}"
+        )
+
+
 # Shipping Methods Management Routes
 @router.get("/shipping-methods")
 async def get_all_shipping_methods(

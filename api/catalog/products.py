@@ -370,28 +370,6 @@ async def get_variant(
         )
 
 
-@router.get("/variants/{variant_id}/qrcode")
-async def get_variant_qrcode(
-    variant_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get QR code for a product variant."""
-    try:
-        product_service = ProductService(db)
-        qr_code_url = await product_service.generate_product_url_qr(variant_id)
-        if not qr_code_url:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Product variant not found"
-            )
-        return Response.success(data={"qr_code_url": qr_code_url})
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to generate QR code - {str(e)}"
-        )
 
 
 @router.get("/{product_id}")

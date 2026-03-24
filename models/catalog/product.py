@@ -187,10 +187,6 @@ class ProductVariant(BaseModel):
     base_price = Column(Float, nullable=False)
     sale_price = Column(Float, nullable=True)
 
-    # Barcodes as text (simple storage)
-    barcode = Column(Text, nullable=True)
-    qr_code = Column(Text, nullable=True)
-
     # Use JSONB only for complex attributes that need querying
     attributes = Column(JSONB, nullable=True)  # {"size": "1kg", "color": "red"}
     specifications = Column(JSONB, nullable=True)  # Technical specs that need filtering
@@ -261,8 +257,6 @@ class ProductVariant(BaseModel):
             "availability_status": self.availability_status,
             "view_count": self.view_count,
             "purchase_count": self.purchase_count,
-            "barcode": self.barcode,
-            "qr_code": self.qr_code,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "inventory": {

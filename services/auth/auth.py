@@ -166,16 +166,7 @@ class AuthService:
         result = await self.db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
-    async def _send_verification_email(self, email: str, verification_code: str):
-        """Placeholder for sending a verification email."""
-        print(f"Sending verification email to {email} with code {verification_code}")
-        # In a real application, integrate with an email service here
-
-    async def _send_welcome_sms(self, phone_number: str):
-        """Placeholder for sending a welcome SMS."""
-        print(f"Sending welcome SMS to {phone_number}")
-        # In a real application, integrate with an SMS service here
-
+    
     async def create_user(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> UserResponse:
         """Create a new user."""
         # Check if user already exists

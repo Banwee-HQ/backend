@@ -215,9 +215,6 @@ Get product variants.
 ### GET /products/variants/{id}
 Get variant by ID.
 
-### GET /products/variants/{id}/qrcode
-Get variant QR code.
-
 ### GET /products/categories/{id}
 Get products by category ID.
 

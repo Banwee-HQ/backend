@@ -15,7 +15,6 @@ REST API for Banwee — premium organic products from Africa. Built with FastAPI
 | Email | Brevo (SendinBlue) |
 | Background Jobs | asyncio scheduler (subscriptions, promocodes) |
 | Documents | WeasyPrint (PDF invoices), Jinja2 |
-| Barcodes | qrcode + python-barcode |
 
 ---
 

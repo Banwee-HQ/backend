@@ -16,7 +16,7 @@ from models.commerce.shipping import ShippingMethod
 from models.commerce.payments import PaymentMethod
 from services.auth.auth import AuthService
 from schemas.commerce.orders import OrderCreate, CheckoutRequest
-from core.dependencies import get_current_auth_user, get_order_service
+from core.dependencies import get_current_auth_user, get_order_service, require_admin
 
 logger = get_logger(__name__)
 
@@ -422,14 +422,15 @@ async def add_order_note(
 async def get_order_notes(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
-    """Get order notes."""
+    """Get all notes for an order."""
     try:
-        notes = await order_service.get_order_notes(order_id, current_user.id)
+        order_service = OrderService(db)
+        notes = await order_service.get_order_notes(order_id)
         return Response.success(data=notes)
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to fetch order notes"
+            message=f"Failed to get order notes - {str(e)}"
         )

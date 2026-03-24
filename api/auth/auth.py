@@ -384,22 +384,13 @@ async def resend_verification_email(
         user.token_expiration = token_expiration
         await db.commit()
         
-        # Send verification email
-        verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
-        
-        context = {
-            "customer_name": user.firstname,
-            "verification_link": verification_link,
-            "company_name": "Banwee",
-            "expiry_time": "24 hours",
-            "current_year": datetime.now(timezone.utc).year,
-        }
-        
-        from core.utils.messages.email import send_email_mailjet_legacy
-        await send_email_mailjet_legacy(
-            to_email=request.email,
-            mail_type='activation',
-            context=context
+        # Send verification email using EmailQueue
+        from services.auth.email import EmailQueue
+        EmailQueue.send_verification(
+            background_tasks,
+            request.email,
+            user.firstname,
+            verification_token
         )
         
         return APIResponse(
@@ -587,6 +578,36 @@ async def change_password(
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to change password - {str(e)}"
+        )
+
+
+@router.delete("/delete-account")
+async def delete_account(
+    password: str,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete user account with password confirmation."""
+    try:
+        # Verify password before deletion
+        auth_service = AuthService(db)
+        if not auth_service.verify_password(password, current_user.hashed_password):
+            raise APIException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="Password is incorrect"
+            )
+
+        # Delete user (this will cascade delete related data)
+        await db.delete(current_user)
+        await db.commit()
+
+        return APIResponse.success(message="Account deleted successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to delete account - {str(e)}"
         )
 
 

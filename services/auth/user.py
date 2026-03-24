@@ -269,70 +269,15 @@ class UserService:
         await self.db.refresh(new_user)
 
         # Send verification email in background
-        background_tasks.add_task(
-            self.send_verification_email, 
-            new_user.email, 
-            new_user.firstname, 
+        from services.auth.email import EmailQueue
+        EmailQueue.send_verification(
+            background_tasks,
+            new_user.email,
+            new_user.firstname,
             verification_token
-        ) # User registration event handled by hybrid task system
+        )
 
         return new_user
-
-    async def send_verification_email(self, email: str, firstname: str, token: str):
-        """Sends a verification email using the send_email service."""
-        if not settings.MAILJET_API_KEY or not settings.MAILJET_API_SECRET:
-            print("Mailjet API key or secret not configured. Skipping email sending.")
-            return
-
-        verification_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-
-        context = {
-            "customer_name": firstname,
-            "verification_link": verification_link,
-            "company_name": "Banwee",
-            "expiry_time": "24 hours",
-            "current_year": datetime.now(timezone.utc).year,
-        }
-
-        try:
-            from core.utils.messages.email import send_email_mailjet_legacy
-            await send_email_mailjet_legacy(
-                to_email=email,
-                mail_type='activation',
-                context=context
-            )
-            print(f"Verification email sent to {email} successfully.")
-        except Exception as e:
-            print(
-                f"Failed to send verification email to {email}. Error: {e}")
-
-    async def send_welcome_email(self, user: User):
-        """Sends a welcome email after email verification."""
-        if not settings.MAILJET_API_KEY or not settings.MAILJET_API_SECRET:
-            print("Mailjet API key or secret not configured. Skipping email sending.")
-            return
-
-        context = {
-            "customer_name": user.firstname,
-            "user_name": f"{user.firstname} {user.lastname}",
-            "email": user.email,
-            "store_url": settings.FRONTEND_URL,
-            "company_name": "Banwee",
-            "support_email": "support@banwee.com",
-            "current_year": datetime.now(timezone.utc).year,
-        }
-
-        try:
-            from core.utils.messages.email import send_email_mailjet_legacy
-            await send_email_mailjet_legacy(
-                to_email=user.email,
-                mail_type='welcome',
-                context=context
-            )
-            print(f"Welcome email sent to {user.email} successfully.")
-        except Exception as e:
-            print(
-                f"Failed to send welcome email to {user.email}. Error: {e}")
 
     async def verify_email(self, token: str, background_tasks: BackgroundTasks):
         """Verify user email with token and send welcome email."""
@@ -375,10 +320,7 @@ class UserService:
         user.token_expiration = None
         await self.db.commit()
 
-        # Send welcome email in the background
-        background_tasks.add_task(self.send_welcome_email, user)
-
-        # User verification event handled by hybrid task system
+        # User verification complete - no welcome email needed
 
     async def get_users(self, page: int = 1, limit: int = 10, role: Optional[str] = None) -> dict:
         """Get paginated list of users with order count"""

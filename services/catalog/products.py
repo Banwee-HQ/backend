@@ -493,52 +493,10 @@ class ProductService:
 
         return [self._convert_variant_to_response(variant) for variant in variants]
 
-    async def generate_qr_code(self, variant_id: UUID) -> Optional[str]:
-        """Generate QR code for a product variant."""
-        from services.barcode import BarcodeService
-        barcode_service = BarcodeService(self.db)
-        
-        try:
-            codes = await barcode_service.generate_variant_codes(variant_id)
-            return codes.get("qr_code")
-        except Exception as e:
-            print(f"Error generating QR code: {e}")
-            return None
-
-    async def generate_barcode(self, variant_id: UUID) -> Optional[str]:
-        """Generate barcode for a product variant."""
-        from services.barcode import BarcodeService
-        barcode_service = BarcodeService(self.db)
-        
-        try:
-            codes = await barcode_service.generate_variant_codes(variant_id)
-            return codes.get("barcode")
-        except Exception as e:
-            print(f"Error generating barcode: {e}")
-            return None
     
-    async def generate_variant_codes(self, variant_id: UUID) -> dict:
-        """Generate both barcode and QR code for a product variant."""
-        from services.barcode import BarcodeService
-        barcode_service = BarcodeService(self.db)
         
-        try:
-            return await barcode_service.generate_variant_codes(variant_id)
-        except Exception as e:
-            print(f"Error generating variant codes: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to generate codes: {str(e)}")
+        
     
-    async def update_variant_codes(self, variant_id: UUID, barcode: Optional[str] = None, qr_code: Optional[str] = None) -> dict:
-        """Update barcode and/or QR code for a product variant."""
-        from services.barcode import BarcodeService
-        barcode_service = BarcodeService(self.db)
-        
-        try:
-            return await barcode_service.update_variant_codes(variant_id, barcode, qr_code)
-        except Exception as e:
-            print(f"Error updating variant codes: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to update codes: {str(e)}")
-
     async def search_products(
         self, 
         query: str, 
@@ -757,8 +715,6 @@ class ProductService:
                 product_id=db_product.id,
                 sku=final_sku,
                 name=variant_data.name,
-                barcode=None,  # Will be set after generation
-                qr_code=None,  # Will be set after generation
                 base_price=variant_data.base_price,
                 sale_price=variant_data.sale_price,
                 attributes=variant_data.attributes or {},
@@ -771,25 +727,6 @@ class ProductService:
             )
             self.db.add(db_variant)
             await self.db.flush()  # Get variant ID
-            
-            # Now generate barcode and QR code with the actual variant ID
-            from services.barcode import BarcodeService
-            barcode_service = BarcodeService(self.db)
-            
-            # Generate QR code data for this specific variant
-            qr_data = f"https://www.banwee.com/products/variant/{db_variant.id}"
-            
-            try:
-                barcode_b64 = barcode_service.generate_barcode(final_sku)
-                qr_code_b64 = barcode_service.generate_qr_code(qr_data)
-                
-                # Update the variant with generated codes
-                db_variant.barcode = barcode_b64
-                db_variant.qr_code = qr_code_b64
-                
-            except Exception as e:
-                print(f"Warning: Failed to generate codes for variant {final_sku}: {e}")
-                # Leave as None if generation fails
             
             # ALWAYS create inventory record for the variant (even if stock is 0)
             from models.catalog.inventories import Inventory, WarehouseLocation

@@ -498,8 +498,6 @@ class CartService:
                     'stock': variant.stock,
                     'is_active': variant.is_active,
                     'attributes': variant.attributes or {},
-                    'barcode': variant.barcode,
-                    'qr_code': variant.qr_code,
                     'created_at': variant.created_at.isoformat() if variant.created_at else None,
                     'updated_at': variant.updated_at.isoformat() if variant.updated_at else None,
                     'images': [],

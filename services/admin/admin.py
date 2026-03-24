@@ -1021,7 +1021,6 @@ class AdminService:
         """Get all product variants with filtering"""
         try:
             from models.catalog.product import ProductVariant, Product
-            from services.barcode import BarcodeService
             
             offset = (page - 1) * limit
             
@@ -1055,8 +1054,6 @@ class AdminService:
             
             total = await self.db.scalar(count_query) or 0
             
-            barcode_service = BarcodeService(self.db)
-            
             return {
                 "data": [
                     {
@@ -1068,8 +1065,6 @@ class AdminService:
                         "sale_price": variant.sale_price,
                         "stock": variant.inventory.quantity_available if variant.inventory else 0,
                         "is_active": variant.is_active,
-                        "barcode": barcode_service.generate_barcode(variant.sku),
-                        "qr_code": barcode_service.generate_qr_code(str(variant.id)),
                         "product": {
                             "id": str(variant.product.id),
                             "name": variant.product.name

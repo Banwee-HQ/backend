@@ -10,13 +10,12 @@ from core.logging import get_structured_logger
 logger = get_structured_logger(__name__)
 
 
-def _get_session_factory():
+def _get_db_session():
+    """Get database session using the DatabaseManager."""
     try:
         import core.db as core_db
-        if getattr(core_db, 'AsyncSessionDB', None):
-            return core_db.AsyncSessionDB
-        if getattr(core_db, 'db_manager', None) and getattr(core_db.db_manager, 'session_factory', None):
-            return core_db.db_manager.session_factory
+        if hasattr(core_db, 'db_manager') and core_db.db_manager:
+            return core_db.db_manager.get_session_with_retry()
     except Exception:
         pass
     return None
@@ -27,18 +26,34 @@ def _get_session_factory():
 # ============================================================================
 
 async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
-    factory = _get_session_factory()
-    if not factory:
-        print("❌ DB session factory not available for email task")
+    session = _get_db_session()
+    if not session:
+        print("❌ DB session not available for email task")
         return "failed"
-
+    
     try:
         from services.auth.email import EmailService
-        async with factory() as db:
+        async with session() as db:
             email_service = EmailService(db)
 
-            if email_type == "welcome":
-                await email_service.send_welcome_email(recipient, kwargs.get('user_name', ''))
+            if email_type == "verification":
+                await email_service.send_verification_email(
+                    recipient, 
+                    kwargs.get('firstname', ''), 
+                    kwargs.get('verification_token', '')
+                )
+            elif email_type == "thank_you":
+                await email_service.send_thank_you_email(
+                    recipient,
+                    kwargs.get('customer_name', ''),
+                    kwargs.get('order_number', '')
+                )
+            elif email_type == "review_request":
+                await email_service.send_review_request_email(
+                    recipient,
+                    kwargs.get('customer_name', ''),
+                    kwargs.get('order_number', '')
+                )
             elif email_type == "order_confirmation":
                 await email_service.send_order_confirmation_email(
                     recipient,
@@ -98,12 +113,13 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
 # ============================================================================
 
 async def process_subscription_orders_task() -> str:
-    factory = _get_session_factory()
-    if not factory:
+    session = _get_db_session()
+    if not session:
         return "failed: no db"
+    
     try:
         from services.subscriptions.scheduler import SubscriptionScheduler
-        async with factory() as db:
+        async with session() as db:
             scheduler = SubscriptionScheduler(db)
             result = await scheduler.process_due_subscriptions()
         return f"subscriptions: {result.get('processed_count', 0)} ok, {result.get('failed_count', 0)} failed"
@@ -117,12 +133,13 @@ async def process_subscription_orders_task() -> str:
 # ============================================================================
 
 async def update_promocode_statuses_task() -> str:
-    factory = _get_session_factory()
-    if not factory:
+    session = _get_db_session()
+    if not session:
         return "failed: no db"
+    
     try:
         from services.promocode.scheduler import PromoCodeScheduler
-        async with factory() as db:
+        async with session() as db:
             scheduler = PromoCodeScheduler(db)
             result = await scheduler.update_promocode_statuses()
         return f"promocodes: {result.get('activated_count', 0)} activated, {result.get('deactivated_count', 0)} deactivated"
@@ -191,13 +208,14 @@ async def enqueue_promocode_update():
     await update_promocode_statuses_task()
 
 async def enqueue_sync_product_availability(product_id: str = None):
-    factory = _get_session_factory()
-    if not factory:
+    session = _get_db_session()
+    if not session:
         return
+    
     try:
         from services.catalog.inventory import InventoryService
         from uuid import UUID
-        async with factory() as db:
+        async with session() as db:
             svc = InventoryService(db, None)
             if product_id:
                 await svc.sync_product_availability_status(UUID(product_id))
