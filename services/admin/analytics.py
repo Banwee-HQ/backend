@@ -45,6 +45,26 @@ class AnalyticsService:
     ) -> AnalyticsEvent:
         """Track an analytics event"""
         try:
+            # Auto-generate session_id if not provided
+            if not session_id:
+                import secrets
+                session_id = secrets.token_hex(16)
+
+            # Ensure session exists (FK constraint)
+            session_result = await self.db.execute(
+                select(UserSession).where(UserSession.session_id == session_id)
+            )
+            if not session_result.scalar_one_or_none():
+                from datetime import datetime, timezone
+                new_session = UserSession(
+                    id=uuid7(),
+                    session_id=session_id,
+                    user_id=user_id,
+                    started_at=datetime.now(timezone.utc),
+                )
+                self.db.add(new_session)
+                await self.db.flush()
+
             event = AnalyticsEvent(
                 id=uuid7(),
                 session_id=session_id,

@@ -676,7 +676,7 @@ async def list_users(
     limit: int = Query(10, ge=1, le=100),
     role: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status"),
     verified: Optional[bool] = Query(None),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -685,18 +685,18 @@ async def list_users(
     try:
         admin_service = AdminService(db)
         users = await admin_service.list_users(
-            page=page, 
-            limit=limit, 
-            role_filter=role, 
-            search=search, 
-            status=status, 
+            page=page,
+            limit=limit,
+            role_filter=role,
+            search=search,
+            status=status_filter,
             verified=verified
         )
         return Response.success(data=users)
     except Exception as e:
         logger.exception("Failed to fetch users")
         raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             message=f"Failed to fetch users: {str(e)}"
         )
 
