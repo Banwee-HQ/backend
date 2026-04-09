@@ -277,7 +277,7 @@ section "SHIPPING TRACKING"
 # ============================================================
 S=$(_pub "/shipping-tracking/carriers"); check "GET /shipping-tracking/carriers" "$S" "$(body)" 200
 S=$(_aget "/shipping-tracking/providers"); check "GET /shipping-tracking/providers (admin)" "$S" "$(body)" 200
-S=$(_pub_post "/shipping-tracking/track" "{\"tracking_number\":\"1Z999AA10123456784\"}"); check "POST /shipping-tracking/track" "$S" "$(body)" 200
+S=$(_post "/shipping-tracking/track" "{\"tracking_number\":\"1Z999AA10123456784\",\"carrier\":\"ups\"}"); check "POST /shipping-tracking/track" "$S" "$(body)" 200
 
 # ============================================================
 section "ANALYTICS"
@@ -315,7 +315,7 @@ CONTACT_MSG_ID=$(jv "['data']['id']" 2>/dev/null)
 S=$(_aget "/contact-messages"); check "GET /contact-messages (admin)" "$S" "$(body)" 200
 if [ -n "$CONTACT_MSG_ID" ]; then
   S=$(_aget "/contact-messages/$CONTACT_MSG_ID"); check "GET /contact-messages/{id} (admin)" "$S" "$(body)" 200
-  S=$(_apatch "/contact-messages/$CONTACT_MSG_ID" "{\"status\":\"read\"}"); check "PATCH /contact-messages/{id} (admin)" "$S" "$(body)" 200
+  S=$(_apatch "/contact-messages/$CONTACT_MSG_ID" "{\"status\":\"in_progress\"}"); check "PATCH /contact-messages/{id} (admin)" "$S" "$(body)" 200
   S=$(_adel "/contact-messages/$CONTACT_MSG_ID"); check "DELETE /contact-messages/{id} (admin)" "$S" "$(body)" 200
 else skip "GET /contact-messages/{id}"; skip "PATCH /contact-messages/{id}"; skip "DELETE /contact-messages/{id}"; fi
 

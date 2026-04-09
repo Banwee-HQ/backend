@@ -506,16 +506,16 @@ class AnalyticsService:
             
             if event_type == EventType.PAGE_VIEW and not funnel.landing_at:
                 funnel.landing_at = now
-                funnel.current_step = max(funnel.current_step, 0)
-                funnel.max_step_reached = max(funnel.max_step_reached, 0)
+                funnel.current_step = max(funnel.current_step or 0, 0)
+                funnel.max_step_reached = max(funnel.max_step_reached or 0, 0)
             elif event_type == EventType.CART_ADD:
                 funnel.cart_add_at = now
-                funnel.current_step = max(funnel.current_step, 2)
-                funnel.max_step_reached = max(funnel.max_step_reached, 2)
+                funnel.current_step = max(funnel.current_step or 0, 2)
+                funnel.max_step_reached = max(funnel.max_step_reached or 0, 2)
             elif event_type == EventType.CHECKOUT_START:
                 funnel.checkout_start_at = now
-                funnel.current_step = max(funnel.current_step, 3)
-                funnel.max_step_reached = max(funnel.max_step_reached, 3)
+                funnel.current_step = max(funnel.current_step or 0, 3)
+                funnel.max_step_reached = max(funnel.max_step_reached or 0, 3)
             elif event_type == EventType.PURCHASE:
                 funnel.purchase_at = now
                 funnel.current_step = 4
@@ -613,7 +613,7 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get comprehensive sales overview data for dashboard"""
         try:
-            from models.catalog.product import Product, Category
+            from models.catalog.product import Product
             from models.commerce.orders import OrderItem
             
             # Base query for orders
@@ -629,8 +629,8 @@ class AnalyticsService:
             if categories:
                 # Filter by product categories through order items
                 category_filter = select(Order.id).join(OrderItem).join(
-                    Product, OrderItem.product_id == Product.id
-                ).join(Category).where(Category.name.in_(categories))
+                    Product, OrderItem.variant_id == Product.id
+                ).where(Product.category.in_(categories))
                 base_query = base_query.where(Order.id.in_(category_filter))
             
             # Generate time series data based on granularity

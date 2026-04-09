@@ -4,7 +4,7 @@ PostgreSQL-based cart with real-time tax and pricing calculations
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, func, update
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, noload, lazyload
 from fastapi import HTTPException
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -396,9 +396,9 @@ class CartService:
             select(Cart)
             .options(
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
-                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.product),
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.inventory),
-                selectinload(Cart.items).selectinload(CartItem.product)
+                selectinload(Cart.items).selectinload(CartItem.variant).lazyload(ProductVariant.product),
+                selectinload(Cart.items).lazyload(CartItem.product),
             )
             .where(Cart.user_id == user_id)
         )

@@ -370,9 +370,9 @@ class UserService:
         for row in rows:
             user = row[0]
             order_count = row[1]
-            # Add order_count as an attribute to the user object
-            user.order_count = order_count
-            users_with_counts.append(user)
+            user_dict = user.to_dict()
+            user_dict['order_count'] = order_count
+            users_with_counts.append(user_dict)
 
         return {
             "users": users_with_counts,
