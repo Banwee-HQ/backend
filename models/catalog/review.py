@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime as dt
+from datetime import datetime
 from typing import Optional
 import uuid
 
@@ -29,9 +29,6 @@ class Review(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))

@@ -6,7 +6,7 @@ Stores customer contact form submissions
 from sqlalchemy import String, Text, DateTime
 from sqlalchemy.dialects.postgresql import UUID, ENUM
 from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime, datetime as dt
+from datetime import datetime
 import uuid
 import enum
 from typing import Optional
@@ -36,7 +36,7 @@ class ContactMessage(Base):
         {'schema': 'system'},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid_module.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(255))
     subject: Mapped[str] = mapped_column(String(255))

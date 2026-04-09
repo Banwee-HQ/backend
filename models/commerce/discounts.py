@@ -33,9 +33,6 @@ class Discount(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
     type: Mapped[str] = mapped_column(String(20))  # PERCENTAGE, FIXED_AMOUNT, FREE_SHIPPING
@@ -122,9 +119,6 @@ class SubscriptionDiscount(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
     discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("discounts.id"))
@@ -168,9 +162,6 @@ class ProductRemovalAudit(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))

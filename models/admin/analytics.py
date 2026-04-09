@@ -3,7 +3,7 @@ Analytics models for tracking business metrics
 Includes: UserSession, ConversionEvent, CartEvent, PurchaseMetrics
 """
 from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
@@ -53,9 +53,6 @@ class UserSession(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Session identification
     session_id: Mapped[str] = mapped_column(String(255), unique=True)
@@ -143,9 +140,6 @@ class AnalyticsEvent(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Event identification
     session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
@@ -155,7 +149,7 @@ class AnalyticsEvent(Base):
     # Event data
     page_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     page_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    event_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    event_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # E-commerce specific fields
     order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
@@ -209,9 +203,6 @@ class ConversionFunnel(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Funnel identification
     session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
@@ -256,9 +247,6 @@ class CustomerLifecycleMetrics(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Customer identification
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"), unique=True)

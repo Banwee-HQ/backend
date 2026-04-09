@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
-from datetime import datetime as dt
+from datetime import datetime
 import uuid
 
 # --- Association table: Subscription <-> ProductVariant ---
@@ -43,9 +43,6 @@ class SubscriptionProduct(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
@@ -107,9 +104,6 @@ class Subscription(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # --- Core fields ---
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))

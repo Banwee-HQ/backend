@@ -277,9 +277,6 @@ class ProductImage(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
     url: Mapped[str] = mapped_column(String(500))

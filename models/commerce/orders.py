@@ -3,12 +3,12 @@ Optimized order models with hard delete only
 Includes: Order, OrderItem, TrackingEvent
 """
 from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Enum as SQLEnum, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
 from enum import Enum
-from datetime import datetime as dt
+from datetime import datetime
 from typing import Optional
 import uuid
 
@@ -72,9 +72,6 @@ class Order(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Order identification
     order_number: Mapped[str] = mapped_column(String(50), unique=True)
@@ -106,8 +103,8 @@ class Order(Base):
     carrier: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Use JSONB only for complex address data that benefits from querying
-    billing_address: Mapped[dict] = mapped_column(JSONB)
-    shipping_address: Mapped[dict] = mapped_column(JSONB)
+    billing_address: Mapped[dict] = mapped_column(JSON)
+    shipping_address: Mapped[dict] = mapped_column(JSON)
 
     # Important lifecycle dates as columns
     confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -183,9 +180,6 @@ class OrderItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
@@ -224,9 +218,6 @@ class TrackingEvent(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
     status: Mapped[str] = mapped_column(String(100))

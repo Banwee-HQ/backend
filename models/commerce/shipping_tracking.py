@@ -4,7 +4,7 @@ Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, et
 """
 
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Float, Index
-from sqlalchemy.dialects.postgresql import UUID, ENUM as PG_ENUM, JSONB
+from sqlalchemy.dialects.postgresql import UUID, ENUM as PG_ENUM, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
@@ -91,9 +91,6 @@ class ShippingProvider(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     name: Mapped[str] = mapped_column(String(100))
     carrier: Mapped[ShippingCarrier] = mapped_column(PG_ENUM(ShippingCarrier, name="shipping_carrier"))
@@ -103,8 +100,8 @@ class ShippingProvider(Base):
     tracking_url_template: Mapped[str] = mapped_column(String(500))  # Template for tracking URLs
     webhook_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    configuration: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Provider-specific config
-    rate_limits: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    configuration: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Provider-specific config
+    rate_limits: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     shipments = relationship("ShipmentTracking", back_populates="provider")
@@ -138,9 +135,6 @@ class ShipmentTracking(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Core shipment information
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
@@ -159,14 +153,14 @@ class ShipmentTracking(Base):
     actual_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Location information
-    origin_address: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Pickup address
-    destination_address: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Delivery address
-    current_location: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Current location
+    origin_address: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Pickup address
+    destination_address: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Delivery address
+    current_location: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Current location
     delivery_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Package information
     package_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Weight in kg
-    package_dimensions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # {length, width, height} in cm
+    package_dimensions: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {length, width, height} in cm
     package_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Declared value
     insurance_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
@@ -176,13 +170,13 @@ class ShipmentTracking(Base):
     delivery_confirmation: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # External tracking data
-    external_tracking_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Raw data from carrier API
+    external_tracking_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Raw data from carrier API
     last_api_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sync_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, success, error
 
     # Customer notifications
     customer_notified: Mapped[bool] = mapped_column(Boolean, default=False)
-    notification_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    notification_preferences: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Metadata
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -242,24 +236,21 @@ class ShipmentTrackingEvent(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     shipment_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("shipment_tracking.id"))
     event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     event_type: Mapped[str] = mapped_column(String(50))  # picked_up, in_transit, out_for_delivery, delivered, etc.
     event_description: Mapped[str] = mapped_column(Text)
-    event_location: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # {city, state, country, coordinates}
+    event_location: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {city, state, country, coordinates}
 
     # Carrier-specific data
     carrier_event_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    carrier_event_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    carrier_event_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Additional details
     estimated_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     delay_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    exception_details: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    exception_details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Contact information
     contact_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -267,7 +258,7 @@ class ShipmentTrackingEvent(Base):
 
     # Metadata
     source: Mapped[str] = mapped_column(String(50), default="api")  # api, webhook, manual
-    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     shipment = relationship("ShipmentTracking", back_populates="tracking_events")
@@ -302,14 +293,11 @@ class ShippingWebhook(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("shipping_providers.id"))
     webhook_url: Mapped[str] = mapped_column(String(500))
     webhook_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    event_types: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)  # Which events to trigger on
+    event_types: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # Which events to trigger on
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     last_triggered: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

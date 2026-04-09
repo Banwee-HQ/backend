@@ -3,13 +3,13 @@ Consolidated payment models
 Includes: PaymentMethod, PaymentIntent, Transaction
 """
 from sqlalchemy import String, Boolean, ForeignKey, Float, Text, Integer, DateTime, func, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM as PG_ENUM
+from sqlalchemy.dialects.postgresql import UUID, JSON, ENUM as PG_ENUM
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from enum import Enum
-from datetime import datetime as dt
+from datetime import datetime
 import uuid
 
 # Enums for Payment Method fields
@@ -62,9 +62,6 @@ class PaymentMethod(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     # Use PG_ENUM for type to map to PostgreSQL enum type
@@ -78,7 +75,7 @@ class PaymentMethod(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Only use JSONB for complex payment method data that needs querying
-    payment_method_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Store complex payment data
+    payment_method_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Store complex payment data
 
     # Relationships
     user = relationship("User", back_populates="payment_methods")
@@ -125,9 +122,6 @@ class PaymentIntent(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Stripe payment intent ID
     stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), unique=True)
@@ -138,7 +132,7 @@ class PaymentIntent(Base):
     order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)  # For order payments
 
     # Amount breakdown (JSONB for complex cost structure that may need querying)
-    amount_breakdown: Mapped[dict] = mapped_column(JSONB)
+    amount_breakdown: Mapped[dict] = mapped_column(JSON)
 
     # Currency
     currency: Mapped[str] = mapped_column(String(3), default="USD")
@@ -147,7 +141,7 @@ class PaymentIntent(Base):
     status: Mapped[str] = mapped_column(String(50), default="requires_payment_method")
 
     # Stripe verification details (JSONB for structured data)
-    stripe_verification: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    stripe_verification: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Payment method details
     payment_method_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -166,7 +160,7 @@ class PaymentIntent(Base):
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Metadata for additional tracking (JSONB for structured payment data)
-    payment_intent_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    payment_intent_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="payment_intents")
@@ -240,9 +234,6 @@ class Transaction(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)

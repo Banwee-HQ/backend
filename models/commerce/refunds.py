@@ -3,7 +3,7 @@ Refund models for painless refund processing
 Includes: Refund, RefundItem, RefundReason
 """
 from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
@@ -71,9 +71,6 @@ class Refund(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # References
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
@@ -117,7 +114,7 @@ class Refund(Base):
     return_shipping_paid: Mapped[bool] = mapped_column(Boolean, default=False) # Did we pay for return shipping?
 
     # Metadata for additional information
-    refund_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    refund_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     order = relationship("Order", back_populates="refunds")
@@ -197,9 +194,6 @@ class RefundItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # References
     refund_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("refunds.id"))

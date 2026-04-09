@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
-from datetime import datetime as dt
+from datetime import datetime
 import uuid
 
 
@@ -28,9 +28,6 @@ class TaxValidationRule(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     location_code: Mapped[str] = mapped_column(String(10))  # Country/state code (e.g., "US-CA", "GB")
     tax_rate: Mapped[float] = mapped_column(Float)  # Tax rate as decimal (e.g., 0.08 for 8%)
@@ -79,9 +76,6 @@ class ShippingValidationRule(Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1)
 
     location_code: Mapped[str] = mapped_column(String(10))  # Country/state code (e.g., "US-CA", "GB")
     weight_min: Mapped[float] = mapped_column(Float, default=0.0)  # Minimum weight in kg
