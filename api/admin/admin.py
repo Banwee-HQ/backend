@@ -538,13 +538,19 @@ async def ship_order(
     """Update an order with shipping information (admin only)."""
     try:
         order_service = OrderService(db)
-        order = await order_service.update_order_shipping_info(
-            order_id,
-            request.tracking_number,
-            request.carrier_name,
-            background_tasks
+        order = await order_service.update_order_status(
+            order_id=UUID(order_id),
+            status="shipped",
+            tracking_number=request.tracking_number,
+            carrier_name=request.carrier_name,
+            background_tasks=background_tasks
         )
-        return Response.success(data=order, message="Order status updated to shipped.")
+        return Response.success(data={
+            "id": str(order.id),
+            "order_status": order.order_status.value if hasattr(order.order_status, 'value') else str(order.order_status),
+            "tracking_number": order.tracking_number,
+            "carrier": order.carrier
+        }, message="Order status updated to shipped.")
     except APIException:
         raise
     except Exception as e:

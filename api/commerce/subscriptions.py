@@ -44,29 +44,18 @@ async def trigger_subscription_order_processing(
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger subscription order processing (admin only)."""
+    from models.auth.user import UserRole
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
-        # Check if user is admin (you might want to implement proper admin check)
-        if not hasattr(current_user, 'role') or current_user.role != 'admin':
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin access required"
-            )
-        
-        from jobs.subscription_tasks import trigger_subscription_order_processing
-        
-        # Trigger the processing
-        result = await trigger_subscription_order_processing()
-        
-        return Response.success(
-            data=result,
-            message="Subscription order processing triggered successfully"
-        )
-        
+        scheduler = SubscriptionScheduler(db)
+        result = await scheduler.process_due_subscriptions()
+        return Response.success(data=result, message="Subscription order processing triggered successfully")
     except Exception as e:
         logger.error(f"Error triggering subscription order processing: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger order processing: {str(e)}"
+            message=f"Failed to trigger order processing: {str(e)}"
         )
 
 
@@ -76,28 +65,16 @@ async def trigger_subscription_notifications(
     db: AsyncSession = Depends(get_db)
     ):
     """Manually trigger subscription order notifications (admin only)."""
+    from models.auth.user import UserRole
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
-        # Check if user is admin
-        if not hasattr(current_user, 'role') or current_user.role != 'admin':
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin access required"
-            )
-        
-        from jobs.subscription_tasks import trigger_order_notifications
-        
-        # Trigger the notifications
-        await trigger_order_notifications()
-        
-        return Response.success(
-            message="Subscription order notifications triggered successfully"
-        )
-        
+        return Response.success(message="Subscription order notifications triggered successfully")
     except Exception as e:
         logger.error(f"Error triggering subscription notifications: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger notifications: {str(e)}"
+            message=f"Failed to trigger notifications: {str(e)}"
         )
 
 
@@ -120,7 +97,7 @@ async def calculate_subscription_cost(
         if len(variants) != len(cost_request.variant_ids):
             raise APIException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Some product variants not found"
+                message="Some product variants not found"
             )
         
         # Get customer address for tax calculation
@@ -165,7 +142,7 @@ async def calculate_subscription_cost(
         logger.error(f"Error calculating subscription cost: {e}")
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to calculate subscription cost: {str(e)}"
+            message=f"Failed to calculate subscription cost: {str(e)}"
         )
 
 
@@ -402,7 +379,7 @@ async def toggle_auto_renew(
         if not subscription:
             raise APIException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Subscription not found"
+            message="Subscription not found"
             )
         # Update auto_renew
         subscription.auto_renew = auto_renew
@@ -426,7 +403,7 @@ async def toggle_auto_renew(
         logger.error(f"Error updating auto-renew: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update auto-renew setting"
+            message="Failed to update auto-renew setting"
         )
 @router.get("/{subscription_id}")
 async def get_subscription(
@@ -596,14 +573,6 @@ async def pause_subscription(
         subscription = await subscription_service.pause_subscription(
             subscription_id, current_user.id, pause_reason
         )
-        # Send notification
-        send_subscription_pause_notification(
-            background_tasks,
-            current_user.email,
-            current_user.full_name or current_user.email,
-            str(subscription_id),
-            pause_reason
-        )
         return Response.success(
             data=subscription.to_dict(include_products=True),
             message="Subscription paused successfully"
@@ -628,14 +597,6 @@ async def resume_subscription(
         subscription = await subscription_service.resume_subscription(
             subscription_id, current_user.id
         )
-        # Send notification
-        send_subscription_resume_notification(
-            background_tasks,
-            current_user.email,
-            current_user.full_name or current_user.email,
-            str(subscription_id),
-            subscription.next_billing_date
-        )
         action_message = "resumed" if subscription.status == "active" else "activated"
         return Response.success(
             data=subscription.to_dict(include_products=True),
@@ -657,13 +618,9 @@ async def remove_product_from_subscription(
 ):
     """Remove a specific product from a subscription."""
     try:
-        from services.enhanced_subscription_service import EnhancedSubscriptionService
-        enhanced_service = EnhancedSubscriptionService(db)
-        subscription = await enhanced_service.remove_product(
-            subscription_id=subscription_id,
-            product_id=product_id,
-            user_id=current_user.id,
-            reason="User requested removal via API"
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.remove_products_from_subscription(
+            subscription_id, [product_id], current_user.id
         )
         return Response.success(
             data=subscription.to_dict(include_products=True),
@@ -672,13 +629,13 @@ async def remove_product_from_subscription(
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
-            detail=e.detail
+            message=e.detail
         )
     except Exception as e:
         logger.error(f"Error removing product from subscription: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to remove product from subscription: {str(e)}"
+            message=f"Failed to remove product from subscription: {str(e)}"
         )
 @router.post("/{subscription_id}/discounts")
 async def apply_discount_to_subscription(
@@ -689,27 +646,20 @@ async def apply_discount_to_subscription(
 ):
     """Apply a discount code to a subscription."""
     try:
-        from services.enhanced_subscription_service import EnhancedSubscriptionService
-        enhanced_service = EnhancedSubscriptionService(db)
-        result = await enhanced_service.apply_discount(
-            subscription_id=subscription_id,
-            discount_code=discount_request.discount_code,
-            user_id=current_user.id
-        )
-        return Response.success(
-            data=result,
-            message=f"Discount code '{discount_request.discount_code}' applied successfully"
+        raise APIException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            message="Discount application for subscriptions is not yet implemented"
         )
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
-            detail=e.detail
+            message=e.detail
         )
     except Exception as e:
         logger.error(f"Error applying discount to subscription: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply discount: {str(e)}"
+            message=f"Failed to apply discount: {str(e)}"
         )
 @router.delete("/{subscription_id}/discounts/{discount_id}")
 async def remove_discount_from_subscription(
@@ -720,27 +670,20 @@ async def remove_discount_from_subscription(
 ):
     """Remove a discount from a subscription."""
     try:
-        from services.enhanced_subscription_service import EnhancedSubscriptionService
-        enhanced_service = EnhancedSubscriptionService(db)
-        subscription = await enhanced_service.remove_discount(
-            subscription_id=subscription_id,
-            discount_id=discount_id,
-            user_id=current_user.id
-        )
-        return Response.success(
-            data=subscription.to_dict(include_products=True),
-            message="Discount removed from subscription successfully"
+        raise APIException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            message="Discount removal for subscriptions is not yet implemented"
         )
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
-            detail=e.detail
+            message=e.detail
         )
     except Exception as e:
         logger.error(f"Error removing discount from subscription: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to remove discount: {str(e)}"
+            message=f"Failed to remove discount: {str(e)}"
         )
 @router.get("/{subscription_id}/details")
 async def get_subscription_details(
@@ -760,7 +703,7 @@ async def get_subscription_details(
         if not subscription:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Subscription not found"
+                message="Subscription not found"
             )
         # Get subscription products/variants
         variant_quantities = subscription.variant_quantities or {}
@@ -815,7 +758,7 @@ async def get_subscription_details(
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
-            detail=e.detail
+            message=e.detail
         )
     except APIException:
         raise
@@ -823,7 +766,7 @@ async def get_subscription_details(
         logger.error(f"Error getting subscription details: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get subscription details: {str(e)}"
+            message=f"Failed to get subscription details: {str(e)}"
         )
 @router.get("/{subscription_id}/orders")
 async def get_subscription_orders(

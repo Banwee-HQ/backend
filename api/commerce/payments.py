@@ -190,7 +190,7 @@ async def process_payment(
 ):
     """Process a payment (simplified)"""
     service = PaymentService(db)
-    result = await service.process_payment(
+    result = await service.process_payment_with_timeout_and_retry(
         user_id=current_user.id,
         amount=amount,
         payment_method_id=payment_method_id,
@@ -226,7 +226,8 @@ async def create_refund(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a refund for a payment (admin only)"""
-    if current_user.role != "Admin":
+    from models.auth.user import UserRole
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can create refunds"

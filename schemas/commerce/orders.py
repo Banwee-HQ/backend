@@ -66,7 +66,7 @@ class OrderResponse(BaseModel):
     total_amount: float
     subtotal: Optional[float] = None
     tax_amount: Optional[float] = None
-    shipping_amount: Optional[float] = None
+    shipping_cost: Optional[float] = None
     discount_amount: Optional[float] = None
     currency: str
     tracking_number: Optional[str]

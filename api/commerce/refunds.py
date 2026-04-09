@@ -102,7 +102,7 @@ async def check_refund_eligibility(
 
 @router.get("/")
 async def get_user_refunds(
-    status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
+    refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(get_current_auth_user),
@@ -116,7 +116,7 @@ async def get_user_refunds(
     try:
         result = await refund_service.get_user_refunds(
             user_id=current_user.id,
-            status=status,
+            status=refund_status,
             page=page,
             limit=limit
         )

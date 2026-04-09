@@ -91,7 +91,7 @@ async def create_order(
         cart_service = CartService(db)
         
         for item in request.items:
-            await cart_service.add_item_to_cart(
+            await cart_service.add_to_cart(
                 user_id=current_user.id,
                 variant_id=item.variant_id,
                 quantity=item.quantity
@@ -427,7 +427,7 @@ async def get_order_notes(
     """Get all notes for an order."""
     try:
         order_service = OrderService(db)
-        notes = await order_service.get_order_notes(order_id)
+        notes = await order_service.get_order_notes(order_id, current_user.id)
         return Response.success(data=notes)
     except Exception as e:
         raise APIException(

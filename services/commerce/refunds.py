@@ -263,7 +263,7 @@ class RefundService:
         order = await self.db.execute(
             select(Order)
             .where(and_(Order.id == order_id, Order.user_id == user_id))
-            .options(selectinload(Order.order_items))
+            .options(selectinload(Order.items))
         )
         order = order.scalar_one_or_none()
         
@@ -327,7 +327,7 @@ class RefundService:
         }
         
         # Get order items
-        order_items_map = {str(item.id): item for item in order.order_items}
+        order_items_map = {str(item.id): item for item in order.items}
         
         for refund_item in refund_items:
             order_item_id = str(refund_item.order_item_id)
@@ -360,7 +360,7 @@ class RefundService:
             calculation["total_amount"] += total_amount
         
         # Calculate proportional shipping refund (if full order refund)
-        total_order_items = sum(item.quantity for item in order.order_items)
+        total_order_items = sum(item.quantity for item in order.items)
         total_refund_items = sum(item.quantity for item in refund_items)
         
         if total_refund_items == total_order_items:
@@ -581,26 +581,18 @@ class RefundService:
     async def get_user_refund_stats(self, user_id: UUID) -> Dict[str, Any]:
         """Get user's refund statistics"""
         try:
-            # Get all user refunds
-            refunds = await self.get_user_refunds(user_id)
+            # Get all user refunds via the paginated method
+            result = await self.get_user_refunds(user_id, page=1, limit=1000)
+            refunds = result.get("items", [])
             
             stats = {
-                "total_refunds": len(refunds),
-                "total_refunded_amount": sum(r.processed_amount or 0 for r in refunds),
-                "by_status": {},
-                "by_reason": {},
-                "average_processing_time_days": 0
+                "total_refunds": result.get("total", 0),
+                "total_amount": result.get("total", 0),
+                "auto_approved_count": 0,
+                "pending_count": 0,
+                "completed_count": 0,
+                "average_processing_time_hours": None
             }
-            
-            # Count by status
-            for refund in refunds:
-                status_key = refund.status.value if refund.status else "unknown"
-                stats["by_status"][status_key] = stats["by_status"].get(status_key, 0) + 1
-            
-            # Count by reason
-            for refund in refunds:
-                reason_key = refund.reason.value if refund.reason else "unknown"
-                stats["by_reason"][reason_key] = stats["by_reason"].get(reason_key, 0) + 1
             
             return stats
             
@@ -608,10 +600,11 @@ class RefundService:
             logger.error(f"Failed to get user refund stats: {e}")
             return {
                 "total_refunds": 0,
-                "total_refunded_amount": 0.0,
-                "by_status": {},
-                "by_reason": {},
-                "average_processing_time_days": 0
+                "total_amount": 0.0,
+                "auto_approved_count": 0,
+                "pending_count": 0,
+                "completed_count": 0,
+                "average_processing_time_hours": None
             }
     
     async def check_order_refund_eligibility(

@@ -39,48 +39,6 @@ router = APIRouter(prefix="/products", tags=["Products"])
 # /products?sort_by=created_at&sort_order=desc&page=1&limit=12
 
 
-@router.get("/search")
-async def search_products(
-    q: str = Query(..., min_length=2, description="Search query (minimum 2 characters)"),
-    limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
-    min_price: Optional[float] = Query(None, ge=0, description="Minimum price filter"),
-    max_price: Optional[float] = Query(None, ge=0, description="Maximum price filter"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Advanced search for products with fuzzy matching and weighted ranking.
-    """
-    try:
-        product_service = ProductService(db)
-        
-        # Build filters
-        filters = {}
-        if min_price is not None:
-            filters["min_price"] = min_price
-        if max_price is not None:
-            filters["max_price"] = max_price
-        
-        products = await product_service.search_products(
-            query=q,
-            limit=limit,
-            filters=filters if filters else None
-        )
-        
-        return Response.success(
-            data={
-                "query": q,
-                "filters": filters,
-                "products": products,
-                "count": len(products)
-            }
-        )
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to search products: {str(e)}"
-        )
-
-
 @router.get("/home")
 async def get_home_data(
     db: AsyncSession = Depends(get_db)
@@ -291,7 +249,8 @@ async def create_product(
 ):
     """Create a new product (admin only)."""
     try:
-        if current_user.role not in ["Admin"]:
+        from models.auth.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="Only admins can create products"

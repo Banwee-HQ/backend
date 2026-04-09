@@ -323,12 +323,12 @@ class UserService:
 
         # User verification complete - no welcome email needed
 
-    async def get_users(self, page: int = 1, limit: int = 10, role: Optional[str] = None) -> dict:
+    async def get_users(self, page: int = 1, limit: int = 10, role: Optional[str] = None, query: Optional[str] = None) -> dict:
         """Get paginated list of users with order count"""
         offset = (page - 1) * limit
 
         # Build base query with order count using SQL aggregation
-        query = (
+        base_query = (
             select(
                 User,
                 func.count(Order.id).label('order_count')
@@ -339,7 +339,19 @@ class UserService:
 
         # Apply role filter if provided
         if role:
-            query = query.where(User.role == role)
+            base_query = base_query.where(User.role == role)
+
+        # Apply search query if provided
+        if query:
+            search_term = f"%{query}%"
+            from sqlalchemy import or_
+            base_query = base_query.where(
+                or_(
+                    User.firstname.ilike(search_term),
+                    User.lastname.ilike(search_term),
+                    User.email.ilike(search_term),
+                )
+            )
 
         # Get total count
         count_query = select(func.count()).select_from(User)
@@ -349,8 +361,8 @@ class UserService:
         total = count_result.scalar()
 
         # Apply pagination and ordering
-        query = query.offset(offset).limit(limit).order_by(User.created_at.desc())
-        result = await self.db.execute(query)
+        base_query = base_query.offset(offset).limit(limit).order_by(User.created_at.desc())
+        result = await self.db.execute(base_query)
         rows = result.all()
 
         # Convert to list of dicts with user and order_count

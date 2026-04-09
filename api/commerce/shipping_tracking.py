@@ -431,9 +431,13 @@ async def sync_all_shipments(
 # Background task for tracking shipments
 async def track_shipment_background(tracking_number: str, carrier: ShippingCarrier):
     """Background task to track shipments"""
-    from core.db import get_db_session
+    from core.db import AsyncSessionDB
     
-    async with get_db_session() as db:
+    if not AsyncSessionDB:
+        print(f"Background tracking skipped for {tracking_number}: DB not initialized")
+        return
+    
+    async with AsyncSessionDB() as db:
         try:
             shipping_service = ShippingTrackingService(db)
             await shipping_service.track_shipment(tracking_number, carrier)

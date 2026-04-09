@@ -27,7 +27,8 @@ async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSe
 
 def require_admin(current_user: User = Depends(get_current_auth_user)):
     """Require admin role."""
-    if current_user.role not in ["admin", "manager", "Admin", "SuperAdmin"]:
+    from models.auth.user import UserRole
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise APIException(
             status_code=status.HTTP_403_FORBIDDEN,
             message="Admin access required"
@@ -307,9 +308,9 @@ async def get_dashboard_data(
     Returns all key business metrics in a single response for dashboard display.
     """
     try:
-        # Check if user has admin role (case insensitive)
-        user_role = (current_user.role or "").lower()
-        if user_role not in ["admin", "manager", "superadmin"]:
+        # Check if user has admin role
+        from models.auth.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             # Return limited data for non-admin users
             return Response.success(
                 data={

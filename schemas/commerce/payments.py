@@ -73,7 +73,7 @@ class PaymentIntentResponse(PaymentIntentBase):
 class TransactionBase(BaseModel):
     amount: float
     currency: str = "USD"
-    type: str  # "payment", "refund", "chargeback"
+    transaction_type: str  # matches model field name
     status: str = "pending"
     description: Optional[str] = None
 

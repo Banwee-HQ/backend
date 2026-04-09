@@ -87,6 +87,9 @@ class Inventory(Base):
     # Legacy field for backward compatibility
     quantity: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Optimistic locking version counter
+    version: Mapped[int] = mapped_column(Integer, default=0)
+
     # Relationships
     variant = relationship("ProductVariant", back_populates="inventory")
     location = relationship("WarehouseLocation", back_populates="inventories")
