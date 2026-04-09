@@ -24,7 +24,8 @@ async def get_current_user_wishlist(
     """Get current user's default wishlist"""
     try:
         wishlist_service = WishlistService(db)
-        wishlists = await wishlist_service.get_wishlists(current_user.id)
+        result = await wishlist_service.get_wishlists(current_user.id, page=1, limit=20)
+        wishlists = result.get("items", [])
         
         # Get default wishlist or first one
         default_wishlist = next((w for w in wishlists if w.is_default), None)
@@ -95,7 +96,8 @@ async def add_to_wishlist(
         wishlist_service = WishlistService(db)
         
         # Get or create default wishlist
-        wishlists = await wishlist_service.get_wishlists(current_user.id)
+        result = await wishlist_service.get_wishlists(current_user.id, page=1, limit=20)
+        wishlists = result.get("items", [])
         default_wishlist = next((w for w in wishlists if w.is_default), None)
         
         if not default_wishlist:
@@ -141,7 +143,8 @@ async def remove_from_wishlist(
         wishlist_service = WishlistService(db)
         
         # Get default wishlist
-        wishlists = await wishlist_service.get_wishlists(current_user.id)
+        result = await wishlist_service.get_wishlists(current_user.id, page=1, limit=20)
+        wishlists = result.get("items", [])
         default_wishlist = next((w for w in wishlists if w.is_default), None)
         
         if not default_wishlist:

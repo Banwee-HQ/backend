@@ -106,7 +106,7 @@ async def get_user_refunds(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
+    refund_service: RefundService = Depends(get_refund_service)
 ):
     """
     Get user's refund history
@@ -114,29 +114,22 @@ async def get_user_refunds(
     Returns paginated list of user's refunds with current status and timeline.
     """
     try:
-        # Simple implementation without RefundService for now
+        result = await refund_service.get_user_refunds(
+            user_id=current_user.id,
+            status=status,
+            page=page,
+            limit=limit
+        )
+        
         return Response.success(
-            data={
-                "refunds": [],
-                "total": 0,
-                "page": page,
-                "limit": limit,
-                "user_id": str(current_user.id),
-                "status_filter": status.value if status else None
-            },
+            data=result,
             message="Refunds retrieved successfully"
         )
         
     except Exception as e:
-        return Response.success(
-            data={
-                "refunds": [],
-                "total": 0,
-                "page": page,
-                "limit": limit,
-                "error": str(e)
-            },
-            message="Refunds retrieved successfully (empty list)"
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve refunds: {str(e)}"
         )
 
 
