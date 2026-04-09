@@ -10,7 +10,7 @@ from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from enum import Enum
 from datetime import datetime as dt
-import uuid as uuid_module
+import uuid
 
 # Enums for Payment Method fields
 class PaymentType(str, Enum):
@@ -59,14 +59,14 @@ class PaymentMethod(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     # Use PG_ENUM for type to map to PostgreSQL enum type
     type: Mapped[PaymentType] = mapped_column(PG_ENUM(PaymentType, name="payment_type"))
     provider: Mapped[PaymentProvider] = mapped_column(PG_ENUM(PaymentProvider, name="payment_provider"))  # stripe, paypal, momo
@@ -122,20 +122,20 @@ class PaymentIntent(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Stripe payment intent ID
     stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), unique=True)
 
     # User and subscription references
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
-    subscription_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)  # May be null for one-time payments
-    order_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)  # For order payments
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    subscription_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)  # May be null for one-time payments
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)  # For order payments
 
     # Amount breakdown (JSONB for complex cost structure that may need querying)
     amount_breakdown: Mapped[dict] = mapped_column(JSONB)
@@ -158,11 +158,11 @@ class PaymentIntent(Base):
     client_secret: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Expiration
-    expires_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Completion details
-    confirmed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    failed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Metadata for additional tracking (JSONB for structured payment data)
@@ -237,16 +237,16 @@ class Transaction(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
-    order_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
-    payment_intent_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("payment_intents.id"), nullable=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
+    payment_intent_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("payment_intents.id"), nullable=True)
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     amount: Mapped[float] = mapped_column(Float)

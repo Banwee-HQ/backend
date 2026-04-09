@@ -5,7 +5,7 @@ from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime as dt
 from typing import Optional
-import uuid as uuid_module
+import uuid
 
 
 class Review(Base):
@@ -26,15 +26,15 @@ class Review(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    product_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     rating: Mapped[int] = mapped_column(Integer)  # 1-5 stars
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_verified_purchase: Mapped[bool] = mapped_column(Boolean, default=False)

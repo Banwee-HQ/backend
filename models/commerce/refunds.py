@@ -10,7 +10,7 @@ from core.utils.uuid_utils import uuid7
 from enum import Enum
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone, datetime as dt
-import uuid as uuid_module
+import uuid
 
 
 class RefundStatus(Enum):
@@ -68,16 +68,16 @@ class Refund(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # References
-    order_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
 
     # Refund details
     refund_number: Mapped[str] = mapped_column(String(50), unique=True)  # REF-XXXXXXXX
@@ -101,15 +101,15 @@ class Refund(Base):
 
     # Admin information
     admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # Internal admin notes
-    reviewed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)  # Admin who reviewed
-    processed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True) # Admin who processed
+    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)  # Admin who reviewed
+    processed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True) # Admin who processed
 
     # Timestamps
-    requested_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    reviewed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    approved_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    processed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Automation flags
     auto_approved: Mapped[bool] = mapped_column(Boolean, default=False)  # Was this auto-approved?
@@ -194,16 +194,16 @@ class RefundItem(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # References
-    refund_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("refunds.id"))
-    order_item_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("order_items.id"))
+    refund_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("refunds.id"))
+    order_item_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("order_items.id"))
 
     # Item details
     quantity_to_refund: Mapped[int] = mapped_column(Integer)

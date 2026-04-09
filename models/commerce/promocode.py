@@ -5,7 +5,7 @@ from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime as dt
 from typing import Optional
-import uuid as uuid_module
+import uuid
 
 
 class Promocode(Base):
@@ -25,11 +25,11 @@ class Promocode(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
@@ -41,5 +41,5 @@ class Promocode(Base):
     usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    valid_from: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    valid_until: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

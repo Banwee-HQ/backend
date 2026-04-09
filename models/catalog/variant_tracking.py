@@ -6,7 +6,7 @@ from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, List, Optional
 from datetime import datetime, datetime as dt
 from enum import Enum
-import uuid as uuid_module
+import uuid
 
 
 class TrackingActionType(str, Enum):
@@ -40,16 +40,16 @@ class VariantTrackingEntry(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Core tracking information
-    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
-    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
 
     # Price tracking
     price_at_time: Mapped[float] = mapped_column(Float)
@@ -57,7 +57,7 @@ class VariantTrackingEntry(Base):
 
     # Tracking metadata
     action_type: Mapped[TrackingActionType] = mapped_column(SQLEnum(TrackingActionType), default=TrackingActionType.ADDED)
-    tracking_timestamp: Mapped[dt] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    tracking_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Additional context
     entry_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -98,15 +98,15 @@ class VariantPriceHistory(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Variant reference
-    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
 
     # Price information
     old_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -117,8 +117,8 @@ class VariantPriceHistory(Base):
 
     # Change metadata
     change_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    changed_by_user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
-    effective_date: Mapped[dt] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    changed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Impact tracking
     affected_subscriptions_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -168,18 +168,18 @@ class VariantAnalytics(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Variant reference
-    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
 
     # Time period for analytics
-    date: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     period_type: Mapped[AnalyticsPeriodType] = mapped_column(SQLEnum(AnalyticsPeriodType), default=AnalyticsPeriodType.DAILY)
 
     # Subscription metrics
@@ -245,16 +245,16 @@ class VariantSubstitution(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Original and substitute variants
-    original_variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
-    substitute_variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    original_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    substitute_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
 
     # Substitution metadata
     similarity_score: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0 to 1.0

@@ -10,7 +10,7 @@ from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from datetime import datetime as dt
-import uuid as uuid_module
+import uuid
 
 # --- Association table: Subscription <-> ProductVariant ---
 subscription_product_association = Table(
@@ -40,23 +40,23 @@ class SubscriptionProduct(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
-    product_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit_price: Mapped[float] = mapped_column(Float)
     total_price: Mapped[float] = mapped_column(Float)
-    added_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
 
     # Removal tracking
-    removed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    removed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
 
     # Relationships
     subscription = relationship("Subscription", back_populates="subscription_products", lazy="select")
@@ -104,30 +104,30 @@ class Subscription(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # --- Core fields ---
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(50), default="active")
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     billing_cycle: Mapped[str] = mapped_column(String(20), default="monthly")
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
-    current_period_start: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    current_period_end: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    cancelled_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_billing_date: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    paused_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_billing_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    paused_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     pause_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_payment_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     payment_retry_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_payment_attempt: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_retry_date: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_payment_attempt: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_retry_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- Payment info ---
     payment_gateway: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -135,7 +135,7 @@ class Subscription(Base):
 
     # --- Delivery info ---
     delivery_type: Mapped[Optional[str]] = mapped_column(String(50), default="standard")
-    delivery_address_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("addresses.id"), nullable=True)
+    delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("addresses.id"), nullable=True)
 
     # --- Pricing at creation ---
     price_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

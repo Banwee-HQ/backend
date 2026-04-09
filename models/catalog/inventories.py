@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, datetime as dt
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
 from core.logging import get_structured_logger
-import uuid as uuid_module
+import uuid
 
 logger = get_structured_logger(__name__)
 
@@ -27,11 +27,11 @@ class WarehouseLocation(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
@@ -58,15 +58,15 @@ class Inventory(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"), unique=True)
-    location_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("warehouse_locations.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"), unique=True)
+    location_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("warehouse_locations.id"))
 
     # Atomic stock tracking fields
     quantity_available: Mapped[int] = mapped_column(Integer, default=0)  # Available for sale
@@ -79,8 +79,8 @@ class Inventory(Base):
     inventory_status: Mapped[str] = mapped_column(String(50), default="active")
 
     # Timestamps for tracking
-    last_restocked_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_sold_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_restocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sold_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Legacy field for backward compatibility
     quantity: Mapped[int] = mapped_column(Integer, default=0)
@@ -227,17 +227,17 @@ class StockAdjustment(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    inventory_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("inventory.id"))
+    inventory_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("inventory.id"))
     quantity_change: Mapped[int] = mapped_column(Integer)  # Positive for add, negative for remove
     reason: Mapped[str] = mapped_column(String(CHAR_LENGTH))  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
-    adjusted_by_user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    adjusted_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

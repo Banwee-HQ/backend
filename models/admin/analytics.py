@@ -9,8 +9,8 @@ from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from enum import Enum
 from typing import Dict, Any, Optional
-from datetime import datetime, timezone, datetime as dt
-import uuid as uuid_module
+from datetime import datetime, timezone
+import uuid
 
 
 class EventType(Enum):
@@ -50,16 +50,16 @@ class UserSession(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Session identification
     session_id: Mapped[str] = mapped_column(String(255), unique=True)
-    user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
 
     # Session metadata
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
@@ -78,8 +78,8 @@ class UserSession(Base):
     utm_term: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Session timing
-    started_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    ended_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Session metrics
@@ -140,16 +140,16 @@ class AnalyticsEvent(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Event identification
     session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
-    user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
     event_type: Mapped[EventType] = mapped_column(SQLEnum(EventType))
 
     # Event data
@@ -158,9 +158,9 @@ class AnalyticsEvent(Base):
     event_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     # E-commerce specific fields
-    order_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
-    product_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    variant_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
+    product_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    variant_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Financial data
@@ -168,7 +168,7 @@ class AnalyticsEvent(Base):
     quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Timing
-    timestamp: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     session = relationship("UserSession", back_populates="events")
@@ -206,31 +206,31 @@ class ConversionFunnel(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Funnel identification
     session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
-    user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
 
     # Funnel steps (0-based)
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     max_step_reached: Mapped[int] = mapped_column(Integer, default=0)
 
     # Step timestamps
-    landing_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    product_view_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    cart_add_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    checkout_start_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-    purchase_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    landing_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    product_view_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cart_add_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    checkout_start_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    purchase_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Funnel metadata
     abandoned_at_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    abandoned_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    abandoned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Financial data
@@ -253,19 +253,19 @@ class CustomerLifecycleMetrics(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Customer identification
-    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"), unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"), unique=True)
 
     # Registration and first purchase
-    registered_at: Mapped[dt] = mapped_column(DateTime(timezone=True))
-    first_purchase_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    first_purchase_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     time_to_first_purchase_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Purchase behavior
@@ -274,7 +274,7 @@ class CustomerLifecycleMetrics(Base):
     average_order_value: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Timing metrics
-    last_purchase_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_purchase_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     days_since_last_purchase: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     average_days_between_orders: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
@@ -294,7 +294,7 @@ class CustomerLifecycleMetrics(Base):
     average_session_duration: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Last updated
-    metrics_updated_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    metrics_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user = relationship("User", back_populates="lifecycle_metrics")

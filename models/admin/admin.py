@@ -9,8 +9,8 @@ from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from decimal import Decimal
 from typing import Dict, Any, Optional
-from datetime import datetime as dt
-import uuid as uuid_module
+from datetime import datetime
+import uuid
 
 
 class PricingConfig(Base):
@@ -26,10 +26,10 @@ class PricingConfig(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Subscription percentage (0.1% to 50%)
@@ -45,7 +45,7 @@ class PricingConfig(Base):
     currency_settings: Mapped[dict] = mapped_column(JSON, default={"default": "USD"})
 
     # Admin user who made the change
-    updated_by: Mapped[uuid_module.UUID] = mapped_column(GUID())
+    updated_by: Mapped[uuid.UUID] = mapped_column(GUID())
 
     # Version for tracking configuration changes
     config_version: Mapped[str] = mapped_column(String(50), default="1.0")
@@ -89,14 +89,14 @@ class SubscriptionCostHistory(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID())
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID())
 
     # Old cost breakdown (JSON)
     old_cost_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -108,10 +108,10 @@ class SubscriptionCostHistory(Base):
     change_reason: Mapped[str] = mapped_column(String(100))  # "admin_percentage_change", "variant_price_change", etc.
 
     # When the change becomes effective
-    effective_date: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     # Admin user who triggered the change (if applicable)
-    changed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    changed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
 
     # Additional metadata
     pricing_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -136,11 +136,11 @@ class SubscriptionAnalytics(Base):
     __tablename__ = "subscription_analytics"
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Date for this analytics record
@@ -213,11 +213,11 @@ class PaymentAnalytics(Base):
     __tablename__ = "payment_analytics"
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Date for this analytics record

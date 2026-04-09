@@ -8,7 +8,7 @@ from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, datetime as dt
 from typing import Dict, Any, Optional
-import uuid as uuid_module
+import uuid
 
 
 class Discount(Base):
@@ -30,11 +30,11 @@ class Discount(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
@@ -42,8 +42,8 @@ class Discount(Base):
     value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
     minimum_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     maximum_discount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    valid_from: Mapped[dt] = mapped_column(DateTime(timezone=True))
-    valid_until: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -119,17 +119,17 @@ class SubscriptionDiscount(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
-    discount_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("discounts.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
+    discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("discounts.id"))
     discount_amount: Mapped[float] = mapped_column(Float)
-    applied_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
 
     # Relationships
     subscription = relationship("Subscription", back_populates="applied_discounts", lazy="select")
@@ -165,17 +165,17 @@ class ProductRemovalAudit(Base):
     )
 
     # Common fields (previously from BaseModel)
-    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
-    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
-    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
-    product_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
-    removed_by: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
-    removed_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
