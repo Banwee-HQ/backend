@@ -75,25 +75,16 @@ class DatabaseManager:
         if self.engine and self.session_factory: # Prevent re-initialization
             return
 
-        # SQLite doesn't need pooling, PostgreSQL does
-        if database_uri.startswith("sqlite"):
-            engine_db = create_async_engine(
-                database_uri,
-                echo=env_is_local,
-                pool_pre_ping=False,  # SQLite doesn't support pool_pre_ping well
-                poolclass=None  # No pooling for SQLite
-            )
-        else:
-            # PostgreSQL with connection pooling
-            engine_db = create_async_engine(
-                database_uri,
-                echo=env_is_local,
-                pool_pre_ping=True,
-                pool_recycle=3600,
-                pool_size=10,
-                max_overflow=20,
-                pool_timeout=30
-            )
+        # PostgreSQL with connection pooling
+        engine_db = create_async_engine(
+            database_uri,
+            echo=env_is_local,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            pool_size=10,
+            max_overflow=20,
+            pool_timeout=30
+        )
 
         AsyncSessionDB = sessionmaker(
             bind=engine_db,
@@ -189,17 +180,14 @@ class DatabaseManager:
                 "error": f"Pool status partially unavailable: {str(e)}",
             }
 
+    @asynccontextmanager
     async def get_session_with_retry(
         self,
         max_retries: int = 3,
         retry_delay: float = 1.0,
         backoff_factor: float = 2.0,
     ) -> AsyncGenerator[AsyncSession, None]:
-        """Get database session with retry logic and exponential backoff.
-        
-        Note: This is not decorated with @asynccontextmanager because we need
-        to handle the generator lifecycle manually to avoid 'athrow' errors.
-        """
+        """Get database session with retry logic and exponential backoff."""
         if not self.session_factory:
             raise DatabaseException(message="Database session factory not initialized.")
 
@@ -276,8 +264,7 @@ db_manager = DatabaseManager()
 async def initialize_db(database_uri: str, env_is_local: bool, engine=None):
     """Initializes the database manager with engine and session factory.
     
-    For SQLite (dev): Auto-creates tables on startup.
-    For PostgreSQL (prod): Requires Alembic migrations - won't auto-create tables.
+    PostgreSQL only: Requires Alembic migrations - won't auto-create tables.
     """
     if engine:
         # Use provided engine
@@ -293,66 +280,9 @@ async def initialize_db(database_uri: str, env_is_local: bool, engine=None):
         # Use default initialization
         db_manager.initialize(database_uri, env_is_local)
         
-        # Auto-create tables for SQLite only (dev environment)
-        if database_uri.startswith("sqlite"):
-            logger.info("SQLite detected - auto-creating tables...")
-            try:
-                # SQLite doesn't support schemas, so we need to remove schema prefixes
-                # Create a copy of metadata with schemas removed for SQLite
-                from sqlalchemy import MetaData, Table, ForeignKey, Index
-                import re
-                
-                # Create new metadata without schemas
-                sqlite_metadata = MetaData()
-                
-                # Helper function to remove schema from table reference
-                def remove_schema(ref):
-                    """Remove schema prefix from table references like 'auth.users' -> 'users'"""
-                    if isinstance(ref, str):
-                        parts = ref.split('.')
-                        if len(parts) == 2 and parts[0] in ('auth', 'catalog', 'commerce', 'admin'):
-                            return parts[1]
-                    return ref
-                
-                # Copy all tables from Base.metadata, removing schema
-                for table in Base.metadata.tables.values():
-                    new_columns = []
-                    
-                    for column in table.columns:
-                        # Copy the column
-                        new_col = column.copy()
-                        
-                        # Fix ForeignKey constraints
-                        if new_col.foreign_keys:
-                            for fk in new_col.foreign_keys:
-                                if fk.target_fullname:
-                                    # Remove schema from target reference
-                                    fk.target_fullname = remove_schema(fk.target_fullname)
-                        
-                        new_columns.append(new_col)
-                    
-                    # Copy the table without schema (indexes will be auto-created from the column definitions)
-                    Table(
-                        table.name,  # Just the name, no schema
-                        sqlite_metadata,
-                        *new_columns,
-                    )
-                
-                async with db_manager.engine.begin() as conn:
-                    await conn.run_sync(sqlite_metadata.create_all)
-                logger.info("SQLite tables created successfully ✅")
-            except Exception as e:
-                logger.error(f"Failed to create SQLite tables: {e}")
-                raise
-        else:
-            logger.info("PostgreSQL detected - tables must be managed via Alembic migrations")
-
-
 # Enhanced dependency to get the async session with retry logic
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get database session with enhanced error handling and retry logic."""
-    # Use the module-level structured logger
-    session_logger = logger
     
     # Ensure database is initialized before getting a session
     if not db_manager.session_factory:

@@ -11,7 +11,7 @@ from models.auth.user import User
 from core.dependencies import get_current_auth_user
 from fastapi.security import OAuth2PasswordBearer
 
-router = APIRouter()
+router = APIRouter(prefix="/promocodes", tags=["promocodes"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 

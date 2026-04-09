@@ -1,26 +1,42 @@
 #!/usr/bin/env python3
 """
-Database Seeder Script
-Populates database with products, variants, images, and admin user
+Database Seeder Script - COMPREHENSIVE
+Populates ALL database tables with sample data for testing
 """
 import asyncio
 import sys
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
+from passlib.context import CryptContext
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core.db import get_db, BaseModel, db_manager
-from models.catalog.product import Product, ProductVariant, ProductImage
-from models.catalog.inventories import Inventory, WarehouseLocation
-from models.auth.user import User
+from core.db import get_db, Base, db_manager
 from core.logging import get_structured_logger
+from core.config import settings
 from enum import Enum
+
+# Import all models
+from models.auth.user import User, Address, UserRole, AccountStatus, VerificationStatus, AddressKind
+from models.catalog.product import Product, ProductVariant, ProductImage
+from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
+from models.catalog.review import Review
+from models.catalog.wishlist import Wishlist, WishlistItem
+from models.commerce.shipping import ShippingMethod
+from models.commerce.tax_rates import TaxRate
+from models.commerce.promocode import Promocode, DiscountType
+from models.commerce.cart import Cart, CartItem
+from models.commerce.orders import Order, OrderItem
+from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
+from models.system.contact_message import ContactMessage, MessageStatus, MessagePriority
+
+logger = get_structured_logger(__name__)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Product Categories Enum
 class ProductCategory(str, Enum):
@@ -34,7 +50,214 @@ class ProductCategory(str, Enum):
     BEVERAGES_TEA_COFFEE = "Beverages, Tea & Coffee"
     BAKERY_PREPARED_FOODS = "Bakery & Prepared Foods"
     FIBERS_INDUSTRIAL_CROPS = "Fibers & Industrial Crops"
-    # check the frontend for the categories
+
+# ============================================================================
+# SHIPPING METHODS DATA
+# ============================================================================
+SHIPPING_METHODS = [
+    {
+        "name": "Standard Shipping",
+        "description": "Standard ground shipping with tracking",
+        "price": 5.99,
+        "estimated_days": 5,
+        "is_active": True,
+        "carrier": "UPS",
+        "tracking_url_template": "https://www.ups.com/track?tracknum={tracking_number}"
+    },
+    {
+        "name": "Express Shipping",
+        "description": "2-3 day express delivery",
+        "price": 15.99,
+        "estimated_days": 2,
+        "is_active": True,
+        "carrier": "FedEx",
+        "tracking_url_template": "https://www.fedex.com/apps/fedextrack/?tracknumbers={tracking_number}"
+    },
+    {
+        "name": "Free Shipping",
+        "description": "Free standard shipping on orders over $50",
+        "price": 0.00,
+        "estimated_days": 7,
+        "is_active": True,
+        "carrier": "USPS",
+        "tracking_url_template": "https://tools.usps.com/go/TrackConfirmAction?tLabels={tracking_number}"
+    },
+    {
+        "name": "Overnight Shipping",
+        "description": "Next business day delivery",
+        "price": 29.99,
+        "estimated_days": 1,
+        "is_active": True,
+        "carrier": "FedEx",
+        "tracking_url_template": "https://www.fedex.com/apps/fedextrack/?tracknumbers={tracking_number}"
+    }
+]
+
+# ============================================================================
+# TAX RATES DATA
+# ============================================================================
+TAX_RATES = [
+    # United States
+    {"country_code": "US", "country_name": "United States", "province_code": "CA", "province_name": "California", "tax_rate": 0.0725, "tax_name": "Sales Tax"},
+    {"country_code": "US", "country_name": "United States", "province_code": "NY", "province_name": "New York", "tax_rate": 0.08, "tax_name": "Sales Tax"},
+    {"country_code": "US", "country_name": "United States", "province_code": "TX", "province_name": "Texas", "tax_rate": 0.0625, "tax_name": "Sales Tax"},
+    {"country_code": "US", "country_name": "United States", "province_code": "FL", "province_name": "Florida", "tax_rate": 0.06, "tax_name": "Sales Tax"},
+    {"country_code": "US", "country_name": "United States", "province_code": "WA", "province_name": "Washington", "tax_rate": 0.065, "tax_name": "Sales Tax"},
+    {"country_code": "US", "country_name": "United States", "province_code": None, "province_name": None, "tax_rate": 0.00, "tax_name": "Federal"},
+    # Canada
+    {"country_code": "CA", "country_name": "Canada", "province_code": "ON", "province_name": "Ontario", "tax_rate": 0.13, "tax_name": "HST"},
+    {"country_code": "CA", "country_name": "Canada", "province_code": "BC", "province_name": "British Columbia", "tax_rate": 0.12, "tax_name": "GST/PST"},
+    {"country_code": "CA", "country_name": "Canada", "province_code": "QC", "province_name": "Quebec", "tax_rate": 0.14975, "tax_name": "QST"},
+    # UK/EU
+    {"country_code": "GB", "country_name": "United Kingdom", "province_code": None, "province_name": None, "tax_rate": 0.20, "tax_name": "VAT"},
+    {"country_code": "DE", "country_name": "Germany", "province_code": None, "province_name": None, "tax_rate": 0.19, "tax_name": "VAT"},
+    {"country_code": "FR", "country_name": "France", "province_code": None, "province_name": None, "tax_rate": 0.20, "tax_name": "VAT"},
+    # African countries
+    {"country_code": "GH", "country_name": "Ghana", "province_code": None, "province_name": None, "tax_rate": 0.125, "tax_name": "VAT"},
+    {"country_code": "NG", "country_name": "Nigeria", "province_code": None, "province_name": None, "tax_rate": 0.075, "tax_name": "VAT"},
+    {"country_code": "ZA", "country_name": "South Africa", "province_code": None, "province_name": None, "tax_rate": 0.15, "tax_name": "VAT"},
+    {"country_code": "KE", "country_name": "Kenya", "province_code": None, "province_name": None, "tax_rate": 0.16, "tax_name": "VAT"},
+]
+
+# ============================================================================
+# PROMOCODES DATA
+# ============================================================================
+PROMOCODES = [
+    {
+        "code": "WELCOME20",
+        "description": "20% off your first order",
+        "discount_type": DiscountType.PERCENTAGE,
+        "value": 20.0,
+        "minimum_order_amount": 25.00,
+        "maximum_discount_amount": 50.00,
+        "usage_limit": 1000,
+        "is_active": True,
+        "valid_from": datetime.now(timezone.utc) - timedelta(days=30),
+        "valid_until": datetime.now(timezone.utc) + timedelta(days=365)
+    },
+    {
+        "code": "ORGANIC10",
+        "description": "$10 off orders over $75",
+        "discount_type": DiscountType.FIXED,
+        "value": 10.0,
+        "minimum_order_amount": 75.00,
+        "maximum_discount_amount": 10.00,
+        "usage_limit": 500,
+        "is_active": True,
+        "valid_from": datetime.now(timezone.utc) - timedelta(days=10),
+        "valid_until": datetime.now(timezone.utc) + timedelta(days=90)
+    },
+    {
+        "code": "FREESHIP",
+        "description": "Free shipping on any order",
+        "discount_type": DiscountType.FIXED,
+        "value": 5.99,
+        "minimum_order_amount": 0.00,
+        "maximum_discount_amount": 5.99,
+        "usage_limit": 200,
+        "is_active": True,
+        "valid_from": datetime.now(timezone.utc),
+        "valid_until": datetime.now(timezone.utc) + timedelta(days=30)
+    },
+    {
+        "code": "BULK15",
+        "description": "15% off orders over $100",
+        "discount_type": DiscountType.PERCENTAGE,
+        "value": 15.0,
+        "minimum_order_amount": 100.00,
+        "maximum_discount_amount": 75.00,
+        "usage_limit": 300,
+        "is_active": True,
+        "valid_from": datetime.now(timezone.utc),
+        "valid_until": datetime.now(timezone.utc) + timedelta(days=60)
+    }
+]
+
+# ============================================================================
+# CONTACT MESSAGES DATA
+# ============================================================================
+CONTACT_MESSAGES = [
+    {
+        "name": "John Smith",
+        "email": "john.smith@example.com",
+        "subject": "Question about fonio millet",
+        "message": "Hi, I'm interested in buying fonio millet in bulk. Do you offer wholesale pricing for orders over 50kg?",
+        "status": MessageStatus.NEW,
+        "priority": MessagePriority.MEDIUM
+    },
+    {
+        "name": "Sarah Johnson",
+        "email": "sarah.j@example.com",
+        "subject": "Shipping to Canada",
+        "message": "Do you ship to Canada? What are the shipping costs and delivery times?",
+        "status": MessageStatus.IN_PROGRESS,
+        "priority": MessagePriority.HIGH
+    },
+    {
+        "name": "Michael Brown",
+        "email": "mbrown@example.com",
+        "subject": "Product availability",
+        "message": "When will the shea butter be back in stock? I've been waiting for the 500ml size.",
+        "status": MessageStatus.RESOLVED,
+        "priority": MessagePriority.LOW
+    },
+    {
+        "name": "Emma Wilson",
+        "email": "emma.w@example.com",
+        "subject": "Order cancellation",
+        "message": "I need to cancel my order #12345. Please confirm the cancellation.",
+        "status": MessageStatus.NEW,
+        "priority": MessagePriority.URGENT
+    },
+    {
+        "name": "David Lee",
+        "email": "david.lee@example.com",
+        "subject": "Payment issue",
+        "message": "My credit card was charged twice for order #12346. Can you help with a refund?",
+        "status": MessageStatus.IN_PROGRESS,
+        "priority": MessagePriority.HIGH
+    }
+]
+
+# ============================================================================
+# SAMPLE USERS DATA
+# ============================================================================
+SAMPLE_USERS = [
+    {
+        "email": "customer1@example.com",
+        "firstname": "Alice",
+        "lastname": "Johnson",
+        "password": "TestPass123!",
+        "role": UserRole.CUSTOMER,
+        "account_status": AccountStatus.ACTIVE,
+        "verification_status": VerificationStatus.VERIFIED,
+        "country": "US",
+        "phone": "+1234567890"
+    },
+    {
+        "email": "customer2@example.com",
+        "firstname": "Bob",
+        "lastname": "Williams",
+        "password": "TestPass123!",
+        "role": UserRole.CUSTOMER,
+        "account_status": AccountStatus.ACTIVE,
+        "verification_status": VerificationStatus.VERIFIED,
+        "country": "CA",
+        "phone": "+14165551234"
+    },
+    {
+        "email": "manager@banwee.com",
+        "firstname": "Manager",
+        "lastname": "User",
+        "password": "AdminPass123!",
+        "role": UserRole.MANAGER,
+        "account_status": AccountStatus.ACTIVE,
+        "verification_status": VerificationStatus.VERIFIED,
+        "country": "GH",
+        "phone": "+233123456789"
+    }
+]
+
 logger = get_structured_logger(__name__)
 
 # Sample data for African organic products
@@ -261,32 +484,62 @@ PRODUCTS = [
 ]
 
 async def create_admin_user(db: AsyncSession) -> User:
-    """Create admin user"""
+    """Create admin user with proper password hashing"""
     # Check if admin user exists
     result = await db.execute(
-        select(User).where(User.email == "admin@banwee.com")
+        text("SELECT id FROM users WHERE email = :email"),
+        {"email": "admin@banwee.com"}
     )
-    existing_admin = result.scalar_one_or_none()
+    existing_id = result.scalar()
     
-    if existing_admin:
-        logger.info("Admin user already exists")
+    if existing_id:
+        # Fetch the existing user object
+        result = await db.execute(
+            select(User).where(User.id == existing_id)
+        )
+        existing_admin = result.scalar_one_or_none()
+        logger.info("✅ Admin user already exists: admin@banwee.com")
         return existing_admin
-    
+
+    # Hash password properly
+    hashed_password = pwd_context.hash("AdminPass123!")
+
     admin_user = User(
         id=uuid4(),
         email="admin@banwee.com",
         firstname="Admin",
         lastname="User",
-        hashed_password="$2b$12$example",  # Change this in production!
-        account_status="active",  # Use account_status instead of is_active
-        verification_status="verified",  # Use verification_status instead of is_verified
-        role="admin",
+        hashed_password=hashed_password,
+        account_status=AccountStatus.ACTIVE,
+        verification_status=VerificationStatus.VERIFIED,
+        role=UserRole.ADMIN,
+        country="GH",
+        phone="+233123456789",
+        language="en",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
     )
-    
+
     db.add(admin_user)
+    await db.flush()  # Get user ID
+
+    # Add default address for admin
+    admin_address = Address(
+        id=uuid4(),
+        user_id=admin_user.id,
+        street="123 Admin Street",
+        city="Accra",
+        state="Greater Accra",
+        country="GH",
+        post_code="00233",
+        kind=AddressKind.SHIPPING,
+        is_default=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db.add(admin_address)
     await db.commit()
+
     logger.info("✅ Created admin user: admin@banwee.com")
     return admin_user
 
@@ -478,6 +731,222 @@ async def seed_products(db: AsyncSession):
 
     logger.info(f"✅ Processed {len(PRODUCTS)} products")
 
+async def seed_shipping_methods(db: AsyncSession):
+    """Seed shipping methods"""
+    logger.info("📦 Seeding shipping methods...")
+    
+    for method_data in SHIPPING_METHODS:
+        # Check if exists
+        result = await db.execute(
+            select(ShippingMethod).where(ShippingMethod.name == method_data["name"])
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            method = ShippingMethod(
+                id=uuid4(),
+                name=method_data["name"],
+                description=method_data["description"],
+                price=method_data["price"],
+                estimated_days=method_data["estimated_days"],
+                is_active=method_data["is_active"],
+                carrier=method_data.get("carrier"),
+                tracking_url_template=method_data.get("tracking_url_template"),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(method)
+            logger.info(f"  ✅ Created shipping method: {method.name}")
+        else:
+            # Update existing
+            existing.price = method_data["price"]
+            existing.estimated_days = method_data["estimated_days"]
+            existing.is_active = method_data["is_active"]
+            existing.updated_at = datetime.now(timezone.utc)
+            logger.info(f"  🔄 Updated shipping method: {existing.name}")
+    
+    await db.commit()
+    logger.info(f"✅ Shipping methods seeded: {len(SHIPPING_METHODS)}")
+
+async def seed_tax_rates(db: AsyncSession):
+    """Seed tax rates"""
+    logger.info("💰 Seeding tax rates...")
+    
+    for tax_data in TAX_RATES:
+        # Check if exists (by country + province)
+        result = await db.execute(
+            select(TaxRate).where(
+                TaxRate.country_code == tax_data["country_code"],
+                TaxRate.province_code == tax_data["province_code"]
+            )
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            tax_rate = TaxRate(
+                id=uuid4(),
+                country_code=tax_data["country_code"],
+                country_name=tax_data["country_name"],
+                province_code=tax_data.get("province_code"),
+                province_name=tax_data.get("province_name"),
+                tax_rate=tax_data["tax_rate"],
+                tax_name=tax_data["tax_name"],
+                is_active=True,
+                effective_date=datetime.now(timezone.utc),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(tax_rate)
+            location = f"{tax_data['country_code']}"
+            if tax_data.get('province_code'):
+                location += f"-{tax_data['province_code']}"
+            logger.info(f"  ✅ Created tax rate: {location} @ {tax_data['tax_rate']*100}%")
+    
+    await db.commit()
+    logger.info(f"✅ Tax rates seeded: {len(TAX_RATES)}")
+
+async def seed_promocodes(db: AsyncSession):
+    """Seed promocodes"""
+    logger.info("🎟️ Seeding promocodes...")
+    
+    for promo_data in PROMOCODES:
+        # Check if exists
+        result = await db.execute(
+            select(Promocode).where(Promocode.code == promo_data["code"])
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            promocode = Promocode(
+                id=uuid4(),
+                code=promo_data["code"],
+                description=promo_data["description"],
+                discount_type=promo_data["discount_type"],
+                value=promo_data["value"],
+                minimum_order_amount=promo_data.get("minimum_order_amount"),
+                maximum_discount_amount=promo_data.get("maximum_discount_amount"),
+                usage_limit=promo_data.get("usage_limit"),
+                used_count=0,
+                is_active=promo_data["is_active"],
+                valid_from=promo_data.get("valid_from"),
+                valid_until=promo_data.get("valid_until"),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(promocode)
+            logger.info(f"  ✅ Created promocode: {promocode.code}")
+        else:
+            # Update validity
+            existing.is_active = promo_data["is_active"]
+            existing.valid_until = promo_data.get("valid_until")
+            existing.updated_at = datetime.now(timezone.utc)
+            logger.info(f"  🔄 Updated promocode: {existing.code}")
+    
+    await db.commit()
+    logger.info(f"✅ Promocodes seeded: {len(PROMOCODES)}")
+
+async def seed_contact_messages(db: AsyncSession):
+    """Seed contact messages"""
+    logger.info("📧 Seeding contact messages...")
+    
+    for msg_data in CONTACT_MESSAGES:
+        # Check if exists (by email + subject)
+        result = await db.execute(
+            select(ContactMessage).where(
+                ContactMessage.email == msg_data["email"],
+                ContactMessage.subject == msg_data["subject"]
+            )
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            message = ContactMessage(
+                id=uuid4(),
+                name=msg_data["name"],
+                email=msg_data["email"],
+                subject=msg_data["subject"],
+                message=msg_data["message"],
+                status=msg_data["status"],
+                priority=msg_data["priority"],
+                created_at=datetime.now(timezone.utc) - timedelta(days=1),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(message)
+            logger.info(f"  ✅ Created contact message: {message.subject}")
+    
+    await db.commit()
+    logger.info(f"✅ Contact messages seeded: {len(CONTACT_MESSAGES)}")
+
+async def create_sample_users(db: AsyncSession):
+    """Create sample users with addresses"""
+    logger.info("👥 Creating sample users...")
+    
+    created_users = []
+    
+    for user_data in SAMPLE_USERS:
+        # Check if user exists - use raw SQL to avoid schema issues
+        result = await db.execute(
+            text("SELECT id FROM users WHERE email = :email"),
+            {"email": user_data["email"]}
+        )
+        existing_id = result.scalar()
+        
+        existing = None
+        if existing_id:
+            result = await db.execute(
+                select(User).where(User.id == existing_id)
+            )
+            existing = result.scalar_one_or_none()
+        
+        if not existing:
+            # Hash password
+            hashed_password = pwd_context.hash(user_data["password"])
+            
+            user = User(
+                id=uuid4(),
+                email=user_data["email"],
+                firstname=user_data["firstname"],
+                lastname=user_data["lastname"],
+                hashed_password=hashed_password,
+                role=user_data["role"],
+                account_status=user_data["account_status"],
+                verification_status=user_data["verification_status"],
+                country=user_data.get("country"),
+                phone=user_data.get("phone"),
+                language="en",
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(user)
+            await db.flush()  # Get user ID
+            
+            created_users.append(user)
+            logger.info(f"  ✅ Created user: {user.email} ({user.role.value})")
+            
+            # Add sample address for the user
+            address = Address(
+                id=uuid4(),
+                user_id=user.id,
+                street=f"123 {user.firstname} Street",
+                city="Sample City",
+                state="CA" if user.country == "US" else "ON" if user.country == "CA" else "Accra",
+                country=user.country or "US",
+                post_code="12345" if user.country == "US" else "A1B2C3" if user.country == "CA" else "00233",
+                kind=AddressKind.SHIPPING,
+                is_default=True,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(address)
+            logger.info(f"    📍 Added address for: {user.email}")
+        else:
+            created_users.append(existing)
+            logger.info(f"  🔄 User already exists: {existing.email}")
+    
+    await db.commit()
+    logger.info(f"✅ Sample users created: {len(created_users)}")
+    return created_users
+
 async def main():
     """Main seeder function"""
     logger.info("🚀 Starting database seeder...")
@@ -491,37 +960,89 @@ async def main():
         if not db_manager.engine:
             logger.error("❌ Database manager failed to initialize.")
             return
-            
+        
+        # PostgreSQL: create tables with schemas
         async with db_manager.engine.begin() as conn:
-            await conn.run_sync(BaseModel.metadata.create_all)
+            await conn.run_sync(Base.metadata.create_all)
         
         async for db in get_db():
-            # Clear existing data
+            # Clear existing data in correct order (respecting FK constraints)
             logger.info("🗑️ Clearing existing data...")
+            
+            # Commerce tables (dependent on users/products)
+            await db.execute(text("DELETE FROM cart_items"))
+            await db.execute(text("DELETE FROM carts"))
+            await db.execute(text("DELETE FROM order_items"))
+            await db.execute(text("DELETE FROM orders"))
+            await db.execute(text("DELETE FROM payment_methods"))
+            await db.execute(text("DELETE FROM wishlist_items"))
+            await db.execute(text("DELETE FROM wishlists"))
+            await db.execute(text("DELETE FROM reviews"))
+            
+            # Catalog tables
             await db.execute(text("DELETE FROM product_images"))
             await db.execute(text("DELETE FROM inventory"))
+            await db.execute(text("DELETE FROM stock_adjustments"))
             await db.execute(text("DELETE FROM product_variants"))
             await db.execute(text("DELETE FROM products"))
+            await db.execute(text("DELETE FROM warehouse_locations"))
+            
+            # Commerce config tables
+            await db.execute(text("DELETE FROM promocodes"))
+            await db.execute(text("DELETE FROM tax_rates"))
+            await db.execute(text("DELETE FROM shipping_methods"))
+            
+            # System tables
+            await db.execute(text("DELETE FROM contact_messages"))
+            
+            # Auth tables (last - many things depend on users)
+            await db.execute(text("DELETE FROM addresses"))
+            await db.execute(text("DELETE FROM users"))
+            
             await db.commit()
             logger.info("✅ Database cleared")
             
-            # Seed new data
-            await create_admin_user(db)
+            # Seed new data in correct order
+            logger.info("\n📦 Seeding data...")
+            
+            # 1. Auth & Users first (other tables depend on users)
+            admin_user = await create_admin_user(db)
+            sample_users = await create_sample_users(db)
+            
+            # 2. Commerce configuration (no dependencies)
+            await seed_shipping_methods(db)
+            await seed_tax_rates(db)
+            await seed_promocodes(db)
+            
+            # 3. System data
+            await seed_contact_messages(db)
+            
+            # 4. Catalog data (products, inventory)
             await seed_products(db)
+            
             break  # Only need one session
         
         logger.info("🎉 Database seeding completed successfully!")
-        print("\n🎉 Database seeding completed!")
-        print("📧 Admin User: admin@banwee.com")
-        print("🔑 Admin Password: example (CHANGE IN PRODUCTION!)")
-        print(f"🛍️  Created {len(PRODUCTS)} products")
-        print(f"📦 Total variants: {sum(len(p['variants']) for p in PRODUCTS)}")
+        print("\n" + "="*60)
+        print("🎉 DATABASE SEEDING COMPLETED!")
+        print("="*60)
+        print("\n📧 USERS:")
+        print("   Admin:      admin@banwee.com / AdminPass123!")
+        print("   Manager:    manager@banwee.com / AdminPass123!")
+        print("   Customer 1: customer1@example.com / TestPass123!")
+        print("   Customer 2: customer2@example.com / TestPass123!")
+        print(f"\n🛍️  PRODUCTS: {len(PRODUCTS)} products with {sum(len(p['variants']) for p in PRODUCTS)} variants")
+        print(f"📦 SHIPPING: {len(SHIPPING_METHODS)} methods")
+        print(f"💰 TAX RATES: {len(TAX_RATES)} rates")
+        print(f"🎟️  PROMOCODES: {len(PROMOCODES)} codes")
+        print(f"📧 CONTACT MESSAGES: {len(CONTACT_MESSAGES)} messages")
+        print("="*60)
         
     except Exception as e:
         logger.error(f"❌ Database seeding failed: {e}")
-        print(f"❌ Error: {e}")
-        # Do not call sys.exit from inside the async context (causes aclose() errors).
-        # Re-raise so the error propagates and the event loop can close cleanly.
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 if __name__ == "__main__":

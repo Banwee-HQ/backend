@@ -1,4 +1,4 @@
-"""Simple config - supports SQLite and PostgreSQL."""
+"""Configuration - PostgreSQL only."""
 
 import os
 from pathlib import Path
@@ -31,28 +31,21 @@ class Settings:
     BACKEND_CORS_ORIGINS: list = ["*"] if os.getenv("ENVIRONMENT", "dev") == "dev" else \
         [os.getenv("FRONTEND_URL", "http://localhost:5173")]
 
-    # Database - SQLite or PostgreSQL
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./banwee.db")
-    # For PostgreSQL connection pooling (optional)
+    # Database - PostgreSQL only
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/banwee")
+    # Connection pooling
     DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        """Async database URI."""
-        if self.DATABASE_URL.startswith("sqlite"):
-            # SQLite async driver
-            return self.DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///")
-        # PostgreSQL async driver
+        """Async PostgreSQL URI."""
         if "+asyncpg" not in self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql"):
             return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
         return self.DATABASE_URL
 
     @property
     def SQLALCHEMY_DATABASE_URI_SYNC(self) -> str:
-        """Sync database URI (for migrations)."""
-        if self.DATABASE_URL.startswith("sqlite"):
-            return self.DATABASE_URL
-        # PostgreSQL sync driver
+        """Sync PostgreSQL URI (for migrations)."""
         if "+psycopg2" not in self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql"):
             return self.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
         return self.DATABASE_URL
@@ -84,8 +77,6 @@ class Settings:
         if self.ENVIRONMENT == "production":
             if self.SECRET_KEY == "dev-secret-key-change-in-production":
                 missing.append("SECRET_KEY")
-            if self.DATABASE_URL.startswith("sqlite"):
-                missing.append("DATABASE_URL (should be PostgreSQL in production)")
         return {"is_valid": len(missing) == 0, "missing": missing}
 
 

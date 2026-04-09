@@ -1,11 +1,15 @@
 import os
 import logging
+import warnings
 from contextlib import asynccontextmanager
 from core.logging import get_structured_logger
 from fastapi import FastAPI, HTTPException, APIRouter
 
+# Suppress urllib3 OpenSSL warning
+warnings.filterwarnings('ignore', category=UserWarning, module='urllib3')
 # Suppress WeasyPrint warnings
 logging.getLogger('weasyprint').setLevel(logging.ERROR)
+os.environ['WEASYPRINT_DO_NOT_INSTALL_EXTRA_LIBS'] = '1'
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -25,7 +29,7 @@ from core.exceptions import (
 
 from api import (
     auth_router, oauth_router, user_router,
-    products_router, search_router, review_router, inventory_router, wishlist_router,
+    products_router, review_router, inventory_router, wishlist_router,
     cart_router, orders_router, payments_router, refunds_router, shipping_router,
     shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router,
     admin_router, analytics_router,
@@ -101,7 +105,6 @@ v1_router.include_router(auth_router)
 v1_router.include_router(oauth_router)
 v1_router.include_router(user_router)
 v1_router.include_router(products_router)
-v1_router.include_router(search_router)
 v1_router.include_router(review_router)
 v1_router.include_router(inventory_router)
 v1_router.include_router(wishlist_router)
@@ -112,7 +115,7 @@ v1_router.include_router(refunds_router)
 v1_router.include_router(shipping_router)
 v1_router.include_router(shipping_tracking_router)
 v1_router.include_router(tax_router)
-v1_router.include_router(promocodes_router, prefix="/promocodes")
+v1_router.include_router(promocodes_router)
 v1_router.include_router(subscriptions_router)
 v1_router.include_router(webhooks_router)
 v1_router.include_router(admin_router)

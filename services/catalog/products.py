@@ -617,19 +617,19 @@ class ProductService:
                 p.rating,
                 p.review_count,
                 p.category,
-                -- Calculate weighted relevance score
+                -- Calculate weighted relevance score (no similarity() - pg_trgm not required)
                 (
                     -- Boost for exact name match
                     CASE 
                         WHEN LOWER(p.name) LIKE CONCAT(:query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:name_weight AS FLOAT)
                         WHEN LOWER(p.name) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:name_weight AS FLOAT) * 0.7
-                        ELSE similarity(LOWER(p.name), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:name_weight AS FLOAT)
+                        ELSE 0.0
                     END +
                     -- Boost for description match
                     CASE 
                         WHEN LOWER(p.description) LIKE CONCAT(:query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:desc_weight AS FLOAT)
                         WHEN LOWER(p.description) LIKE CONCAT('%', :query, '%') THEN CAST(:prefix_weight AS FLOAT) * CAST(:desc_weight AS FLOAT) * 0.7
-                        ELSE similarity(LOWER(p.description), :query) * CAST(:fuzzy_weight AS FLOAT) * CAST(:desc_weight AS FLOAT)
+                        ELSE 0.0
                     END +
                     -- Boost for higher rated products
                     (COALESCE(p.rating, 0) / 5.0) * 0.1 +
@@ -641,8 +641,6 @@ class ProductService:
             AND (
                 LOWER(p.name) LIKE CONCAT('%', :query, '%')
                 OR LOWER(p.description) LIKE CONCAT('%', :query, '%')
-                OR similarity(LOWER(p.name), :query) > :similarity_threshold
-                OR similarity(LOWER(p.description), :query) > :similarity_threshold
             )
             ORDER BY relevance_score DESC, p.rating DESC, p.review_count DESC
             LIMIT :limit

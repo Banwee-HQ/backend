@@ -52,8 +52,8 @@ fi
 
 # Validate required vars
 print_step "Verifying environment..."
-if [ -z "$POSTGRES_DB_URL" ]; then
-  print_error "POSTGRES_DB_URL is not set"
+if [ -z "$DATABASE_URL" ]; then
+  print_error "DATABASE_URL is not set"
   exit 1
 fi
 if [ -z "$SECRET_KEY" ]; then
