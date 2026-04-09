@@ -151,7 +151,7 @@ class SubscriptionScheduler:
             order_id = uuid7()
             
             payment_service = PaymentService(self.db)
-            payment_result = await payment_service.process_payment_idempotent(
+            payment_result = await payment_service.process_idempotent(
                 user_id=subscription.user_id,
                 order_id=order_id,
                 amount=pricing["total"],

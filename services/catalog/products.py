@@ -1,18 +1,20 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text
+from sqlalchemy import select, and_, or_, func, text, desc
 from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any, TypeVar
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from models.catalog.product import Product, ProductVariant, ProductImage, ProductStatus, AvailabilityStatus
 from models.catalog.inventories import Inventory
+from models.commerce.cart import CartItem
 from schemas.catalog.product import (
     ProductCreate, ProductUpdate, ProductResponse,
-    ProductVariantResponse, ProductImageResponse, PriceRange
+    ProductVariantResponse, ProductImageResponse, PriceRange, ProductListResponse
 )
 from schemas.catalog.inventory import InventoryResponse
 from core.exceptions import APIException
 from core.logging import get_structured_logger
+from fastapi import HTTPException
 from datetime import datetime, timezone, date
 
 logger = get_structured_logger(__name__)
@@ -197,7 +199,7 @@ class ProductService:
                 primary_variant=None
             )
 
-    async def get_products(
+    async def list(
         self,
         page: int = 1,
         limit: int = 10,
@@ -224,13 +226,13 @@ class ProductService:
                 )
             
             if filters.get("min_rating") is not None:
-                base_conditions.append(Product.rating >= filters["min_rating"])
+                base_conditions.append(Product.rating_average >= filters["min_rating"])
             
             if filters.get("max_rating") is not None:
-                base_conditions.append(Product.rating <= filters["max_rating"])
+                base_conditions.append(Product.rating_average <= filters["max_rating"])
 
             if filters.get("featured"):
-                base_conditions.append(or_(Product.is_featured.is_(True), Product.featured.is_(True)))
+                base_conditions.append(Product.is_featured.is_(True))
         
         # Build subquery for filtering by category (now it's a string)
         if filters and filters.get("category"):
@@ -334,7 +336,7 @@ class ProductService:
             "total_pages": (total + limit - 1) // limit
         }
 
-    async def get_featured_products(self, limit: int = 4) -> List[ProductResponse]:
+    async def featured(self, limit: int = 4) -> List[ProductResponse]:
         """Fetch featured products with related data."""
         print(f"Fetching {limit} featured products...")
 
@@ -365,7 +367,7 @@ class ProductService:
 
         return [self._convert_product_to_response(product) for product in products]
 
-    async def get_popular_products(self, limit: int = 4) -> List[ProductResponse]:
+    async def popular(self, limit: int = 4) -> List[ProductResponse]:
         """Get popular products based on cart additions or fallback to highest rated products."""
         # First, try to get products based on cart additions
         query = (
@@ -391,7 +393,7 @@ class ProductService:
                 selectinload(Product.variants).selectinload(
                     ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
-            ).order_by(Product.rating.desc(), Product.review_count.desc()).limit(limit)
+            ).order_by(Product.rating_average.desc(), Product.review_count.desc()).limit(limit)
 
             fallback_result = await self.db.execute(fallback_query)
             fallback_products = fallback_result.scalars().all()
@@ -402,7 +404,7 @@ class ProductService:
         products = [row[0] for row in rows]  # Extract Product objects
         return [self._convert_product_to_response(product) for product in products]
 
-    async def get_recommended_products(self, product_id: UUID, limit: int = 4) -> List[ProductResponse]:
+    async def recommended(self, product_id: UUID, limit: int = 4) -> List[ProductResponse]:
         """
         Get smart product recommendations using multiple algorithms:
         - Complementary (cross-sell): Products frequently bought together
@@ -414,7 +416,7 @@ class ProductService:
         recommendation_service = RecommendationService(self.db)
         return await recommendation_service.get_smart_recommendations(product_id, limit)
 
-    async def get_category_by_slug(self, slug: str) -> Optional[ProductResponse]:
+    async def by_category(self, slug: str) -> Optional[ProductResponse]:
         """Get category by slug and return products in that category."""
         # Find products in this category
         query = (
@@ -438,19 +440,17 @@ class ProductService:
         # Convert to responses
         product_responses = []
         for product in products:
-            product_responses.append(
-                self._convert_product_to_response(product, include_relationships=True))
+            product_responses.append(self._convert_product_to_response(product))
         
         return ProductListResponse(
             products=product_responses,
             total=len(product_responses),
             page=1,
-            limit=len(product_responses),
-            has_more=False
+            per_page=len(product_responses),
+            pages=1
         )
-        return None
 
-    async def get_product_by_id(self, product_id: UUID) -> Optional[ProductResponse]:
+    async def get(self, product_id: UUID) -> Optional[ProductResponse]:
         """Get product by ID."""
         query = select(Product).options(
             selectinload(Product.variants).selectinload(ProductVariant.images),
@@ -464,7 +464,7 @@ class ProductService:
             return self._convert_product_to_response(product)
         return None
 
-    async def get_variant_by_id(self, variant_id: UUID) -> Optional[ProductVariantResponse]:
+    async def get_variant(self, variant_id: UUID) -> Optional[ProductVariantResponse]:
         """Get product variant by ID."""
         query = select(ProductVariant).options(
             selectinload(ProductVariant.images),
@@ -478,7 +478,7 @@ class ProductService:
             return self._convert_variant_to_response(variant)
         return None
 
-    async def get_product_variants(self, product_id: UUID) -> List[ProductVariantResponse]:
+    async def variants(self, product_id: UUID) -> List[ProductVariantResponse]:
         """Get all variants for a product."""
         query = select(ProductVariant).options(
             selectinload(ProductVariant.images),
@@ -490,7 +490,7 @@ class ProductService:
 
         return [self._convert_variant_to_response(variant) for variant in variants]
 
-    async def get_all_variants(
+    async def all_variants(
         self,
         page: int = 1,
         limit: int = 10,
@@ -538,7 +538,7 @@ class ProductService:
             "pages": (total + limit - 1) // limit if total > 0 else 0
         }
 
-    async def create_product(self, product_data: ProductCreate, created_by: UUID) -> ProductResponse:
+    async def create(self, product_data: ProductCreate, created_by: UUID) -> ProductResponse:
         """Create a new product."""
         # Create product
         db_product = Product(
@@ -640,9 +640,9 @@ class ProductService:
         await self.db.commit()
 
         # Return the created product
-        return await self.get_product_by_id(db_product.id)
+        return await self.get(db_product.id)
 
-    async def update_product(
+    async def update(
         self,
         product_id: UUID,
         product_data: ProductUpdate,
@@ -866,9 +866,9 @@ class ProductService:
         logger.info(f"Product {product_id} updated successfully")
 
         # Return the updated product
-        return await self.get_product_by_id(product_id)
+        return await self.get(product_id)
 
-    async def delete_product(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
+    async def delete(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
         """Delete a product and all its associated data (variants, inventory, reviews, cart items, wishlist items)."""
         from models.commerce.orders import OrderItem
         

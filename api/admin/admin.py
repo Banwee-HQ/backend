@@ -252,7 +252,7 @@ async def get_admin_stats(
     """Get admin dashboard statistics with filters."""
     try:
         admin_service = AdminService(db)
-        stats = await admin_service.get_dashboard_stats(
+        stats = await admin_service.stats(
             date_from=date_from,
             date_to=date_to,
             status=status,
@@ -279,7 +279,7 @@ async def get_dashboard_data(
         admin_service = AdminService(db)
         
         # Get dashboard stats with date filters
-        stats = await admin_service.get_dashboard_stats(
+        stats = await admin_service.stats(
             date_from=date_from,
             date_to=date_to,
             status=status,
@@ -295,7 +295,7 @@ async def get_dashboard_data(
 
 # Order Management Routes
 @router.get("/orders")
-async def get_all_orders(
+async def list_all(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     order_status: Optional[str] = Query(None, alias="status"),
@@ -310,7 +310,7 @@ async def get_all_orders(
     """Get all orders (admin only)."""
     try:
         admin_service = AdminService(db)
-        orders = await admin_service.get_all_orders(page, limit, order_status, q, date_from, date_to, min_price, max_price)
+        orders = await admin_service.list_all(page, limit, order_status, q, date_from, date_to, min_price, max_price)
         return Response.success(data=orders)
     except Exception as e:
         raise APIException(
@@ -319,7 +319,7 @@ async def get_all_orders(
         )
 
 @router.get("/orders/{order_id}")
-async def get_order_by_id(
+async def get(
     order_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -327,7 +327,7 @@ async def get_order_by_id(
     """Get a single order by ID (admin only)."""
     try:
         admin_service = AdminService(db)
-        order = await admin_service.get_order_by_id(str(order_id))
+        order = await admin_service.get(str(order_id))
         if not order:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -418,7 +418,7 @@ async def get_all_refunds(
         )
 
 @router.get("/refunds/{refund_id}")
-async def get_refund_details(
+async def get(
     refund_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -538,7 +538,7 @@ async def ship_order(
     """Update an order with shipping information (admin only)."""
     try:
         order_service = OrderService(db)
-        order = await order_service.update_order_status(
+        order = await order_service.update_status(
             order_id=UUID(order_id),
             status="shipped",
             tracking_number=request.tracking_number,
@@ -560,7 +560,7 @@ async def ship_order(
         )
 
 @router.put("/orders/{order_id}/status")
-async def update_order_status(
+async def update_status(
     order_id: str,
     request: UpdateOrderStatusRequest,
     background_tasks: BackgroundTasks,
@@ -572,7 +572,7 @@ async def update_order_status(
         from services.commerce.orders import OrderService
         
         order_service = OrderService(db)
-        order = await order_service.update_order_status(
+        order = await order_service.update_status(
             order_id=UUID(order_id),
             status=request.status,
             tracking_number=request.tracking_number,
@@ -621,7 +621,7 @@ async def get_order_invoice_admin(
                 message="Order not found"
             )
         
-        invoice = await order_service.generate_invoice(order_id, order.user_id)
+        invoice = await order_service.invoice(order_id, order.user_id)
         
         # Check if invoice generation was successful
         if not invoice.get('success', False):
@@ -671,7 +671,7 @@ async def get_order_invoice_admin(
 
 # User Management Routes
 @router.get("/users")
-async def get_all_users(
+async def list_users(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     role: Optional[str] = Query(None),
@@ -684,7 +684,7 @@ async def get_all_users(
     """Get all users (admin only)."""
     try:
         admin_service = AdminService(db)
-        users = await admin_service.get_all_users(
+        users = await admin_service.list_users(
             page=page, 
             limit=limit, 
             role_filter=role, 
@@ -710,7 +710,7 @@ async def create_user_admin(
     """Create a new user (admin only)."""
     try:
         admin_service = AdminService(db)
-        user = await admin_service.create_user(user_data, background_tasks)
+        user = await admin_service.create(user_data, background_tasks)
         return Response.success(data=user, message="User created successfully")
     except APIException:
         raise
@@ -721,7 +721,7 @@ async def create_user_admin(
         )
 
 @router.get("/users/{user_id}")
-async def get_user_by_id(
+async def get_by_id(
     user_id: str,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -729,7 +729,7 @@ async def get_user_by_id(
     """Get a single user by ID (admin only)."""
     try:
         admin_service = AdminService(db)
-        user = await admin_service.get_user_by_id(user_id)
+        user = await admin_service.get_by_id(user_id)
         if not user:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -757,7 +757,7 @@ async def get_dashboard_data(
     try:
         admin_service = AdminService(db)
         # Get platform overview (includes all dashboard stats, recent users, orders, top products, metrics)
-        overview = await admin_service.get_platform_overview()
+        overview = await admin_service.overview()
         return Response.success(data=overview)
     except Exception as e:
         raise APIException(
@@ -766,7 +766,7 @@ async def get_dashboard_data(
         )
 
 @router.put("/users/{user_id}/status")
-async def update_user_status(
+async def update_status(
     user_id: str,
     is_active: bool,
     current_user: User = Depends(require_admin),
@@ -775,7 +775,7 @@ async def update_user_status(
     """Update user status (admin only)."""
     try:
         admin_service = AdminService(db)
-        user = await admin_service.update_user_status(user_id, is_active)
+        user = await admin_service.update_status(user_id, is_active)
         return Response.success(data=user, message="User status updated")
     except Exception as e:
         raise APIException(
@@ -784,7 +784,7 @@ async def update_user_status(
         )
 
 @router.delete("/users/{user_id}")
-async def delete_user(
+async def delete(
     user_id: str,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -792,7 +792,7 @@ async def delete_user(
     """Delete user (admin only)."""
     try:
         admin_service = AdminService(db)
-        await admin_service.delete_user(user_id)
+        await admin_service.delete(user_id)
         return Response.success(message="User deleted successfully")
     except Exception as e:
         raise APIException(
@@ -801,7 +801,7 @@ async def delete_user(
         )
 
 @router.post("/users/{user_id}/reset-password")
-async def reset_user_password(
+async def reset_password(
     user_id: str,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -809,7 +809,7 @@ async def reset_user_password(
     """Send password reset email to user (admin only)."""
     try:
         admin_service = AdminService(db)
-        result = await admin_service.reset_user_password(user_id)
+        result = await admin_service.reset_password(user_id)
         return Response.success(data=result, message="Password reset email sent successfully")
     except APIException:
         raise
@@ -828,7 +828,7 @@ async def deactivate_user_account(
     """Deactivate user account (admin only)."""
     try:
         admin_service = AdminService(db)
-        result = await admin_service.deactivate_user(user_id)
+        result = await admin_service.deactivate(user_id)
         return Response.success(data=result, message="User account deactivated successfully")
     except APIException:
         raise
@@ -847,7 +847,7 @@ async def activate_user_account(
     """Activate user account (admin only)."""
     try:
         admin_service = AdminService(db)
-        result = await admin_service.activate_user(user_id)
+        result = await admin_service.activate(user_id)
         return Response.success(data=result, message="User account activated successfully")
     except APIException:
         raise
@@ -872,7 +872,7 @@ async def get_all_products_admin(
     logger.debug(f"Fetching products: page={page}, limit={limit}, search={search}")
     try:
         admin_service = AdminService(db)
-        products = await admin_service.get_all_products(page, limit, search, category, status)
+        products = await admin_service.list_products(page, limit, search, category, status)
         logger.debug(f"Successfully fetched {len(products.get('data', []))} products")
         return Response.success(data=products)
     except Exception as e:
@@ -891,7 +891,7 @@ async def create_product_admin(
     """Create a new product (admin only)."""
     try:
         product_service = ProductService(db)
-        product = await product_service.create_product(product_data, current_user.id)
+        product = await product_service.create(product_data, current_user.id)
         logger.info(f"Admin {current_user.id} created product {product.id}")
         return Response.success(data=product, message="Product created successfully")
     except APIException:
@@ -991,7 +991,7 @@ async def update_product_admin(
     """Update a product (admin only)."""
     try:
         product_service = ProductService(db)
-        product = await product_service.update_product(product_id, product_data, current_user.id, is_admin=True)
+        product = await product_service.update(product_id, product_data, current_user.id, is_admin=True)
         return Response.success(data=product, message="Product updated successfully")
     except APIException:
         raise
@@ -1011,7 +1011,7 @@ async def delete_product_admin(
     """Delete a product and all its associated data (admin only)."""
     try:
         product_service = ProductService(db)
-        await product_service.delete_product(product_id, current_user.id, is_admin=True)
+        await product_service.delete(product_id, current_user.id, is_admin=True)
         return Response.success(message="Product deleted successfully")
     except HTTPException as e:
         raise APIException(status_code=e.status_code, message=e.detail)
@@ -1034,7 +1034,7 @@ async def get_all_variants_admin(
     """Get all variants (admin only)."""
     try:
         admin_service = AdminService(db)
-        variants = await admin_service.get_all_variants(page, limit, search, product_id)
+        variants = await admin_service.all_variants(page, limit, search, product_id)
         return Response.success(data=variants)
     except Exception as e:
         raise APIException(
@@ -1127,7 +1127,7 @@ async def export_orders(
         limit = 100
         
         while True:
-            orders_data = await admin_service.get_all_orders(
+            orders_data = await admin_service.list_all(
                 page=page, 
                 limit=limit,
                 order_status=order_status,
@@ -1251,7 +1251,7 @@ async def get_all_orders_admin(
     """Get all orders for admin management with advanced filtering."""
     try:
         order_service = OrderService(db)
-        orders = await order_service.get_all_orders(
+        orders = await order_service.list_all(
             page=page,
             limit=limit,
             customer_id=customer_id,
@@ -1280,7 +1280,7 @@ async def update_user_admin(
     """Update user details (admin only)."""
     try:
         admin_service = AdminService(db)
-        user = await admin_service.update_user(user_id, user_data)
+        user = await admin_service.update(user_id, user_data)
         return Response.success(data=user, message="User updated successfully")
     except Exception as e:
         raise APIException(
@@ -1697,14 +1697,14 @@ async def export_subscriptions_admin(
 
 # Shipping Methods Management Routes
 @router.get("/shipping-methods")
-async def get_all_shipping_methods(
+async def list_all(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all shipping methods (admin only)."""
     try:
         shipping_service = ShippingService(db)
-        methods = await shipping_service.get_all_shipping_methods()
+        methods = await shipping_service.list_all()
         
         # Convert to dict format for API response
         methods_data = []
@@ -1738,7 +1738,7 @@ async def get_shipping_method(
     """Get a single shipping method by ID (admin only)."""
     try:
         shipping_service = ShippingService(db)
-        method = await shipping_service.get_shipping_method_by_id(method_id)
+        method = await shipping_service.get(method_id)
         
         if not method:
             raise APIException(
@@ -1769,7 +1769,7 @@ async def get_shipping_method(
         )
 
 @router.post("/shipping-methods")
-async def create_shipping_method(
+async def create(
     method_data: ShippingMethodCreate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -1777,7 +1777,7 @@ async def create_shipping_method(
     """Create a new shipping method (admin only)."""
     try:
         shipping_service = ShippingService(db)
-        method = await shipping_service.create_shipping_method(method_data)
+        method = await shipping_service.create(method_data)
         
         method_response = {
             "id": str(method.id),
@@ -1802,7 +1802,7 @@ async def create_shipping_method(
         )
 
 @router.put("/shipping-methods/{method_id}")
-async def update_shipping_method(
+async def update(
     method_id: UUID,
     method_data: ShippingMethodUpdate,
     current_user: User = Depends(require_admin),
@@ -1811,7 +1811,7 @@ async def update_shipping_method(
     """Update a shipping method (admin only)."""
     try:
         shipping_service = ShippingService(db)
-        method = await shipping_service.update_shipping_method(method_id, method_data)
+        method = await shipping_service.update(method_id, method_data)
         
         if not method:
             raise APIException(
@@ -1842,7 +1842,7 @@ async def update_shipping_method(
         )
 
 @router.delete("/shipping-methods/{method_id}")
-async def delete_shipping_method(
+async def delete(
     method_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -1850,7 +1850,7 @@ async def delete_shipping_method(
     """Delete a shipping method (admin only)."""
     try:
         shipping_service = ShippingService(db)
-        success = await shipping_service.delete_shipping_method(method_id)
+        success = await shipping_service.delete(method_id)
         
         if not success:
             raise APIException(
@@ -2330,7 +2330,7 @@ async def sync_product_inventory(
         
         product_id_uuid = UUIDType(product_id)
         inventory_service = InventoryService(db)
-        result = await inventory_service.sync_product_availability_status(product_id_uuid)
+        result = await inventory_service.sync_availability(product_id_uuid)
         
         return Response.success(
             data=result,
@@ -2454,14 +2454,14 @@ async def get_admin_payments(
         )
 
 @router.post("/recalculate-ratings")
-async def recalculate_all_product_ratings(
+async def recalc_ratings(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Recalculate ratings for all products that have reviews"""
     try:
         review_service = ReviewService(db)
-        updated_count = await review_service.recalculate_all_product_ratings()
+        updated_count = await review_service.recalc_ratings()
         
         return Response.success(
             data={"updated_count": updated_count},

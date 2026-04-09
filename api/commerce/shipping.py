@@ -34,7 +34,7 @@ async def get_shipping_methods(
     """
     try:
         shipping_service = ShippingService(db)
-        methods = await shipping_service.get_all_active_shipping_methods()
+        methods = await shipping_service.list_active()
         
         # Convert SQLAlchemy objects to Pydantic models
         methods_data = [ShippingMethodInDB.model_validate(method) for method in methods]
@@ -60,7 +60,7 @@ async def get_shipping_method(
     """Get a specific shipping method by ID"""
     try:
         shipping_service = ShippingService(db)
-        method = await shipping_service.get_shipping_method_by_id(method_id)
+        method = await shipping_service.get(method_id)
         
         if not method:
             raise APIException(
@@ -87,7 +87,7 @@ async def get_shipping_method(
 
 
 @router.post("/methods", dependencies=[Depends(require_admin)])
-async def create_shipping_method(
+async def create(
     method_data: ShippingMethodCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -95,7 +95,7 @@ async def create_shipping_method(
     """Create a new shipping method (Admin only)"""
     try:
         shipping_service = ShippingService(db)
-        method = await shipping_service.create_shipping_method(method_data)
+        method = await shipping_service.create(method_data)
         
         # Convert SQLAlchemy object to Pydantic model
         method_data = ShippingMethodInDB.model_validate(method)
@@ -114,7 +114,7 @@ async def create_shipping_method(
 
 
 @router.put("/methods/{method_id}", dependencies=[Depends(require_admin)])
-async def update_shipping_method(
+async def update(
     method_id: UUID,
     method_data: ShippingMethodUpdate,
     current_user: User = Depends(get_current_user),
@@ -123,7 +123,7 @@ async def update_shipping_method(
     """Update a shipping method (Admin only)"""
     try:
         shipping_service = ShippingService(db)
-        method = await shipping_service.update_shipping_method(method_id, method_data)
+        method = await shipping_service.update(method_id, method_data)
         
         if not method:
             raise APIException(
@@ -150,7 +150,7 @@ async def update_shipping_method(
 
 
 @router.delete("/methods/{method_id}", dependencies=[Depends(require_admin)])
-async def delete_shipping_method(
+async def delete(
     method_id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -158,7 +158,7 @@ async def delete_shipping_method(
     """Delete a shipping method (Admin only)"""
     try:
         shipping_service = ShippingService(db)
-        success = await shipping_service.delete_shipping_method(method_id)
+        success = await shipping_service.delete(method_id)
         
         if not success:
             raise APIException(
@@ -188,7 +188,7 @@ class ShippingCalculateRequest(BaseModel):
 
 
 @router.post("/calculate")
-async def calculate_shipping_cost(
+async def calc_cost(
     body: ShippingCalculateRequest,
     db: AsyncSession = Depends(get_db)
 ):
@@ -196,7 +196,7 @@ async def calculate_shipping_cost(
     try:
         shipping_service = ShippingService(db)
         address = {'country': body.destination_country or 'US'}
-        cost = await shipping_service.calculate_shipping_cost(
+        cost = await shipping_service.calc_cost(
             cart_subtotal=body.order_amount,
             address=address,
             shipping_method_id=body.shipping_method_id

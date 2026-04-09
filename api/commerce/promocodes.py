@@ -16,7 +16,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.get("/")
-async def get_all_promocodes(
+async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     is_active: Optional[bool] = Query(None),
@@ -33,7 +33,7 @@ async def get_all_promocodes(
             )
         
         promocode_service = PromocodeService(db)
-        promocodes, total = await promocode_service.get_all_promocodes(
+        promocodes, total = await promocode_service.list(
             page=page, limit=limit, is_active=is_active
         )
         
@@ -74,7 +74,7 @@ async def get_all_promocodes(
 
 
 @router.get("/{promocode_id}")
-async def get_promocode_by_id(
+async def get(
     promocode_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -89,7 +89,7 @@ async def get_promocode_by_id(
             )
         
         promocode_service = PromocodeService(db)
-        promocode = await promocode_service.get_promocode_by_id(promocode_id)
+        promocode = await promocode_service.get(promocode_id)
         
         if not promocode:
             raise APIException(
@@ -123,7 +123,7 @@ async def get_promocode_by_id(
 
 
 @router.post("/")
-async def create_promocode(
+async def create(
     promocode_data: PromocodeCreate,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -138,7 +138,7 @@ async def create_promocode(
             )
         
         promocode_service = PromocodeService(db)
-        promocode = await promocode_service.create_promocode(promocode_data)
+        promocode = await promocode_service.create(promocode_data)
         
         return Response.success(data={
             "id": str(promocode.id),
@@ -166,7 +166,7 @@ async def create_promocode(
 
 
 @router.put("/{promocode_id}")
-async def update_promocode(
+async def update(
     promocode_id: UUID,
     promocode_data: PromocodeUpdate,
     current_user: User = Depends(get_current_auth_user),
@@ -182,7 +182,7 @@ async def update_promocode(
             )
         
         promocode_service = PromocodeService(db)
-        promocode = await promocode_service.update_promocode(promocode_id, promocode_data)
+        promocode = await promocode_service.update(promocode_id, promocode_data)
         
         return Response.success(data={
             "id": str(promocode.id),
@@ -210,7 +210,7 @@ async def update_promocode(
 
 
 @router.delete("/{promocode_id}")
-async def delete_promocode(
+async def delete(
     promocode_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -225,7 +225,7 @@ async def delete_promocode(
             )
         
         promocode_service = PromocodeService(db)
-        success = await promocode_service.delete_promocode(promocode_id)
+        success = await promocode_service.delete(promocode_id)
         
         if not success:
             raise APIException(

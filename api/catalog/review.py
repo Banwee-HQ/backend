@@ -17,7 +17,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     auth_service = AuthService(db)
-    return await auth_service.get_current_user(token)
+    return await auth_service.current_user(token)
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -38,12 +38,12 @@ async def get_reviews(
         
         if product_id:
             # Get reviews for specific product
-            reviews = await review_service.get_reviews_for_product(
+            reviews = await review_service.for_product(
                 product_id, page, limit, min_rating, max_rating, sort_by
             )
         else:
             # Get all reviews
-            reviews = await review_service.get_all_reviews(
+            reviews = await review_service.list(
                 page, limit, min_rating, max_rating, sort_by
             )
         
@@ -58,7 +58,7 @@ async def get_reviews(
 
 
 @router.post("/")
-async def create_review(
+async def create(
     review_data: ReviewCreate,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -71,7 +71,7 @@ async def create_review(
         print(f"Rating: {review_data.rating}")
         
         review_service = ReviewService(db)
-        review = await review_service.create_review(review_data, current_user.id)
+        review = await review_service.create(review_data, current_user.id)
         
         print(f"Review created: {review}")
         print(f"=== CREATE REVIEW SUCCESS ===\n")
@@ -100,7 +100,7 @@ async def get_review(
     """Get a specific review by ID."""
     try:
         review_service = ReviewService(db)
-        review = await review_service.get_review_by_id(review_id)
+        review = await review_service.get(review_id)
         if not review:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -117,7 +117,7 @@ async def get_review(
 
 
 @router.get("/product/{product_id}")
-async def get_reviews_for_product(
+async def for_product(
     product_id: UUID,
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
@@ -130,7 +130,7 @@ async def get_reviews_for_product(
     """Get all reviews for a specific product with optional filtering and sorting."""
     try:
         review_service = ReviewService(db)
-        reviews = await review_service.get_reviews_for_product(
+        reviews = await review_service.for_product(
             product_id, page, limit, min_rating, max_rating, sort_by
         )
         return Response.success(data=reviews)
@@ -144,7 +144,7 @@ async def get_reviews_for_product(
 
 
 @router.put("/{review_id}")
-async def update_review(
+async def update(
     review_id: UUID,
     review_data: ReviewUpdate,
     current_user: User = Depends(get_current_auth_user),
@@ -153,7 +153,7 @@ async def update_review(
     """Update an existing review."""
     try:
         review_service = ReviewService(db)
-        review = await review_service.update_review(review_id, review_data, current_user.id)
+        review = await review_service.update(review_id, review_data, current_user.id)
         return Response.success(data=review, message="Review updated successfully")
     except APIException:
         raise
@@ -165,7 +165,7 @@ async def update_review(
 
 
 @router.delete("/{review_id}")
-async def delete_review(
+async def delete(
     review_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -173,7 +173,7 @@ async def delete_review(
     """Delete a review."""
     try:
         review_service = ReviewService(db)
-        await review_service.delete_review(review_id, current_user.id)
+        await review_service.delete(review_id, current_user.id)
         return Response.success(message="Review deleted successfully")
     except APIException:
         raise

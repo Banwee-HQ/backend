@@ -24,7 +24,7 @@ async def get_current_user_wishlist(
     """Get current user's default wishlist"""
     try:
         wishlist_service = WishlistService(db)
-        result = await wishlist_service.get_wishlists(current_user.id, page=1, limit=20)
+        result = await wishlist_service.list(current_user.id, page=1, limit=20)
         wishlists = result.get("items", [])
         
         # Get default wishlist or first one
@@ -35,7 +35,7 @@ async def get_current_user_wishlist(
         if not default_wishlist:
             # Create default wishlist if none exists
             payload = WishlistCreate(name="My Wishlist", is_default=True)
-            default_wishlist = await wishlist_service.create_wishlist(current_user.id, payload)
+            default_wishlist = await wishlist_service.create(current_user.id, payload)
         
         # Return simple data
         wishlist_data = {
@@ -96,13 +96,13 @@ async def add_to_wishlist(
         wishlist_service = WishlistService(db)
         
         # Get or create default wishlist
-        result = await wishlist_service.get_wishlists(current_user.id, page=1, limit=20)
+        result = await wishlist_service.list(current_user.id, page=1, limit=20)
         wishlists = result.get("items", [])
         default_wishlist = next((w for w in wishlists if w.is_default), None)
         
         if not default_wishlist:
             payload = WishlistCreate(name="My Wishlist", is_default=True)
-            default_wishlist = await wishlist_service.create_wishlist(current_user.id, payload)
+            default_wishlist = await wishlist_service.create(current_user.id, payload)
         
         # Add item to wishlist
         item_payload = WishlistItemCreate(
@@ -111,7 +111,7 @@ async def add_to_wishlist(
             quantity=product_data.get("quantity", 1)
         )
         
-        item = await wishlist_service.add_item_to_wishlist(default_wishlist.id, item_payload)
+        item = await wishlist_service.add_item(default_wishlist.id, item_payload)
         
         return Response.success(
             data={
@@ -143,7 +143,7 @@ async def remove_from_wishlist(
         wishlist_service = WishlistService(db)
         
         # Get default wishlist
-        result = await wishlist_service.get_wishlists(current_user.id, page=1, limit=20)
+        result = await wishlist_service.list(current_user.id, page=1, limit=20)
         wishlists = result.get("items", [])
         default_wishlist = next((w for w in wishlists if w.is_default), None)
         
@@ -154,7 +154,7 @@ async def remove_from_wishlist(
             )
         
         # Remove item from wishlist
-        success = await wishlist_service.remove_item_from_wishlist(default_wishlist.id, product_id)
+        success = await wishlist_service.remove_item(default_wishlist.id, product_id)
         
         if not success:
             raise APIException(

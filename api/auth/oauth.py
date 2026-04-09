@@ -97,8 +97,8 @@ async def oauth_callback(
         }
 
         # Create access and refresh tokens
-        access_token = auth_service.create_access_token(token_data)
-        refresh_token = await auth_service.create_refresh_token(token_data)
+        access_token = auth_service.make_access_token(token_data)
+        refresh_token = await auth_service.make_refresh_token(token_data)
         
         return {
             "success": True,
@@ -217,7 +217,7 @@ async def find_or_create_user(db: AsyncSession, provider: str, user_info: dict) 
     )
     
     auth_service = AuthService(db)
-    user = await auth_service.create_user(user_data, background_tasks=None)
+    user = await auth_service.create(user_data, background_tasks=None)
     
     # Set avatar after user creation
     if avatar_url:

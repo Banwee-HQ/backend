@@ -26,7 +26,7 @@ class AdminService:
         self.db = db
 
     # --- User Management ---
-    async def get_all_users(
+    async def list_users(
         self,
         page: int = 1,
         limit: int = 20,
@@ -39,13 +39,13 @@ class AdminService:
         from services.auth.user import UserService
         
         user_service = UserService(self.db)
-        return await user_service.get_users(
+        return await user_service.list(
             page=page,
             limit=limit,
             role=role_filter
         )
 
-    async def update_user_role(
+    async def update_role(
         self,
         user_id: UUID,
         new_role: str,
@@ -66,7 +66,7 @@ class AdminService:
         
         return user
 
-    async def deactivate_user(
+    async def deactivate(
         self,
         user_id: UUID,
         admin_user_id: UUID
@@ -85,7 +85,7 @@ class AdminService:
         
         return user
 
-    async def get_dashboard_stats(
+    async def stats(
         self,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -442,12 +442,12 @@ class AdminService:
         
         return chart_data
 
-    async def get_platform_overview(self) -> Dict[str, Any]:
+    async def overview(self) -> Dict[str, Any]:
         """Get platform overview statistics"""
         try:
             
             # Get basic counts
-            stats = await self.get_dashboard_stats()
+            stats = await self.stats()
             
             # Additional platform metrics
             last_30_days = datetime.utcnow() - timedelta(days=30)
@@ -522,7 +522,7 @@ class AdminService:
                 "generated_at": datetime.utcnow().isoformat()
             }
 
-    async def get_all_orders(
+    async def list_all(
         self,
         page: int = 1,
         limit: int = 10,
@@ -537,7 +537,7 @@ class AdminService:
         from services.commerce.orders import OrderService
         
         order_service = OrderService(self.db)
-        return await order_service.get_all_orders(
+        return await order_service.list_all(
             page=page,
             limit=limit,
             order_status=order_status,
@@ -573,7 +573,7 @@ class AdminService:
         
         return subtotal
 
-    async def get_order_by_id(self, order_id: str) -> Optional[Dict[str, Any]]:
+    async def get(self, order_id: str) -> Optional[Dict[str, Any]]:
         """Get a single order by ID with items, product, variant, and variant images"""
         try:
             from models.commerce.orders import Order, OrderItem
@@ -689,7 +689,7 @@ class AdminService:
             return None
 
 
-    async def get_all_products(
+    async def list_products(
         self,
         page: int = 1,
         limit: int = 10,
@@ -701,7 +701,7 @@ class AdminService:
         from services.catalog.products import ProductService
         
         product_service = ProductService(self.db)
-        return await product_service.get_products(
+        return await product_service.list(
             page=page,
             limit=limit,
             search=search,
@@ -709,7 +709,7 @@ class AdminService:
             status=status
         )
 
-    async def get_all_variants(
+    async def all_variants(
         self,
         page: int = 1,
         limit: int = 10,
@@ -721,7 +721,7 @@ class AdminService:
         from uuid import UUID
         
         product_service = ProductService(self.db)
-        return await product_service.get_all_variants(
+        return await product_service.all_variants(
             page=page,
             limit=limit,
             search=search,
@@ -729,14 +729,14 @@ class AdminService:
         )
 
     # User management methods
-    async def create_user(self, user_data, background_tasks) -> Dict[str, Any]:
+    async def create(self, user_data, background_tasks) -> Dict[str, Any]:
         """Create a new user (admin only)"""
         try:
             from services.auth.auth import AuthService
             
             # Use AuthService to create user
             auth_service = AuthService()
-            user = await auth_service.create_user(user_data, self.db, background_tasks)
+            user = await auth_service.create(user_data, self.db, background_tasks)
             
             return {
                 "id": str(user.id),
@@ -754,7 +754,7 @@ class AdminService:
                 detail=f"Failed to create user: {str(e)}"
             )
 
-    async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get a user by ID"""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
@@ -776,7 +776,7 @@ class AdminService:
         except Exception:
             return None
 
-    async def update_user_status(self, user_id: str, is_active: bool) -> Dict[str, Any]:
+    async def update_status(self, user_id: str, is_active: bool) -> Dict[str, Any]:
         """Update user status (admin only)"""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
@@ -805,7 +805,7 @@ class AdminService:
                 detail=f"Failed to update user status: {str(e)}"
             )
 
-    async def delete_user(self, user_id: str) -> bool:
+    async def delete(self, user_id: str) -> bool:
         """Delete user (admin only)"""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
@@ -829,7 +829,7 @@ class AdminService:
                 detail=f"Failed to delete user: {str(e)}"
             )
 
-    async def reset_user_password(self, user_id: str) -> Dict[str, Any]:
+    async def reset_password(self, user_id: str) -> Dict[str, Any]:
         """Send password reset email to user (admin only)"""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
@@ -854,7 +854,7 @@ class AdminService:
                 detail=f"Failed to send password reset email: {str(e)}"
             )
 
-    async def deactivate_user(self, user_id: str) -> Dict[str, Any]:
+    async def deactivate(self, user_id: str) -> Dict[str, Any]:
         """Deactivate user account (admin only)"""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
@@ -881,7 +881,7 @@ class AdminService:
                 detail=f"Failed to deactivate user: {str(e)}"
             )
 
-    async def activate_user(self, user_id: str) -> Dict[str, Any]:
+    async def activate(self, user_id: str) -> Dict[str, Any]:
         """Activate user account (admin only)"""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))

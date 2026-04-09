@@ -17,7 +17,7 @@ class ReviewService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_review(self, review_data: ReviewCreate, user_id: UUID):
+    async def create(self, review_data: ReviewCreate, user_id: UUID):
         # Check if product exists
         product = await self.db.get(Product, review_data.product_id)
         if not product:
@@ -90,7 +90,7 @@ class ReviewService:
         
         return sort_field, sort_order
 
-    async def get_all_reviews(self, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
+    async def list(self, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
         """Get all reviews with pagination and filtering"""
         offset = (page - 1) * limit
         query = select(Review).options(
@@ -125,7 +125,7 @@ class ReviewService:
             "data": [ReviewResponse.from_orm(r) for r in reviews]
         }
 
-    async def get_reviews_for_product(self, product_id: UUID, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
+    async def for_product(self, product_id: UUID, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
         offset = (page - 1) * limit
         query = select(Review).where(Review.product_id == product_id).options(
             selectinload(Review.user).load_only(
@@ -158,12 +158,12 @@ class ReviewService:
             "data": [ReviewResponse.from_orm(r) for r in reviews]
         }
 
-    async def get_review_by_id(self, review_id: UUID) -> Optional[Review]:
+    async def get(self, review_id: UUID) -> Optional[Review]:
         result = await self.db.execute(select(Review).where(Review.id == review_id))
         return result.scalars().first()
 
-    async def update_review(self, review_id: UUID, review_data: ReviewUpdate, user_id: UUID) -> Review:
-        review = await self.get_review_by_id(review_id)
+    async def update(self, review_id: UUID, review_data: ReviewUpdate, user_id: UUID) -> Review:
+        review = await self.get(review_id)
         if not review:
             raise APIException(status_code=404, message="Review not found")
 
@@ -182,8 +182,8 @@ class ReviewService:
 
         return ReviewResponse.from_orm(review)
 
-    async def delete_review(self, review_id: UUID, user_id: UUID):
-        review = await self.get_review_by_id(review_id)
+    async def delete(self, review_id: UUID, user_id: UUID):
+        review = await self.get(review_id)
         if not review:
             raise APIException(status_code=404, message="Review not found")
 
@@ -226,7 +226,7 @@ class ReviewService:
             traceback.print_exc()
             raise
 
-    async def recalculate_all_product_ratings(self):
+    async def recalc_ratings(self):
         """Recalculate ratings for all products that have reviews"""
         # Get all products that have reviews
         products_with_reviews = await self.db.execute(

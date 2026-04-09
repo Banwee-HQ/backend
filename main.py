@@ -149,6 +149,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=os.getenv("ENVIRONMENT", "local") == "local",
+        reload=true,
         log_level="info"
     )

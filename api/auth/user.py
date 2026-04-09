@@ -114,7 +114,7 @@ async def update_user_profile(
     try:
         from schemas.auth.user import UserResponse
         service = UserService(db)
-        updated_user = await service.update_user(current_user.id, payload)
+        updated_user = await service.update(current_user.id, payload)
         if not updated_user:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND, 
@@ -155,7 +155,7 @@ async def update_user_profile(
 
 
 @router.get("/search")
-async def search_users(
+async def search(
     q: str = Query(..., min_length=2, description="Search query (minimum 2 characters)"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     role: Optional[str] = Query(None, regex="^(Customer|Admin)$", description="Filter by user role"),
@@ -167,7 +167,7 @@ async def search_users(
     try:
         user_service = UserService(db)
         
-        users = await user_service.search_users(
+        users = await user_service.search(
             query=q,
             limit=limit,
             role_filter=role
@@ -200,7 +200,7 @@ async def list_users(
     """List users with optional filtering and pagination."""
     try:
         service = UserService(db)
-        users = await service.get_users(page=page, limit=limit, role=role, query=q)
+        users = await service.list(page=page, limit=limit, role=role, query=q)
         if isinstance(users, dict):
             users["search_mode"] = "basic"
         return Response.success(data=users)
@@ -212,9 +212,9 @@ async def list_users(
 
 
 @router.get("/{user_id}")
-async def get_user(user_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get(user_id: UUID, db: AsyncSession = Depends(get_db)):
     service = UserService(db)
-    user = await service.get_user(user_id)
+    user = await service.get(user_id)
     if not user:
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND, message="User not found")
@@ -222,16 +222,16 @@ async def get_user(user_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/")
-async def create_user(payload: UserCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def create(payload: UserCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     service = UserService(db)
-    user = await service.create_user(payload, background_tasks)
+    user = await service.create(payload, background_tasks)
     return Response.success(data=user, code=status.HTTP_201_CREATED)
 
 
 @router.put("/{user_id}")
-async def update_user(user_id: UUID, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
+async def update(user_id: UUID, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
     service = UserService(db)
-    updated_user = await service.update_user(user_id, payload)
+    updated_user = await service.update(user_id, payload)
     if not updated_user:
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND, message="User not found")
@@ -239,9 +239,9 @@ async def update_user(user_id: UUID, payload: UserUpdate, db: AsyncSession = Dep
 
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete(user_id: UUID, db: AsyncSession = Depends(get_db)):
     service = UserService(db)
-    deleted = await service.delete_user(user_id)
+    deleted = await service.delete(user_id)
     if not deleted:
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND, message="User not found")
@@ -259,7 +259,7 @@ async def list_my_addresses(
     db: AsyncSession = Depends(get_db)
 ):
     service = AddressService(db)
-    addresses = await service.get_user_addresses(current_user.id)
+    addresses = await service.list(current_user.id)
     # Convert SQLAlchemy models to Pydantic models
     return Response.success(data=[AddressResponse.from_orm(address) for address in addresses])
 
@@ -267,12 +267,12 @@ async def list_my_addresses(
 @router.get("/{user_id}/addresses")
 async def list_addresses(user_id: UUID, db: AsyncSession = Depends(get_db)):
     service = AddressService(db)
-    addresses = await service.get_user_addresses(user_id)
+    addresses = await service.list(user_id)
     return Response.success(data=addresses)
 
 
 @router.get("/addresses/{address_id}")
-async def get_address(
+async def get(
     address_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -306,7 +306,7 @@ async def create_user_address(
     """Create address for current user (requires authentication)"""
     try:
         service = AddressService(db)
-        address = await service.create_address(user_id=current_user.id, **payload.model_dump())
+        address = await service.create(user_id=current_user.id, **payload.model_dump())
         return Response.success(
             data=address,
             message="Address created successfully",
@@ -330,7 +330,7 @@ async def update_user_address(
     """Update address for current user (requires authentication)"""
     try:
         service = AddressService(db)
-        updated = await service.update_address(address_id, current_user.id, **payload.model_dump(exclude_unset=True))
+        updated = await service.update(address_id, current_user.id, **payload.model_dump(exclude_unset=True))
         if not updated:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -363,7 +363,7 @@ async def delete_user_address(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Address not found"
             )
-        deleted = await service.delete_address(address_id)
+        deleted = await service.delete(address_id)
         if not deleted:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -430,7 +430,7 @@ async def get_user_wishlists(
     try:
         from services.catalog.wishlist import WishlistService
         wishlist_service = WishlistService(db)
-        wishlists = await wishlist_service.get_wishlists(user_id)
+        wishlists = await wishlist_service.list(user_id)
         data = [_serialize_wishlist(w) for w in wishlists]
         return Response.success(data=data)
     except APIException:
@@ -464,7 +464,7 @@ async def create_user_wishlist(
             name=data.get("name", "My Wishlist"),
             is_default=data.get("is_default", False),
         )
-        wishlist = await wishlist_service.create_wishlist(user_id, payload)
+        wishlist = await wishlist_service.create(user_id, payload)
         return Response.success(data=_serialize_wishlist(wishlist), message="Wishlist created")
     except APIException:
         raise
@@ -525,7 +525,7 @@ async def add_item_to_user_wishlist(
             variant_id=variant_uuid,
             quantity=data.get("quantity", 1),
         )
-        item = await wishlist_service.add_item_to_wishlist(wishlist_id, payload)
+        item = await wishlist_service.add_item(wishlist_id, payload)
         return Response.success(
             data={
                 "id": str(item.id),
@@ -563,7 +563,7 @@ async def remove_item_from_user_wishlist(
     try:
         from services.catalog.wishlist import WishlistService
         wishlist_service = WishlistService(db)
-        success = await wishlist_service.remove_item_from_wishlist(wishlist_id, item_id)
+        success = await wishlist_service.remove_item(wishlist_id, item_id)
         if not success:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -596,7 +596,7 @@ async def set_user_wishlist_default(
     try:
         from services.catalog.wishlist import WishlistService
         wishlist_service = WishlistService(db)
-        updated = await wishlist_service.set_default_wishlist(user_id, wishlist_id)
+        updated = await wishlist_service.set_default(user_id, wishlist_id)
         if not updated:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,

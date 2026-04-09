@@ -19,7 +19,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     auth_service = AuthService(db)
-    return await auth_service.get_current_user(token)
+    return await auth_service.current_user(token)
 
 # Hardcoded categories since we moved to string-based system
 CATEGORIES = [
@@ -48,11 +48,11 @@ async def get_home_data(
         product_service = ProductService(db)
         
         # Fetch featured products (4 items)
-        featured = await product_service.get_featured_products(limit=4)
+        featured = await product_service.featured(limit=4)
         
         # Fetch popular/recent products (20 items for filtering by category)
         try:
-            popular_result = await product_service.get_products(
+            popular_result = await product_service.list(
                 page=1,
                 limit=20,
                 filters={},
@@ -66,7 +66,7 @@ async def get_home_data(
         
         # Fetch products on sale for deals section (10 items)
         try:
-            deals_result = await product_service.get_products(
+            deals_result = await product_service.list(
                 page=1,
                 limit=10,
                 filters={"sale": True},
@@ -103,7 +103,7 @@ async def get_home_data(
 
 
 @router.get("/")
-async def get_products(
+async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     q: Optional[str] = Query(None, description="Search query for filtering"),
@@ -137,7 +137,7 @@ async def get_products(
             "sale": sale
         }
 
-        result = await product_service.get_products(
+        result = await product_service.list(
             page=page,
             limit=limit,
             filters=filters,
@@ -154,7 +154,7 @@ async def get_products(
         )
 
 @router.get("/{product_id}/recommendations")
-async def get_recommended_products(
+async def recommended(
     product_id: UUID,
     limit: int = Query(4, ge=1, le=20),
     db: AsyncSession = Depends(get_db)
@@ -162,7 +162,7 @@ async def get_recommended_products(
     """Get recommended products based on a product."""
     try:
         product_service = ProductService(db)
-        products = await product_service.get_recommended_products(product_id, limit)
+        products = await product_service.recommended(product_id, limit)
         return Response.success(data=products)
     except Exception as e:
         raise APIException(
@@ -172,14 +172,14 @@ async def get_recommended_products(
 
 
 @router.get("/{product_id}/variants")
-async def get_product_variants(
+async def variants(
     product_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
     """Get all variants for a product."""
     try:
         product_service = ProductService(db)
-        variants = await product_service.get_product_variants(product_id)
+        variants = await product_service.variants(product_id)
         return Response.success(data=variants)
     except Exception as e:
         raise APIException(
@@ -196,7 +196,7 @@ async def get_variant(
     """Get a specific product variant by ID."""
     try:
         product_service = ProductService(db)
-        variant = await product_service.get_variant_by_id(variant_id)
+        variant = await product_service.get_variant(variant_id)
         if not variant:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -223,7 +223,7 @@ async def get_product(
     try:
         logger.debug(f"Fetching product with ID: {product_id}")
         product_service = ProductService(db)
-        product = await product_service.get_product_by_id(product_id)
+        product = await product_service.get(product_id)
         if not product:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -242,7 +242,7 @@ async def get_product(
 
 
 @router.post("/")
-async def create_product(
+async def create(
     product_data: ProductCreate,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -257,7 +257,7 @@ async def create_product(
             )
 
         product_service = ProductService(db)
-        product = await product_service.create_product(product_data, current_user.id)
+        product = await product_service.create(product_data, current_user.id)
         return Response(success=True, data=product, message="Product created successfully")
     except APIException:
         raise
@@ -269,7 +269,7 @@ async def create_product(
 
 
 @router.put("/{product_id}")
-async def update_product(
+async def update(
     product_id: UUID,
     product_data: ProductUpdate,
     current_user: User = Depends(get_current_auth_user),
@@ -278,7 +278,7 @@ async def update_product(
     """Update a product (admin only)."""
     try:
         product_service = ProductService(db)
-        product = await product_service.update_product(product_id, product_data, current_user.id)
+        product = await product_service.update(product_id, product_data, current_user.id)
         return Response(success=True, data=product, message="Product updated successfully")
     except APIException:
         raise
@@ -290,7 +290,7 @@ async def update_product(
 
 
 @router.delete("/{product_id}")
-async def delete_product(
+async def delete(
     product_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -298,7 +298,7 @@ async def delete_product(
     """Delete a product (admin only)."""
     try:
         product_service = ProductService(db)
-        await product_service.delete_product(product_id, current_user.id)
+        await product_service.delete(product_id, current_user.id)
         return Response(success=True, message="Product deleted successfully")
     except APIException:
         raise

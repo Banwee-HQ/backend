@@ -33,7 +33,7 @@ class AuthService:
         """Hash a password."""
         return self.password_manager.hash_password(password)
 
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    def make_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token."""
         to_encode = data.copy()
         if expires_delta:
@@ -52,7 +52,7 @@ class AuthService:
             to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
         return encoded_jwt
 
-    async def create_refresh_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    async def make_refresh_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT refresh token."""
         to_encode = data.copy()
         if expires_delta:
@@ -105,7 +105,7 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    async def refresh_access_token(self, refresh_token: str) -> Dict[str, str]:
+    async def refresh_token(self, refresh_token: str) -> Dict[str, str]:
         """Generate new access token using refresh token."""
         try:
             # Verify refresh token
@@ -120,7 +120,7 @@ class AuthService:
                 )
             
             # Get user from token
-            user = await self.get_user_by_id(user_id_from_token)
+            user = await self.get_by_id(user_id_from_token)
             if not user or not user.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -135,7 +135,7 @@ class AuthService:
                 "role": getattr(user, 'role', 'user')
             }
             
-            new_access_token = self.create_access_token(access_token_data)
+            new_access_token = self.make_access_token(access_token_data)
             
             return {
                 "access_token": new_access_token,
@@ -150,27 +150,27 @@ class AuthService:
                 detail="Could not refresh token"
             )
 
-    async def revoke_refresh_token(self, refresh_token: str) -> bool:
+    async def revoke_token(self, refresh_token: str) -> bool:
         """Revoke a refresh token (add to blacklist)."""
         # With stateless JWTs, we can't truly revoke a token.
         # This method can be used to clear the token on the client side.
         return True
 
-    async def get_user_by_id(self, user_id: str) -> Optional[User]:
+    async def get_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID."""
         result = await self.db.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    async def get_by_email(self, email: str) -> Optional[User]:
         """Get user by email."""
         result = await self.db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
     
-    async def create_user(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> UserResponse:
+    async def create(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> UserResponse:
         """Create a new user."""
         # Check if user already exists
-        existing_user = await self.get_user_by_email(user_data.email)
+        existing_user = await self.get_by_email(user_data.email)
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -179,16 +179,16 @@ class AuthService:
 
         user_service = UserService(self.db)
         print(user_data, '---')
-        new_user = await user_service.create_user(user_data, background_tasks)
+        new_user = await user_service.create(user_data, background_tasks)
 
 
 
         return UserResponse.from_orm(new_user)
 
-    async def authenticate_user(self, email: str, password: str, background_tasks: BackgroundTasks) -> AuthResponse:
+    async def authenticate(self, email: str, password: str, background_tasks: BackgroundTasks) -> AuthResponse:
         """Authenticate user and return JWT tokens."""
         print(f"Attempting to authenticate user: {email}")
-        user = await self.get_user_by_email(email)
+        user = await self.get_by_email(email)
         if not user:
             print(f"User {email} not found.")
             raise HTTPException(
@@ -232,8 +232,8 @@ class AuthService:
         }
 
         # Create access and refresh tokens
-        access_token = self.create_access_token(token_data)
-        refresh_token = await self.create_refresh_token(token_data)
+        access_token = self.make_access_token(token_data)
+        refresh_token = await self.make_refresh_token(token_data)
         
         print(f"Generated tokens for user {user.email}")
 
@@ -257,7 +257,7 @@ class AuthService:
         
         return auth_response
 
-    async def get_current_user(
+    async def current_user(
         self,
         token: str
     ) -> User:
@@ -318,9 +318,9 @@ class AuthService:
 
 
 
-    async def send_password_reset(self, email: str, background_tasks: BackgroundTasks):
+    async def send_reset(self, email: str, background_tasks: BackgroundTasks):
         """Send password reset email"""
-        user = await self.get_user_by_email(email)
+        user = await self.get_by_email(email)
         if not user:
             # Return silently for security (don't reveal if email exists)
             logger.info(f"Password reset requested for non-existent email: {email}")
@@ -358,7 +358,7 @@ class AuthService:
         except Exception as e:
             logger.error(f"Failed to queue password reset email for {user.email}. Error: {e}")
 
-    async def reset_password(self, token: str, new_password: str):
+    async def reset_pwd(self, token: str, new_password: str):
         """Reset password using reset token"""
         # Find user by reset token
         result = await self.db.execute(

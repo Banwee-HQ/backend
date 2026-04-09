@@ -137,7 +137,7 @@ async def update_cart_item(
         
         # Use the update_cart_item_quantity method which handles cart_item_id
         logger.info(f"Calling update_cart_item_quantity...")
-        result = await cart_service.update_cart_item_quantity(
+        result = await cart_service.update_item(
             user_id=current_user.id,
             cart_item_id=cart_item_id,
             quantity=request.quantity
@@ -174,7 +174,7 @@ async def remove_from_cart(
     try:
         cart_service = CartService(db)
         
-        cart = await cart_service.remove_from_cart_by_item_id(
+        cart = await cart_service.remove_item(
             user_id=current_user.id,
             cart_item_id=cart_item_id
         )
@@ -190,7 +190,7 @@ async def remove_from_cart(
 
 
 @router.post("/promocode")
-async def apply_promocode(
+async def apply_promo(
     request: ApplyPromocodeRequest,
     req: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -198,7 +198,7 @@ async def apply_promocode(
 ):
     try:
         cart_service = CartService(db)
-        result = await cart_service.apply_promocode(
+        result = await cart_service.apply_promo(
             user_id=current_user.id,
             code=request.code,
             session_id=None
@@ -210,14 +210,14 @@ async def apply_promocode(
 
 
 @router.delete("/promocode")
-async def remove_promocode(
+async def remove_promo(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
         cart_service = CartService(db)
-        result = await cart_service.remove_promocode(
+        result = await cart_service.remove_promo(
             user_id=current_user.id,
             session_id=None
         )
@@ -228,14 +228,14 @@ async def remove_promocode(
 
 
 @router.get("/count")
-async def get_cart_item_count(
+async def item_count(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
         cart_service = CartService(db)
-        count = await cart_service.get_cart_item_count(
+        count = await cart_service.item_count(
             user_id=current_user.id,
             session_id=None
         )
@@ -315,7 +315,7 @@ async def validate_cart(
 
 
 @router.post("/shipping-options")
-async def get_shipping_options(
+async def shipping_options(
     address: dict,
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -323,7 +323,7 @@ async def get_shipping_options(
 ):
     try:
         cart_service = CartService(db)
-        result = await cart_service.get_shipping_options(
+        result = await cart_service.shipping_options(
             user_id=current_user.id,
             address=address,
             session_id=None
@@ -335,7 +335,7 @@ async def get_shipping_options(
 
 
 @router.post("/calculate")
-async def calculate_totals(
+async def calc_totals(
     data: dict,
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -343,7 +343,7 @@ async def calculate_totals(
 ):
     try:
         cart_service = CartService(db)
-        result = await cart_service.calculate_totals(
+        result = await cart_service.calc_totals(
             user_id=current_user.id,
             data=data,
             session_id=None
@@ -377,14 +377,14 @@ async def clear_cart(
 
 
 @router.get("/checkout-summary")
-async def get_checkout_summary(
+async def checkout_summary(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
         cart_service = CartService(db)
-        result = await cart_service.get_checkout_summary(
+        result = await cart_service.checkout_summary(
             user_id=current_user.id,
             session_id=None
         )
@@ -395,7 +395,7 @@ async def get_checkout_summary(
 
 
 @router.post("/items/{item_id}/save-for-later")
-async def save_item_for_later(
+async def save_later(
     item_id: UUID,
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -404,7 +404,7 @@ async def save_item_for_later(
     """Save cart item for later (move to saved items)"""
     try:
         cart_service = CartService(db)
-        result = await cart_service.save_item_for_later(
+        result = await cart_service.save_later(
             user_id=current_user.id,
             item_id=item_id,
             session_id=None
@@ -418,7 +418,7 @@ async def save_item_for_later(
 
 
 @router.post("/items/{item_id}/move-to-cart")
-async def move_item_to_cart(
+async def move_to_cart(
     item_id: UUID,
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -427,7 +427,7 @@ async def move_item_to_cart(
     """Move saved item back to cart"""
     try:
         cart_service = CartService(db)
-        result = await cart_service.move_item_to_cart(
+        result = await cart_service.move_to_cart(
             user_id=current_user.id,
             item_id=item_id,
             session_id=None
@@ -441,7 +441,7 @@ async def move_item_to_cart(
 
 
 @router.get("/saved-items")
-async def get_saved_items(
+async def saved_items(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -449,7 +449,7 @@ async def get_saved_items(
     """Get all saved items for later"""
     try:
         cart_service = CartService(db)
-        result = await cart_service.get_saved_items(
+        result = await cart_service.saved_items(
             user_id=current_user.id,
             session_id=None
         )

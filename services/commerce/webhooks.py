@@ -211,7 +211,7 @@ class WebhookService:
                     failure_handler = PaymentFailureHandler(self.db)
                     
                     stripe_error = payment_intent_data.get("last_payment_error", {})
-                    failure_result = await failure_handler.handle_payment_failure(
+                    failure_result = await failure_handler.handle_failure(
                         payment_intent_id=payment_intent.id,
                         stripe_error=stripe_error,
                         failure_context={

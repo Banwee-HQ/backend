@@ -109,7 +109,7 @@ class OrderService:
         self.shipping_service = ShippingService(db)
         self.discount_engine = DiscountEngine(db)
 
-    async def calculate_comprehensive_pricing(
+    async def calc_pricing(
         self,
         cart_items: List[CartItem],
         shipping_address: Address,
@@ -147,7 +147,7 @@ class OrderService:
         
         # Step 2: Calculate shipping cost
         shipping_cost = Decimal('0.00')
-        shipping_method = await self.shipping_service.get_shipping_method_by_id(shipping_method_id)
+        shipping_method = await self.shipping_service.get(shipping_method_id)
         if shipping_method and shipping_method.is_active:
             shipping_cost = Decimal(str(shipping_method.price))
             logger.info(f"Shipping cost: ${shipping_cost} ({shipping_method.name})")
@@ -240,7 +240,7 @@ class OrderService:
             breakdown=breakdown
         )
 
-    async def validate_checkout_requirements(
+    async def validate_checkout(
         self,
         user_id: UUID,
         request: CheckoutRequest
@@ -303,7 +303,7 @@ class OrderService:
                 return validation_result
             
             # Step 3: Validate shipping method
-            shipping_method = await self.shipping_service.get_shipping_method_by_id(request.shipping_method_id)
+            shipping_method = await self.shipping_service.get(request.shipping_method_id)
             if not shipping_method or not shipping_method.is_active:
                 validation_result['valid'] = False
                 validation_result['can_proceed'] = False
@@ -331,7 +331,7 @@ class OrderService:
                 return validation_result
             
             # Step 5: Calculate comprehensive pricing
-            pricing = await self.calculate_comprehensive_pricing(
+            pricing = await self.calc_pricing(
                 cart.items,
                 shipping_address,
                 request.shipping_method_id,
@@ -371,7 +371,7 @@ class OrderService:
             })
             return validation_result
 
-    async def place_order_with_comprehensive_validation(
+    async def place(
         self, 
         user_id: UUID, 
         request: CheckoutRequest, 
@@ -384,7 +384,7 @@ class OrderService:
         logger.info(f"Processing order for user {user_id}")
         
         # Step 1: Comprehensive validation
-        validation_result = await self.validate_checkout_requirements(user_id, request)
+        validation_result = await self.validate_checkout(user_id, request)
         
         if not validation_result['can_proceed']:
             error_messages = [error['message'] for error in validation_result['errors']]
@@ -446,7 +446,7 @@ class OrderService:
 
             logger.info(f"Processing payment for order {order_number}, amount: {pricing['total']}")
             
-            payment_result = await payment_service.process_payment_idempotent(
+            payment_result = await payment_service.process_idempotent(
                 user_id=user_id,
                 order_id=temp_order_id,  # Use temp ID since order doesn't exist yet
                 amount=pricing['total'],
@@ -606,9 +606,9 @@ class OrderService:
             )
         
         # STEP 3: Proceed with regular order placement
-        return await self.place_order_with_idempotency(user_id, request, background_tasks, idempotency_key)
+        return await self.place_idempotent(user_id, request, background_tasks, idempotency_key)
 
-    async def place_order_with_idempotency(
+    async def place_idempotent(
         self, 
         user_id: UUID, 
         request: CheckoutRequest, 
@@ -623,7 +623,7 @@ class OrderService:
         if not idempotency_key:
             # Create deterministic key based on user, cart state, and timestamp
             cart_service = CartService(self.db)
-            cart = await cart_service.get_or_create_cart(user_id)
+            cart = await cart_service.get_or_create(user_id)
             
             # Create hash of cart contents + user + shipping details
             cart_hash = self._generate_cart_hash(cart, request)
@@ -640,9 +640,9 @@ class OrderService:
             return await self._convert_order_to_response(existing)
         
         # If no existing order, delegate to the main place_order method
-        return await self.place_order(user_id, request, background_tasks, idempotency_key)
+        return await self.place_simple(user_id, request, background_tasks, idempotency_key)
     
-    async def request_refund(
+    async def request(
         self, 
         order_id: UUID, 
         user_id: UUID, 
@@ -663,7 +663,7 @@ class OrderService:
             refund_request = RefundRequest(**refund_data)
             
             # Process refund request
-            refund_response = await refund_service.request_refund(
+            refund_response = await refund_service.request(
                 user_id=user_id,
                 order_id=order_id,
                 refund_request=refund_request
@@ -678,7 +678,7 @@ class OrderService:
                 detail=f"Failed to process refund request: {str(e)}"
             )
 
-    async def place_order(
+    async def place_simple(
         self, 
         user_id: UUID, 
         request: CheckoutRequest, 
@@ -692,7 +692,7 @@ class OrderService:
         # Generate idempotency key if not provided
         if not idempotency_key:
             cart_service = CartService(self.db)
-            cart = await cart_service.get_or_create_cart(user_id)
+            cart = await cart_service.get_or_create(user_id)
             cart_hash = self._generate_cart_hash(cart, request)
             idempotency_key = f"order_{user_id}_{cart_hash}"
         
@@ -795,7 +795,7 @@ class OrderService:
                 # STEP 3: CHECK STOCK AVAILABILITY (optimized for Checkout)
                 stock_validation_results = []
                 for item in active_items:
-                    stock_check = await self.inventory_service.check_stock_availability(
+                    stock_check = await self.inventory_service.check_stock(
                         variant_id=item.variant.id,
                         quantity=item.quantity
                     )
@@ -982,7 +982,7 @@ class OrderService:
                 for validated_item in validated_cart_items:
                     # Atomically check and decrement stock in single operation
                     try:
-                        stock_result = await self.inventory_service.decrement_stock_on_purchase(
+                        stock_result = await self.inventory_service.decrement(
                             variant_id=validated_item["variant_id"],
                             quantity=validated_item["quantity"],
                             location_id=None,  # Will be determined by service
@@ -1018,7 +1018,7 @@ class OrderService:
                 payment_idempotency_key = f"payment_{order.id}_{idempotency_key}" if idempotency_key else None
                 
                 try:
-                    payment_result = await payment_service.process_payment_idempotent(
+                    payment_result = await payment_service.process_idempotent(
                         user_id=user_id,
                         order_id=order.id,
                         amount=final_total["total_amount"],  # Use backend-calculated total
@@ -1035,7 +1035,7 @@ class OrderService:
                         # Restore inventory for all items
                         for validated_item in validated_cart_items:
                             try:
-                                await self.inventory_service.increment_stock_on_cancellation(
+                                await self.inventory_service.increment(
                                     variant_id=validated_item["variant_id"],
                                     quantity=validated_item["quantity"],
                                     location_id=None,  # Will be determined by service
@@ -1061,7 +1061,7 @@ class OrderService:
                     # Restore inventory for all items
                     for validated_item in validated_cart_items:
                         try:
-                            await self.inventory_service.increment_stock_on_cancellation(
+                            await self.inventory_service.increment(
                                 variant_id=validated_item["variant_id"],
                                 quantity=validated_item["quantity"],
                                 location_id=None,
@@ -1154,7 +1154,7 @@ class OrderService:
 
         return await self._format_order_response(order)
 
-    async def get_user_orders(self, user_id: UUID, page: int = 1, limit: int = 10, status_filter: Optional[str] = None) -> Dict[str, Any]:
+    async def list(self, user_id: UUID, page: int = 1, limit: int = 10, status_filter: Optional[str] = None) -> Dict[str, Any]:
         """Get paginated list of user's orders"""
         try:
             query = select(Order).where(Order.user_id == user_id).options(
@@ -1216,7 +1216,7 @@ class OrderService:
                 }
             )
 
-    async def get_order_by_id(self, order_id: UUID, user_id: UUID) -> Optional[OrderResponse]:
+    async def get(self, order_id: UUID, user_id: UUID) -> Optional[OrderResponse]:
         """Get a specific order by ID"""
         
         query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).options(
@@ -1232,7 +1232,7 @@ class OrderService:
 
         return await self._format_order_response(order)
 
-    async def get_all_orders(
+    async def list_all(
         self,
         page: int = 1,
         limit: int = 10,
@@ -1316,7 +1316,7 @@ class OrderService:
                 "error": str(e)
             }
 
-    async def cancel_order(self, order_id: UUID, user_id: UUID) -> OrderResponse:
+    async def cancel(self, order_id: UUID, user_id: UUID) -> OrderResponse:
         """Cancel an order with transaction safety"""
         query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).with_for_update()
         result = await self.db.execute(query)
@@ -1348,7 +1348,7 @@ class OrderService:
                         continue
                     
                     # Use new increment stock method for cancellations
-                    await self.inventory_service.increment_stock_on_cancellation(
+                    await self.inventory_service.increment(
                         variant_id=item.variant.id,
                         quantity=item.quantity,
                         location_id=item.variant.inventory.location_id,
@@ -1375,7 +1375,7 @@ class OrderService:
 
         return await self._format_order_response(order)
 
-    async def update_order_status(
+    async def update_status(
         self, 
         order_id: UUID, 
         status: str, 
@@ -1745,7 +1745,7 @@ class OrderService:
                     'postal_code': shipping_address.get('postal_code')
                 }
                 
-                shipping_cost = await shipping_service.calculate_shipping_cost(
+                shipping_cost = await shipping_service.calc_cost(
                     cart_subtotal=subtotal,
                     address=address_dict,
                     shipping_method_id=shipping_method.id if hasattr(shipping_method, 'id') else None
@@ -1992,7 +1992,7 @@ class OrderService:
         except Exception as e:
             logger.error(f"Failed to publish order events using new event system: {e}")
             raise
-    async def request_refund(
+    async def request(
         self, 
         order_id: UUID, 
         user_id: UUID, 
@@ -2013,7 +2013,7 @@ class OrderService:
             refund_request = RefundRequest(**refund_data)
             
             # Process refund request
-            refund_response = await refund_service.request_refund(
+            refund_response = await refund_service.request(
                 user_id=user_id,
                 order_id=order_id,
                 refund_request=refund_request
@@ -2085,7 +2085,7 @@ class OrderService:
             ]
         )
 
-    async def get_order_tracking(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
+    async def tracking(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get order tracking information for authenticated user"""
         try:
             # Get order with tracking events
@@ -2135,7 +2135,7 @@ class OrderService:
                 detail="Failed to retrieve tracking information"
             )
 
-    async def get_order_tracking_public(self, order_id: UUID) -> Dict[str, Any]:
+    async def tracking_public(self, order_id: UUID) -> Dict[str, Any]:
         """Get order tracking information without authentication (public endpoint)"""
         try:
             # Get order with tracking events (no user_id filter for public access)
@@ -2212,7 +2212,7 @@ class OrderService:
                 
                 if variant and variant.is_active:
                     # Check stock availability
-                    stock_check = await self.inventory_service.check_stock_availability(
+                    stock_check = await self.inventory_service.check_stock(
                         variant_id=item.variant_id,
                         quantity=item.quantity
                     )
@@ -2227,7 +2227,7 @@ class OrderService:
                         )
             
             # Get updated cart
-            cart = await cart_service.get_or_create_cart(user_id)
+            cart = await cart_service.get_or_create(user_id)
             
             if not cart.items:
                 raise HTTPException(
@@ -2251,7 +2251,7 @@ class OrderService:
                 detail="Failed to create reorder"
             )
 
-    async def generate_invoice(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
+    async def invoice(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Generate invoice for an order"""
         try:
             # Get order with items
@@ -2313,7 +2313,7 @@ class OrderService:
             }
             
             # Generate invoice
-            invoice_result = await invoice_generator.generate_invoice(order_data)
+            invoice_result = await invoice_generator.invoice(order_data)
             
             return invoice_result
             
@@ -2327,7 +2327,7 @@ class OrderService:
                 detail=f"Failed to generate invoice: {str(e)}"
             )
 
-    async def add_order_note(self, order_id: UUID, user_id: UUID, note: str) -> Dict[str, Any]:
+    async def add_note(self, order_id: UUID, user_id: UUID, note: str) -> Dict[str, Any]:
         """Add a customer note to an order"""
         try:
             # Get order
@@ -2368,7 +2368,7 @@ class OrderService:
                 detail="Failed to add order note"
             )
 
-    async def get_order_notes(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
+    async def notes(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get all customer notes for an order"""
         try:
             # Get order

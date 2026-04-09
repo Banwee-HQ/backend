@@ -24,7 +24,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     auth_service = AuthService(db)
-    return await auth_service.get_current_user(token)
+    return await auth_service.current_user(token)
 
 
 @router.post("/register")
@@ -36,7 +36,7 @@ async def register(
     """Register a new user."""
     try:
         auth_service = AuthService(db)
-        user = await auth_service.create_user(user_data, background_tasks)
+        user = await auth_service.create(user_data, background_tasks)
         return APIResponse(success=True, data=user, message="User registered successfully")
     except Exception as e:
         raise APIException(
@@ -54,7 +54,7 @@ async def login(
     """Login user and return access token."""
     try:
         auth_service = AuthService(db)
-        token = await auth_service.authenticate_user(user_login.email, user_login.password, background_tasks)
+        token = await auth_service.authenticate(user_login.email, user_login.password, background_tasks)
         logger.info(f"User login successful: {user_login.email}")
         return APIResponse(success=True, data=token, message="Login successful")
     except HTTPException as e:
@@ -77,7 +77,7 @@ async def refresh_token(
     """Refresh access token using refresh token."""
     try:
         auth_service = AuthService(db)
-        token_data = await auth_service.refresh_access_token(request.refresh_token)
+        token_data = await auth_service.refresh_token(request.refresh_token)
         return APIResponse.success(data=token_data, message="Token refreshed successfully")
     except Exception as e:
         raise APIException(
@@ -87,14 +87,14 @@ async def refresh_token(
 
 
 @router.post("/revoke")
-async def revoke_refresh_token(
+async def revoke_token(
     refresh_token: str,
     db: AsyncSession = Depends(get_db)
 ):
     """Revoke a refresh token."""
     try:
         auth_service = AuthService(db)
-        success = await auth_service.revoke_refresh_token(refresh_token)
+        success = await auth_service.revoke_token(refresh_token)
         if success:
             return APIResponse.success(message="Refresh token revoked successfully")
         else:
@@ -167,7 +167,7 @@ async def get_addresses(
     """Get all addresses for the current user."""
     try:
         address_service = AddressService(db)
-        addresses = await address_service.get_user_addresses(current_user.id)
+        addresses = await address_service.list(current_user.id)
         return APIResponse.success(data=[AddressResponse.from_orm(address) for address in addresses])
     except Exception as e:
         raise APIException(
@@ -177,7 +177,7 @@ async def get_addresses(
 
 
 @router.post("/addresses")
-async def create_address(
+async def create(
     address_data: AddressCreate,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -185,7 +185,7 @@ async def create_address(
     """Create a new address for the current user."""
     try:
         address_service = AddressService(db)
-        address = await address_service.create_address(
+        address = await address_service.create(
             user_id=current_user.id,
             **address_data.dict()
         )
@@ -198,7 +198,7 @@ async def create_address(
 
 
 @router.put("/addresses/{address_id}")
-async def update_address(
+async def update(
     address_id: UUID,
     address_data: AddressUpdate,
     current_user: User = Depends(get_current_auth_user),
@@ -207,7 +207,7 @@ async def update_address(
     """Update an existing address for the current user."""
     try:
         address_service = AddressService(db)
-        address = await address_service.update_address(
+        address = await address_service.update(
             address_id=address_id,
             user_id=current_user.id,  # Ensure user owns the address
             **address_data.dict(exclude_unset=True)
@@ -226,7 +226,7 @@ async def update_address(
 
 
 @router.delete("/addresses/{address_id}")
-async def delete_address(
+async def delete(
     address_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -235,7 +235,7 @@ async def delete_address(
     try:
         address_service = AddressService(db)
         # Pass user_id for ownership check
-        deleted = await address_service.delete_address(address_id, current_user.id)
+        deleted = await address_service.delete(address_id, current_user.id)
         if not deleted:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND,
                                message="Address not found or not owned by user")
@@ -250,7 +250,7 @@ async def delete_address(
 
 
 @router.get("/verify-email")  # Changed to GET as it's typically a link click
-async def verify_email(
+async def verify(
     token: str = Query(..., description="Verification token"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db)
@@ -280,7 +280,7 @@ async def verify_email(
         logger.info(f"Email verification attempt with token: {token[:20]}...")
         
         user_service = UserService(db)
-        await user_service.verify_email(token, background_tasks)
+        await user_service.verify(token, background_tasks)
         
         logger.info(f"Email verification successful for token: {token[:20]}...")
         return APIResponse(success=True, message="Email verified successfully")
@@ -299,162 +299,49 @@ async def resend_verification_email(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Resend verification email to user.
-    
-    SECURITY: This endpoint should only be called from frontend 
-    when user clicks "Resend Verification" button after getting 
-    an expired token error.
-    
-    PROTECTION:
-    - Requires 'X-Resend-Token' header from frontend
-    - Rate limited: 3 requests per 5 minutes
-    - Prevents abuse and automated attacks
-    
-    - Finds user by email
-    - Checks if already verified
-    - Generates new verification token
-    - Sends new verification email
-    
-    Returns success even if email doesn't exist (security)
-    """
+    """Resend verification email. Rate-limited to 3 requests per 5 minutes."""
     try:
-        # Rate limiting check
         current_time = time.time()
         email_key = request.email.lower()
-        
-        # Clean old requests
-        _resend_requests = {
-            email: current_time for email, timestamp in _resend_requests.get(email_key, [])
-            if current_time - timestamp < RATE_LIMIT_WINDOW
-        }
-        
-        # Check rate limit
-        recent_requests = [
-            timestamp for timestamp in _resend_requests[email_key]
-            if current_time - timestamp < RATE_LIMIT_WINDOW
-        ]
-        
-        if len(recent_requests) >= RATE_LIMIT_COUNT:
-            raise APIException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                message="Too many resend requests. Please try again later."
-            )
-        
-        # Add current request
-        _resend_requests[email_key].append(current_time)
-        
-        # Verify resend token header (additional security)
+
+        # Clean expired entries and enforce rate limit
+        timestamps = [t for t in _resend_requests.get(email_key, []) if current_time - t < RATE_LIMIT_WINDOW]
+        if len(timestamps) >= RATE_LIMIT_COUNT:
+            raise APIException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                               message="Too many resend requests. Please try again later.")
+        timestamps.append(current_time)
+        _resend_requests[email_key] = timestamps
+
         if not x_resend_token or len(x_resend_token) < 16:
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="Invalid request. Please use the resend verification form."
-            )
-        
-        user_service = UserService(db)
-        
-        # Find user by email
-        result = await db.execute(
-            select(User).where(User.email == email_key)
-        )
+            raise APIException(status_code=status.HTTP_400_BAD_REQUEST,
+                               message="Invalid request. Please use the resend verification form.")
+
+        result = await db.execute(select(User).where(User.email == email_key))
         user = result.scalar_one_or_none()
-        
+
         if not user:
-            # For security, always return success but don't send email
-            return APIResponse(
-                success=True, 
-                message="If an account exists with this email, a verification email has been sent."
-            )
-        
+            return APIResponse(success=True, message="If an account exists with this email, a verification email has been sent.")
+
         if user.verified:
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="Email is already verified"
-            )
-        
-        # Generate new token
+            raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="Email is already verified")
+
         import secrets
         from datetime import datetime, timedelta, timezone
-        verification_token = secrets.token_urlsafe(32)
-        token_expiration = datetime.now(timezone.utc) + timedelta(hours=24)
-        
-        # Update user with new token
-        user.verification_token = verification_token
-        user.token_expiration = token_expiration
+        token = secrets.token_urlsafe(32)
+        user.verification_token = token
+        user.token_expiration = datetime.now(timezone.utc) + timedelta(hours=24)
         await db.commit()
-        
-        # Send verification email using EmailQueue
+
         from services.auth.email import EmailQueue
-        EmailQueue.send_verification(
-            background_tasks,
-            request.email,
-            user.firstname,
-            verification_token
-        )
-        
-        return APIResponse(
-            success=True, 
-            message="Verification email sent successfully. Please check your inbox."
-        )
-        
-    except APIException:
-        raise
-    try:
-        from datetime import datetime, timedelta
-        import secrets
-        
-        # Find user by email
-        result = await db.execute(
-            select(User).where(User.email == request.email.lower())
-        )
-        user = result.scalar_one_or_none()
-        
-        # Always return success for security (don't reveal if email exists)
-        if not user:
-            return APIResponse(
-                success=True,
-                message="If the email exists, a new verification link has been sent."
-            )
-        
-        # Check if user is already verified
-        if user.verified:
-            return APIResponse(
-                success=True,
-                message="This email is already verified. You can login now."
-            )
-        
-        # Generate new verification token
-        new_token = secrets.token_urlsafe(32)
-        new_expiration = datetime.now(timezone.utc) + timedelta(hours=24)
-        
-        # Update user with new token
-        user.verification_token = new_token
-        user.token_expiration = new_expiration
-        await db.commit()
-        
-        # Send verification email
-        verification_link = f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
-        
-        context = {
-            "customer_name": user.firstname,
-            "verification_link": verification_link,
-            "company_name": "Banwee",
-            "expiry_time": "24 hours",
-            "current_year": datetime.now(timezone.utc).year,}
-        return APIResponse(
-            success=True, 
-            message="Verification email sent successfully. Please check your inbox."
-        )
-        
+        EmailQueue.send_verification(background_tasks, request.email, user.firstname, token)
+
+        return APIResponse(success=True, message="Verification email sent successfully. Please check your inbox.")
+
     except APIException:
         raise
     except Exception as e:
-        # Log error but return generic success message for security
         logger.error(f"Error resending verification email: {e}")
-        return APIResponse(
-            success=True,
-            message="If an account exists with this email, a verification email has been sent."
-        )
+        return APIResponse(success=True, message="If an account exists with this email, a verification email has been sent.")
 
 
 @router.post("/forgot-password")
@@ -466,7 +353,7 @@ async def forgot_password(
     """Send password reset email."""
     try:
         auth_service = AuthService(db)
-        await auth_service.send_password_reset(request.email, background_tasks)
+        await auth_service.send_reset(request.email, background_tasks)
         return APIResponse(success=True, message="Password reset email sent")
     except Exception as e:
         # Always return success for security
@@ -474,14 +361,14 @@ async def forgot_password(
 
 
 @router.post("/reset-password")
-async def reset_password(
+async def reset_pwd(
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Reset password with token."""
     try:
         auth_service = AuthService(db)
-        await auth_service.reset_password(request.token, request.new_password)
+        await auth_service.reset_pwd(request.token, request.new_password)
         return APIResponse(success=True, message="Password reset successfully")
     except Exception as e:
         raise APIException(
@@ -567,7 +454,7 @@ async def change_password(
         # Update password
         user_service = UserService(db)
         hashed_password = auth_service.get_password_hash(new_password)
-        await user_service.update_user(current_user.id, {"hashed_password": hashed_password})
+        await user_service.update(current_user.id, {"hashed_password": hashed_password})
 
         return APIResponse(success=True, message="Password changed successfully")
     except APIException:

@@ -15,7 +15,7 @@ class ShippingService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_shipping_method(self, shipping_method_data: ShippingMethodCreate) -> ShippingMethod:
+    async def create(self, shipping_method_data: ShippingMethodCreate) -> ShippingMethod:
         new_shipping_method = ShippingMethod(
             id=uuid7(),
             **shipping_method_data.dict(exclude_unset=True)
@@ -25,19 +25,19 @@ class ShippingService:
         await self.db.refresh(new_shipping_method)
         return new_shipping_method
 
-    async def get_shipping_method_by_id(self, shipping_method_id: UUID) -> Optional[ShippingMethod]:
+    async def get(self, shipping_method_id: UUID) -> Optional[ShippingMethod]:
         result = await self.db.execute(select(ShippingMethod).where(ShippingMethod.id == shipping_method_id))
         return result.scalars().first()
 
-    async def get_all_shipping_methods(self) -> List[ShippingMethod]:
+    async def list_all(self) -> List[ShippingMethod]:
         result = await self.db.execute(select(ShippingMethod))
         return result.scalars().all()
 
-    async def get_all_active_shipping_methods(self) -> List[ShippingMethod]:
+    async def list_active(self) -> List[ShippingMethod]:
         result = await self.db.execute(select(ShippingMethod).where(ShippingMethod.is_active == True))
         return result.scalars().all()
 
-    async def calculate_shipping_cost(
+    async def calc_cost(
         self, 
         cart_subtotal: float, 
         address: dict, 
@@ -48,13 +48,13 @@ class ShippingService:
         Simple implementation - just returns the method price.
         """
         if shipping_method_id:
-            method = await self.get_shipping_method_by_id(shipping_method_id)
+            method = await self.get(shipping_method_id)
             if method and method.is_active:
                 logger.info(f"Using selected shipping method: {method.name} - ${method.price}")
                 return method.price
 
         # If no specific method or method not available, get cheapest available method
-        active_methods = await self.get_all_active_shipping_methods()
+        active_methods = await self.list_active()
         if active_methods:
             cheapest = min(active_methods, key=lambda m: m.price)
             logger.info(f"Using cheapest available method: {cheapest.name} - ${cheapest.price}")
@@ -64,8 +64,8 @@ class ShippingService:
         logger.warning("No shipping methods available")
         return 0.0
 
-    async def update_shipping_method(self, shipping_method_id: UUID, shipping_method_data: ShippingMethodUpdate) -> Optional[ShippingMethod]:
-        shipping_method = await self.get_shipping_method_by_id(shipping_method_id)
+    async def update(self, shipping_method_id: UUID, shipping_method_data: ShippingMethodUpdate) -> Optional[ShippingMethod]:
+        shipping_method = await self.get(shipping_method_id)
         if not shipping_method:
             raise APIException(
                 status_code=404, message="Shipping method not found")
@@ -77,8 +77,8 @@ class ShippingService:
         await self.db.refresh(shipping_method)
         return shipping_method
 
-    async def delete_shipping_method(self, shipping_method_id: UUID) -> bool:
-        shipping_method = await self.get_shipping_method_by_id(shipping_method_id)
+    async def delete(self, shipping_method_id: UUID) -> bool:
+        shipping_method = await self.get(shipping_method_id)
         if not shipping_method:
             return False
 

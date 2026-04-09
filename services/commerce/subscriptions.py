@@ -270,7 +270,7 @@ class SubscriptionService:
         # Final fallback
         return Decimal('8.99')
 
-    async def get_by_id(self, subscription_id: UUID, user_id: Optional[UUID] = None) -> Optional[Subscription]:
+    async def get(self, subscription_id: UUID, user_id: Optional[UUID] = None) -> Optional[Subscription]:
         """Get subscription by ID"""
         query = select(Subscription).where(Subscription.id == subscription_id).options(
             selectinload(Subscription.products).selectinload(ProductVariant.product),
@@ -283,7 +283,7 @@ class SubscriptionService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_user_subscriptions(
+    async def list(
         self, user_id: UUID, status: Optional[str] = None,
         page: int = 1, limit: int = 10
     ):
@@ -318,7 +318,7 @@ class SubscriptionService:
         variant_quantities: Optional[Dict[str, int]] = None
     ) -> Subscription:
         """Update subscription"""
-        subscription = await self.get_by_id(subscription_id, user_id)
+        subscription = await self.get(subscription_id, user_id)
         
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
@@ -375,7 +375,7 @@ class SubscriptionService:
 
     async def cancel(self, subscription_id: UUID, user_id: UUID, reason: Optional[str] = None) -> Subscription:
         """Cancel subscription"""
-        subscription = await self.get_by_id(subscription_id, user_id)
+        subscription = await self.get(subscription_id, user_id)
         
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
@@ -394,7 +394,7 @@ class SubscriptionService:
 
     async def pause(self, subscription_id: UUID, user_id: UUID, reason: Optional[str] = None) -> Subscription:
         """Pause subscription"""
-        subscription = await self.get_by_id(subscription_id, user_id)
+        subscription = await self.get(subscription_id, user_id)
         
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
@@ -413,7 +413,7 @@ class SubscriptionService:
 
     async def resume(self, subscription_id: UUID, user_id: UUID) -> Subscription:
         """Resume subscription"""
-        subscription = await self.get_by_id(subscription_id, user_id)
+        subscription = await self.get(subscription_id, user_id)
         
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
@@ -432,7 +432,7 @@ class SubscriptionService:
         
         return subscription
 
-    async def recalculate_current_pricing(self, subscription: Subscription) -> Dict[str, Any]:
+    async def recalc_pricing(self, subscription: Subscription) -> Dict[str, Any]:
         """Recalculate current pricing for a subscription"""
         
         # Get current variants
@@ -481,3 +481,127 @@ class SubscriptionService:
         await self.db.commit()
         
         return pricing
+
+    # -------------------------------------------------------------------------
+
+    async def delete(self, subscription_id: UUID, user_id: UUID) -> bool:
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        await self.db.delete(subscription)
+        await self.db.commit()
+        return True
+
+    async def add_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        from models.commerce.subscriptions import subscription_product_association
+        existing_ids = {str(v.id) for v in subscription.products}
+        for vid in variant_ids:
+            if str(vid) not in existing_ids:
+                await self.db.execute(
+                    subscription_product_association.insert().values(
+                        subscription_id=subscription.id, product_variant_id=vid
+                    )
+                )
+                if subscription.variant_ids is None:
+                    subscription.variant_ids = []
+                if str(vid) not in subscription.variant_ids:
+                    subscription.variant_ids = subscription.variant_ids + [str(vid)]
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+
+    async def remove_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        from models.commerce.subscriptions import subscription_product_association
+        for vid in variant_ids:
+            await self.db.execute(
+                subscription_product_association.delete().where(
+                    and_(
+                        subscription_product_association.c.subscription_id == subscription.id,
+                        subscription_product_association.c.product_variant_id == vid
+                    )
+                )
+            )
+        if subscription.variant_ids:
+            subscription.variant_ids = [v for v in subscription.variant_ids if v not in [str(vid) for vid in variant_ids]]
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+
+    async def set_quantity(self, subscription_id: UUID, variant_id: UUID, quantity: int, user_id: UUID) -> Subscription:
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        meta = dict(subscription.subscription_metadata or {})
+        quantities = dict(meta.get("variant_quantities", {}))
+        quantities[str(variant_id)] = quantity
+        subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+
+    async def adjust_quantity(self, subscription_id: UUID, variant_id: UUID, change: int, user_id: UUID) -> Subscription:
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        meta = dict(subscription.subscription_metadata or {})
+        quantities = dict(meta.get("variant_quantities", {}))
+        quantities[str(variant_id)] = max(1, quantities.get(str(variant_id), 1) + change)
+        subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+
+    async def get_quantities(self, subscription_id: UUID, user_id: UUID) -> Dict[str, int]:
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        if subscription.subscription_metadata:
+            return subscription.subscription_metadata.get("variant_quantities", {})
+        return {}
+
+    async def get_orders(self, subscription_id: UUID, user_id: UUID, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        from models.commerce.orders import Order
+        from sqlalchemy import func as sqlfunc
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        total = await self.db.scalar(
+            select(sqlfunc.count()).select_from(Order).where(Order.subscription_id == subscription_id)
+        ) or 0
+        result = await self.db.execute(
+            select(Order).where(Order.subscription_id == subscription_id)
+            .order_by(Order.created_at.desc())
+            .offset((page - 1) * limit).limit(limit)
+        )
+        orders = result.scalars().all()
+        return {
+            "orders": [o.to_dict() for o in orders],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": max(1, (total + limit - 1) // limit)
+        }
+
+    async def _calc_cost(
+        self,
+        variants: List[ProductVariant],
+        delivery_type: str,
+        customer_address: Optional[Dict],
+        currency: str,
+        user_id: UUID,
+        variant_quantities: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Any]:
+        return await self._calculate_pricing(
+            variants=variants,
+            variant_quantities=variant_quantities or {},
+            delivery_type=delivery_type,
+            customer_address=customer_address,
+            currency=currency,
+            user_id=user_id,
+        )

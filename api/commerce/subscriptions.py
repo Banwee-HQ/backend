@@ -35,7 +35,7 @@ router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
 async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     auth_service = AuthService(db)
-    return await auth_service.get_current_user(token)
+    return await auth_service.current_user(token)
 
 
 @router.post("/trigger-order-processing")
@@ -120,7 +120,7 @@ async def calculate_subscription_cost(
                 }
         
         # Calculate cost
-        cost_breakdown = await subscription_service._calculate_subscription_cost(
+        cost_breakdown = await subscription_service._calc_cost(
             variants=variants,
             delivery_type=cost_request.delivery_type,
             customer_address=customer_address,
@@ -159,7 +159,7 @@ async def create_subscription(
         product_variant_ids = subscription_data.product_variant_ids
         variant_quantities = subscription_data.variant_quantities
         # Create subscription with quantities
-        subscription = await subscription_service.create_subscription(
+        subscription = await subscription_service.create(
             user_id=current_user.id,
             name=subscription_data.name,
             product_variant_ids=product_variant_ids,
@@ -191,7 +191,7 @@ async def get_subscriptions(
     """Get user's subscriptions."""
     try:
         subscription_service = SubscriptionService(db)
-        subscriptions, total = await subscription_service.get_user_subscriptions(
+        subscriptions, total = await subscription_service.list(
             user_id=current_user.id, page=page, limit=limit
         )
         return Response.success(data={
@@ -223,7 +223,7 @@ async def add_products_to_subscription(
     """Add products to an existing subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.add_products_to_subscription(
+        subscription = await subscription_service.add_products(
         subscription_id, request.variant_ids, current_user.id
         )
         # Load the products relationship properly for the response
@@ -259,7 +259,7 @@ async def remove_products_from_subscription(
     """Remove products from an existing subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.remove_products_from_subscription(
+        subscription = await subscription_service.remove_products(
         subscription_id, request.variant_ids, current_user.id
         )
         # Load the products relationship properly for the response
@@ -293,7 +293,7 @@ async def update_variant_quantity(
     """Update the quantity of a specific variant in a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.update_variant_quantity(
+        subscription = await subscription_service.set_quantity(
             subscription_id, request.variant_id, request.quantity, current_user.id
             )
         return Response.success(
@@ -320,7 +320,7 @@ async def change_variant_quantity(
     """Increment or decrement the quantity of a specific variant in a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.change_variant_quantity(
+        subscription = await subscription_service.adjust_quantity(
             subscription_id, request.variant_id, request.change, current_user.id
         )
         action = "increased" if request.change > 0 else "decreased"
@@ -347,7 +347,7 @@ async def get_subscription_variant_quantities(
     """Get the quantities of all variants in a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        quantities = await subscription_service.get_subscription_variant_quantities(
+        quantities = await subscription_service.get_quantities(
             subscription_id, current_user.id
             )
         return Response.success(
@@ -375,7 +375,7 @@ async def toggle_auto_renew(
     try:
         subscription_service = SubscriptionService(db)
         # Get the subscription
-        subscription = await subscription_service.get_subscription_by_id(subscription_id, current_user.id)
+        subscription = await subscription_service.get(subscription_id, current_user.id)
         if not subscription:
             raise APIException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -414,7 +414,7 @@ async def get_subscription(
     """Get a specific subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.get_subscription_by_id(subscription_id, current_user.id)
+        subscription = await subscription_service.get(subscription_id, current_user.id)
         if not subscription:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -445,7 +445,7 @@ async def update_subscription(
         # Extract product_variant_ids and other data
         product_variant_ids = subscription_data.product_variant_ids
         # Pass data directly to the service method
-        subscription = await subscription_service.update_subscription(
+        subscription = await subscription_service.update(
             subscription_id=subscription_id,
             user_id=current_user.id,
             name=subscription_data.name if hasattr(subscription_data, 'name') else None,
@@ -479,7 +479,7 @@ async def cancel_subscription_endpoint(
     """Cancel a subscription (soft delete - status update only)."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.cancel_subscription(subscription_id, current_user.id, reason)
+        subscription = await subscription_service.cancel(subscription_id, current_user.id, reason)
         return Response.success(
             data=subscription.to_dict(include_products=True), 
             message="Subscription cancelled successfully"
@@ -503,7 +503,7 @@ async def delete_subscription(
     """Delete a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        await subscription_service.delete_subscription(subscription_id, current_user.id)
+        await subscription_service.delete(subscription_id, current_user.id)
         return Response.success(message="Subscription deleted successfully")
     except APIException as e:
         raise APIException(
@@ -524,7 +524,7 @@ async def process_subscription_shipment(
     """Manually trigger shipment processing for a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.get_subscription_by_id(subscription_id, current_user.id)
+        subscription = await subscription_service.get(subscription_id, current_user.id)
         if not subscription:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -570,7 +570,7 @@ async def pause_subscription(
     """Pause a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.pause_subscription(
+        subscription = await subscription_service.pause(
             subscription_id, current_user.id, pause_reason
         )
         return Response.success(
@@ -594,7 +594,7 @@ async def resume_subscription(
     """Resume a paused subscription or activate a cancelled subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.resume_subscription(
+        subscription = await subscription_service.resume(
             subscription_id, current_user.id
         )
         action_message = "resumed" if subscription.status == "active" else "activated"
@@ -619,7 +619,7 @@ async def remove_product_from_subscription(
     """Remove a specific product from a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.remove_products_from_subscription(
+        subscription = await subscription_service.remove_products(
             subscription_id, [product_id], current_user.id
         )
         return Response.success(
@@ -696,7 +696,7 @@ async def get_subscription_details(
     try:
         subscription_service = SubscriptionService(db)
         # Get subscription with all related data
-        subscription = await subscription_service.get_subscription_by_id(
+        subscription = await subscription_service.get(
             subscription_id=subscription_id,
             user_id=current_user.id
         )
@@ -779,7 +779,7 @@ async def get_subscription_orders(
     """Get orders created from a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        orders = await subscription_service.get_subscription_orders(
+        orders = await subscription_service.get_orders(
             subscription_id, current_user.id, page, limit
         )
         return Response.success(data=orders)

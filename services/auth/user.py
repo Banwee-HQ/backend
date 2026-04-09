@@ -39,7 +39,7 @@ class AddressService:
 
 
 
-    async def create_address(
+    async def create(
 
         self,
 
@@ -89,7 +89,7 @@ class AddressService:
 
 
 
-    async def get_address(self, address_id: UUID) -> Optional[Address]:
+    async def get(self, address_id: UUID) -> Optional[Address]:
 
         """Retrieve an address by ID."""
 
@@ -101,7 +101,7 @@ class AddressService:
 
 
 
-    async def get_user_addresses(self, user_id: UUID) -> List[Address]:
+    async def list(self, user_id: UUID) -> List[Address]:
 
         """Fetch all addresses for a given user."""
 
@@ -121,7 +121,7 @@ class AddressService:
 
 
 
-    async def update_address(self, address_id: UUID, user_id: UUID, **kwargs) -> Optional[Address]:
+    async def update(self, address_id: UUID, user_id: UUID, **kwargs) -> Optional[Address]:
 
         """Update address fields dynamically."""
 
@@ -141,11 +141,11 @@ class AddressService:
 
         await self.db.commit()
 
-        return await self.get_address(address_id)
+        return await self.get(address_id)
 
 
 
-    async def delete_address(self, address_id: UUID, user_id: UUID = None) -> bool:
+    async def delete(self, address_id: UUID, user_id: UUID = None) -> bool:
 
         """Delete an address by ID."""
 
@@ -171,7 +171,7 @@ class AddressService:
 
 
 
-    async def get_default_shipping(self, user_id: UUID) -> Optional[Address]:
+    async def default_shipping(self, user_id: UUID) -> Optional[Address]:
 
         """Get a user's default shipping address."""
 
@@ -215,7 +215,7 @@ class AddressService:
 
 
 
-    async def get_default_billing(self, user_id: UUID) -> Optional[Address]:
+    async def default_billing(self, user_id: UUID) -> Optional[Address]:
 
         """Get a user's default billing address."""
 
@@ -247,7 +247,7 @@ class UserService:
             "fuzzy": 0.5
         }
 
-    async def create_user(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> User:
+    async def create(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> User:
         hashed_password = self.password_manager.hash_password(
             user_data.password)
         verification_token = secrets.token_urlsafe(32)
@@ -278,7 +278,7 @@ class UserService:
 
         return new_user
 
-    async def verify_email(self, token: str, background_tasks: BackgroundTasks):
+    async def verify(self, token: str, background_tasks: BackgroundTasks):
         """Verify user email with token and send welcome email."""
         print(f"🔧 DEBUG: UserService.verify_email called with token: '{token}'")
         print(f"🔧 DEBUG: Token length: {len(token)}")
@@ -323,7 +323,7 @@ class UserService:
 
         # User verification complete - no welcome email needed
 
-    async def get_users(self, page: int = 1, limit: int = 10, role: Optional[str] = None, query: Optional[str] = None) -> dict:
+    async def list(self, page: int = 1, limit: int = 10, role: Optional[str] = None, query: Optional[str] = None) -> dict:
         """Get paginated list of users with order count"""
         offset = (page - 1) * limit
 
@@ -384,7 +384,7 @@ class UserService:
             }
         }
 
-    async def get_user(self, user_id: UUID) -> Optional[User]:
+    async def get(self, user_id: UUID) -> Optional[User]:
         """Get user by ID"""
         query = select(User).where(User.id == user_id).options(
             selectinload(User.addresses)
@@ -392,7 +392,7 @@ class UserService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def update_user(self, user_id: UUID, user_data: UserUpdate) -> Optional[User]:
+    async def update(self, user_id: UUID, user_data: UserUpdate) -> Optional[User]:
         """Update user"""
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
@@ -410,7 +410,7 @@ class UserService:
         await self.db.refresh(user)
         return user
 
-    async def delete_user(self, user_id: UUID) -> bool:
+    async def delete(self, user_id: UUID) -> bool:
         """Delete user"""
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
@@ -423,7 +423,7 @@ class UserService:
         await self.db.commit()
         return True
 
-    async def search_users(
+    async def search(
         self, 
         query: str, 
         limit: int = 20,

@@ -49,7 +49,7 @@ class CartService:
         self.db = db
         self.tax_service = TaxService(db)
 
-    async def get_cart_with_pricing(
+    async def get_with_pricing(
         self, 
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None,
@@ -65,7 +65,7 @@ class CartService:
             return self._create_empty_cart_response(session_id, country_code, province_code)
 
         # Get or create cart for authenticated user
-        cart = await self.get_or_create_cart(user_id)
+        cart = await self.get_or_create(user_id)
         
         if not cart.items:
             return self._create_empty_cart_response(None, country_code, province_code, cart.id)
@@ -221,7 +221,7 @@ class CartService:
             'location': f"{country_code}-{province_code}" if province_code else country_code
         }
 
-    async def validate_cart_comprehensive(
+    async def validate(
         self,
         user_id: UUID,
         country_code: str = 'US',
@@ -348,7 +348,7 @@ class CartService:
             try:
                 from services.catalog.inventory import InventoryService
                 inventory_service = InventoryService(self.db)
-                stock_check = await inventory_service.check_stock_availability(item.variant_id, item.quantity)
+                stock_check = await inventory_service.check_stock(item.variant_id, item.quantity)
                 
                 if not stock_check.get('available', False):
                     severity = 'error' if stock_check.get('current_stock', 0) == 0 else 'warning'
@@ -390,7 +390,7 @@ class CartService:
         
         return issues
 
-    async def get_or_create_cart(self, user_id: UUID) -> Cart:
+    async def get_or_create(self, user_id: UUID) -> Cart:
         """Get existing cart or create new one"""
         result = await self.db.execute(
             select(Cart)
@@ -449,12 +449,12 @@ class CartService:
     # Legacy method for backward compatibility
     async def get_cart(self, *args, **kwargs):
         """Legacy method - redirects to get_cart_with_pricing"""
-        return await self.get_cart_with_pricing(*args, **kwargs)
+        return await self.get_with_pricing(*args, **kwargs)
     
     # Legacy method for backward compatibility  
     async def validate_cart(self, user_id: UUID, **kwargs):
         """Legacy method - redirects to validate_cart_comprehensive"""
-        result = await self.validate_cart_comprehensive(user_id, **kwargs)
+        result = await self.validate(user_id, **kwargs)
         return {
             'valid': result.valid,
             'can_checkout': result.can_checkout,
@@ -664,7 +664,7 @@ class CartService:
         # Return updated cart
         return await self.get_cart(user_id=user_id)
 
-    async def update_cart_item_quantity(
+    async def update_item(
         self,
         user_id: Optional[UUID] = None,
         cart_item_id: UUID = None,
@@ -712,7 +712,7 @@ class CartService:
         # Return updated cart
         return await self.get_cart(user_id=user_id)
 
-    async def remove_from_cart_by_item_id(
+    async def remove_item(
         self,
         user_id: Optional[UUID] = None,
         cart_item_id: UUID = None,
@@ -769,7 +769,7 @@ class CartService:
         # Return empty cart
         return await self.get_cart(user_id=user_id)
 
-    async def get_cart_item_count(
+    async def item_count(
         self,
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None
@@ -788,7 +788,7 @@ class CartService:
         
         return result.scalar() or 0
 
-    async def merge_guest_cart(
+    async def merge_guest(
         self,
         user_id: UUID,
         guest_cart_data: Dict[str, Any]
@@ -801,7 +801,7 @@ class CartService:
         # For PostgreSQL version, just return the user's existing cart
         return await self.get_cart(user_id=user_id)
 
-    async def get_checkout_summary(
+    async def checkout_summary(
         self,
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None
@@ -820,7 +820,7 @@ class CartService:
         
         return checkout_summary
 
-    async def apply_promocode(
+    async def apply_promo(
         self,
         user_id: Optional[UUID] = None,
         code: str = None,
@@ -836,7 +836,7 @@ class CartService:
             "message": "Promocode functionality not yet implemented"
         }
 
-    async def remove_promocode(
+    async def remove_promo(
         self,
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None
@@ -851,7 +851,7 @@ class CartService:
             "message": "Promocode removed"
         }
 
-    async def get_shipping_options(
+    async def shipping_options(
         self,
         user_id: Optional[UUID] = None,
         address: Dict[str, Any] = None,
@@ -923,7 +923,7 @@ class CartService:
                 ]
             }
 
-    async def calculate_totals(
+    async def calc_totals(
         self,
         user_id: Optional[UUID] = None,
         data: Dict[str, Any] = None,
@@ -935,7 +935,7 @@ class CartService:
         # Extract shipping method from data
         shipping_cost = 0.0
         if data and "shipping_method_id" in data:
-            shipping_options = await self.get_shipping_options(user_id, session_id=session_id)
+            shipping_options = await self.shipping_options(user_id, session_id=session_id)
             for option in shipping_options.get("shipping_options", []):
                 if option["id"] == data["shipping_method_id"]:
                     shipping_cost = option["price"]
@@ -963,7 +963,7 @@ class CartService:
         # since we don't support guest carts in this implementation
         return await self.get_cart(user_id=user_id)
 
-    async def save_item_for_later(
+    async def save_later(
         self,
         user_id: UUID,
         item_id: UUID,
@@ -995,7 +995,7 @@ class CartService:
             logger.error(f"Failed to save item for later: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to save item for later: {str(e)}")
 
-    async def move_item_to_cart(
+    async def move_to_cart(
         self,
         user_id: UUID,
         item_id: UUID,
@@ -1027,14 +1027,14 @@ class CartService:
             logger.error(f"Failed to move item to cart: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to move item to cart: {str(e)}")
 
-    async def get_saved_items(
+    async def saved_items(
         self,
         user_id: UUID,
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get all items saved for later"""
         try:
-            cart = await self.get_or_create_cart(user_id=user_id, session_id=session_id)
+            cart = await self.get_or_create(user_id=user_id, session_id=session_id)
             
             saved_items = [
                 {

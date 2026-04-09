@@ -31,7 +31,7 @@ def get_refund_service(db: AsyncSession = Depends(get_db)) -> RefundService:
 
 
 @router.post("/orders/{order_id}/request")
-async def request_refund(
+async def request(
     order_id: UUID,
     refund_request: RefundRequest,
     current_user: User = Depends(get_current_auth_user),
@@ -47,7 +47,7 @@ async def request_refund(
     - Automatic return label generation when needed
     """
     try:
-        refund = await refund_service.request_refund(
+        refund = await refund_service.request(
             user_id=current_user.id,
             order_id=order_id,
             refund_request=refund_request
@@ -81,7 +81,7 @@ async def check_refund_eligibility(
     Use this before showing the refund request form to provide better UX.
     """
     try:
-        eligibility = await refund_service.check_order_refund_eligibility(
+        eligibility = await refund_service.eligibility(
             user_id=current_user.id,
             order_id=order_id
         )
@@ -101,7 +101,7 @@ async def check_refund_eligibility(
 
 
 @router.get("/")
-async def get_user_refunds(
+async def list(
     refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -114,7 +114,7 @@ async def get_user_refunds(
     Returns paginated list of user's refunds with current status and timeline.
     """
     try:
-        result = await refund_service.get_user_refunds(
+        result = await refund_service.list(
             user_id=current_user.id,
             status=refund_status,
             page=page,
@@ -134,7 +134,7 @@ async def get_user_refunds(
 
 
 @router.get("/{refund_id}")
-async def get_refund_details(
+async def get(
     refund_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     refund_service: RefundService = Depends(get_refund_service)
@@ -145,7 +145,7 @@ async def get_refund_details(
     Returns complete refund details including timeline, items, and current status.
     """
     try:
-        refund = await refund_service.get_refund_details(
+        refund = await refund_service.get(
             user_id=current_user.id,
             refund_id=refund_id
         )
@@ -165,7 +165,7 @@ async def get_refund_details(
 
 
 @router.put("/{refund_id}/cancel")
-async def cancel_refund(
+async def cancel(
     refund_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     refund_service: RefundService = Depends(get_refund_service)
@@ -177,7 +177,7 @@ async def cancel_refund(
     Only works for refunds in 'requested' or 'pending_review' status.
     """
     try:
-        refund = await refund_service.cancel_refund(
+        refund = await refund_service.cancel(
             user_id=current_user.id,
             refund_id=refund_id
         )
@@ -207,7 +207,7 @@ async def get_refund_stats(
     Returns summary statistics about user's refund history for dashboard display.
     """
     try:
-        stats = await refund_service.get_user_refund_stats(current_user.id)
+        stats = await refund_service.stats(current_user.id)
         
         return Response.success(
             data=stats,
@@ -223,7 +223,7 @@ async def get_refund_stats(
 
 # Admin endpoints (if needed)
 @router.post("/process-automatic")
-async def process_automatic_refunds(
+async def process_auto(
     # Add admin authentication here
     refund_service: RefundService = Depends(get_refund_service)
 ):
@@ -233,7 +233,7 @@ async def process_automatic_refunds(
     This endpoint is called by background jobs to process auto-approved refunds.
     """
     try:
-        result = await refund_service.process_automatic_refunds()
+        result = await refund_service.process_auto()
         
         return Response.success(
             data=result,

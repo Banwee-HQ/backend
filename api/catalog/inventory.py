@@ -23,7 +23,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     auth_service = AuthService(db)
-    return await auth_service.get_current_user(token)
+    return await auth_service.current_user(token)
 
 def require_admin(current_user: User = Depends(get_current_auth_user)):
     from models.auth.user import UserRole
@@ -41,7 +41,7 @@ router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 
 # --- Public Stock Check Endpoint ---
 @router.get("/check-stock/{variant_id}")
-async def check_stock_availability(
+async def check_stock(
     variant_id: UUID,
     quantity: int = Query(..., gt=0, description="Quantity to check"),
     inventory_service: InventoryService = Depends(get_inventory_service)
@@ -55,7 +55,7 @@ async def check_stock_availability(
                 detail="Invalid variant ID provided"
             )
         
-        stock_check = await inventory_service.check_stock_availability(variant_id, quantity)
+        stock_check = await inventory_service.check_stock(variant_id, quantity)
         return Response.success(data=stock_check, message="Stock check completed")
     except ValueError as e:
         # Handle invalid UUID format
@@ -96,7 +96,7 @@ async def check_bulk_stock_availability(
                 continue
             
             try:
-                stock_check = await inventory_service.check_stock_availability(
+                stock_check = await inventory_service.check_stock(
                     UUID(variant_id), quantity
                 )
                 results.append({
@@ -136,14 +136,14 @@ async def check_bulk_stock_availability(
 
 # --- WarehouseLocation Endpoints ---
 @router.post("/locations")
-async def create_warehouse_location(
+async def create_location(
     location_data: WarehouseLocationCreate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
     """Create a new warehouse location (Admin access)."""
     try:
-        location = await inventory_service.create_warehouse_location(location_data)
+        location = await inventory_service.create_location(location_data)
         return Response.success(data=location, message="Warehouse location created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
@@ -158,7 +158,7 @@ async def get_all_warehouse_locations(
 ):
     """Get all warehouse locations (Admin access)."""
     try:
-        locations = await inventory_service.get_warehouse_locations()
+        locations = await inventory_service.list_locations()
         return Response.success(data=locations)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch locations: {e}")
@@ -172,7 +172,7 @@ async def get_warehouse_location(
 ):
     """Get a specific warehouse location by ID (Admin access)."""
     try:
-        location = await inventory_service.get_warehouse_location_by_id(location_id)
+        location = await inventory_service.get_location(location_id)
         if not location:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Warehouse location not found")
         return Response.success(data=location)
@@ -183,7 +183,7 @@ async def get_warehouse_location(
 
 
 @router.put("/locations/{location_id}")
-async def update_warehouse_location(
+async def update_location(
     location_id: UUID,
     location_data: WarehouseLocationUpdate,
     current_user: User = Depends(require_admin),
@@ -191,7 +191,7 @@ async def update_warehouse_location(
 ):
     """Update a warehouse location (Admin access)."""
     try:
-        location = await inventory_service.update_warehouse_location(location_id, location_data)
+        location = await inventory_service.update_location(location_id, location_data)
         return Response.success(data=location, message="Warehouse location updated successfully")
     except APIException:
         raise
@@ -200,14 +200,14 @@ async def update_warehouse_location(
 
 
 @router.delete("/locations/{location_id}")
-async def delete_warehouse_location(
+async def delete_location(
     location_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
     """Delete a warehouse location (Admin access)."""
     try:
-        await inventory_service.delete_warehouse_location(location_id)
+        await inventory_service.delete_location(location_id)
         return Response.success(message="Warehouse location deleted successfully")
     except APIException:
         raise
@@ -218,14 +218,14 @@ async def delete_warehouse_location(
 # --- Inventory Item Endpoints ---
 # --- Inventory CRUD Endpoints ---
 @router.post("/")
-async def create_inventory_item(
+async def create(
     inventory_data: InventoryCreate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
     """Create a new inventory item (Admin access)."""
     try:
-        item = await inventory_service.create_inventory_item(inventory_data)
+        item = await inventory_service.create(inventory_data)
         return Response.success(data=item, message="Inventory item created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
@@ -234,7 +234,7 @@ async def create_inventory_item(
 
 
 @router.get("/")
-async def get_all_inventory_items(
+async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     product_id: Optional[UUID] = Query(None),
@@ -249,7 +249,7 @@ async def get_all_inventory_items(
     """Get all inventory items with filters (Admin access)."""
     try:
         logger.info(f"API endpoint received params: page={page}, limit={limit}, sort_by={sort_by}, sort_order={sort_order}, low_stock={low_stock}, search={search}")
-        items = await inventory_service.get_all_inventory_items(
+        items = await inventory_service.list(
             page=page,
             limit=limit,
             product_id=product_id,
@@ -275,7 +275,7 @@ async def get_inventory_item(
 ):
     """Get a specific inventory item by ID (Admin access)."""
     try:
-        item = await inventory_service.get_inventory_item_by_id_serialized(inventory_id)
+        item = await inventory_service.get_serialized(inventory_id)
         if not item:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Inventory item not found")
         return Response.success(data=item)
@@ -286,7 +286,7 @@ async def get_inventory_item(
 
 
 @router.put("/{inventory_id}")
-async def update_inventory_item(
+async def update(
     inventory_id: UUID,
     inventory_data: InventoryUpdate,
     current_user: User = Depends(require_admin),
@@ -294,7 +294,7 @@ async def update_inventory_item(
 ):
     """Update an inventory item (Admin access)."""
     try:
-        item = await inventory_service.update_inventory_item(inventory_id, inventory_data)
+        item = await inventory_service.update(inventory_id, inventory_data)
         return Response.success(data=item, message="Inventory item updated successfully")
     except APIException:
         raise
@@ -303,14 +303,14 @@ async def update_inventory_item(
 
 
 @router.delete("/{inventory_id}")
-async def delete_inventory_item(
+async def delete(
     inventory_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
     """Delete an inventory item (Admin access)."""
     try:
-        await inventory_service.delete_inventory_item(inventory_id)
+        await inventory_service.delete(inventory_id)
         return Response.success(message="Inventory item deleted successfully")
     except APIException:
         raise
@@ -343,7 +343,7 @@ async def get_stock_adjustments(
 ):
     """Get all stock adjustments for an inventory item (Admin access)."""
     try:
-        adjustments = await inventory_service.get_stock_adjustments_for_inventory(inventory_id)
+        adjustments = await inventory_service.adjustments(inventory_id)
         return Response.success(data=adjustments)
     except APIException:
         raise
@@ -352,13 +352,13 @@ async def get_stock_adjustments(
 
 
 @router.get("/adjustments/all")
-async def get_all_stock_adjustments(
+async def all_adjustments(
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
     """Get all stock adjustments across all inventory items (Admin access)."""
     try:
-        adjustments = await inventory_service.get_all_stock_adjustments()
+        adjustments = await inventory_service.all_adjustments()
         return Response.success(data=adjustments)
     except APIException:
         raise

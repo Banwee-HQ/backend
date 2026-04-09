@@ -28,7 +28,7 @@ class RefundService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def request_refund(
+    async def request(
         self,
         user_id: UUID,
         order_id: UUID,
@@ -113,7 +113,7 @@ class RefundService:
             logger.error(f"Failed to request refund: {e}")
             raise HTTPException(status_code=500, detail="Failed to process refund request")
     
-    async def process_automatic_refunds(self) -> Dict[str, Any]:
+    async def process_auto(self) -> Dict[str, Any]:
         """
         Process pending automatic refunds
         Called by background job to handle auto-approved refunds
@@ -157,7 +157,7 @@ class RefundService:
             logger.error(f"Failed to process automatic refunds: {e}")
             return {"processed": 0, "failed": 0, "total": 0, "error": str(e)}
     
-    async def get_user_refunds(
+    async def list(
         self,
         user_id: UUID,
         status: Optional[RefundStatus] = None,
@@ -201,7 +201,7 @@ class RefundService:
             logger.error(f"Failed to get user refunds: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve refunds")
     
-    async def get_refund_details(self, user_id: UUID, refund_id: UUID) -> RefundResponse:
+    async def get(self, user_id: UUID, refund_id: UUID) -> RefundResponse:
         """Get detailed refund information"""
         try:
             refund = await self.db.execute(
@@ -225,7 +225,7 @@ class RefundService:
             logger.error(f"Failed to get refund details: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve refund details")
     
-    async def cancel_refund(self, user_id: UUID, refund_id: UUID) -> RefundResponse:
+    async def cancel(self, user_id: UUID, refund_id: UUID) -> RefundResponse:
         """Cancel a pending refund request"""
         try:
             refund = await self.db.execute(
@@ -434,7 +434,7 @@ class RefundService:
             for refund_item in refund_items:
                 try:
                     # Restore inventory for each refunded item
-                    restore_result = await inventory_service.increment_stock_on_cancellation(
+                    restore_result = await inventory_service.increment(
                         variant_id=refund_item.order_item.variant_id,
                         quantity=refund_item.quantity_to_refund,
                         location_id=None,  # Will be determined by service
@@ -557,7 +557,7 @@ class RefundService:
             timeline=self._generate_refund_timeline(refund)
         )
     
-    async def get_user_refunds_count(
+    async def count(
         self,
         user_id: UUID,
         status: Optional[RefundStatus] = None
@@ -578,11 +578,11 @@ class RefundService:
             logger.error(f"Failed to get user refunds count: {e}")
             return 0
     
-    async def get_user_refund_stats(self, user_id: UUID) -> Dict[str, Any]:
+    async def stats(self, user_id: UUID) -> Dict[str, Any]:
         """Get user's refund statistics"""
         try:
             # Get all user refunds via the paginated method
-            result = await self.get_user_refunds(user_id, page=1, limit=1000)
+            result = await self.list(user_id, page=1, limit=1000)
             refunds = result.get("items", [])
             
             stats = {
@@ -607,7 +607,7 @@ class RefundService:
                 "average_processing_time_hours": None
             }
     
-    async def check_order_refund_eligibility(
+    async def eligibility(
         self,
         user_id: UUID,
         order_id: UUID

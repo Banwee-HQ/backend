@@ -20,7 +20,7 @@ class WishlistService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_wishlists(
+    async def list(
         self,
         user_id: UUID,
         page: int = 1,
@@ -62,7 +62,7 @@ class WishlistService:
             logger.error(f"Error in get_wishlists for user_id {user_id}: {str(e)}", exc_info=True)
             raise
 
-    async def get_wishlist_by_id(self, wishlist_id: UUID, user_id: UUID) -> Optional[Wishlist]:
+    async def get(self, wishlist_id: UUID, user_id: UUID) -> Optional[Wishlist]:
         try:
             logger.info(f"Fetching wishlist {wishlist_id} for user_id: {user_id}")
             query = select(Wishlist).where(Wishlist.id == wishlist_id, Wishlist.user_id == user_id).options(
@@ -82,7 +82,7 @@ class WishlistService:
             logger.error(f"Error in get_wishlist_by_id for wishlist_id {wishlist_id}, user_id {user_id}: {str(e)}", exc_info=True)
             raise
 
-    async def create_wishlist(self, user_id: UUID, payload: WishlistCreate) -> Wishlist:
+    async def create(self, user_id: UUID, payload: WishlistCreate) -> Wishlist:
         # Ensure only one default wishlist per user
         if payload.is_default:
             await self._clear_default_wishlist(user_id)
@@ -98,7 +98,7 @@ class WishlistService:
         await self.db.refresh(new_wishlist)
 
         # Re-fetch the wishlist with items eagerly loaded
-        refetched_wishlist = await self.get_wishlist_by_id(new_wishlist.id, user_id)
+        refetched_wishlist = await self.get(new_wishlist.id, user_id)
         if not refetched_wishlist:
             # This should ideally not happen if creation was successful
             raise Exception(
@@ -106,7 +106,7 @@ class WishlistService:
 
         return refetched_wishlist
 
-    async def update_wishlist(self, wishlist_id: UUID, user_id: UUID, payload: WishlistUpdate) -> Optional[Wishlist]:
+    async def update(self, wishlist_id: UUID, user_id: UUID, payload: WishlistUpdate) -> Optional[Wishlist]:
         query = select(Wishlist).where(
             Wishlist.id == wishlist_id, Wishlist.user_id == user_id)
         result = await self.db.execute(query)
@@ -128,7 +128,7 @@ class WishlistService:
         await self.db.refresh(wishlist)
         return wishlist
 
-    async def delete_wishlist(self, wishlist_id: UUID, user_id: UUID) -> bool:
+    async def delete(self, wishlist_id: UUID, user_id: UUID) -> bool:
         query = select(Wishlist).where(
             Wishlist.id == wishlist_id, Wishlist.user_id == user_id)
         result = await self.db.execute(query)
@@ -141,7 +141,7 @@ class WishlistService:
         await self.db.commit()
         return True
 
-    async def add_item_to_wishlist(self, wishlist_id: UUID, payload: WishlistItemCreate) -> WishlistItem:
+    async def add_item(self, wishlist_id: UUID, payload: WishlistItemCreate) -> WishlistItem:
         try:
             logger.info(f"Adding item to wishlist {wishlist_id}: product_id={payload.product_id}, variant_id={payload.variant_id}")
 
@@ -195,7 +195,7 @@ class WishlistService:
             # Wrap other exceptions in a generic 500 error
             raise HTTPException(status_code=500, detail="An unexpected error occurred while adding the item.")
 
-    async def get_wishlist_items(
+    async def items(
         self,
         wishlist_id: UUID,
         user_id: UUID,
@@ -236,7 +236,7 @@ class WishlistService:
             logger.error(f"Error in get_wishlist_items for wishlist_id {wishlist_id}: {str(e)}", exc_info=True)
             raise
 
-    async def remove_item_from_wishlist(self, wishlist_id: UUID, item_id: UUID) -> bool:
+    async def remove_item(self, wishlist_id: UUID, item_id: UUID) -> bool:
         try:
             logger.info(f"Removing item {item_id} from wishlist {wishlist_id}")
             query = select(WishlistItem).where(WishlistItem.id ==
@@ -257,7 +257,7 @@ class WishlistService:
             await self.db.rollback()
             raise
 
-    async def set_default_wishlist(self, user_id: UUID, wishlist_id: UUID) -> Optional[Wishlist]:
+    async def set_default(self, user_id: UUID, wishlist_id: UUID) -> Optional[Wishlist]:
         await self._clear_default_wishlist(user_id)
 
         query = update(Wishlist).where(Wishlist.id == wishlist_id,

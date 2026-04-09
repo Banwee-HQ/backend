@@ -31,7 +31,7 @@ async def get_payments_overview(
 ):
     """Get payments overview for current user"""
     service = PaymentService(db)
-    payment_methods = await service.get_user_payment_methods(current_user.id)
+    payment_methods = await service.list_methods(current_user.id)
     return Response.success(
         data={
             "payment_methods": [PaymentMethodResponse.from_orm(pm) for pm in payment_methods],
@@ -48,7 +48,7 @@ async def get_payment_methods(
 ):
     """Get user's payment methods"""
     service = PaymentService(db)
-    payment_methods = await service.get_user_payment_methods(current_user.id)
+    payment_methods = await service.list_methods(current_user.id)
     # Always return an array, even if empty
     if not payment_methods:
         payment_methods = []
@@ -57,7 +57,7 @@ async def get_payment_methods(
 
 
 @router.post("/methods")
-async def create_payment_method(
+async def create_method(
     payment_method_data: PaymentMethodCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -74,7 +74,7 @@ async def create_payment_method(
         "expiry_year": payment_method_data.expiry_year,
     }
     
-    payment_method = await service.create_payment_method(
+    payment_method = await service.create_method(
         user_id=current_user.id,
         stripe_payment_method_id=payment_method_data.stripe_payment_method_id,
         stripe_token=payment_method_data.stripe_token,
@@ -85,14 +85,14 @@ async def create_payment_method(
 
 
 @router.delete("/methods/{payment_method_id}")
-async def delete_payment_method(
+async def delete_method(
     payment_method_id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a payment method"""
     service = PaymentService(db)
-    success = await service.delete_payment_method(payment_method_id, current_user.id)
+    success = await service.delete_method(payment_method_id, current_user.id)
     
     if not success:
         raise HTTPException(
@@ -104,7 +104,7 @@ async def delete_payment_method(
 
 
 @router.put("/methods/{payment_method_id}")
-async def update_payment_method(
+async def update_method(
     payment_method_id: UUID,
     payment_method_data: PaymentMethodUpdate,
     current_user: User = Depends(get_current_user),
@@ -112,7 +112,7 @@ async def update_payment_method(
 ):
     """Update a payment method"""
     service = PaymentService(db)
-    updated_method = await service.update_payment_method(
+    updated_method = await service.update_method(
         payment_method_id=payment_method_id,
         user_id=current_user.id,
         update_data=payment_method_data.dict(exclude_unset=True)
@@ -126,14 +126,14 @@ async def update_payment_method(
 
 
 @router.put("/methods/{payment_method_id}/default")
-async def set_default_payment_method(
+async def set_default_method(
     payment_method_id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Set a payment method as default"""
     service = PaymentService(db)
-    success = await service.set_default_payment_method(payment_method_id, current_user.id)
+    success = await service.set_default_method(payment_method_id, current_user.id)
     
     if not success:
         raise HTTPException(
@@ -145,14 +145,14 @@ async def set_default_payment_method(
 
 
 @router.post("/intents")
-async def create_payment_intent(
+async def create_intent(
     payment_intent_data: PaymentIntentCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a payment intent"""
     service = PaymentService(db)
-    payment_intent = await service.create_payment_intent(
+    payment_intent = await service.create_intent(
         user_id=current_user.id,
         amount=payment_intent_data.amount,
         currency=payment_intent_data.currency,
@@ -164,7 +164,7 @@ async def create_payment_intent(
 
 
 @router.post("/intents/{payment_intent_id}/confirm")
-async def confirm_payment_intent(
+async def confirm_intent(
     payment_intent_id: UUID,
     payment_method_id: str,
     current_user: User = Depends(get_current_user),
@@ -172,7 +172,7 @@ async def confirm_payment_intent(
 ):
     """Confirm a payment intent"""
     service = PaymentService(db)
-    payment_intent = await service.confirm_payment_intent(
+    payment_intent = await service.confirm_intent(
         payment_intent_id=payment_intent_id,
         payment_method_id=payment_method_id
     )
@@ -190,7 +190,7 @@ async def process_payment(
 ):
     """Process a payment (simplified)"""
     service = PaymentService(db)
-    result = await service.process_payment_with_timeout_and_retry(
+    result = await service.process(
         user_id=current_user.id,
         amount=amount,
         payment_method_id=payment_method_id,
@@ -201,7 +201,7 @@ async def process_payment(
 
 
 @router.get("/transactions")
-async def get_user_transactions(
+async def transactions(
     page: int = 1,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
@@ -209,7 +209,7 @@ async def get_user_transactions(
 ):
     """Get user transaction history"""
     service = PaymentService(db)
-    transactions = await service.get_user_transactions(
+    transactions = await service.transactions(
         user_id=current_user.id,
         page=page,
         limit=limit
@@ -218,7 +218,7 @@ async def get_user_transactions(
 
 
 @router.post("/refunds/{payment_intent_id}")
-async def create_refund(
+async def refund(
     payment_intent_id: UUID,
     amount: Optional[float] = None,
     reason: str = "requested_by_customer",
@@ -234,7 +234,7 @@ async def create_refund(
         )
     
     service = PaymentService(db)
-    transaction = await service.create_refund(
+    transaction = await service.refund(
         payment_intent_id=payment_intent_id,
         amount=amount,
         reason=reason
@@ -246,7 +246,7 @@ async def create_refund(
 # ============================================================================
 
 @router.get("/failures/{payment_intent_id}/status")
-async def get_payment_failure_status(
+async def failure_status(
     payment_intent_id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -254,7 +254,7 @@ async def get_payment_failure_status(
     """Get detailed status of a failed payment"""
     try:
         service = PaymentService(db)
-        failure_details = await service.get_payment_failure_status(
+        failure_details = await service.failure_status(
             payment_intent_id=payment_intent_id,
             user_id=current_user.id
         )
@@ -272,7 +272,7 @@ async def get_payment_failure_status(
 
 
 @router.post("/failures/{payment_intent_id}/retry")
-async def retry_failed_payment(
+async def retry(
     payment_intent_id: UUID,
     new_payment_method_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user),
@@ -283,13 +283,13 @@ async def retry_failed_payment(
         service = PaymentService(db)
         
         # Verify payment intent belongs to user first
-        failure_details = await service.get_payment_failure_status(
+        failure_details = await service.failure_status(
             payment_intent_id=payment_intent_id,
             user_id=current_user.id
         )
         
         # Retry the payment
-        retry_result = await service.retry_failed_payment(
+        retry_result = await service.retry(
             payment_intent_id=payment_intent_id,
             new_payment_method_id=new_payment_method_id
         )
@@ -308,7 +308,7 @@ async def retry_failed_payment(
 
 
 @router.get("/failures/user/failed-payments")
-async def get_user_failed_payments(
+async def failed_payments(
     page: int = 1,
     limit: int = 10,
     current_user: User = Depends(get_current_user),
@@ -317,7 +317,7 @@ async def get_user_failed_payments(
     """Get user's failed payments with retry options"""
     try:
         service = PaymentService(db)
-        failed_payments_data = await service.get_user_failed_payments(
+        failed_payments_data = await service.failed_payments(
             user_id=current_user.id,
             page=page,
             limit=limit

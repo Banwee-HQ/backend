@@ -31,32 +31,32 @@ class InventoryService:
         self.lock_service = lock_service
 
     # --- WarehouseLocation CRUD ---
-    async def create_warehouse_location(self, location_data: WarehouseLocationCreate) -> WarehouseLocationResponse:
+    async def create_location(self, location_data: WarehouseLocationCreate) -> WarehouseLocationResponse:
         new_location = WarehouseLocation(id=uuid7(), **location_data.model_dump())
         self.db.add(new_location)
         await self.db.commit()
         await self.db.refresh(new_location)
         return WarehouseLocationResponse.model_validate(new_location)
 
-    async def get_warehouse_locations(self) -> List[WarehouseLocationResponse]:
+    async def list_locations(self) -> List[WarehouseLocationResponse]:
         result = await self.db.execute(select(WarehouseLocation).order_by(WarehouseLocation.name))
         locations = result.scalars().all()
         return [WarehouseLocationResponse.model_validate(location) for location in locations]
 
-    async def get_warehouse_location_by_id(self, location_id: UUID) -> Optional[WarehouseLocationResponse]:
+    async def get_location(self, location_id: UUID) -> Optional[WarehouseLocationResponse]:
         result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
         location = result.scalars().first()
         if location:
             return WarehouseLocationResponse.model_validate(location)
         return None
 
-    async def get_warehouse_location_model_by_id(self, location_id: UUID) -> Optional[WarehouseLocation]:
+    async def get_location_model(self, location_id: UUID) -> Optional[WarehouseLocation]:
         """Get the raw SQLAlchemy model for internal operations"""
         result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
         return result.scalars().first()
 
-    async def update_warehouse_location(self, location_id: UUID, location_data: WarehouseLocationUpdate) -> WarehouseLocationResponse:
-        location = await self.get_warehouse_location_model_by_id(location_id)
+    async def update_location(self, location_id: UUID, location_data: WarehouseLocationUpdate) -> WarehouseLocationResponse:
+        location = await self.get_location_model(location_id)
         if not location:
             raise APIException(status_code=404, message="Warehouse location not found")
         
@@ -68,8 +68,8 @@ class InventoryService:
         await self.db.refresh(location)
         return WarehouseLocationResponse.model_validate(location)
 
-    async def delete_warehouse_location(self, location_id: UUID):
-        location = await self.get_warehouse_location_model_by_id(location_id)
+    async def delete_location(self, location_id: UUID):
+        location = await self.get_location_model(location_id)
         if not location:
             raise APIException(status_code=404, message="Warehouse location not found")
         
@@ -82,7 +82,7 @@ class InventoryService:
         await self.db.commit()
 
     # --- Inventory CRUD and Adjustment ---
-    async def get_inventory_item_by_id(self, inventory_id: UUID) -> Optional[Inventory]:
+    async def get(self, inventory_id: UUID) -> Optional[Inventory]:
         result = await self.db.execute(select(Inventory).filter(Inventory.id == inventory_id).options(
             joinedload(Inventory.variant).joinedload(ProductVariant.product),
             joinedload(Inventory.variant).joinedload(ProductVariant.images),
@@ -90,7 +90,7 @@ class InventoryService:
         ))
         return result.scalars().unique().first()
 
-    async def get_inventory_item_by_id_serialized(self, inventory_id: UUID) -> Optional[dict]:
+    async def get_serialized(self, inventory_id: UUID) -> Optional[dict]:
         """Get inventory item by ID and return serialized data"""
         result = await self.db.execute(select(Inventory).filter(Inventory.id == inventory_id).options(
             joinedload(Inventory.variant).joinedload(ProductVariant.product),
@@ -189,14 +189,14 @@ class InventoryService:
 }, exception=e)
             return None
 
-    async def get_inventory_item_by_variant_id(self, variant_id: UUID) -> Optional[Inventory]:
+    async def get_by_variant(self, variant_id: UUID) -> Optional[Inventory]:
         result = await self.db.execute(select(Inventory).filter(Inventory.variant_id == variant_id).options(
             joinedload(Inventory.variant).joinedload(ProductVariant.product),
             joinedload(Inventory.location)
         ))
         return result.scalars().unique().first()
 
-    async def get_all_inventory_items(self, page: int = 1, limit: int = 10, product_id: Optional[UUID] = None, location_id: Optional[UUID] = None, low_stock: Optional[bool] = None, search: Optional[str] = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> dict:
+    async def list(self, page: int = 1, limit: int = 10, product_id: Optional[UUID] = None, location_id: Optional[UUID] = None, low_stock: Optional[bool] = None, search: Optional[str] = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> dict:
         try:
             logger.info(f"get_all_inventory_items called", metadata={
     "page": page,
@@ -421,8 +421,8 @@ class InventoryService:
             "error": f"Database error: {str(e)}"
         }
 
-    async def create_inventory_item(self, inventory_data: InventoryCreate) -> InventoryResponse:
-        existing_inventory = await self.get_inventory_item_by_variant_id(inventory_data.variant_id)
+    async def create(self, inventory_data: InventoryCreate) -> InventoryResponse:
+        existing_inventory = await self.get_by_variant(inventory_data.variant_id)
         if existing_inventory:
             raise APIException(status_code=400, message="Inventory for this variant already exists.")
         
@@ -436,8 +436,8 @@ class InventoryService:
         await self.db.refresh(new_inventory)
         return InventoryResponse.model_validate(new_inventory)
 
-    async def update_inventory_item(self, inventory_id: UUID, inventory_data: InventoryUpdate) -> InventoryResponse:
-        inventory_item = await self.get_inventory_item_by_id(inventory_id)
+    async def update(self, inventory_id: UUID, inventory_data: InventoryUpdate) -> InventoryResponse:
+        inventory_item = await self.get(inventory_id)
         if not inventory_item:
             raise APIException(status_code=404, message="Inventory item not found")
 
@@ -472,8 +472,8 @@ class InventoryService:
         await self.db.refresh(inventory_item)
         return InventoryResponse.model_validate(inventory_item)
 
-    async def delete_inventory_item(self, inventory_id: UUID):
-        inventory_item = await self.get_inventory_item_by_id(inventory_id)
+    async def delete(self, inventory_id: UUID):
+        inventory_item = await self.get(inventory_id)
         if not inventory_item:
             raise APIException(status_code=404, message="Inventory item not found")
         
@@ -539,7 +539,7 @@ class InventoryService:
             if variant and variant.product_id:
                 # Sync availability status (don't fail if this fails)
                 try:
-                    await self.sync_product_availability_status(variant.product_id)
+                    await self.sync_availability(variant.product_id)
                 except Exception as e:
                     logger.warning(f"Failed to sync product availability after stock adjustment", exception=e)
             
@@ -552,7 +552,7 @@ class InventoryService:
                 message=f"Failed to adjust stock: {str(e)}"
             )
 
-    async def get_stock_adjustments_for_inventory(self, inventory_id: UUID) -> List[StockAdjustmentResponse]:
+    async def adjustments(self, inventory_id: UUID) -> List[StockAdjustmentResponse]:
         result = await self.db.execute(
             select(StockAdjustment)
             .filter(StockAdjustment.inventory_id == inventory_id)
@@ -562,7 +562,7 @@ class InventoryService:
         adjustments = result.scalars().all()
         return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
 
-    async def get_all_stock_adjustments(self) -> List[StockAdjustmentResponse]:
+    async def all_adjustments(self) -> List[StockAdjustmentResponse]:
         """Get all stock adjustments across all inventory items"""
         result = await self.db.execute(
             select(StockAdjustment)
@@ -572,14 +572,14 @@ class InventoryService:
         adjustments = result.scalars().all()
         return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
 
-    async def check_low_stock(self, inventory_id: UUID) -> bool:
-        inventory_item = await self.get_inventory_item_by_id(inventory_id)
+    async def is_low_stock(self, inventory_id: UUID) -> bool:
+        inventory_item = await self.get(inventory_id)
         if not inventory_item:
             return False
         return inventory_item.quantity <= inventory_item.low_stock_threshold
 
     # Enhanced inventory integration methods
-    async def get_real_time_stock_levels(
+    async def stock_levels(
         self,
         variant_ids: Optional[List[UUID]] = None,
         location_id: Optional[UUID] = None
@@ -619,7 +619,7 @@ class InventoryService:
         
         return stock_levels
 
-    async def predict_demand_based_on_subscriptions(
+    async def predict_demand(
         self,
         variant_id: UUID,
         forecast_days: int = 30
@@ -642,7 +642,7 @@ class InventoryService:
             "recommendation": "Reorder recommended" if predicted_demand > current_stock else "Stock adequate"
         }
 
-    async def generate_reorder_suggestions(
+    async def reorder_suggestions(
         self,
         location_id: Optional[UUID] = None,
         days_ahead: int = 30
@@ -701,7 +701,7 @@ class InventoryService:
                     new_quantity = item_data["quantity"]
                     
                     # Get current inventory to calculate change
-                    inventory = await self.get_inventory_item_by_variant_id(variant_id)
+                    inventory = await self.get_by_variant(variant_id)
                     
                     if not inventory:
                         continue  # Skip items not found
@@ -751,7 +751,7 @@ class InventoryService:
                 message=f"Failed to update inventory from warehouse data: {str(e)}"
             )
         
-    async def check_stock_availability(
+    async def check_stock(
         self,
         variant_id: UUID,
         quantity: int,
@@ -802,7 +802,7 @@ class InventoryService:
             "message": f"Error checking stock: {str(e)}"
         }
 
-    async def decrement_stock_on_purchase(
+    async def decrement(
         self,
         variant_id: UUID,
         quantity: int,
@@ -948,7 +948,7 @@ class InventoryService:
     
 
 
-    async def increment_stock_on_cancellation(
+    async def increment(
         self,
         variant_id: UUID,
         quantity: int,
@@ -1121,7 +1121,7 @@ class InventoryService:
             logger.error(f"Failed to log inventory change: {e}")
             # Don't raise exception as logging failures shouldn't break inventory operations
 
-    async def sync_product_availability_status(self, product_id: UUID) -> Dict[str, Any]:
+    async def sync_availability(self, product_id: UUID) -> Dict[str, Any]:
         """
         Sync product availability_status based on its variants' inventory levels
         

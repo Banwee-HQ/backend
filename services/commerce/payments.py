@@ -48,7 +48,7 @@ class PaymentService:
         self.db = db
         self._init_failure_handling()
 
-    async def create_payment_method(
+    async def create_method(
         self,
         user_id: UUID,
         stripe_payment_method_id: Optional[str] = None,
@@ -246,7 +246,7 @@ class PaymentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create payment method: {str(e)}")
 
-    async def get_user_payment_methods(self, user_id: UUID) -> List[PaymentMethod]:
+    async def list_methods(self, user_id: UUID) -> List[PaymentMethod]:
         """Get all payment methods for a user"""
         result = await self.db.execute(
             select(PaymentMethod).where(
@@ -255,7 +255,7 @@ class PaymentService:
         )
         return result.scalars().all()
 
-    async def delete_payment_method(self, payment_method_id: UUID, user_id: UUID) -> bool:
+    async def delete_method(self, payment_method_id: UUID, user_id: UUID) -> bool:
         """Delete a payment method"""
         result = await self.db.execute(
             select(PaymentMethod).where(
@@ -291,7 +291,7 @@ class PaymentService:
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
-    async def set_default_payment_method(self, payment_method_id: UUID, user_id: UUID) -> bool:
+    async def set_default_method(self, payment_method_id: UUID, user_id: UUID) -> bool:
         """Set a payment method as default for the user"""
         try:
             # Get the payment method to set as default
@@ -334,7 +334,7 @@ class PaymentService:
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Failed to set default payment method: {str(e)}")
 
-    async def update_payment_method(self, payment_method_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[PaymentMethod]:
+    async def update_method(self, payment_method_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[PaymentMethod]:
         """Update a payment method"""
         try:
             # Get the payment method
@@ -366,7 +366,7 @@ class PaymentService:
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Failed to update payment method: {str(e)}")
 
-    async def create_payment_intent(
+    async def create_intent(
         self,
         user_id: UUID,
         amount: float,
@@ -414,7 +414,7 @@ class PaymentService:
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
-    async def confirm_payment_intent(
+    async def confirm_intent(
         self,
         payment_intent_id: UUID,
         payment_method_id: str,
@@ -504,7 +504,7 @@ class PaymentService:
                         "param": getattr(e, 'param', None)
                     }
                     
-                    failure_result = await failure_handler.handle_payment_failure(
+                    failure_result = await failure_handler.handle_failure(
                         payment_intent_id=payment_intent.id,
                         stripe_error=stripe_error_details,
                         failure_context={
@@ -543,7 +543,7 @@ class PaymentService:
             
             raise HTTPException(status_code=400, detail=f"Payment failed: {str(e)}")
 
-    async def process_payment_with_timeout_and_retry(
+    async def process(
         self,
         user_id: UUID,
         amount: float,
@@ -670,7 +670,7 @@ class PaymentService:
                 )
             
             # Create and confirm payment intent
-            payment_intent = await self.create_payment_intent(
+            payment_intent = await self.create_intent(
                 user_id=user_id,
                 amount=amount,
                 order_id=order_id,
@@ -678,7 +678,7 @@ class PaymentService:
                 commit=commit
             )
             
-            confirmed_intent = await self.confirm_payment_intent(
+            confirmed_intent = await self.confirm_intent(
                 payment_intent.id,
                 payment_method.stripe_payment_method_id,
                 commit=commit
@@ -696,7 +696,7 @@ class PaymentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Payment processing failed: {str(e)}")
 
-    async def process_payment_idempotent(
+    async def process_idempotent(
         self,
         user_id: UUID,
         order_id: UUID,
@@ -909,7 +909,7 @@ class PaymentService:
             logger.error(f"Payment processing error for idempotency key {idempotency_key}: {e}")
             raise HTTPException(status_code=500, detail=f"Payment processing failed: {str(e)}")
 
-    async def validate_order_pricing(
+    async def validate_pricing(
         self,
         order_items: List[Dict[str, Any]],
         shipping_cost: float = 0.0,
@@ -975,7 +975,7 @@ class PaymentService:
             "validation_passed": True
         }
 
-    async def get_user_transactions(
+    async def transactions(
         self,
         user_id: UUID,
         page: int = 1,
@@ -1007,7 +1007,7 @@ class PaymentService:
             }
         }
 
-    async def create_refund(
+    async def refund(
         self,
         payment_intent_id: UUID,
         amount: Optional[float] = None,
@@ -1112,7 +1112,7 @@ class PaymentService:
             "fraud": PaymentFailureReason.FRAUD_SUSPECTED,
         }
 
-    async def handle_payment_failure(
+    async def handle_failure(
         self,
         payment_intent_id: UUID,
         stripe_error: Optional[Dict] = None,
@@ -1293,7 +1293,7 @@ class PaymentService:
                 if item.variant:
                     try:
                         # Restore stock atomically
-                        restore_result = await inventory_service.increment_stock_on_cancellation(
+                        restore_result = await inventory_service.increment(
                             variant_id=item.variant_id,
                             quantity=item.quantity,
                             location_id=item.variant.inventory.location_id if item.variant.inventory else None,
@@ -1559,7 +1559,7 @@ class PaymentService:
             "Contact support for assistance"
         ])
 
-    async def retry_failed_payment(
+    async def retry(
         self,
         payment_intent_id: UUID,
         new_payment_method_id: Optional[UUID] = None
@@ -1622,7 +1622,7 @@ class PaymentService:
                 detail=f"Failed to retry payment: {str(e)}"
             )
 
-    async def get_payment_failure_status(
+    async def failure_status(
         self,
         payment_intent_id: UUID,
         user_id: UUID
@@ -1678,7 +1678,7 @@ class PaymentService:
                 detail="Failed to get payment failure status"
             )
 
-    async def get_user_failed_payments(
+    async def failed_payments(
         self,
         user_id: UUID,
         page: int = 1,
