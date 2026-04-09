@@ -6,7 +6,7 @@ from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.catalog.wishlist import WishlistService
 from schemas.catalog.wishlist import WishlistCreate, WishlistUpdate, WishlistResponse, WishlistItemCreate, WishlistItemResponse
-from models.auth.user import User
+from models.accounts.user import User
 from core.dependencies import get_current_auth_user
 from core.utils.response import Response
 from core.exceptions import APIException

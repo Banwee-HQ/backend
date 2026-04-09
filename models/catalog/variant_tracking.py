@@ -111,7 +111,7 @@ class VariantPriceHistory(Base):
 
     # Change metadata
     change_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    changed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
+    changed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.users.id"), nullable=True)
     effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Impact tracking

@@ -1,6 +1,6 @@
 from core.db import Base
 
-from .auth import User, Address
+from .accounts import User, Address
 from .catalog import (
     Product, ProductVariant, ProductImage,
     Review, Inventory, WarehouseLocation, StockAdjustment,
@@ -16,6 +16,7 @@ from .commerce import (
     TaxRate, Promocode,
     Discount, SubscriptionDiscount, ProductRemovalAudit,
     Subscription, SubscriptionProduct,
+    TaxValidationRule, ShippingValidationRule,
 )
 from .admin import (
     PricingConfig, SubscriptionCostHistory, SubscriptionAnalytics, PaymentAnalytics,
@@ -23,5 +24,4 @@ from .admin import (
 )
 from .system import (
     ContactMessage, MessageStatus, MessagePriority,
-    TaxValidationRule, ShippingValidationRule,
 )

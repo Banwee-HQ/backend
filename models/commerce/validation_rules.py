@@ -21,7 +21,7 @@ class TaxValidationRule(Base):
         Index('idx_tax_rules_tax_rate', 'tax_rate'),
         # Composite indexes for common queries
         Index('idx_tax_rules_location_active', 'location_code', 'is_active'),
-        {'schema': 'system'}
+        {'schema': 'commerce'}
     )
 
     # Common fields (previously from BaseModel)
@@ -69,7 +69,7 @@ class ShippingValidationRule(Base):
         # Composite indexes for common queries
         Index('idx_shipping_rules_location_active', 'location_code', 'is_active'),
         Index('idx_shipping_rules_weight_active', 'weight_min', 'weight_max', 'is_active'),
-        {'schema': 'system'}
+        {'schema': 'commerce'}
     )
 
     # Common fields (previously from BaseModel)

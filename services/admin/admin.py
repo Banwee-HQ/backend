@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, desc, String
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.auth.user import User
+from models.accounts.user import User
 from models.commerce.orders import Order, OrderItem
 from models.catalog.product import Product, ProductVariant
 from uuid import UUID
@@ -36,7 +36,7 @@ class AdminService:
         verified: Optional[bool] = None
     ) -> Dict[str, Any]:
         """Get all users with pagination and filtering - delegates to UserService"""
-        from services.auth.user import UserService
+        from services.accounts.user import UserService
         
         user_service = UserService(self.db)
         return await user_service.list(
@@ -732,7 +732,7 @@ class AdminService:
     async def create(self, user_data, background_tasks) -> Dict[str, Any]:
         """Create a new user (admin only)"""
         try:
-            from services.auth.auth import AuthService
+            from services.accounts.auth import AuthService
             
             # Use AuthService to create user
             auth_service = AuthService()

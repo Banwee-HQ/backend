@@ -239,7 +239,7 @@ class StockAdjustment(Base):
     inventory_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.inventory.id"))
     quantity_change: Mapped[int] = mapped_column(Integer)  # Positive for add, negative for remove
     reason: Mapped[str] = mapped_column(String(CHAR_LENGTH))  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
-    adjusted_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
+    adjusted_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.users.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

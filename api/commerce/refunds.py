@@ -10,7 +10,7 @@ from uuid import UUID
 from core.db import get_db
 from core.dependencies import get_current_auth_user
 from core.utils.response import Response
-from models.auth.user import User
+from models.accounts.user import User
 from models.commerce.refunds import RefundStatus
 from schemas.commerce.refunds import (
     RefundRequest, 

@@ -6,14 +6,14 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_structured_logger as get_logger
-from services.auth.user import UserService, AddressService
+from services.accounts.user import UserService, AddressService
 # Import AddressResponse
-from schemas.auth.user import UserCreate, UserUpdate, AddressResponse
-from schemas.auth.user import AddressCreate, AddressUpdate
+from schemas.accounts.user import UserCreate, UserUpdate, AddressResponse
+from schemas.accounts.user import AddressCreate, AddressUpdate
 # Import AuthService and oauth2_scheme
-from services.auth.auth import AuthService
+from services.accounts.auth import AuthService
 from core.dependencies import get_current_auth_user
-from models.auth.user import User  # Import User model
+from models.accounts.user import User  # Import User model
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["Users & Addresses"])
@@ -30,7 +30,7 @@ async def get_current_user_me(
 ):
     """Get current user profile (alias for /profile)"""
     try:
-        from schemas.auth.user import UserResponse
+        from schemas.accounts.user import UserResponse
         
         user_data = {
             "id": current_user.id,
@@ -69,7 +69,7 @@ async def get_user_profile(
 ):
     """Get current user's profile"""
     try:
-        from schemas.auth.user import UserResponse
+        from schemas.accounts.user import UserResponse
         
         # Convert User model to UserResponse
         user_data = {
@@ -112,7 +112,7 @@ async def update_user_profile(
 ):
     """Update current user's profile"""
     try:
-        from schemas.auth.user import UserResponse
+        from schemas.accounts.user import UserResponse
         service = UserService(db)
         updated_user = await service.update(current_user.id, payload)
         if not updated_user:

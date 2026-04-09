@@ -14,7 +14,7 @@ from core.logging import get_structured_logger
 from models.commerce.subscriptions import Subscription
 from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus, OrderSource
 from models.catalog.product import ProductVariant
-from models.auth.user import User, Address
+from models.accounts.user import User, Address
 from models.commerce.payments import PaymentMethod
 from core.db import get_db
 
@@ -195,10 +195,10 @@ class SubscriptionScheduler:
                     
                     # Send email notification about paused subscription
                     try:
-                        from services.auth.email import EmailQueue
+                        from services.accounts.email import EmailQueue
                         # Note: This needs BackgroundTasks, but scheduler runs in background
                         # For now, send directly via EmailService (already handled)
-                        from services.auth.email import EmailService
+                        from services.accounts.email import EmailService
                         email_service = EmailService(self.db)
                         await email_service.send_subscription_payment_failed(
                             user_email=user.email,

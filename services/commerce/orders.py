@@ -8,10 +8,10 @@ from sqlalchemy import select, and_, desc, delete
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
 from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
-from models.auth.user import User
-from services.auth.email import send_order_confirmation_email
+from models.accounts.user import User
+from services.accounts.email import send_order_confirmation_email
 from models.commerce.cart import Cart, CartItem
-from models.auth.user import User, Address
+from models.accounts.user import User, Address
 from models.catalog.product import ProductVariant
 from models.commerce.shipping import ShippingMethod
 from models.commerce.payments import PaymentMethod
@@ -1475,7 +1475,7 @@ class OrderService:
         
         # Send shipping update email for shipped/delivered orders
         if status in ['shipped', 'delivered'] and background_tasks:
-            from services.auth.email import send_shipping_update_email, send_order_delivered_email
+            from services.accounts.email import send_shipping_update_email, send_order_delivered_email
             
             # Get user details for email
             user_result = await self.db.execute(
@@ -2027,31 +2027,6 @@ class OrderService:
                 status_code=500,
                 detail=f"Failed to process refund request: {str(e)}"
             )
-    def _generate_cart_hash(self, cart, request: CheckoutRequest) -> str:
-        """Generate deterministic hash for cart state and checkout request"""
-        import hashlib
-        
-        # Create hash from cart items and checkout details
-        cart_data = {
-            "items": [
-                {
-                    "variant_id": str(item.variant.id),
-                    "quantity": item.quantity,
-                    "price": float(item.price_per_unit)
-                }
-                for item in cart.items if not getattr(item, 'saved_for_later', False)
-            ],
-            "shipping_address_id": str(request.shipping_address_id),
-            "shipping_method_id": str(request.shipping_method_id),
-            "payment_method_id": str(request.payment_method_id)
-        }
-        
-        # Sort items for consistent hashing
-        cart_data["items"].sort(key=lambda x: x["variant_id"])
-        
-        # Create hash
-        cart_str = str(cart_data)
-        return hashlib.md5(cart_str.encode()).hexdigest()[:16]
 
     async def _convert_order_to_response(self, order: Order) -> OrderResponse:
         """Convert Order model to OrderResponse"""

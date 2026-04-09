@@ -17,7 +17,7 @@ from models.admin.analytics import (
     EventType, TrafficSource 
 )
 from models.commerce.orders import Order
-from models.auth.user import User
+from models.accounts.user import User
 from models.commerce.refunds import Refund, RefundStatus
 from core.config import settings
 from core.logging import get_structured_logger

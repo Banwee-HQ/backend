@@ -7,8 +7,8 @@ from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from models.auth.user import User
-from services.auth.auth import AuthService
+from models.accounts.user import User
+from services.accounts.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
 from schemas.catalog.inventory import (
     WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
@@ -26,7 +26,7 @@ async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSe
     return await auth_service.current_user(token)
 
 def require_admin(current_user: User = Depends(get_current_auth_user)):
-    from models.auth.user import UserRole
+    from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise APIException(status_code=403, message="Admin access required")
     return current_user

@@ -32,7 +32,7 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
         return "failed"
     
     try:
-        from services.auth.email import EmailService
+        from services.accounts.email import EmailService
         async with session as db:
             email_service = EmailService(db)
 

@@ -8,8 +8,8 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import ProductCreate, ProductUpdate
 from services.catalog.products import ProductService
-from models.auth.user import User
-from services.auth.auth import AuthService
+from models.accounts.user import User
+from services.accounts.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
 
 logger = get_logger(__name__)
@@ -249,7 +249,7 @@ async def create(
 ):
     """Create a new product (admin only)."""
     try:
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,

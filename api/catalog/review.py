@@ -7,8 +7,8 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.catalog.review import ReviewCreate, ReviewUpdate
 from services.catalog.review import ReviewService
-from models.auth.user import User
-from services.auth.auth import AuthService
+from models.accounts.user import User
+from services.accounts.auth import AuthService
 
 from fastapi.security import OAuth2PasswordBearer
 

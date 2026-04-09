@@ -83,7 +83,12 @@ class DatabaseManager:
             pool_recycle=3600,
             pool_size=10,
             max_overflow=20,
-            pool_timeout=30
+            pool_timeout=30,
+            connect_args={
+                "server_settings": {
+                    "search_path": "accounts,catalog,commerce,admin,system,public"
+                }
+            }
         )
 
         AsyncSessionDB = sessionmaker(

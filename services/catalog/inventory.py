@@ -10,7 +10,7 @@ from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta, timezone
 from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
 from models.catalog.product import ProductVariant, Product, ProductImage
-from models.auth.user import User
+from models.accounts.user import User
 from schemas.catalog.inventory import (
     WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
     InventoryCreate, InventoryUpdate, InventoryResponse,

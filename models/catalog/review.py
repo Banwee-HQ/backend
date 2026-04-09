@@ -31,7 +31,7 @@ class Review(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     rating: Mapped[int] = mapped_column(Integer)  # 1-5 stars
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_verified_purchase: Mapped[bool] = mapped_column(Boolean, default=False)

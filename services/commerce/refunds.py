@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason, RefundType
 from models.commerce.orders import Order, OrderItem
 from models.commerce.payments import Transaction
-from models.auth.user import User
+from models.accounts.user import User
 from schemas.commerce.refunds import RefundRequest, RefundResponse, RefundItemRequest
 from core.config import settings
 from core.logging import get_structured_logger

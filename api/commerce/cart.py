@@ -5,7 +5,7 @@ from core.db import get_db
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from services.commerce.cart import CartService
-from models.auth.user import User
+from models.accounts.user import User
 from core.utils.response import Response
 from schemas.commerce.cart import AddToCartRequest, ApplyPromocodeRequest, UpdateCartItemRequest
 from core.dependencies import get_current_auth_user

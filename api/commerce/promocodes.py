@@ -7,7 +7,7 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.promos import PromocodeCreate, PromocodeUpdate
 from services.commerce.promocode import PromocodeService
-from models.auth.user import User
+from models.accounts.user import User
 from core.dependencies import get_current_auth_user
 from fastapi.security import OAuth2PasswordBearer
 
@@ -25,7 +25,7 @@ async def list(
 ):
     """Get all promocodes (Admin only)."""
     try:
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -81,7 +81,7 @@ async def get(
 ):
     """Get promocode by ID (Admin only)."""
     try:
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -130,7 +130,7 @@ async def create(
 ):
     """Create new promocode (Admin only)."""
     try:
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -174,7 +174,7 @@ async def update(
 ):
     """Update promocode (Admin only)."""
     try:
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -217,7 +217,7 @@ async def delete(
 ):
     """Delete promocode (Admin only)."""
     try:
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,

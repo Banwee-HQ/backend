@@ -74,7 +74,7 @@ class Refund(Base):
 
     # References
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
 
     # Refund details
     refund_number: Mapped[str] = mapped_column(String(50), unique=True)  # REF-XXXXXXXX
@@ -98,8 +98,8 @@ class Refund(Base):
 
     # Admin information
     admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # Internal admin notes
-    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)  # Admin who reviewed
-    processed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True) # Admin who processed
+    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.users.id"), nullable=True)  # Admin who reviewed
+    processed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.users.id"), nullable=True) # Admin who processed
 
     # Timestamps
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

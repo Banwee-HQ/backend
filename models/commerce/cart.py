@@ -19,7 +19,7 @@ class Cart(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey('auth.users.id'))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey('accounts.users.id'))
     
     items = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
     user = relationship("User", back_populates="cart")

@@ -14,7 +14,7 @@ from core.db import get_db
 from core.dependencies import get_current_user, require_admin
 from core.exceptions import APIException
 from core.utils.response import Response
-from models.auth.user import User
+from models.accounts.user import User
 from models.commerce.tax_rates import TaxRate
 from services.commerce.tax import TaxService
 from schemas.commerce.tax import (

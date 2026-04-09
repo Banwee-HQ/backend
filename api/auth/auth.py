@@ -8,11 +8,11 @@ from core.utils.response import Response as APIResponse
 from core.exceptions import APIException
 from core.config import settings
 from core.logging import get_structured_logger as get_logger
-from schemas.auth import UserCreate, UserLogin, RefreshTokenRequest, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
-from schemas.auth.user import AddressCreate, AddressUpdate, AddressResponse
-from services.auth.auth import AuthService
-from services.auth.user import UserService, AddressService
-from models.auth.user import User
+from schemas.accounts import UserCreate, UserLogin, RefreshTokenRequest, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
+from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
+from services.accounts.auth import AuthService
+from services.accounts.user import UserService, AddressService
+from models.accounts.user import User
 from uuid import UUID
 import time
 
@@ -305,7 +305,8 @@ async def resend_verification_email(
         email_key = request.email.lower()
 
         # Clean expired entries and enforce rate limit
-        timestamps = [t for t in _resend_requests.get(email_key, []) if current_time - t < RATE_LIMIT_WINDOW]
+        existing = _resend_requests.get(email_key, [])
+        timestamps = [t for t in existing if current_time - t < RATE_LIMIT_WINDOW]
         if len(timestamps) >= RATE_LIMIT_COUNT:
             raise APIException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                                message="Too many resend requests. Please try again later.")
@@ -332,7 +333,7 @@ async def resend_verification_email(
         user.token_expiration = datetime.now(timezone.utc) + timedelta(hours=24)
         await db.commit()
 
-        from services.auth.email import EmailQueue
+        from services.accounts.email import EmailQueue
         EmailQueue.send_verification(background_tasks, request.email, user.firstname, token)
 
         return APIResponse(success=True, message="Verification email sent successfully. Please check your inbox.")

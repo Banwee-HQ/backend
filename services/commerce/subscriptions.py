@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.subscriptions import Subscription
 from models.catalog.product import ProductVariant
-from models.auth.user import Address
+from models.accounts.user import Address
 from models.commerce.promocode import Promocode
 from uuid import UUID
 from datetime import datetime, timedelta, timezone

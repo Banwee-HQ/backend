@@ -50,7 +50,7 @@ class User(Base):
         Index('idx_users_stripe_customer', 'stripe_customer_id'),
         Index('idx_users_age', 'age'),
         Index('idx_users_gender', 'gender'),
-        {'schema': 'auth'}
+        {'schema': 'accounts'}
     )
 
     # Common fields (previously from BaseModel)
@@ -188,7 +188,7 @@ class Address(Base):
         Index('idx_addresses_user_default', 'user_id', 'is_default'),
         Index('idx_addresses_user_kind', 'user_id', 'kind'),
         Index('idx_addresses_country_city', 'country', 'city'),
-        {'schema': 'auth'}
+        {'schema': 'accounts'}
     )
 
     # Common fields (previously from BaseModel)
@@ -196,7 +196,7 @@ class Address(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     street: Mapped[str] = mapped_column(String(CHAR_LENGTH))
     city: Mapped[str] = mapped_column(String(100))
     state: Mapped[str] = mapped_column(String(100))

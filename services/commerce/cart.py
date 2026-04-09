@@ -15,7 +15,7 @@ from core.logging import get_structured_logger
 
 from models.commerce.cart import Cart, CartItem
 from models.catalog.product import ProductVariant, Product
-from models.auth.user import User
+from models.accounts.user import User
 from services.commerce.tax import TaxService
 from core.config import settings
 
@@ -49,7 +49,7 @@ class CartService:
         self.db = db
         self.tax_service = TaxService(db)
 
-    async def get_with_pricing(
+    async def get_cart(
         self, 
         user_id: Optional[UUID] = None,
         session_id: Optional[str] = None,
@@ -221,7 +221,7 @@ class CartService:
             'location': f"{country_code}-{province_code}" if province_code else country_code
         }
 
-    async def validate(
+    async def validate_cart(
         self,
         user_id: UUID,
         country_code: str = 'US',
@@ -445,142 +445,6 @@ class CartService:
             "item_count": 0,
             "currency": "USD"
         }
-
-    # Legacy method for backward compatibility
-    async def get_cart(self, *args, **kwargs):
-        """Legacy method - redirects to get_cart_with_pricing"""
-        return await self.get_with_pricing(*args, **kwargs)
-    
-    # Legacy method for backward compatibility  
-    async def validate_cart(self, user_id: UUID, **kwargs):
-        """Legacy method - redirects to validate_cart_comprehensive"""
-        result = await self.validate(user_id, **kwargs)
-        return {
-            'valid': result.valid,
-            'can_checkout': result.can_checkout,
-            'cart': result.cart,
-            'issues': result.issues,
-            'summary': result.summary
-        }
-
-        # Enrich cart items with detailed variant data
-        for item in cart.items:
-            variant = item.variant
-            product = item.product or variant.product if variant else None
-            
-            item_data = {
-                "id": item.id,
-                "cart_id": item.cart_id,
-                "variant_id": item.variant_id,
-                "quantity": item.quantity,
-                "price_per_unit": float(item.price_per_unit),
-                "total_price": float(item.total_price),
-                "created_at": item.created_at.isoformat() if item.created_at else None,
-                "updated_at": item.updated_at.isoformat() if item.updated_at else None
-            }
-
-            # Add comprehensive variant data if available
-            if variant:
-                # Calculate discount information
-                discount_percentage = 0
-                if variant.sale_price and variant.sale_price < variant.base_price:
-                    discount_percentage = round(((variant.base_price - variant.sale_price) / variant.base_price) * 100, 2)
-                
-                variant_dict = {
-                    'id': variant.id,
-                    'product_id': variant.product_id,
-                    'sku': variant.sku,
-                    'name': variant.name,
-                    'base_price': float(variant.base_price),
-                    'sale_price': float(variant.sale_price) if variant.sale_price else None,
-                    'current_price': float(variant.sale_price or variant.base_price),
-                    'discount_percentage': discount_percentage,
-                    'stock': variant.stock,
-                    'is_active': variant.is_active,
-                    'attributes': variant.attributes or {},
-                    'created_at': variant.created_at.isoformat() if variant.created_at else None,
-                    'updated_at': variant.updated_at.isoformat() if variant.updated_at else None,
-                    'images': [],
-                    'primary_image': None,
-                    'image_count': len(variant.images) if variant.images else 0
-                }
-                
-                # Add detailed product information
-                if product:
-                    variant_dict.update({
-                        'product_name': product.name,
-                        'product_description': product.description,
-                        'product_short_description': product.short_description,
-                        'product_slug': product.slug,
-                        'product_category': product.category if product.category else None,
-                        'product_rating_average': product.rating_average,
-                        'product_rating_count': product.rating_count,
-                        'product_is_featured': product.is_featured,
-                        'product_specifications': product.specifications,
-                        'product_dietary_tags': product.dietary_tags,
-                        'product_tags': product.tags.split(",") if product.tags else [],
-                        'product_origin': product.origin
-                    })
-                
-                # Process images with detailed information
-                if variant.images:
-                    # Sort images by sort_order, then by is_primary (primary first)
-                    sorted_images = sorted(variant.images, key=lambda x: (not x.is_primary, x.sort_order))
-                    
-                    variant_dict['images'] = [
-                        {
-                            'id': img.id,
-                            'variant_id': img.variant_id,
-                            'url': img.url,
-                            'alt_text': img.alt_text or f"{variant.name} - Image {img.sort_order + 1}",
-                            'is_primary': img.is_primary,
-                            'sort_order': img.sort_order,
-                            'format': img.format,
-                            'created_at': img.created_at.isoformat() if img.created_at else None
-                        }
-                        for img in sorted_images
-                    ]
-                    
-                    # Set primary image (first primary image or first image)
-                    primary_img = next((img for img in sorted_images if img.is_primary), sorted_images[0] if sorted_images else None)
-                    if primary_img:
-                        variant_dict['primary_image'] = {
-                            'id': primary_img.id,
-                            'variant_id': primary_img.variant_id,
-                            'url': primary_img.url,
-                            'alt_text': primary_img.alt_text or f"{variant.name} - Primary Image",
-                            'is_primary': primary_img.is_primary,
-                            'sort_order': primary_img.sort_order,
-                            'format': primary_img.format,
-                            'created_at': primary_img.created_at.isoformat() if primary_img.created_at else None
-                        }
-                else:
-                    # Provide fallback image information
-                    variant_dict['images'] = []
-                    variant_dict['primary_image'] = {
-                        'id': None,
-                        'variant_id': variant.id,
-                        'url': '/placeholder-product.jpg',  # Fallback image
-                        'alt_text': f"{variant.name} - No Image Available",
-                        'is_primary': True,
-                        'sort_order': 0,
-                        'format': 'jpg',
-                        'created_at': None
-                    }
-                
-                # Add inventory information
-                if hasattr(variant, 'inventory') and variant.inventory:
-                    variant_dict.update({
-                        'inventory_quantity_available': variant.inventory.quantity_available,
-                        'inventory_reorder_level': variant.inventory.reorder_point,
-                        'inventory_last_updated': variant.inventory.updated_at.isoformat() if variant.inventory.updated_at else None
-                    })
-                
-                item_data['variant'] = variant_dict
-
-            cart_data['items'].append(item_data)
-
-        return cart_data
 
     async def add_to_cart(
         self,
@@ -953,15 +817,6 @@ class CartService:
             "calculation_timestamp": datetime.utcnow().isoformat()
         }
 
-    async def merge_carts(
-        self,
-        user_id: UUID,
-        session_id: str
-    ) -> Dict[str, Any]:
-        """Merge guest cart with user cart after login"""
-        # For PostgreSQL version, just return the user's existing cart
-        # since we don't support guest carts in this implementation
-        return await self.get_cart(user_id=user_id)
 
     async def save_later(
         self,

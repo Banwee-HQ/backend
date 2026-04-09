@@ -10,7 +10,7 @@ from datetime import datetime
 from core.db import get_db
 from core.dependencies import get_current_user
 from core.utils.response import Response
-from models.auth.user import User
+from models.accounts.user import User
 from services.commerce.payments import PaymentService
 from schemas.commerce.payments import (
     PaymentMethodResponse,
@@ -226,7 +226,7 @@ async def refund(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a refund for a payment (admin only)"""
-    from models.auth.user import UserRole
+    from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

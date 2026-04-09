@@ -21,10 +21,10 @@ from schemas.commerce.subscriptions import (
 )
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
-from models.auth.user import User
+from models.accounts.user import User
 from models.catalog.product import Product, ProductVariant, ProductImage
 from models.commerce.subscriptions import Subscription
-from services.auth.auth import AuthService
+from services.accounts.auth import AuthService
 
 
 from fastapi.security import OAuth2PasswordBearer
@@ -44,7 +44,7 @@ async def trigger_subscription_order_processing(
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger subscription order processing (admin only)."""
-    from models.auth.user import UserRole
+    from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
@@ -65,7 +65,7 @@ async def trigger_subscription_notifications(
     db: AsyncSession = Depends(get_db)
     ):
     """Manually trigger subscription order notifications (admin only)."""
-    from models.auth.user import UserRole
+    from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
@@ -103,7 +103,7 @@ async def calculate_subscription_cost(
         # Get customer address for tax calculation
         customer_address = None
         if cost_request.delivery_address_id:
-            from models.auth.user import Address
+            from models.accounts.user import Address
             address_result = await db.execute(
                 select(Address).where(
                     and_(Address.id == cost_request.delivery_address_id, Address.user_id == current_user.id)

@@ -77,7 +77,7 @@ class Order(Base):
     order_number: Mapped[str] = mapped_column(String(50), unique=True)
 
     # Customer reference
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     guest_email: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)  # For guest orders
 
     # Subscription reference for recurring orders

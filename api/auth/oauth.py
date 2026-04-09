@@ -9,9 +9,9 @@ from sqlalchemy import select
 import httpx
 from core.db import get_db
 from core.config import settings
-from services.auth.auth import AuthService
-from models.auth.user import User
-from schemas.auth import UserCreate
+from services.accounts.auth import AuthService
+from models.accounts.user import User
+from schemas.accounts import UserCreate
 import secrets
 from datetime import datetime, timezone
 

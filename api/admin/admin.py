@@ -15,15 +15,15 @@ from services.commerce.orders import OrderService
 from services.commerce.shipping import ShippingService
 from services.catalog.products import ProductService
 from services.catalog.review import ReviewService
-from models.auth.user import User
+from models.accounts.user import User
 from models.commerce.subscriptions import Subscription
 from models.catalog.product import ProductVariant
 from models.commerce.refunds import Refund, RefundStatus, RefundItem
 from models.commerce.orders import Order
 from models.commerce.payments import PaymentIntent, Transaction
-from services.auth.auth import AuthService
-from schemas.auth import UserCreate
-from schemas.auth.user import UserUpdate
+from services.accounts.auth import AuthService
+from schemas.accounts import UserCreate
+from schemas.accounts.user import UserUpdate
 from schemas.catalog.product import ProductCreate, ProductUpdate
 from schemas.commerce.shipping import ShippingMethodCreate, ShippingMethodUpdate
 from core.dependencies import get_current_auth_user

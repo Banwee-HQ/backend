@@ -13,7 +13,7 @@ from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
 from core.dependencies import get_current_auth_user, get_current_admin_user
-from models.auth.user import User
+from models.accounts.user import User
 from models.commerce.shipping_tracking import (
     ShipmentTracking, ShippingProvider, ShippingCarrier, 
     TrackingStatus, ShipmentType

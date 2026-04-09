@@ -8,3 +8,4 @@ from .tax_rates import TaxRate
 from .promocode import Promocode
 from .discounts import Discount, SubscriptionDiscount, ProductRemovalAudit
 from .subscriptions import Subscription, SubscriptionProduct
+from .validation_rules import TaxValidationRule, ShippingValidationRule

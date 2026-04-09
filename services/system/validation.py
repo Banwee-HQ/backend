@@ -5,7 +5,7 @@ Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from models.system.validation_rules import TaxValidationRule, ShippingValidationRule
+from models.commerce.validation_rules import TaxValidationRule, ShippingValidationRule
 from models.commerce.subscriptions import SubscriptionProduct
 from models.catalog.product import Product
 from decimal import Decimal

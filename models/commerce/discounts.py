@@ -173,7 +173,7 @@ class ProductRemovalAudit(Base):
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
-    removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
+    removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

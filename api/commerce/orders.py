@@ -10,11 +10,11 @@ from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from services.commerce.orders import OrderService
-from models.auth.user import User, Address
+from models.accounts.user import User, Address
 from models.commerce.orders import Order
 from models.commerce.shipping import ShippingMethod
 from models.commerce.payments import PaymentMethod
-from services.auth.auth import AuthService
+from services.accounts.auth import AuthService
 from schemas.commerce.orders import OrderCreate, CheckoutRequest
 from core.dependencies import get_current_auth_user, get_order_service, require_admin
 
@@ -37,7 +37,7 @@ async def create_order(
     """Create a new order from OrderCreate request."""
     try:
         # First, create or get shipping address
-        from services.auth.user import AddressService
+        from services.accounts.user import AddressService
         address_service = AddressService(db)
         
         # Create shipping address

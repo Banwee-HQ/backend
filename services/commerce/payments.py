@@ -9,7 +9,7 @@ from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction
 from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus
 from models.commerce.subscriptions import Subscription
 from models.catalog.inventories import Inventory
-from models.auth.user import User
+from models.accounts.user import User
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta

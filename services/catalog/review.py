@@ -4,7 +4,7 @@ from sqlalchemy import func, desc
 from typing import Optional, List
 from models.catalog.review import Review
 from models.catalog.product import Product
-from models.auth.user import User
+from models.accounts.user import User
 from schemas.catalog.review import ReviewCreate, ReviewUpdate, ReviewResponse
 from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7

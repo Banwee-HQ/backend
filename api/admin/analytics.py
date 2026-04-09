@@ -12,11 +12,11 @@ from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
 from core.utils.response import Response
-from models.auth.user import User
+from models.accounts.user import User
 from models.admin.analytics import EventType, TrafficSource
 from services.admin.analytics import AnalyticsService
 from core.exceptions import APIException
-from services.auth.auth import AuthService
+from services.accounts.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -27,7 +27,7 @@ async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSe
 
 def require_admin(current_user: User = Depends(get_current_auth_user)):
     """Require admin role."""
-    from models.auth.user import UserRole
+    from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise APIException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -309,7 +309,7 @@ async def get_dashboard_data(
     """
     try:
         # Check if user has admin role
-        from models.auth.user import UserRole
+        from models.accounts.user import UserRole
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             # Return limited data for non-admin users
             return Response.success(

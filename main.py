@@ -100,7 +100,7 @@ app.add_middleware(
 if hasattr(settings, 'ALLOWED_HOSTS'):
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
-v1_router = APIRouter(prefix="/v1")
+v1_router = APIRouter(prefix="/v1", redirect_slashes=False)
 v1_router.include_router(auth_router)
 v1_router.include_router(oauth_router)
 v1_router.include_router(user_router)
