@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, List, Optional
-from datetime import datetime, datetime as dt
+from datetime import datetime, timezone
 from enum import Enum
 import uuid
 
@@ -54,7 +54,7 @@ class VariantTrackingEntry(Base):
 
     # Tracking metadata
     action_type: Mapped[TrackingActionType] = mapped_column(SQLEnum(TrackingActionType), default=TrackingActionType.ADDED)
-    tracking_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    tracking_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Additional context
     entry_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -112,7 +112,7 @@ class VariantPriceHistory(Base):
     # Change metadata
     change_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     changed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
-    effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Impact tracking
     affected_subscriptions_count: Mapped[int] = mapped_column(Integer, default=0)

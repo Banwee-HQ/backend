@@ -1232,6 +1232,90 @@ class OrderService:
 
         return await self._format_order_response(order)
 
+    async def get_all_orders(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        order_status: Optional[str] = None,
+        q: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Get all orders with filtering and pagination (for admin use)"""
+        try:
+            offset = (page - 1) * limit
+            
+            query = select(Order).options(
+                selectinload(Order.user),
+                selectinload(Order.items)
+            )
+            count_query = select(func.count(Order.id))
+            
+            conditions = []
+            
+            if order_status:
+                conditions.append(Order.order_status == order_status)
+            
+            if q:
+                conditions.append(
+                    or_(
+                        Order.id.cast(String).ilike(f"%{q}%"),
+                        Order.user.has(User.email.ilike(f"%{q}%"))
+                    )
+                )
+            
+            if date_from:
+                try:
+                    date_from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                    conditions.append(Order.created_at >= date_from_dt)
+                except ValueError:
+                    pass
+            
+            if date_to:
+                try:
+                    date_to_dt = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                    conditions.append(Order.created_at <= date_to_dt)
+                except ValueError:
+                    pass
+            
+            if min_price is not None:
+                conditions.append(Order.total_amount >= min_price)
+            
+            if max_price is not None:
+                conditions.append(Order.total_amount <= max_price)
+            
+            if conditions:
+                query = query.where(and_(*conditions))
+                count_query = count_query.where(and_(*conditions))
+            
+            query = query.order_by(desc(Order.created_at)).offset(offset).limit(limit)
+            
+            result = await self.db.execute(query)
+            orders = result.scalars().all()
+            
+            total = await self.db.scalar(count_query) or 0
+            
+            return {
+                "data": [await self._format_order_response(order) for order in orders],
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit if total > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.error("Failed to fetch orders", exception=e)
+            return {
+                "data": [],
+                "total": 0,
+                "page": page,
+                "limit": limit,
+                "pages": 0,
+                "error": str(e)
+            }
+
     async def cancel_order(self, order_id: UUID, user_id: UUID) -> OrderResponse:
         """Cancel an order with transaction safety"""
         query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).with_for_update()

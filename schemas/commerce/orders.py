@@ -3,6 +3,8 @@ from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 
+from models.commerce.orders import OrderStatus, PaymentStatus, FulfillmentStatus
+
 
 class OrderItemCreate(BaseModel):
     variant_id: UUID
@@ -37,7 +39,9 @@ class OrderCreate(BaseModel):
 
 
 class OrderUpdate(BaseModel):
-    status: Optional[str] = None
+    order_status: Optional[OrderStatus] = None
+    payment_status: Optional[PaymentStatus] = None
+    fulfillment_status: Optional[FulfillmentStatus] = None
     tracking_number: Optional[str] = None
     notes: Optional[str] = None
 
@@ -56,7 +60,9 @@ class OrderItemResponse(BaseModel):
 class OrderResponse(BaseModel):
     id: UUID
     user_id: UUID
-    status: str
+    order_status: OrderStatus
+    payment_status: PaymentStatus
+    fulfillment_status: FulfillmentStatus
     total_amount: float
     subtotal: Optional[float] = None
     tax_amount: Optional[float] = None
@@ -68,11 +74,15 @@ class OrderResponse(BaseModel):
     shipping_address: Optional[dict] = None
     billing_address: Optional[dict] = None
     items: List[OrderItemResponse]
-    created_at: str = Field(..., description="ISO format datetime string")
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True, json_encoders={
-        datetime: lambda v: v.isoformat() if v else None
-    })
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 
 
 # Order Intent schemas

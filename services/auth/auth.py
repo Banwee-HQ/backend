@@ -4,7 +4,7 @@ from fastapi import HTTPException, Depends, status, BackgroundTasks
 
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import secrets
 from core.logging import get_structured_logger
@@ -39,7 +39,7 @@ class AuthService:
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         
         to_encode.update({
             "exp": expire,
@@ -58,7 +58,7 @@ class AuthService:
         if expires_delta:
             expire = datetime.utcnow() + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         
         to_encode.update({
             "exp": expire,
@@ -89,7 +89,7 @@ class AuthService:
             
             # Check expiration
             exp = payload.get("exp")
-            if exp is None or datetime.utcnow() > datetime.fromtimestamp(exp):
+            if exp is None or datetime.now(timezone.utc) > datetime.fromtimestamp(exp, tz=timezone.utc):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Token has expired",
@@ -289,7 +289,7 @@ class AuthService:
                 
             # Check token expiration
             exp = payload.get("exp")
-            if exp is None or datetime.utcnow() > datetime.fromtimestamp(exp):
+            if exp is None or datetime.now(timezone.utc) > datetime.fromtimestamp(exp, tz=timezone.utc):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Token has expired",
@@ -332,7 +332,7 @@ class AuthService:
         
         # Store token in user record with expiration (1 hour)
         user.reset_token = reset_token
-        user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+        user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         await self.db.commit()
         
         logger.info(f"Password reset token generated for {email}")
@@ -374,7 +374,7 @@ class AuthService:
             )
         
         # Check token expiration
-        if not user.reset_token_expires or user.reset_token_expires < datetime.utcnow():
+        if not user.reset_token_expires or user.reset_token_expires < datetime.now(timezone.utc):
             logger.warning(f"Password reset attempted with expired token for user {user.email}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

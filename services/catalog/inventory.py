@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
 from models.catalog.product import ProductVariant, Product, ProductImage
 from models.auth.user import User
@@ -63,7 +63,7 @@ class InventoryService:
         for field, value in location_data.model_dump(exclude_unset=True).items():
             setattr(location, field, value)
         
-        location.updated_at = datetime.utcnow()
+        location.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(location)
         return WarehouseLocationResponse.model_validate(location)
@@ -393,7 +393,7 @@ class InventoryService:
                         "last_restocked_at": None,
                         "last_sold_at": None,
                         "version": 1,
-                        "created_at": getattr(item, 'created_at', datetime.utcnow()).isoformat() if hasattr(item, 'created_at') else None,
+                        "created_at": getattr(item, 'created_at', datetime.now(timezone.utc)).isoformat() if hasattr(item, 'created_at') else None,
                         "updated_at": None,
                         "variant": None,
                         "location": None,
@@ -448,7 +448,7 @@ class InventoryService:
             quantity_value = update_data.pop("quantity")
             inventory_item.quantity_available = quantity_value
             inventory_item.quantity = quantity_value
-            inventory_item.last_restocked_at = datetime.utcnow()
+            inventory_item.last_restocked_at = datetime.now(timezone.utc)
 
         if location_name:
             normalized_name = location_name.strip()
@@ -467,7 +467,7 @@ class InventoryService:
         for field, value in update_data.items():
             setattr(inventory_item, field, value)
 
-        inventory_item.updated_at = datetime.utcnow()
+        inventory_item.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(inventory_item)
         return InventoryResponse.model_validate(inventory_item)

@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc
+from sqlalchemy import select, and_, or_, desc, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
@@ -161,17 +161,27 @@ class RefundService:
         self,
         user_id: UUID,
         status: Optional[RefundStatus] = None,
-        limit: int = 20,
-        offset: int = 0
-    ) -> List[RefundResponse]:
-        """Get user's refund history"""
+        page: int = 1,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """Get user's refund history with pagination"""
         try:
-            query = select(Refund).where(Refund.user_id == user_id)
+            offset = (page - 1) * limit
+            
+            # Build base query
+            base_query = select(Refund).where(Refund.user_id == user_id)
+            count_query = select(func.count()).select_from(Refund).where(Refund.user_id == user_id)
             
             if status:
-                query = query.where(Refund.status == status)
+                base_query = base_query.where(Refund.status == status)
+                count_query = count_query.where(Refund.status == status)
             
-            query = query.options(
+            # Get total count
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Get paginated results
+            query = base_query.options(
                 selectinload(Refund.order),
                 selectinload(Refund.refund_items).selectinload(RefundItem.order_item)
             ).order_by(desc(Refund.created_at)).limit(limit).offset(offset)
@@ -179,7 +189,13 @@ class RefundService:
             result = await self.db.execute(query)
             refunds = result.scalars().all()
             
-            return [await self._format_refund_response(refund) for refund in refunds]
+            return {
+                "items": [await self._format_refund_response(refund) for refund in refunds],
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit if limit > 0 else 0
+            }
             
         except Exception as e:
             logger.error(f"Failed to get user refunds: {e}")

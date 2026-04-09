@@ -46,6 +46,17 @@ class UserSession(Base):
     """User session tracking for analytics"""
     __tablename__ = "user_sessions"
     __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_user_sessions_session_id', 'session_id'),
+        Index('idx_user_sessions_user_id', 'user_id'),
+        Index('idx_user_sessions_created_at', 'created_at'),
+        Index('idx_user_sessions_started_at', 'started_at'),
+        Index('idx_user_sessions_ended_at', 'ended_at'),
+        Index('idx_user_sessions_traffic_source', 'traffic_source'),
+        Index('idx_user_sessions_converted', 'converted'),
+        # Composite indexes for common queries
+        Index('idx_user_sessions_user_created', 'user_id', 'created_at'),
+        Index('idx_user_sessions_source_created', 'traffic_source', 'created_at'),
         {'schema': 'admin'},
     )
 

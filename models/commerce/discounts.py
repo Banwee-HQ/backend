@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import uuid
 from enum import Enum
@@ -78,7 +78,7 @@ class Discount(Base):
 
     def is_valid(self) -> bool:
         """Check if discount is currently valid"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return (
             self.is_active and
             self.valid_from <= now <= self.valid_until and

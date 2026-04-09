@@ -3,6 +3,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
 
+from models.catalog.product import ProductStatus, AvailabilityStatus
+
 
 class ProductImageResponse(BaseModel):
     id: UUID
@@ -57,7 +59,7 @@ class ProductVariantUpdate(BaseModel):
     dietary_tags: Optional[List[str]] = None
     tags: Optional[str] = None
     is_active: Optional[bool] = None
-    availability_status: Optional[str] = None
+    availability_status: Optional[AvailabilityStatus] = None
     images: Optional[List[Dict[str, Any]]] = None  # List of image objects with id, url, alt_text, is_primary, sort_order
 
 
@@ -68,7 +70,7 @@ class ProductUpdate(BaseModel):
     short_description: Optional[str] = None
     category_id: Optional[UUID] = None
     origin: Optional[str] = None
-    product_status: Optional[str] = None
+    product_status: Optional[ProductStatus] = None
     is_featured: Optional[bool] = None
     is_bestseller: Optional[bool] = None
     variants: Optional[List[ProductVariantUpdate]] = None
@@ -97,21 +99,24 @@ class ProductVariantResponse(BaseModel):
     specifications: Optional[Dict[str, Any]] = None
     dietary_tags: Optional[List[str]] = []
     tags: List[str] = []
-    availability_status: str = "available"
+    availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE
     view_count: int = 0
     purchase_count: int = 0
     is_active: bool
     images: List[ProductImageResponse] = []
     primary_image: Optional[ProductImageResponse] = None
     inventory: Optional[InventoryResponse] = None
-    created_at: str
-    updated_at: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime] = None
     product_name: Optional[str] = None
     product_description: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True, json_encoders={
-        datetime: lambda v: v.isoformat() if v else None
-    })
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 
 
 class PriceRange(BaseModel):
@@ -131,14 +136,19 @@ class ProductResponse(BaseModel):
     is_active: bool
     price_range: PriceRange
     in_stock: bool
-    availability_status: str = "available"
-    created_at: str
-    updated_at: Optional[str]
+    availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE
+    created_at: datetime
+    updated_at: Optional[datetime] = None
     # Relationships
     variants: List[ProductVariantResponse] = []
     primary_variant: Optional[ProductVariantResponse] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 
 
 class ProductListResponse(BaseModel):

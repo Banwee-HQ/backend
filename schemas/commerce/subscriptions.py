@@ -1,8 +1,10 @@
 """Subscription schemas"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
+
+from models.commerce.subscriptions import SubscriptionStatus, BillingCycle, DeliveryType
 
 
 class VariantItem(BaseModel):
@@ -20,7 +22,7 @@ class VariantPrice(BaseModel):
 
 class DiscountInfo(BaseModel):
     """Discount information"""
-    type: str  # "percentage" or "fixed"
+    discount_type: str  # "percentage" or "fixed"
     value: float
     code: Optional[str] = None
 
@@ -30,9 +32,9 @@ class CreateSubscription(BaseModel):
     name: str
     variant_ids: List[str]
     variant_quantities: Optional[Dict[str, int]] = {}
-    delivery_type: str = "standard"
+    delivery_type: DeliveryType = DeliveryType.STANDARD
     delivery_address_id: Optional[UUID] = None
-    billing_cycle: str = "monthly"
+    billing_cycle: BillingCycle = BillingCycle.MONTHLY
     currency: str = "USD"
     discount_code: Optional[str] = None
 
@@ -40,7 +42,7 @@ class CreateSubscription(BaseModel):
 class UpdateSubscription(BaseModel):
     """Update subscription"""
     name: Optional[str] = None
-    delivery_type: Optional[str] = None
+    delivery_type: Optional[DeliveryType] = None
     delivery_address_id: Optional[UUID] = None
     auto_renew: Optional[bool] = None
     variant_ids: Optional[List[str]] = None
@@ -51,7 +53,7 @@ class SubscriptionCostCalculationRequest(BaseModel):
     """Request to calculate subscription cost"""
     variant_ids: List[str]
     variant_quantities: Optional[Dict[str, int]] = {}
-    delivery_type: str = "standard"
+    delivery_type: DeliveryType = DeliveryType.STANDARD
     delivery_address_id: Optional[UUID] = None
     currency: str = "USD"
 
@@ -89,12 +91,12 @@ class SubscriptionResponse(BaseModel):
     id: str
     user_id: str
     name: str
-    status: str
+    status: SubscriptionStatus
     currency: str
-    billing_cycle: str
+    billing_cycle: BillingCycle
     auto_renew: bool
-    next_billing_date: Optional[str]
-    delivery_type: Optional[str]
+    next_billing_date: Optional[datetime]
+    delivery_type: Optional[DeliveryType]
     delivery_address_id: Optional[str]
     
     # At-creation prices
@@ -114,9 +116,13 @@ class SubscriptionResponse(BaseModel):
     # Products
     products: Optional[List[Dict[str, Any]]] = []
     
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 

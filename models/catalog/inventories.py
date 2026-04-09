@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
 from core.logging import get_structured_logger
@@ -164,9 +164,9 @@ class Inventory(Base):
         
         # Update timestamps
         if quantity_change < 0:
-            self.last_sold_at = datetime.utcnow()
+            self.last_sold_at = datetime.now(timezone.utc)
         elif quantity_change > 0:
-            self.last_restocked_at = datetime.utcnow()
+            self.last_restocked_at = datetime.now(timezone.utc)
         
         # Create audit record
         adjustment = StockAdjustment(

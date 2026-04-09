@@ -35,74 +35,15 @@ class AdminService:
         status: Optional[str] = None,
         verified: Optional[bool] = None
     ) -> Dict[str, Any]:
-        """Get all users with pagination and filtering"""
-        offset = (page - 1) * limit
+        """Get all users with pagination and filtering - delegates to UserService"""
+        from services.auth.user import UserService
         
-        query = select(User)
-        count_query = select(func.count(User.id))
-        
-        conditions = []
-        if search:
-            conditions.append(
-                or_(
-                    User.email.ilike(f"%{search}%"),
-                    User.firstname.ilike(f"%{search}%"),
-                    User.lastname.ilike(f"%{search}%")
-                )
-            )
-        
-        if role_filter:
-            conditions.append(User.role == role_filter)
-            
-        if status:
-            # Assuming status refers to is_active field
-            if status.lower() == 'active':
-                conditions.append(User.is_active == True)
-            elif status.lower() == 'inactive':
-                conditions.append(User.is_active == False)
-                
-        if verified is not None:
-            # `User.verified` is a read-only property; filter against the
-            # underlying `verification_status` column instead.
-            conditions.append(User.verification_status == ('verified' if verified else 'unverified'))
-        
-        # Exclude soft-deleted users by default
-        conditions.append(User.account_status != "deleted")
-
-        if conditions:
-            query = query.where(and_(*conditions))
-            count_query = count_query.where(and_(*conditions))
-        
-        query = query.order_by(desc(User.created_at)).offset(offset).limit(limit)
-        
-        result = await self.db.execute(query)
-        users = result.scalars().all()
-        
-        total = await self.db.scalar(count_query)
-        
-        return {
-            "users": [
-                {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "firstname": user.firstname,
-                    "lastname": user.lastname,
-                    "role": user.role,
-                    "is_active": user.is_active,
-                    "status": "active" if user.is_active else "inactive",
-                    "verified": user.verified,
-                    "created_at": user.created_at.isoformat() if user.created_at else None,
-                    "last_login": user.last_login.isoformat() if user.last_login else None
-                }
-                for user in users
-            ],
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": (total + limit - 1) // limit
-            }
-        }
+        user_service = UserService(self.db)
+        return await user_service.get_users(
+            page=page,
+            limit=limit,
+            role=role_filter
+        )
 
     async def update_user_role(
         self,
@@ -592,107 +533,20 @@ class AdminService:
         min_price: Optional[float] = None,
         max_price: Optional[float] = None
     ) -> Dict[str, Any]:
-        """Get all orders with filtering and pagination"""
-        try:
-
-
-            from models.commerce.orders import Order
-            
-            offset = (page - 1) * limit
-            
-            query = select(Order).options(
-                selectinload(Order.user),
-                selectinload(Order.items)
-            )
-            count_query = select(func.count(Order.id))
-            
-            conditions = []
-            
-            if order_status:
-                conditions.append(Order.order_status == order_status)
-            
-            if q:
-                logger.debug(f"DEBUG: Processing 'q' filter. q type: {type(q)}, q value: {q}")
-                conditions.append(
-                    or_(
-                        Order.id.cast(String).ilike(f"%{q}%"),
-                        Order.user.has(User.email.ilike(f"%{q}%"))
-                    )
-                )
-            
-            if date_from:
-                try:
-                    date_from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
-                    conditions.append(Order.created_at >= date_from_dt)
-                except ValueError:
-                    pass
-            
-            if date_to:
-                try:
-                    date_to_dt = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
-                    conditions.append(Order.created_at <= date_to_dt)
-                except ValueError:
-                    pass
-            
-            if min_price is not None:
-                conditions.append(Order.total_amount >= min_price)
-            
-            if max_price is not None:
-                conditions.append(Order.total_amount <= max_price)
-            
-            if conditions:
-                query = query.where(and_(*conditions))
-                count_query = count_query.where(and_(*conditions))
-            
-            query = query.order_by(desc(Order.created_at)).offset(offset).limit(limit)
-            
-            result = await self.db.execute(query)
-            orders = result.scalars().all()
-            
-            total = await self.db.scalar(count_query) or 0
-            
-            return {
-                "data": [
-                    {
-                        "id": str(order.id),
-                        "order_number": order.order_number,
-                        "user_email": order.user.email if order.user else "Unknown",
-                        "user_name": f"{order.user.firstname or ''} {order.user.lastname or ''}".strip() if order.user else None,
-                        "user": {
-                            "firstname": order.user.firstname if order.user else None,
-                            "lastname": order.user.lastname if order.user else None,
-                            "email": order.user.email if order.user else "Unknown"
-                        } if order.user else None,
-                        "total_amount": float(order.total_amount),
-                        "status": order.order_status.value if hasattr(order.order_status, "value") else order.order_status,
-                        "order_status": order.order_status.value if hasattr(order.order_status, "value") else order.order_status,
-                        "payment_status": order.payment_status.value if hasattr(order.payment_status, "value") else order.payment_status,
-                        "fulfillment_status": order.fulfillment_status.value if hasattr(order.fulfillment_status, "value") else order.fulfillment_status,
-                        "created_at": order.created_at.isoformat() if order.created_at else None,
-                        "updated_at": order.updated_at.isoformat() if order.updated_at else None,
-                        "shipped_at": order.shipped_at.isoformat() if order.shipped_at else None,
-                        "delivered_at": order.delivered_at.isoformat() if order.delivered_at else None,
-                        "items_count": len(order.items) if order.items else 0
-                    }
-                    for order in orders
-                ],
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "pages": (total + limit - 1) // limit if total > 0 else 0
-                }
-            }
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            logger.error(f"DEBUG: Exception in get_all_orders: {type(e).__name__} - {e}")
-            return {
-                "data": [],
-                "pagination": {"page": page, "limit": limit, "total": 0, "pages": 0},
-                "error": f"Failed to fetch orders: {str(e)}"
-            }
+        """Get all orders with filtering and pagination - delegates to OrderService"""
+        from services.commerce.orders import OrderService
+        
+        order_service = OrderService(self.db)
+        return await order_service.get_all_orders(
+            page=page,
+            limit=limit,
+            order_status=order_status,
+            q=q,
+            date_from=date_from,
+            date_to=date_to,
+            min_price=min_price,
+            max_price=max_price
+        )
 
     def _calculate_subtotal_from_items(self, items: List) -> float:
         """
@@ -843,169 +697,17 @@ class AdminService:
         category: Optional[str] = None,
         status: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Get all products with complete data including images, SKU, category, price, stock status, and variants"""
-        try:
-            from models.catalog.product import Product, ProductVariant, ProductImage
-            from models.catalog.inventories import Inventory
-            from models.auth.user import User
-            
-            offset = (page - 1) * limit
-            
-            # Build query with all necessary joins
-            query = select(Product).options(
-                selectinload(Product.variants).selectinload(ProductVariant.images),
-                selectinload(Product.variants).selectinload(ProductVariant.inventory)
-            )
-            count_query = select(func.count(Product.id))
-            
-            conditions = []
-            
-            if search:
-                conditions.append(
-                    or_(
-                        Product.name.ilike(f"%{search}%"),
-                        Product.description.ilike(f"%{search}%"),
-                        Product.slug.ilike(f"%{search}%")
-                    )
-                )
-            
-            if status:
-                if status == "active":
-                    conditions.append(Product.is_active == True)
-                elif status == "inactive":
-                    conditions.append(Product.is_active == False)
-                elif status == "draft":
-                    conditions.append(Product.product_status == "draft")
-                elif status == "discontinued":
-                    conditions.append(Product.product_status == "discontinued")
-            
-            if conditions:
-                query = query.where(and_(*conditions))
-                count_query = count_query.where(and_(*conditions))
-            
-            query = query.order_by(desc(Product.created_at)).offset(offset).limit(limit)
-            
-            result = await self.db.execute(query)
-            products = result.scalars().all()
-            
-            total = await self.db.scalar(count_query) or 0
-            
-            # Format products with complete data
-            formatted_products = []
-            for product in products:
-                # Get primary variant and its data
-                primary_variant = product.variants[0] if product.variants else None
-                
-                # Calculate total stock across all variants
-                total_stock = sum(
-                    variant.inventory.quantity_available if variant.inventory else 0 
-                    for variant in product.variants
-                )
-                
-                # Determine stock status
-                if total_stock == 0:
-                    stock_status = "out_of_stock"
-                elif total_stock <= 10:  # Low stock threshold
-                    stock_status = "low_stock"
-                else:
-                    stock_status = "in_stock"
-                
-                # Derive min/max price from variants
-                variant_prices = [
-                    (v.sale_price if v.sale_price is not None else v.base_price)
-                    for v in product.variants
-                    if v.is_active
-                ] if product.variants else []
-                min_price_val = min(variant_prices) if variant_prices else 0
-                max_price_val = max(variant_prices) if variant_prices else 0
-                
-                # Format variants data
-                variants_data = []
-                for variant in product.variants:
-                    current_price = variant.sale_price if variant.sale_price is not None else variant.base_price
-                    variant_data = {
-                        "id": str(variant.id),
-                        "sku": variant.sku,
-                        "name": variant.name,
-                        "base_price": float(variant.base_price),
-                        "sale_price": float(variant.sale_price) if variant.sale_price is not None else None,
-                        "current_price": float(current_price),
-                        "stock": variant.inventory.quantity_available if variant.inventory else 0,
-                        "is_active": variant.is_active,
-                        "attributes": variant.attributes,
-                        "images": [
-                            {
-                                "id": str(img.id),
-                                "url": img.url,
-                                "alt_text": img.alt_text,
-                                "is_primary": getattr(img, "is_primary", False),
-                                "sort_order": getattr(img, "sort_order", 0),
-                            }
-                            for img in (variant.images or [])
-                        ],
-                        "primary_image": next(
-                            (
-                                {"id": str(img.id), "url": img.url, "alt_text": img.alt_text, "is_primary": True}
-                                for img in (variant.images or []) if getattr(img, "is_primary", False)
-                            ),
-                            (variant.images[0].to_dict() if variant.images else None)
-                        )
-                    }
-                    variants_data.append(variant_data)
-                
-                # Calculate total views and purchases across all variants
-                total_views = sum(variant.view_count for variant in product.variants) if product.variants else 0
-                total_purchases = sum(variant.purchase_count for variant in product.variants) if product.variants else 0
-                
-                product_data = {
-                    "id": str(product.id),
-                    "name": product.name,
-                    "slug": product.slug,
-                    "description": product.description,
-                    "short_description": product.short_description,
-                    "product_status": product.product_status,
-                    "availability_status": product.availability_status,
-                    "is_active": product.is_active,
-                    "is_featured": product.is_featured,
-                    "is_bestseller": product.is_bestseller,
-                    "rating_average": product.rating_average,
-                    "rating_count": product.rating_count,
-                    "review_count": product.review_count,
-                    "min_price": float(min_price_val) if min_price_val is not None else 0,
-                    "max_price": float(max_price_val) if max_price_val is not None else 0,
-                    "price": float(min_price_val) if min_price_val is not None else 0,
-                    "view_count": total_views,
-                    "purchase_count": total_purchases,
-                    "total_stock": total_stock,
-                    "stock_status": stock_status,
-                    "category": product.category if product.category else None,
-                    "variants": variants_data,
-                    "primary_variant": variants_data[0] if variants_data else None,
-                    "created_at": product.created_at.isoformat() if product.created_at else None,
-                    "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-                    "published_at": product.published_at.isoformat() if product.published_at else None
-                }
-                
-                formatted_products.append(product_data)
-            
-            return {
-                "data": formatted_products,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "pages": (total + limit - 1) // limit if total > 0 else 0
-                }
-            }
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return {
-                "data": [],
-                "pagination": {"page": page, "limit": limit, "total": 0, "pages": 0},
-                "error": f"Failed to fetch products: {str(e)}"
-            }
+        """Get all products - delegates to ProductService to avoid duplication"""
+        from services.catalog.products import ProductService
+        
+        product_service = ProductService(self.db)
+        return await product_service.get_products(
+            page=page,
+            limit=limit,
+            search=search,
+            category=category,
+            status=status
+        )
 
     async def get_all_variants(
         self,
@@ -1014,75 +716,17 @@ class AdminService:
         search: Optional[str] = None,
         product_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Get all product variants with filtering"""
-        try:
-            from models.catalog.product import ProductVariant, Product
-            
-            offset = (page - 1) * limit
-            
-            query = select(ProductVariant).options(
-                selectinload(ProductVariant.product),
-                selectinload(ProductVariant.inventory)
-            )
-            count_query = select(func.count(ProductVariant.id))
-            
-            conditions = []
-            
-            if search:
-                conditions.append(
-                    or_(
-                        ProductVariant.name.ilike(f"%{search}%"),
-                        ProductVariant.sku.ilike(f"%{search}%")
-                    )
-                )
-            
-            if product_id:
-                conditions.append(ProductVariant.product_id == UUID(product_id))
-            
-            if conditions:
-                query = query.where(and_(*conditions))
-                count_query = count_query.where(and_(*conditions))
-            
-            query = query.order_by(desc(ProductVariant.created_at)).offset(offset).limit(limit)
-            
-            result = await self.db.execute(query)
-            variants = result.scalars().all()
-            
-            total = await self.db.scalar(count_query) or 0
-            
-            return {
-                "data": [
-                    {
-                        "id": str(variant.id),
-                        "product_id": str(variant.product_id),
-                        "sku": variant.sku,
-                        "name": variant.name,
-                        "base_price": variant.base_price,
-                        "sale_price": variant.sale_price,
-                        "stock": variant.inventory.quantity_available if variant.inventory else 0,
-                        "is_active": variant.is_active,
-                        "product": {
-                            "id": str(variant.product.id),
-                            "name": variant.product.name
-                        } if variant.product else None,
-                        "created_at": variant.created_at.isoformat() if variant.created_at else None
-                    }
-                    for variant in variants
-                ],
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "pages": (total + limit - 1) // limit if total > 0 else 0
-                }
-            }
-            
-        except Exception as e:
-            return {
-                "data": [],
-                "pagination": {"page": page, "limit": limit, "total": 0, "pages": 0},
-                "error": f"Failed to fetch variants: {str(e)}"
-            }
+        """Get all product variants with filtering - delegates to ProductService"""
+        from services.catalog.products import ProductService
+        from uuid import UUID
+        
+        product_service = ProductService(self.db)
+        return await product_service.get_all_variants(
+            page=page,
+            limit=limit,
+            search=search,
+            product_id=UUID(product_id) if product_id else None
+        )
 
     # User management methods
     async def create_user(self, user_data, background_tasks) -> Dict[str, Any]:

@@ -1,10 +1,10 @@
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from core.logging import get_structured_logger
 
 from models.catalog.wishlist import Wishlist, WishlistItem
@@ -20,22 +20,46 @@ class WishlistService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_wishlists(self, user_id: UUID) -> List[Wishlist]:
+    async def get_wishlists(
+        self,
+        user_id: UUID,
+        page: int = 1,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """Get paginated list of wishlists for user"""
         try:
-            logger.info(f"Fetching wishlists for user_id: {user_id}")
-            query = select(Wishlist).where(Wishlist.user_id == user_id).options(
+            logger.info(f"Fetching wishlists for user_id: {user_id}, page={page}, limit={limit}")
+            offset = (page - 1) * limit
+            
+            # Build queries
+            base_query = select(Wishlist).where(Wishlist.user_id == user_id)
+            count_query = select(func.count()).select_from(Wishlist).where(Wishlist.user_id == user_id)
+            
+            # Get total count
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Get paginated wishlists
+            query = base_query.options(
                 selectinload(Wishlist.items).selectinload(WishlistItem.product).selectinload(
                     Product.variants).selectinload(ProductVariant.images),
                 selectinload(Wishlist.items).selectinload(
                     WishlistItem.variant).selectinload(ProductVariant.images)
-            )
+            ).offset(offset).limit(limit)
+            
             result = await self.db.execute(query)
             wishlists = result.scalars().all()
+            
             logger.info(f"Successfully fetched {len(wishlists)} wishlists for user_id: {user_id}")
-            return wishlists
+            return {
+                "items": list(wishlists),
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit if limit > 0 else 0
+            }
         except Exception as e:
             logger.error(f"Error in get_wishlists for user_id {user_id}: {str(e)}", exc_info=True)
-            # Re-raise the exception so the route handler can return proper error response
             raise
 
     async def get_wishlist_by_id(self, wishlist_id: UUID, user_id: UUID) -> Optional[Wishlist]:
@@ -170,6 +194,47 @@ class WishlistService:
             await self.db.rollback()
             # Wrap other exceptions in a generic 500 error
             raise HTTPException(status_code=500, detail="An unexpected error occurred while adding the item.")
+
+    async def get_wishlist_items(
+        self,
+        wishlist_id: UUID,
+        user_id: UUID,
+        page: int = 1,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """Get paginated wishlist items"""
+        try:
+            logger.info(f"Fetching items for wishlist {wishlist_id}, user_id: {user_id}, page={page}, limit={limit}")
+            offset = (page - 1) * limit
+            
+            # Build queries
+            base_query = select(WishlistItem).where(WishlistItem.wishlist_id == wishlist_id)
+            count_query = select(func.count()).select_from(WishlistItem).where(WishlistItem.wishlist_id == wishlist_id)
+            
+            # Get total count
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Get paginated items with eager loading
+            query = base_query.options(
+                selectinload(WishlistItem.product),
+                selectinload(WishlistItem.variant).selectinload(ProductVariant.images)
+            ).offset(offset).limit(limit)
+            
+            result = await self.db.execute(query)
+            items = result.scalars().all()
+            
+            logger.info(f"Successfully fetched {len(items)} items for wishlist {wishlist_id}")
+            return {
+                "items": list(items),
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit if limit > 0 else 0
+            }
+        except Exception as e:
+            logger.error(f"Error in get_wishlist_items for wishlist_id {wishlist_id}: {str(e)}", exc_info=True)
+            raise
 
     async def remove_item_from_wishlist(self, wishlist_id: UUID, item_id: UUID) -> bool:
         try:

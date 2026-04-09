@@ -3,6 +3,8 @@ from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 
+from models.catalog.inventories import InventoryStatus
+
 
 # --- WarehouseLocation Schemas ---
 class WarehouseLocationBase(BaseModel):
@@ -26,7 +28,12 @@ class WarehouseLocationResponse(WarehouseLocationBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 
 
 # --- Inventory Schemas ---
@@ -54,13 +61,18 @@ class InventoryResponse(InventoryBase):
     updated_at: Optional[datetime] = None
     quantity_available: Optional[int] = None
     reorder_point: Optional[int] = None
-    inventory_status: Optional[str] = None
+    inventory_status: Optional[InventoryStatus] = None
     last_restocked_at: Optional[datetime] = None
     last_sold_at: Optional[datetime] = None
     version: Optional[int] = None
     location: Optional[WarehouseLocationResponse] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 
 
 # --- StockAdjustment Schemas ---
@@ -85,4 +97,9 @@ class StockAdjustmentResponse(StockAdjustmentBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )

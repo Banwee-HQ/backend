@@ -1,24 +1,19 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, text
 from sqlalchemy.orm import selectinload
-from typing import Optional, List, Dict, Any
-from fastapi import HTTPException
-import uuid
+from typing import Optional, List, Dict, Any, TypeVar
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.catalog.product import Product, ProductVariant, ProductImage
+from models.catalog.product import Product, ProductVariant, ProductImage, ProductStatus, AvailabilityStatus
 from models.catalog.inventories import Inventory
-from models.commerce.cart import CartItem
-from models.auth.user import User
-from models.catalog.review import Review
-from models.catalog.wishlist import WishlistItem
 from schemas.catalog.product import (
-    ProductCreate, ProductUpdate, ProductResponse, ProductListResponse,
+    ProductCreate, ProductUpdate, ProductResponse,
     ProductVariantResponse, ProductImageResponse, PriceRange
 )
+from schemas.catalog.inventory import InventoryResponse
 from core.exceptions import APIException
 from core.logging import get_structured_logger
-from datetime import datetime, date
+from datetime import datetime, timezone, date
 
 logger = get_structured_logger(__name__)
 
@@ -445,7 +440,7 @@ class ProductService:
                     ProductVariant.inventory)
             )
             .where(Product.category == slug)
-            .where(Product.product_status == "active")
+            .where(Product.product_status == ProductStatus.ACTIVE)
         )
         result = await self.db.execute(query)
         products = result.scalars().all()
@@ -509,10 +504,54 @@ class ProductService:
 
         return [self._convert_variant_to_response(variant) for variant in variants]
 
-    
+    async def get_all_variants(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        search: Optional[str] = None,
+        product_id: Optional[UUID] = None
+    ) -> Dict[str, Any]:
+        """Get all product variants with filtering and pagination (for admin use)"""
+        offset = (page - 1) * limit
         
+        query = select(ProductVariant).options(
+            selectinload(ProductVariant.product),
+            selectinload(ProductVariant.inventory)
+        )
+        count_query = select(func.count(ProductVariant.id))
         
-    
+        conditions = []
+        
+        if search:
+            conditions.append(
+                or_(
+                    ProductVariant.name.ilike(f"%{search}%"),
+                    ProductVariant.sku.ilike(f"%{search}%")
+                )
+            )
+        
+        if product_id:
+            conditions.append(ProductVariant.product_id == product_id)
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+            count_query = count_query.where(and_(*conditions))
+        
+        query = query.order_by(desc(ProductVariant.created_at)).offset(offset).limit(limit)
+        
+        result = await self.db.execute(query)
+        variants = result.scalars().all()
+        
+        total = await self.db.scalar(count_query) or 0
+        
+        return {
+            "data": [self._convert_variant_to_response(variant) for variant in variants],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": (total + limit - 1) // limit if total > 0 else 0
+        }
+
     async def search_products(
         self, 
         query: str, 

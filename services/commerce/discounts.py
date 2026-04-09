@@ -4,7 +4,7 @@ Implements discount code validation, calculation logic, and optimal discount sel
 Requirements: 3.1, 3.2, 3.5
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, desc
 from models.commerce.discounts import Discount, SubscriptionDiscount
 from models.commerce.subscriptions import Subscription
 from datetime import datetime, timezone
@@ -526,6 +526,61 @@ class DiscountEngine:
         except Exception as e:
             logger.error(f"Error getting applicable discounts: {str(e)}")
             return []
+
+    async def list_discounts(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        is_active: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        List all discounts with pagination
+        
+        Args:
+            page: Page number (1-based)
+            limit: Items per page
+            is_active: Filter by active status (optional)
+            
+        Returns:
+            Paginated list of discounts
+        """
+        try:
+            offset = (page - 1) * limit
+            
+            # Build base query
+            base_query = select(Discount)
+            count_query = select(func.count()).select_from(Discount)
+            
+            if is_active is not None:
+                base_query = base_query.where(Discount.is_active == is_active)
+                count_query = count_query.where(Discount.is_active == is_active)
+            
+            # Get total count
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Get paginated results
+            query = base_query.order_by(desc(Discount.created_at)).offset(offset).limit(limit)
+            result = await self.db.execute(query)
+            discounts = result.scalars().all()
+            
+            return {
+                "items": discounts,
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit if limit > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.error(f"Error listing discounts: {str(e)}")
+            return {
+                "items": [],
+                "total": 0,
+                "page": page,
+                "limit": limit,
+                "pages": 0
+            }
 
     async def create_discount(
         self,

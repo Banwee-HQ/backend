@@ -6,7 +6,7 @@ from datetime import datetime
 from uuid import UUID
 from enum import Enum
 
-from models.auth.user import UserRole
+from models.auth.user import UserRole, AccountStatus, VerificationStatus, AddressKind
 
 class AddressBase(BaseModel):
     street: str
@@ -14,7 +14,7 @@ class AddressBase(BaseModel):
     state: str
     country: str
     post_code: str
-    kind: str = "Shipping"
+    kind: AddressKind = AddressKind.SHIPPING
 
 
 class AddressCreate(AddressBase):
@@ -44,7 +44,7 @@ class UserBase(BaseModel):
     email: EmailStr
     firstname: str
     lastname: str
-    role: Optional[UserRole] = UserRole.CUSTOMER
+    role: UserRole = UserRole.CUSTOMER
 
 
 class UserCreate(UserBase):
@@ -71,7 +71,9 @@ class UserResponse(BaseModel):
     lastname: str
     full_name: Optional[str] = None
     phone: Optional[str] = None
-    role: str
+    role: UserRole
+    account_status: AccountStatus
+    verification_status: VerificationStatus
     verified: bool
     is_active: bool
     age: Optional[int] = None
@@ -82,4 +84,9 @@ class UserResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )

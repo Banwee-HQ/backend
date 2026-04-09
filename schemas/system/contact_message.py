@@ -3,7 +3,7 @@ Contact Message Schemas
 Pydantic schemas for contact message validation
 """
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -57,8 +57,12 @@ class ContactMessageResponse(BaseModel):
     updated_at: datetime
     resolved_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    )
 
 
 class ContactMessageListResponse(BaseModel):

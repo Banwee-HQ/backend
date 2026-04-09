@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.auth.user import Address, User
+from models.auth.user import Address, User, AddressKind
 from models.commerce.orders import Order
 from core.exceptions import APIException
 from schemas.auth.user import UserCreate, UserUpdate
@@ -223,7 +223,7 @@ class AddressService:
 
             Address.user_id == user_id,
 
-            Address.kind == "Billing"
+            Address.kind == AddressKind.BILLING
 
         ).order_by(Address.created_at.desc())
 
