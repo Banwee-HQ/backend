@@ -170,9 +170,6 @@ class ProductVariant(Base):
         Index('idx_variants_active', 'is_active'),
         Index('idx_variants_price', 'base_price', 'sale_price'),
         Index('idx_variants_availability', 'availability_status'),
-        # GIN indexes for JSON fields only
-        Index('idx_variants_specifications', 'specifications', postgresql_using='gin'),
-        Index('idx_variants_dietary_tags', 'dietary_tags', postgresql_using='gin'),
         {'schema': 'catalog'}
     )
 

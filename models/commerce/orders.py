@@ -63,8 +63,6 @@ class Order(Base):
         Index('idx_orders_total_currency', 'total_amount', 'currency'),
         Index('idx_orders_tracking', 'tracking_number'),
         Index('idx_orders_confirmed_shipped', 'confirmed_at', 'shipped_at'),
-        # GIN index for address queries
-        Index('idx_orders_shipping_address', 'shipping_address', postgresql_using='gin'),
         {'schema': 'commerce'}
     )
 

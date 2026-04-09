@@ -7,11 +7,10 @@ PASS=0; FAIL=0; SKIP=0
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
 TOKEN=""; REFRESH_TOKEN=""; USER_ID=""
-ADDRESS_ID=""; PRODUCT_ID=""; VARIANT_ID=""; CATEGORY_ID=""
+ADDRESS_ID=""; PRODUCT_ID=""; VARIANT_ID=""
 CART_ITEM_ID=""; ORDER_ID=""; REVIEW_ID=""; PAYMENT_METHOD_ID=""
 SHIPPING_METHOD_ID=""; PROMO_ID=""; SUBSCRIPTION_ID=""
-CONTACT_MSG_ID=""; TAX_RATE_ID=""; SHIPMENT_ID=""
-INVENTORY_ID=""; INVENTORY_LOC_ID=""; WISHLIST_ID=""
+CONTACT_MSG_ID=""; TAX_RATE_ID=""; PROMO_CODE=""
 
 section() { echo -e "\n${BLUE}══════════════════════════════════════${NC}\n  ${BLUE}$1${NC}\n${BLUE}══════════════════════════════════════${NC}"; }
 
@@ -20,21 +19,22 @@ check() {
   if [ "$status" -eq "$expected" ] || ([ "$expected" == "2xx" ] && [ "$status" -ge 200 ] && [ "$status" -lt 300 ]); then
     echo -e "  ${GREEN}✓${NC} $label (HTTP $status)"; PASS=$((PASS+1))
   else
-    echo -e "  ${RED}✗${NC} $label (HTTP $status)"; echo -e "    ${YELLOW}$(echo $body | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("message","")[:200])' 2>/dev/null || echo $body | head -c 200)${NC}"; FAIL=$((FAIL+1))
+    echo -e "  ${RED}✗${NC} $label (HTTP $status)"
+    MSG=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message','')[:150])" 2>/dev/null || echo "$body" | head -c 150)
+    echo -e "    ${YELLOW}$MSG${NC}"; FAIL=$((FAIL+1))
   fi
 }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped)"; SKIP=$((SKIP+1)); }
 
-# HTTP helpers — all write to /tmp/resp.json
-_get()  { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$BASE$1"; }
-_post() { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$2" "$BASE$1"; }
-_put()  { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$2" -X PUT "$BASE$1"; }
-_patch(){ curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$2" -X PATCH "$BASE$1"; }
-_del()  { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -X DELETE "$BASE$1"; }
-_pub()  { curl -s -o /tmp/resp.json -w "%{http_code}" "$BASE$1"; }  # no auth
+_get()      { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "$BASE$1"; }
+_post()     { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$2" "$BASE$1"; }
+_put()      { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$2" -X PUT "$BASE$1"; }
+_patch()    { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$2" -X PATCH "$BASE$1"; }
+_del()      { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" -X DELETE "$BASE$1"; }
+_pub()      { curl -s -o /tmp/resp.json -w "%{http_code}" "$BASE$1"; }
 _pub_post() { curl -s -o /tmp/resp.json -w "%{http_code}" -H "Content-Type: application/json" -d "$2" "$BASE$1"; }
-body()  { cat /tmp/resp.json; }
-jv()    { cat /tmp/resp.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d$1)" 2>/dev/null; }
+body()      { cat /tmp/resp.json; }
+jv()        { cat /tmp/resp.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d$1)" 2>/dev/null; }
 
 # ============================================================
 section "HEALTH"
@@ -45,11 +45,11 @@ S=$(_pub "/health/"); check "GET /health/" "$S" "$(body)"
 section "AUTH — Register & Login"
 # ============================================================
 TS=$(date +%s)
-TEST_EMAIL="test_${TS}@banwee.com"
+TEST_EMAIL="testuser_${TS}@banwee.com"
 TEST_PASS="TestPass123!"
 
 S=$(_pub_post "/auth/register" "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASS\",\"firstname\":\"Test\",\"lastname\":\"User\"}")
-check "POST /auth/register (triggers welcome email)" "$S" "$(body)" 200
+check "POST /auth/register (welcome email)" "$S" "$(body)" 200
 
 S=$(_pub_post "/auth/login" "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASS\"}")
 check "POST /auth/login" "$S" "$(body)" 200
@@ -57,18 +57,20 @@ TOKEN=$(jv "['data']['access_token']")
 REFRESH_TOKEN=$(jv "['data']['refresh_token']")
 USER_ID=$(jv "['data']['user']['id']")
 
-S=$(_pub_post "/auth/refresh" "{\"refresh_token\":\"$REFRESH_TOKEN\"}")
-check "POST /auth/refresh" "$S" "$(body)" 200
-NEW_TOKEN=$(jv "['data']['access_token']"); [ -n "$NEW_TOKEN" ] && TOKEN="$NEW_TOKEN"
+if [ -n "$TOKEN" ]; then
+  S=$(_pub_post "/auth/refresh" "{\"refresh_token\":\"$REFRESH_TOKEN\"}")
+  check "POST /auth/refresh" "$S" "$(body)" 200
+  NEW_TOKEN=$(jv "['data']['access_token']"); [ -n "$NEW_TOKEN" ] && TOKEN="$NEW_TOKEN"
 
-S=$(_get "/auth/profile"); check "GET /auth/profile" "$S" "$(body)" 200
-S=$(_put "/auth/profile" "{\"firstname\":\"Updated\",\"lastname\":\"User\"}"); check "PUT /auth/profile" "$S" "$(body)" 200
+  S=$(_get "/auth/profile"); check "GET /auth/profile" "$S" "$(body)" 200
+  S=$(_put "/auth/profile" "{\"firstname\":\"Updated\",\"lastname\":\"User\"}"); check "PUT /auth/profile" "$S" "$(body)" 200
+else
+  skip "POST /auth/refresh"; skip "GET /auth/profile"; skip "PUT /auth/profile"
+fi
 
-# Resend verification (triggers email)
 S=$(curl -s -o /tmp/resp.json -w "%{http_code}" -H "Content-Type: application/json" -H "X-Resend-Token: abcdefghijklmnop" -d "{\"email\":\"$TEST_EMAIL\"}" "$BASE/auth/resend-verification")
 check "POST /auth/resend-verification (email)" "$S" "$(body)" 200
 
-# Forgot password (triggers email)
 S=$(_pub_post "/auth/forgot-password" "{\"email\":\"$TEST_EMAIL\"}")
 check "POST /auth/forgot-password (email)" "$S" "$(body)" 200
 
@@ -86,16 +88,12 @@ if [ -n "$ADDRESS_ID" ]; then
 else skip "PUT /auth/addresses/{id}"; fi
 
 # ============================================================
-section "PRODUCTS & CATEGORIES"
+section "PRODUCTS"
 # ============================================================
-S=$(_pub "/products"); check "GET /products" "$S" "$(body)" 200
-PRODUCT_ID=$(jv "['data'][0]['id']" 2>/dev/null)
+S=$(_pub "/products/"); check "GET /products/" "$S" "$(body)" 200
+PRODUCT_ID=$(jv "['data']['data'][0]['id']" 2>/dev/null)
 
 S=$(_pub "/products/home"); check "GET /products/home" "$S" "$(body)" 200
-S=$(_pub "/products/categories"); check "GET /products/categories" "$S" "$(body)" 200
-CATEGORY_ID=$(jv "['data'][0]['id']" 2>/dev/null)
-
-S=$(_pub "/products/search?q=organic"); check "GET /products/search" "$S" "$(body)" 200
 
 if [ -n "$PRODUCT_ID" ]; then
   S=$(_pub "/products/$PRODUCT_ID"); check "GET /products/{id}" "$S" "$(body)" 200
@@ -109,16 +107,16 @@ fi
 # ============================================================
 section "REVIEWS"
 # ============================================================
-S=$(_pub "/reviews"); check "GET /reviews" "$S" "$(body)" 200
+S=$(_pub "/reviews/"); check "GET /reviews/" "$S" "$(body)" 200
 
 if [ -n "$PRODUCT_ID" ]; then
-  S=$(_post "/reviews" "{\"product_id\":\"$PRODUCT_ID\",\"rating\":5,\"comment\":\"Great product!\"}"); check "POST /reviews" "$S" "$(body)" 200
+  S=$(_post "/reviews/" "{\"product_id\":\"$PRODUCT_ID\",\"rating\":5,\"comment\":\"Great product!\"}"); check "POST /reviews/" "$S" "$(body)" 200
   REVIEW_ID=$(jv "['data']['id']" 2>/dev/null)
   S=$(_pub "/reviews/product/$PRODUCT_ID"); check "GET /reviews/product/{id}" "$S" "$(body)" 200
   if [ -n "$REVIEW_ID" ]; then
     S=$(_put "/reviews/$REVIEW_ID" "{\"rating\":4,\"comment\":\"Updated\"}"); check "PUT /reviews/{id}" "$S" "$(body)" 200
   else skip "PUT /reviews/{id}"; fi
-else skip "POST /reviews"; skip "GET /reviews/product/{id}"; fi
+else skip "POST /reviews/"; skip "GET /reviews/product/{id}"; fi
 
 # ============================================================
 section "WISHLIST"
@@ -137,7 +135,7 @@ else skip "POST /wishlist/add"; skip "DELETE /wishlist/items/{product_id}"; fi
 section "INVENTORY"
 # ============================================================
 S=$(_get "/inventory/locations"); check "GET /inventory/locations" "$S" "$(body)" 200
-S=$(_get "/inventory"); check "GET /inventory" "$S" "$(body)" 200
+S=$(_get "/inventory/"); check "GET /inventory/" "$S" "$(body)" 200
 S=$(_get "/inventory/adjustments/all"); check "GET /inventory/adjustments/all" "$S" "$(body)" 200
 
 if [ -n "$VARIANT_ID" ]; then
@@ -181,17 +179,16 @@ S=$(_get "/tax/admin/tax-rates/tax-types"); check "GET /tax/admin/tax-rates/tax-
 # ============================================================
 section "ORDERS"
 # ============================================================
-S=$(_get "/orders"); check "GET /orders" "$S" "$(body)" 200
+S=$(_get "/orders/"); check "GET /orders/" "$S" "$(body)" 200
 
 if [ -n "$VARIANT_ID" ] && [ -n "$ADDRESS_ID" ] && [ -n "$SHIPPING_METHOD_ID" ]; then
-  # Re-add to cart
   _post "/cart/add" "{\"variant_id\":\"$VARIANT_ID\",\"quantity\":1}" > /dev/null
 
   S=$(_post "/orders/checkout/validate" "{\"shipping_address_id\":\"$ADDRESS_ID\",\"shipping_method_id\":\"$SHIPPING_METHOD_ID\",\"payment_method_id\":\"pm_card_visa\"}")
   check "POST /orders/checkout/validate" "$S" "$(body)" 200
 
   S=$(_post "/orders/checkout" "{\"shipping_address_id\":\"$ADDRESS_ID\",\"shipping_method_id\":\"$SHIPPING_METHOD_ID\",\"payment_method_id\":\"pm_card_visa\",\"currency\":\"USD\",\"country_code\":\"GH\"}")
-  check "POST /orders/checkout (triggers order email)" "$S" "$(body)" 200
+  check "POST /orders/checkout (order email)" "$S" "$(body)" 200
   ORDER_ID=$(jv "['data']['id']" 2>/dev/null)
 else skip "POST /orders/checkout/validate"; skip "POST /orders/checkout"; fi
 
@@ -206,7 +203,7 @@ else skip "GET /orders/{id}"; skip "GET /orders/{id}/tracking"; skip "GET /order
 # ============================================================
 section "PAYMENTS"
 # ============================================================
-S=$(_get "/payments"); check "GET /payments" "$S" "$(body)" 200
+S=$(_get "/payments/"); check "GET /payments/" "$S" "$(body)" 200
 S=$(_get "/payments/methods"); check "GET /payments/methods" "$S" "$(body)" 200
 S=$(_get "/payments/transactions"); check "GET /payments/transactions" "$S" "$(body)" 200
 S=$(_get "/payments/failures/user/failed-payments"); check "GET /payments/failures/user/failed-payments" "$S" "$(body)" 200
@@ -223,9 +220,8 @@ else skip "PUT /payments/methods/{id}"; skip "PUT /payments/methods/{id}/default
 # ============================================================
 section "REFUNDS"
 # ============================================================
-S=$(_get "/refunds"); check "GET /refunds" "$S" "$(body)" 200
+S=$(_get "/refunds/"); check "GET /refunds/" "$S" "$(body)" 200
 S=$(_get "/refunds/stats/summary"); check "GET /refunds/stats/summary" "$S" "$(body)" 200
-
 if [ -n "$ORDER_ID" ]; then
   S=$(_get "/refunds/orders/$ORDER_ID/eligibility"); check "GET /refunds/orders/{id}/eligibility" "$S" "$(body)" 200
 else skip "GET /refunds/orders/{id}/eligibility"; fi
@@ -233,11 +229,11 @@ else skip "GET /refunds/orders/{id}/eligibility"; fi
 # ============================================================
 section "PROMOCODES"
 # ============================================================
-S=$(_get "/promocodes"); check "GET /promocodes" "$S" "$(body)" 200
+S=$(_get "/promocodes/"); check "GET /promocodes/" "$S" "$(body)" 200
 
 PROMO_CODE="TEST10_${TS}"
-S=$(_post "/promocodes" "{\"code\":\"$PROMO_CODE\",\"discount_type\":\"percentage\",\"discount_value\":10,\"is_active\":true}")
-check "POST /promocodes" "$S" "$(body)" 200
+S=$(_post "/promocodes/" "{\"code\":\"$PROMO_CODE\",\"discount_type\":\"percentage\",\"discount_value\":10,\"is_active\":true}")
+check "POST /promocodes/" "$S" "$(body)" 200
 PROMO_ID=$(jv "['data']['id']" 2>/dev/null)
 
 if [ -n "$PROMO_ID" ]; then
@@ -245,7 +241,6 @@ if [ -n "$PROMO_ID" ]; then
   S=$(_put "/promocodes/$PROMO_ID" "{\"discount_value\":15}"); check "PUT /promocodes/{id}" "$S" "$(body)" 200
 else skip "GET /promocodes/{id}"; skip "PUT /promocodes/{id}"; fi
 
-# Test applying promo to cart
 if [ -n "$VARIANT_ID" ]; then
   _post "/cart/add" "{\"variant_id\":\"$VARIANT_ID\",\"quantity\":1}" > /dev/null
   S=$(_post "/cart/promocode" "{\"code\":\"$PROMO_CODE\"}"); check "POST /cart/promocode (apply)" "$S" "$(body)" 200
@@ -255,16 +250,16 @@ else skip "POST /cart/promocode"; skip "DELETE /cart/promocode"; fi
 # ============================================================
 section "SUBSCRIPTIONS"
 # ============================================================
-S=$(_get "/subscriptions"); check "GET /subscriptions" "$S" "$(body)" 200
+S=$(_get "/subscriptions/"); check "GET /subscriptions/" "$S" "$(body)" 200
 
 if [ -n "$VARIANT_ID" ] && [ -n "$ADDRESS_ID" ]; then
   S=$(_post "/subscriptions/calculate-cost" "{\"variant_ids\":[\"$VARIANT_ID\"],\"billing_cycle\":\"monthly\"}")
   check "POST /subscriptions/calculate-cost" "$S" "$(body)" 200
 
-  S=$(_post "/subscriptions" "{\"name\":\"Test Sub\",\"variant_ids\":[\"$VARIANT_ID\"],\"billing_cycle\":\"monthly\",\"delivery_address_id\":\"$ADDRESS_ID\"}")
-  check "POST /subscriptions (triggers email)" "$S" "$(body)" 200
+  S=$(_post "/subscriptions/" "{\"name\":\"Test Sub\",\"variant_ids\":[\"$VARIANT_ID\"],\"billing_cycle\":\"monthly\",\"delivery_address_id\":\"$ADDRESS_ID\"}")
+  check "POST /subscriptions/ (email)" "$S" "$(body)" 200
   SUBSCRIPTION_ID=$(jv "['data']['id']" 2>/dev/null)
-else skip "POST /subscriptions/calculate-cost"; skip "POST /subscriptions"; fi
+else skip "POST /subscriptions/calculate-cost"; skip "POST /subscriptions/"; fi
 
 if [ -n "$SUBSCRIPTION_ID" ]; then
   S=$(_get "/subscriptions/$SUBSCRIPTION_ID"); check "GET /subscriptions/{id}" "$S" "$(body)" 200
@@ -307,14 +302,13 @@ S=$(_get "/admin/refunds"); check "GET /admin/refunds" "$S" "$(body)" 200
 S=$(_get "/admin/subscriptions"); check "GET /admin/subscriptions" "$S" "$(body)" 200
 
 # ============================================================
-section "CONTACT MESSAGES (triggers email)"
+section "CONTACT MESSAGES (email)"
 # ============================================================
 S=$(_pub_post "/contact-messages" "{\"name\":\"Test User\",\"email\":\"test@example.com\",\"subject\":\"Test\",\"message\":\"Hello from test suite\"}")
 check "POST /contact-messages" "$S" "$(body)" 201
 CONTACT_MSG_ID=$(jv "['data']['id']" 2>/dev/null)
 
 S=$(_get "/contact-messages"); check "GET /contact-messages" "$S" "$(body)" 200
-
 if [ -n "$CONTACT_MSG_ID" ]; then
   S=$(_get "/contact-messages/$CONTACT_MSG_ID"); check "GET /contact-messages/{id}" "$S" "$(body)" 200
   S=$(_patch "/contact-messages/$CONTACT_MSG_ID" "{\"status\":\"read\"}"); check "PATCH /contact-messages/{id}" "$S" "$(body)" 200

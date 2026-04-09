@@ -84,12 +84,15 @@ class DatabaseManager:
             pool_size=10,
             max_overflow=20,
             pool_timeout=30,
-            connect_args={
-                "server_settings": {
-                    "search_path": "accounts,catalog,commerce,admin,system,public"
-                }
-            }
         )
+
+        # Set search_path on every new connection so all schemas are visible
+        from sqlalchemy import event
+        @event.listens_for(engine_db.sync_engine, "connect")
+        def set_search_path(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("SET search_path TO accounts, catalog, commerce, admin, system, public")
+            cursor.close()
 
         AsyncSessionDB = sessionmaker(
             bind=engine_db,

@@ -249,6 +249,8 @@ class AuthService:
                 lastname=user.lastname,
                 phone=user.phone,
                 role=user.role,
+                account_status=user.account_status,
+                verification_status=user.verification_status,
                 verified=user.verified,
                 is_active=user.is_active,
                 created_at=user.created_at

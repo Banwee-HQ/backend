@@ -36,19 +36,25 @@ class Settings:
     # Connection pooling
     DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
 
+    SEARCH_PATH = "accounts,catalog,commerce,admin,system,public"
+
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Async PostgreSQL URI."""
-        if "+asyncpg" not in self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql"):
-            return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-        return self.DATABASE_URL
+        url = self.DATABASE_URL
+        if url.startswith("postgresql"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            url = url.replace("postgresql+asyncpg+asyncpg://", "postgresql+asyncpg://", 1)
+        return url
 
     @property
     def SQLALCHEMY_DATABASE_URI_SYNC(self) -> str:
         """Sync PostgreSQL URI (for migrations)."""
-        if "+psycopg2" not in self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql"):
-            return self.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
-        return self.DATABASE_URL
+        url = self.DATABASE_URL
+        if url.startswith("postgresql"):
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            url = url.replace("postgresql+psycopg2+psycopg2://", "postgresql+psycopg2://", 1)
+        return url
 
     # Auth
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))

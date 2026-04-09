@@ -19,10 +19,12 @@ class UserResponse(BaseModel):
     email: str
     firstname: str
     lastname: str
-    phone: Optional[str]
+    phone: Optional[str] = None
     role: str
-    verified: bool
-    is_active: bool
+    account_status: Optional[str] = None
+    verification_status: Optional[str] = None
+    verified: bool = False
+    is_active: bool = True
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
