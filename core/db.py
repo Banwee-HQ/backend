@@ -331,22 +331,11 @@ async def initialize_db(database_uri: str, env_is_local: bool, engine=None):
                         
                         new_columns.append(new_col)
                     
-                    # Copy indexes, removing schema references
-                    new_indexes = []
-                    for idx in table.indexes:
-                        new_idx = Index(
-                            idx.name,
-                            *[c.copy() for c in idx.columns],
-                            unique=idx.unique
-                        )
-                        new_indexes.append(new_idx)
-                    
-                    # Copy the table without schema
+                    # Copy the table without schema (indexes will be auto-created from the column definitions)
                     Table(
                         table.name,  # Just the name, no schema
                         sqlite_metadata,
                         *new_columns,
-                        indexes=new_indexes,
                     )
                 
                 async with db_manager.engine.begin() as conn:
