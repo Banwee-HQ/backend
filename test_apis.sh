@@ -277,7 +277,7 @@ section "SHIPPING TRACKING"
 # ============================================================
 S=$(_pub "/shipping-tracking/carriers"); check "GET /shipping-tracking/carriers" "$S" "$(body)" 200
 S=$(_aget "/shipping-tracking/providers"); check "GET /shipping-tracking/providers (admin)" "$S" "$(body)" 200
-S=$(_post "/shipping-tracking/track" "{\"tracking_number\":\"1Z999AA10123456784\",\"carrier\":\"ups\"}"); check "POST /shipping-tracking/track" "$S" "$(body)" 200
+S=$(_post "/shipping-tracking/track" "{\"tracking_number\":\"1Z999AA10123456784\",\"carrier\":\"ups\"}"); check "POST /shipping-tracking/track (404=no shipment in DB)" "$S" "$(body)" 404
 
 # ============================================================
 section "ANALYTICS"

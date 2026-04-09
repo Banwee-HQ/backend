@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any, TypeVar
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.catalog.product import Product, ProductVariant, ProductImage, ProductStatus, AvailabilityStatus
+from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage, AvailabilityStatus
 from models.catalog.inventories import Inventory
 from models.commerce.cart import CartItem
 from schemas.catalog.product import (
@@ -213,7 +213,7 @@ class ProductService:
         offset = (page - 1) * limit
 
         # Build filter conditions
-        base_conditions = [Product.is_active == True]
+        base_conditions = [Product.product_status == ProductStatus.ACTIVE]
         
         if filters:
             if filters.get("q"):

@@ -405,11 +405,21 @@ class CartService:
         cart = result.scalar_one_or_none()
 
         if not cart:
-            # Create new cart
-            cart = Cart(user_id=user_id)
-            self.db.add(cart)
+            # Create new cart and re-query with proper eager loading
+            new_cart = Cart(user_id=user_id)
+            self.db.add(new_cart)
             await self.db.commit()
-            await self.db.refresh(cart)
+            # Re-query with options to avoid lazy load issues
+            result2 = await self.db.execute(
+                select(Cart)
+                .options(
+                    selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
+                    selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.inventory),
+                    selectinload(Cart.items).selectinload(CartItem.product),
+                )
+                .where(Cart.user_id == user_id)
+            )
+            cart = result2.scalar_one()
 
         return cart
 

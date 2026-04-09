@@ -97,7 +97,7 @@ class ShippingTrackingService:
 
         except Exception as e:
             await self.db.rollback()
-            raise APIException(message=f"Failed to create shipment: {str(e)}")
+            raise APIException(status_code=500, message=f"Failed to create shipment: {str(e)}")
 
     async def track_shipment(self, tracking_number: str, carrier: ShippingCarrier) -> Dict[str, Any]:
         """Track a shipment using carrier-specific integration"""
@@ -114,12 +114,12 @@ class ShippingTrackingService:
             shipment = shipment_result.scalar_one_or_none()
 
             if not shipment:
-                raise APIException(message="Shipment not found")
+                raise APIException(status_code=404, message="Shipment not found")
 
             # Get carrier integration
             integration = self.carrier_integrations.get(carrier)
             if not integration:
-                raise APIException(message=f"Carrier integration not available for {carrier}")
+                raise APIException(status_code=400, message=f"Carrier integration not available for {carrier}")
 
             # Get provider configuration
             provider_result = await self.db.execute(
@@ -151,14 +151,15 @@ class ShippingTrackingService:
                 "tracking_data": tracking_data
             }
 
+        except APIException:
+            raise
         except Exception as e:
             # Update sync status on error
-            if shipment:
+            if 'shipment' in dir() and shipment:
                 shipment.sync_status = "error"
                 shipment.last_api_sync = datetime.now(timezone.utc)
                 await self.db.commit()
-            
-            raise APIException(message=f"Failed to track shipment: {str(e)}")
+            raise APIException(status_code=500, message=f"Failed to track shipment: {str(e)}")
 
     async def get_shipment_tracking(self, shipment_id: str) -> Optional[Dict[str, Any]]:
         """Get detailed tracking information for a shipment"""
@@ -176,7 +177,7 @@ class ShippingTrackingService:
             return shipment.to_dict()
 
         except Exception as e:
-            raise APIException(message=f"Failed to get shipment tracking: {str(e)}")
+            raise APIException(status_code=500, message=f"Failed to get shipment tracking: {str(e)}")
 
     async def get_order_shipments(self, order_id: str) -> List[Dict[str, Any]]:
         """Get all shipments for an order"""
@@ -191,7 +192,7 @@ class ShippingTrackingService:
             return [shipment.to_dict() for shipment in shipments]
 
         except Exception as e:
-            raise APIException(message=f"Failed to get order shipments: {str(e)}")
+            raise APIException(status_code=500, message=f"Failed to get order shipments: {str(e)}")
 
     async def update_shipment_status(self, shipment_id: str, status: TrackingStatus, 
                                    event_data: Dict[str, Any] = None) -> ShipmentTracking:
@@ -203,7 +204,7 @@ class ShippingTrackingService:
             shipment = shipment_result.scalar_one_or_none()
 
             if not shipment:
-                raise APIException(message="Shipment not found")
+                raise APIException(status_code=404, message="Shipment not found")
 
             old_status = shipment.status
             shipment.status = status
@@ -227,7 +228,7 @@ class ShippingTrackingService:
 
         except Exception as e:
             await self.db.rollback()
-            raise APIException(message=f"Failed to update shipment status: {str(e)}")
+            raise APIException(status_code=500, message=f"Failed to update shipment status: {str(e)}")
 
     async def _update_shipment_from_tracking_data(self, shipment: ShipmentTracking, 
                                                 tracking_data: Dict[str, Any]):

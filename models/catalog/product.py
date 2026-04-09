@@ -67,7 +67,7 @@ class Product(Base):
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships with optimized lazy loading
-    variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="selectin")
+    variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="select")
     reviews = relationship("Review", back_populates="product", lazy="select")
     wishlist_items = relationship("WishlistItem", back_populates="product", lazy="select")
     cart_items = relationship("CartItem", back_populates="product", lazy="select")
