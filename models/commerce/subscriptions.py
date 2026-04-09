@@ -42,8 +42,8 @@ class BillingCycle(str, Enum):
 subscription_product_association = Table(
     "subscription_product_association",
     Base.metadata,
-    Column("subscription_id", GUID(), ForeignKey("subscriptions.id"), primary_key=True),
-    Column("product_variant_id", GUID(), ForeignKey("product_variants.id"), primary_key=True),
+    Column("subscription_id", GUID(), ForeignKey("commerce.subscriptions.id"), primary_key=True),
+    Column("product_variant_id", GUID(), ForeignKey("catalog.product_variants.id"), primary_key=True),
     Index('idx_sub_product_association_variant', 'product_variant_id'),
     extend_existing=True
 )
@@ -70,8 +70,8 @@ class SubscriptionProduct(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
-    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit_price: Mapped[float] = mapped_column(Float)
     total_price: Mapped[float] = mapped_column(Float)
@@ -79,7 +79,7 @@ class SubscriptionProduct(Base):
 
     # Removal tracking
     removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    removed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    removed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
 
     # Relationships
     subscription = relationship("Subscription", back_populates="subscription_products", lazy="select")
@@ -132,7 +132,7 @@ class Subscription(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # --- Core fields ---
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[SubscriptionStatus] = mapped_column(String(50), default=SubscriptionStatus.ACTIVE)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
@@ -155,7 +155,7 @@ class Subscription(Base):
 
     # --- Delivery info ---
     delivery_type: Mapped[Optional[DeliveryType]] = mapped_column(String(50), default=DeliveryType.STANDARD)
-    delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("addresses.id"), nullable=True)
+    delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.addresses.id"), nullable=True)
 
     # --- Pricing at creation ---
     price_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -184,7 +184,7 @@ class Subscription(Base):
     subscription_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # --- Discount fields ---
-    discount_id = Column(GUID(), ForeignKey("promocodes.id"), nullable=True)
+    discount_id = Column(GUID(), ForeignKey("commerce.promocodes.id"), nullable=True)
     discount_type = Column(String(20), nullable=True)  # "percentage" or "fixed"
     discount_value = Column(Float, nullable=True)
     discount_code = Column(String(50), nullable=True)

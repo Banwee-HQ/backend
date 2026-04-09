@@ -73,8 +73,8 @@ class Refund(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # References
-    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
 
     # Refund details
     refund_number: Mapped[str] = mapped_column(String(50), unique=True)  # REF-XXXXXXXX
@@ -98,8 +98,8 @@ class Refund(Base):
 
     # Admin information
     admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # Internal admin notes
-    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)  # Admin who reviewed
-    processed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True) # Admin who processed
+    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)  # Admin who reviewed
+    processed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True) # Admin who processed
 
     # Timestamps
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -196,8 +196,8 @@ class RefundItem(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # References
-    refund_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("refunds.id"))
-    order_item_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("order_items.id"))
+    refund_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.refunds.id"))
+    order_item_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.order_items.id"))
 
     # Item details
     quantity_to_refund: Mapped[int] = mapped_column(Integer)

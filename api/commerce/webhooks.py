@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_db
 from services.commerce.webhooks import WebhookService
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 
 logger = get_logger(__name__)
 

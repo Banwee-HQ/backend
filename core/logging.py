@@ -60,12 +60,3 @@ class StructuredLogger:
 
 def get_structured_logger(name: str) -> StructuredLogger:
     return StructuredLogger(name)
-
-
-# Legacy compat
-def get_logger(name: str) -> StructuredLogger:
-    return StructuredLogger(name)
-
-
-def setup_logging(*args, **kwargs) -> None:
-    pass  # No-op — nothing to configure

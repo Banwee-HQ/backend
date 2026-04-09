@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 from services.admin.admin import AdminService
 from services.commerce.orders import OrderService
 from services.commerce.shipping import ShippingService

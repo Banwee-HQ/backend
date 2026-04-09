@@ -7,7 +7,7 @@ from core.db import get_db
 from core.utils.response import Response as APIResponse
 from core.exceptions import APIException
 from core.config import settings
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 from schemas.auth import UserCreate, UserLogin, RefreshTokenRequest, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
 from schemas.auth.user import AddressCreate, AddressUpdate, AddressResponse
 from services.auth.auth import AuthService

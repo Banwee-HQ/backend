@@ -9,7 +9,7 @@ REST API for Banwee — premium organic products from Africa. Built with FastAPI
 | Layer | Technology |
 |---|---|
 | Framework | FastAPI 0.111 + Uvicorn |
-| Database | PostgreSQL (async via asyncpg, Alembic migrations) |
+| Database | SQLite (dev) / PostgreSQL (prod) with Alembic migrations |
 | Auth | JWT (python-jose) + bcrypt/argon2 + OAuth (Google, Facebook) |
 | Payments | Stripe |
 | Email | Brevo (SendinBlue) |
@@ -58,10 +58,29 @@ cp .env.dev.example .env.dev   # then fill in your secrets
 
 See [Environment Variables](#environment-variables) for details.
 
-**4. Run database migrations**
+**4. Database Setup**
 
+The app supports **SQLite** (development) and **PostgreSQL** (production):
+
+### Development (SQLite) - Auto Setup
 ```bash
+# .env.dev - Uses SQLite by default
+DATABASE_URL=sqlite:///./banwee.db
+
+# Tables auto-create on first run - no migrations needed
+uvicorn main:app --reload
+```
+
+### Production (PostgreSQL) - Manual Setup
+```bash
+# .env.prod - Use PostgreSQL
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+
+# Run migrations manually
 alembic upgrade head
+
+# Start app
+uvicorn main:app
 ```
 
 ---
@@ -162,7 +181,9 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 ## Database Migrations
 
-### First time / fresh setup
+> **Note:** Migrations are **required** for PostgreSQL (production) but **not needed** for SQLite (development). SQLite tables auto-create on startup.
+
+### First time / fresh setup (PostgreSQL only)
 
 ```bash
 alembic upgrade head

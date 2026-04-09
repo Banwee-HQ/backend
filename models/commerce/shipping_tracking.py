@@ -86,6 +86,14 @@ class SyncStatus(str, Enum):
     ERROR = "error"
 
 
+class SourceType(str, Enum):
+    """Event source types"""
+    API = "api"
+    WEBHOOK = "webhook"
+    MANUAL = "manual"
+    SYSTEM = "system"
+
+
 class ShipmentEventType(str, Enum):
     """Shipment tracking event types"""
     PICKED_UP = "picked_up"
@@ -155,9 +163,9 @@ class ShipmentTracking(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Core shipment information
-    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
-    order_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("order_items.id"), nullable=True)  # For multi-item shipments
-    provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("shipping_providers.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
+    order_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.order_items.id"), nullable=True)  # For multi-item shipments
+    provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.shipping_providers.id"))
 
     # Tracking details
     tracking_number: Mapped[str] = mapped_column(String(100), unique=True)
@@ -255,7 +263,7 @@ class ShipmentTrackingEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    shipment_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("shipment_tracking.id"))
+    shipment_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.shipment_tracking.id"))
     event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     event_type: Mapped[ShipmentEventType] = mapped_column(String(50))
     event_description: Mapped[str] = mapped_column(Text)
@@ -312,7 +320,7 @@ class ShippingWebhook(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("shipping_providers.id"))
+    provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.shipping_providers.id"))
     webhook_url: Mapped[str] = mapped_column(String(500))
     webhook_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     event_types: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # Which events to trigger on

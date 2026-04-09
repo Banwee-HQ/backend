@@ -26,7 +26,7 @@ class Wishlist(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     name: Mapped[str] = mapped_column(String(225))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -55,9 +55,9 @@ class WishlistItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    wishlist_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("wishlists.id"))
-    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
-    variant_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("product_variants.id"), nullable=True)
+    wishlist_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.wishlists.id"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
+    variant_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
 
     # Relationships

@@ -77,11 +77,11 @@ class Order(Base):
     order_number: Mapped[str] = mapped_column(String(50), unique=True)
 
     # Customer reference
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     guest_email: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)  # For guest orders
 
     # Subscription reference for recurring orders
-    subscription_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("subscriptions.id"), nullable=True)
+    subscription_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"), nullable=True)
 
     # Status fields as columns for fast querying and indexing
     order_status: Mapped[OrderStatus] = mapped_column(SQLEnum(OrderStatus), default=OrderStatus.PENDING)
@@ -181,8 +181,8 @@ class OrderItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
-    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
     quantity: Mapped[int] = mapped_column(Integer)
     price_per_unit: Mapped[float] = mapped_column(Float)
     total_price: Mapped[float] = mapped_column(Float)
@@ -219,7 +219,7 @@ class TrackingEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
     status: Mapped[str] = mapped_column(String(100))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

@@ -113,16 +113,24 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
 # ============================================================================
 
 async def process_subscription_orders_task() -> str:
-    session = _get_db_session()
-    if not session:
-        return "failed: no db"
-    
+    """Process due subscription orders."""
     try:
+        import core.db as core_db
+        if not hasattr(core_db, 'db_manager') or not core_db.db_manager:
+            return "failed: db not initialized"
+        
         from services.commerce.subscriptions_scheduler import SubscriptionScheduler
-        async with session as db:
+        
+        # Use simple session without retry wrapper for scheduled tasks
+        session_factory = core_db.db_manager.session_factory
+        if not session_factory:
+            return "failed: no session factory"
+        
+        async with session_factory() as db:
             scheduler = SubscriptionScheduler(db)
             result = await scheduler.process_due_subscriptions()
-        return f"subscriptions: {result.get('processed_count', 0)} ok, {result.get('failed_count', 0)} failed"
+            return f"subscriptions: {result.get('processed_count', 0)} ok, {result.get('failed_count', 0)} failed"
+            
     except Exception as e:
         print(f"❌ Subscription task failed: {e}")
         raise
@@ -133,16 +141,24 @@ async def process_subscription_orders_task() -> str:
 # ============================================================================
 
 async def update_promocode_statuses_task() -> str:
-    session = _get_db_session()
-    if not session:
-        return "failed: no db"
-    
+    """Update promocode statuses."""
     try:
+        import core.db as core_db
+        if not hasattr(core_db, 'db_manager') or not core_db.db_manager:
+            return "failed: db not initialized"
+        
         from services.promocode.scheduler import PromoCodeScheduler
-        async with session as db:
+        
+        # Use simple session without retry wrapper for scheduled tasks
+        session_factory = core_db.db_manager.session_factory
+        if not session_factory:
+            return "failed: no session factory"
+        
+        async with session_factory() as db:
             scheduler = PromoCodeScheduler(db)
             result = await scheduler.update_promocode_statuses()
-        return f"promocodes: {result.get('activated_count', 0)} activated, {result.get('deactivated_count', 0)} deactivated"
+            return f"promocodes: {result.get('activated_count', 0)} activated, {result.get('deactivated_count', 0)} deactivated"
+            
     except Exception as e:
         print(f"❌ Promocode task failed: {e}")
         raise

@@ -22,7 +22,7 @@ from schemas.system.contact_message import (
 from core.utils.response import Response
 from core.exceptions import APIException
 from services.system.contact_message import ContactMessageService
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/contact-messages", tags=["Contact Messages"], redirect_slashes=False)

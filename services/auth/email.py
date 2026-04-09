@@ -397,7 +397,7 @@ class EmailQueue:
     @staticmethod
     async def _send_direct(email_type: str, recipient: str, **kwargs):
         """Send email directly without a queue."""
-        from core.arq_worker import send_email_task
+        from core.worker import send_email_task
         await send_email_task(email_type, recipient, **kwargs)
 
     @classmethod

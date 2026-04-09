@@ -45,8 +45,8 @@ class VariantTrackingEntry(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Core tracking information
-    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
-    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"))
 
     # Price tracking
     price_at_time: Mapped[float] = mapped_column(Float)
@@ -100,7 +100,7 @@ class VariantPriceHistory(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Variant reference
-    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
 
     # Price information
     old_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -111,7 +111,7 @@ class VariantPriceHistory(Base):
 
     # Change metadata
     change_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    changed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    changed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
     effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Impact tracking
@@ -167,7 +167,7 @@ class VariantAnalytics(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Variant reference
-    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
 
     # Time period for analytics
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -241,8 +241,8 @@ class VariantSubstitution(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Original and substitute variants
-    original_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
-    substitute_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    original_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
+    substitute_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
 
     # Substitution metadata
     similarity_score: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0 to 1.0

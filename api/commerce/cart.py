@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from core.db import get_db
 from core.exceptions import APIException
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 from services.commerce.cart import CartService
 from models.auth.user import User
 from core.utils.response import Response
@@ -392,3 +392,94 @@ async def get_checkout_summary(
     except Exception:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                            message="Failed to get checkout summary")
+
+
+@router.post("/items/{item_id}/save-for-later")
+async def save_item_for_later(
+    item_id: UUID,
+    request: Request,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save cart item for later (move to saved items)"""
+    try:
+        cart_service = CartService(db)
+        result = await cart_service.save_item_for_later(
+            user_id=current_user.id,
+            item_id=item_id,
+            session_id=None
+        )
+        return Response(success=True, data=result, message="Item saved for later")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to save item for later: {str(e)}"
+        )
+
+
+@router.post("/items/{item_id}/move-to-cart")
+async def move_item_to_cart(
+    item_id: UUID,
+    request: Request,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Move saved item back to cart"""
+    try:
+        cart_service = CartService(db)
+        result = await cart_service.move_item_to_cart(
+            user_id=current_user.id,
+            item_id=item_id,
+            session_id=None
+        )
+        return Response(success=True, data=result, message="Item moved to cart")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to move item to cart: {str(e)}"
+        )
+
+
+@router.get("/saved-items")
+async def get_saved_items(
+    request: Request,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all saved items for later"""
+    try:
+        cart_service = CartService(db)
+        result = await cart_service.get_saved_items(
+            user_id=current_user.id,
+            session_id=None
+        )
+        return Response(success=True, data=result)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get saved items: {str(e)}"
+        )
+
+
+@router.post("/merge")
+async def merge_cart(
+    request: Request,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Merge guest cart with user cart after login"""
+    try:
+        cart_service = CartService(db)
+        # Get guest_cart_id from cookie if available
+        guest_cart_id = request.cookies.get("guest_cart_id")
+        result = await cart_service.merge_cart(
+            user_id=current_user.id,
+            guest_cart_id=guest_cart_id,
+            session_id=None
+        )
+        return Response(success=True, data=result, message="Cart merged successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to merge cart: {str(e)}"
+        )

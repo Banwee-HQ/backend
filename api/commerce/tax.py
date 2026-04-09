@@ -8,7 +8,7 @@ from sqlalchemy import select, and_, or_, func
 from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
 from core.dependencies import get_current_user, require_admin

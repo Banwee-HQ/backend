@@ -5,6 +5,7 @@ from core.utils.uuid_utils import uuid7
 from enum import Enum
 import uuid
 from datetime import datetime
+from typing import Optional
 
 class UserRole(str, Enum):
     GUEST = "guest"
@@ -196,7 +197,7 @@ class Address(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     street: Mapped[str] = mapped_column(String(CHAR_LENGTH))
     city: Mapped[str] = mapped_column(String(100))
     state: Mapped[str] = mapped_column(String(100))

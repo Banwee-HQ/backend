@@ -128,8 +128,8 @@ class SubscriptionDiscount(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
-    discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("discounts.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
+    discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.discounts.id"))
     discount_amount: Mapped[float] = mapped_column(Float)
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
 
@@ -171,9 +171,9 @@ class ProductRemovalAudit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
-    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
-    removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
+    removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

@@ -5,7 +5,7 @@ from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import ProductCreate, ProductUpdate
 from services.catalog.products import ProductService
 from services.catalog.search import SearchService

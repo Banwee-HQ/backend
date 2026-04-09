@@ -1926,7 +1926,7 @@ class OrderService:
         Events are versioned, validated, and idempotent.
         """
         try:
-            from core.arq_worker import enqueue_email, enqueue_notification
+            from core.worker import enqueue_email, enqueue_notification
             
             # Use correlation ID for event tracing
             correlation_id = str(order.id)

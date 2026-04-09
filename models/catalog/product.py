@@ -181,7 +181,7 @@ class ProductVariant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     sku: Mapped[str] = mapped_column(String(100), unique=True)
     name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
 
@@ -294,7 +294,7 @@ class ProductImage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
     url: Mapped[str] = mapped_column(String(500))
     alt_text: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)

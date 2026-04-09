@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
 from core.dependencies import get_current_user, require_admin

@@ -907,7 +907,7 @@ class InventoryService:
         
         # Queue product availability sync as background task (don't wait for it)
         try:
-            from core.arq_worker import enqueue_sync_product_availability
+            from core.worker import enqueue_sync_product_availability
             
             # Get the variant to find its product
             variant_result = await self.db.execute(
@@ -1022,7 +1022,7 @@ class InventoryService:
         
         # Queue product availability sync as background task (don't wait for it)
         try:
-            from core.arq_worker import enqueue_sync_product_availability
+            from core.worker import enqueue_sync_product_availability
             
             # Get the variant to find its product
             variant_result = await self.db.execute(

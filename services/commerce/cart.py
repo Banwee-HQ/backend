@@ -962,3 +962,113 @@ class CartService:
         # For PostgreSQL version, just return the user's existing cart
         # since we don't support guest carts in this implementation
         return await self.get_cart(user_id=user_id)
+
+    async def save_item_for_later(
+        self,
+        user_id: UUID,
+        item_id: UUID,
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Save cart item for later (move to saved items list)"""
+        try:
+            # Get the cart item
+            item_query = select(CartItem).where(
+                and_(
+                    CartItem.id == item_id,
+                    CartItem.cart.has(Cart.user_id == user_id)
+                )
+            )
+            result = await self.db.execute(item_query)
+            item = result.scalar_one_or_none()
+            
+            if not item:
+                raise HTTPException(status_code=404, detail="Cart item not found")
+            
+            # Mark as saved for later
+            item.is_saved_for_later = True
+            await self.db.commit()
+            
+            return await self.get_cart(user_id=user_id, session_id=session_id)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to save item for later: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save item for later: {str(e)}")
+
+    async def move_item_to_cart(
+        self,
+        user_id: UUID,
+        item_id: UUID,
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Move saved item back to active cart"""
+        try:
+            # Get the cart item
+            item_query = select(CartItem).where(
+                and_(
+                    CartItem.id == item_id,
+                    CartItem.cart.has(Cart.user_id == user_id)
+                )
+            )
+            result = await self.db.execute(item_query)
+            item = result.scalar_one_or_none()
+            
+            if not item:
+                raise HTTPException(status_code=404, detail="Cart item not found")
+            
+            # Mark as active (not saved for later)
+            item.is_saved_for_later = False
+            await self.db.commit()
+            
+            return await self.get_cart(user_id=user_id, session_id=session_id)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to move item to cart: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to move item to cart: {str(e)}")
+
+    async def get_saved_items(
+        self,
+        user_id: UUID,
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get all items saved for later"""
+        try:
+            cart = await self.get_or_create_cart(user_id=user_id, session_id=session_id)
+            
+            saved_items = [
+                {
+                    "id": str(item.id),
+                    "cart_id": str(item.cart_id),
+                    "variant_id": str(item.variant_id) if item.variant_id else None,
+                    "quantity": item.quantity,
+                    "price_per_unit": float(item.price_per_unit) if item.price_per_unit else None,
+                    "is_saved_for_later": item.is_saved_for_later,
+                    "created_at": item.created_at.isoformat() if item.created_at else None
+                }
+                for item in cart.items if item.is_saved_for_later
+            ]
+            
+            return {
+                "items": saved_items,
+                "count": len(saved_items)
+            }
+        except Exception as e:
+            logger.error(f"Failed to get saved items: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to get saved items: {str(e)}")
+
+    async def merge_cart(
+        self,
+        user_id: UUID,
+        guest_cart_id: Optional[str] = None,
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Merge guest cart with user cart after login"""
+        try:
+            # For now, just return the user's cart
+            # Guest cart merging can be implemented later if needed
+            logger.info(f"Merging cart for user {user_id}, guest_cart_id: {guest_cart_id}")
+            return await self.get_cart(user_id=user_id, session_id=session_id)
+        except Exception as e:
+            logger.error(f"Failed to merge cart: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to merge cart: {str(e)}")

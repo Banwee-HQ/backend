@@ -5,7 +5,7 @@ from typing import Optional, List
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.db import get_db
-from core.logging import get_logger
+from core.logging import get_structured_logger as get_logger
 from services.auth.user import UserService, AddressService
 from services.catalog.search import SearchService
 # Import AddressResponse

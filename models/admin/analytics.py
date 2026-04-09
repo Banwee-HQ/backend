@@ -67,7 +67,7 @@ class UserSession(Base):
 
     # Session identification
     session_id: Mapped[str] = mapped_column(String(255), unique=True)
-    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
 
     # Session metadata
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
@@ -153,8 +153,8 @@ class AnalyticsEvent(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Event identification
-    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
-    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("admin.user_sessions.session_id"))
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
     event_type: Mapped[EventType] = mapped_column(SQLEnum(EventType))
 
     # Event data
@@ -163,7 +163,7 @@ class AnalyticsEvent(Base):
     event_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # E-commerce specific fields
-    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.orders.id"), nullable=True)
     product_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     variant_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -216,8 +216,8 @@ class ConversionFunnel(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Funnel identification
-    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
-    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("admin.user_sessions.session_id"))
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
 
     # Funnel steps (0-based)
     current_step: Mapped[int] = mapped_column(Integer, default=0)
@@ -260,7 +260,7 @@ class CustomerLifecycleMetrics(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Customer identification
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"), unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"), unique=True)
 
     # Registration and first purchase
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

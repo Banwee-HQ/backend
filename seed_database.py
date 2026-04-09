@@ -34,7 +34,7 @@ class ProductCategory(str, Enum):
     BEVERAGES_TEA_COFFEE = "Beverages, Tea & Coffee"
     BAKERY_PREPARED_FOODS = "Bakery & Prepared Foods"
     FIBERS_INDUSTRIAL_CROPS = "Fibers & Industrial Crops"
-
+    # check the frontend for the categories
 logger = get_structured_logger(__name__)
 
 # Sample data for African organic products

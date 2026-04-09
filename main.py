@@ -1,7 +1,11 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from core.logging import get_structured_logger
 from fastapi import FastAPI, HTTPException, APIRouter
+
+# Suppress WeasyPrint warnings
+logging.getLogger('weasyprint').setLevel(logging.ERROR)
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -9,7 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from core.db import initialize_db
-from core.config import settings, validate_startup_environment
+from core.config import settings
 from core.exceptions import (
     APIException,
     api_exception_handler,
@@ -35,36 +39,35 @@ logger = get_structured_logger(__name__)
 async def lifespan(app: FastAPI):
     # --- Startup ---
     logger.info("Validating environment configuration...")
-    validation_result = validate_startup_environment()
+    validation_result = settings.validate()
 
     if not validation_result["is_valid"]:
         logger.error("Environment validation failed!")
         missing = validation_result.get("missing", [])
         if missing:
             logger.error("Missing required vars: %s", missing)
-        if os.getenv("ENVIRONMENT", "local").lower() in ["local", "development", "dev"]:
+        if settings.ENVIRONMENT.lower() in ["local", "development", "dev"]:
             logger.warning("Continuing with invalid environment in development mode")
         else:
             raise RuntimeError("Invalid environment configuration. Check your .env file.")
 
     logger.info("Environment validation passed ✅")
-    for warning in (validation_result.get("warnings") or []):
-        logger.warning(warning)
 
     # Initialize database
     try:
-        initialize_db(
+        await initialize_db(
             settings.SQLALCHEMY_DATABASE_URI,
-            settings.ENVIRONMENT == "local",
-            use_optimized_engine=False
+            settings.ENVIRONMENT == "local"
         )
+        # Import all models to ensure SQLAlchemy mappers are configured
+        import models
         logger.info("Database initialized ✅")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise RuntimeError(f"Database initialization failed: {e}")
 
     # Start background scheduler (subscriptions, promocodes)
-    from core.arq_worker import start_scheduler
+    from core.worker import start_scheduler
     start_scheduler()
 
     yield

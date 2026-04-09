@@ -83,7 +83,7 @@ class PaymentMethod(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     # Use PG_ENUM for type to map to PostgreSQL enum type
     type: Mapped[PaymentType] = mapped_column(PG_ENUM(PaymentType, name="payment_type"))
     provider: Mapped[PaymentProvider] = mapped_column(PG_ENUM(PaymentProvider, name="payment_provider"))  # stripe, paypal, momo
@@ -147,9 +147,9 @@ class PaymentIntent(Base):
     stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), unique=True)
 
     # User and subscription references
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
     subscription_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)  # May be null for one-time payments
-    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)  # For order payments
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.orders.id"), nullable=True)  # For order payments
 
     # Amount breakdown (JSONB for complex cost structure that may need querying)
     amount_breakdown: Mapped[dict] = mapped_column(JSON)
@@ -255,9 +255,9 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
-    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
-    payment_intent_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("payment_intents.id"), nullable=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("auth.users.id"))
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.orders.id"), nullable=True)
+    payment_intent_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.payment_intents.id"), nullable=True)
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     amount: Mapped[float] = mapped_column(Float)

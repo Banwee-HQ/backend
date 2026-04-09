@@ -67,8 +67,8 @@ class Inventory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"), unique=True)
-    location_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("warehouse_locations.id"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"), unique=True)
+    location_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.warehouse_locations.id"))
 
     # Atomic stock tracking fields
     quantity_available: Mapped[int] = mapped_column(Integer, default=0)  # Available for sale
@@ -233,10 +233,10 @@ class StockAdjustment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
-    inventory_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("inventory.id"))
+    inventory_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.inventory.id"))
     quantity_change: Mapped[int] = mapped_column(Integer)  # Positive for add, negative for remove
     reason: Mapped[str] = mapped_column(String(CHAR_LENGTH))  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
-    adjusted_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    adjusted_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("auth.users.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

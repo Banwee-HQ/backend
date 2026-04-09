@@ -18,7 +18,7 @@ class PricingConfig(Base):
     __tablename__ = "pricing_configs"
     __table_args__ = (
         # Indexes for search and performance
-        Index('idx_pricing_configs_version', 'version'),
+        Index('idx_pricing_configs_version', 'config_version'),
         Index('idx_pricing_configs_active', 'is_active'),
         Index('idx_pricing_configs_updated_by', 'updated_by'),
         Index('idx_pricing_configs_created_at', 'created_at'),
@@ -63,7 +63,7 @@ class PricingConfig(Base):
             "tax_rates": self.tax_rates,
             "currency_settings": self.currency_settings,
             "updated_by": str(self.updated_by),
-            "version": self.version,
+            "config_version": self.config_version,
             "is_active": self.is_active,
             "change_reason": self.change_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,
