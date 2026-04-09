@@ -297,8 +297,60 @@ async def initialize_db(database_uri: str, env_is_local: bool, engine=None):
         if database_uri.startswith("sqlite"):
             logger.info("SQLite detected - auto-creating tables...")
             try:
+                # SQLite doesn't support schemas, so we need to remove schema prefixes
+                # Create a copy of metadata with schemas removed for SQLite
+                from sqlalchemy import MetaData, Table, ForeignKey, Index
+                import re
+                
+                # Create new metadata without schemas
+                sqlite_metadata = MetaData()
+                
+                # Helper function to remove schema from table reference
+                def remove_schema(ref):
+                    """Remove schema prefix from table references like 'auth.users' -> 'users'"""
+                    if isinstance(ref, str):
+                        parts = ref.split('.')
+                        if len(parts) == 2 and parts[0] in ('auth', 'catalog', 'commerce', 'admin'):
+                            return parts[1]
+                    return ref
+                
+                # Copy all tables from Base.metadata, removing schema
+                for table in Base.metadata.tables.values():
+                    new_columns = []
+                    
+                    for column in table.columns:
+                        # Copy the column
+                        new_col = column.copy()
+                        
+                        # Fix ForeignKey constraints
+                        if new_col.foreign_keys:
+                            for fk in new_col.foreign_keys:
+                                if fk.target_fullname:
+                                    # Remove schema from target reference
+                                    fk.target_fullname = remove_schema(fk.target_fullname)
+                        
+                        new_columns.append(new_col)
+                    
+                    # Copy indexes, removing schema references
+                    new_indexes = []
+                    for idx in table.indexes:
+                        new_idx = Index(
+                            idx.name,
+                            *[c.copy() for c in idx.columns],
+                            unique=idx.unique
+                        )
+                        new_indexes.append(new_idx)
+                    
+                    # Copy the table without schema
+                    Table(
+                        table.name,  # Just the name, no schema
+                        sqlite_metadata,
+                        *new_columns,
+                        indexes=new_indexes,
+                    )
+                
                 async with db_manager.engine.begin() as conn:
-                    await conn.run_sync(Base.metadata.create_all)
+                    await conn.run_sync(sqlite_metadata.create_all)
                 logger.info("SQLite tables created successfully ✅")
             except Exception as e:
                 logger.error(f"Failed to create SQLite tables: {e}")
