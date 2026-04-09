@@ -397,8 +397,8 @@ class CartService:
             .options(
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.inventory),
-                selectinload(Cart.items).selectinload(CartItem.variant).lazyload(ProductVariant.product),
-                selectinload(Cart.items).lazyload(CartItem.product),
+                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.product),
+                selectinload(Cart.items).selectinload(CartItem.product),
             )
             .where(Cart.user_id == user_id)
         )
