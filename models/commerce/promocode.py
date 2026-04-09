@@ -1,9 +1,36 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Text, Integer, Index
-from core.db import BaseModel
+from sqlalchemy import String, Boolean, DateTime, func, Float, Text, Integer, Index
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
+from datetime import datetime as dt
+from typing import Optional
+import uuid as uuid_module
 
 
-class Promocode(BaseModel):
+class Promocode(Base):
     __tablename__ = "promocodes"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    code: Mapped[str] = mapped_column(String(50), unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    discount_type: Mapped[str] = mapped_column(String(20))  # percentage, fixed
+    value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
+    minimum_order_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    maximum_discount_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    valid_from: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_promocodes_code', 'code'),
@@ -17,15 +44,3 @@ class Promocode(BaseModel):
         Index('idx_promocodes_active_valid', 'is_active', 'valid_from', 'valid_until'),
         {'extend_existing': True}
     )
-
-    code = Column(String(50), unique=True, nullable=False)
-    description = Column(Text, nullable=True)
-    discount_type = Column(String(20), nullable=False)  # percentage, fixed
-    value = Column(Float, nullable=False)  # 10 for 10% or $10
-    minimum_order_amount = Column(Float, nullable=True)
-    maximum_discount_amount = Column(Float, nullable=True)
-    usage_limit = Column(Integer, nullable=True)
-    used_count = Column(Integer, default=0)
-    is_active = Column(Boolean, default=True)
-    valid_from = Column(DateTime(timezone=True), nullable=True)
-    valid_until = Column(DateTime(timezone=True), nullable=True)

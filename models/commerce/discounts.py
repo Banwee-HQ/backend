@@ -1,17 +1,40 @@
 """
 Discount management models for subscription product management
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Text, Integer, Index, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, Float, Text, Integer, func, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID
-from datetime import datetime
-from typing import Dict, Any
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
+from datetime import datetime, datetime as dt
+from typing import Dict, Any, Optional
+import uuid as uuid_module
 
 
-class Discount(BaseModel):
+class Discount(Base):
     """Discount codes and promotional offers"""
     __tablename__ = "discounts"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    code: Mapped[str] = mapped_column(String(50), unique=True)
+    type: Mapped[str] = mapped_column(String(20))  # PERCENTAGE, FIXED_AMOUNT, FREE_SHIPPING
+    value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
+    minimum_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    maximum_discount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    valid_from: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_discounts_code', 'code'),
@@ -26,18 +49,6 @@ class Discount(BaseModel):
         Index('idx_discounts_code_active', 'code', 'is_active'),
         {'extend_existing': True}
     )
-
-    code = Column(String(50), unique=True, nullable=False)
-    type = Column(String(20), nullable=False)  # PERCENTAGE, FIXED_AMOUNT, FREE_SHIPPING
-    value = Column(Float, nullable=False)  # 10 for 10% or $10
-    minimum_amount = Column(Float, nullable=True)
-    maximum_discount = Column(Float, nullable=True)
-    valid_from = Column(DateTime(timezone=True), nullable=False)
-    valid_until = Column(DateTime(timezone=True), nullable=False)
-    usage_limit = Column(Integer, nullable=True)
-    used_count = Column(Integer, default=0, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    description = Column(Text, nullable=True)
 
     # Relationships
     subscription_discounts = relationship("SubscriptionDiscount", back_populates="discount", lazy="select")
@@ -95,9 +106,23 @@ class Discount(BaseModel):
         return min(discount_amount, subtotal)
 
 
-class SubscriptionDiscount(BaseModel):
+class SubscriptionDiscount(Base):
     """Applied discounts tracking for subscriptions"""
     __tablename__ = "subscription_discounts"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
+    discount_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("discounts.id"))
+    discount_amount: Mapped[float] = mapped_column(Float)
+    applied_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_subscription_discounts_subscription_id', 'subscription_id'),
@@ -107,11 +132,6 @@ class SubscriptionDiscount(BaseModel):
         Index('idx_subscription_discounts_sub_discount', 'subscription_id', 'discount_id'),
         {'extend_existing': True}
     )
-
-    subscription_id = Column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False)
-    discount_id = Column(GUID(), ForeignKey("discounts.id"), nullable=False)
-    discount_amount = Column(Float, nullable=False)
-    applied_at = Column(DateTime(timezone=True), server_default="NOW()", nullable=False)
 
     # Relationships
     subscription = relationship("Subscription", back_populates="applied_discounts", lazy="select")
@@ -131,9 +151,24 @@ class SubscriptionDiscount(BaseModel):
         }
 
 
-class ProductRemovalAudit(BaseModel):
+class ProductRemovalAudit(Base):
     """Audit trail for product removals from subscriptions"""
     __tablename__ = "product_removal_audit"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
+    product_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    removed_by: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    removed_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_product_removal_audit_subscription_id', 'subscription_id'),
@@ -145,12 +180,6 @@ class ProductRemovalAudit(BaseModel):
         Index('idx_product_removal_audit_user_date', 'removed_by', 'removed_at'),
         {'extend_existing': True}
     )
-
-    subscription_id = Column(GUID(), ForeignKey("subscriptions.id"), nullable=False)
-    product_id = Column(GUID(), ForeignKey("products.id"), nullable=False)
-    removed_by = Column(GUID(), ForeignKey("users.id"), nullable=False)
-    removed_at = Column(DateTime(timezone=True), server_default="NOW()", nullable=False)
-    reason = Column(Text, nullable=True)
 
     # Relationships
     subscription = relationship("Subscription", lazy="select")

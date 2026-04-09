@@ -3,13 +3,15 @@ Shipping Tracking Models
 Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, etc.)
 """
 
-from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text, Integer, Float, Index
+from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Float, Index
 from sqlalchemy.dialects.postgresql import UUID, ENUM as PG_ENUM, JSONB
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
 from enum import Enum
-from datetime import datetime, timezone
+from datetime import datetime, timezone, datetime as dt
 from typing import Dict, Any, Optional
+import uuid as uuid_module
 
 class ShippingCarrier(str, Enum):
     """Supported shipping carriers"""
@@ -76,25 +78,34 @@ class ShipmentType(str, Enum):
     INTERNATIONAL = "international"
     FREIGHT = "freight"
 
-class ShippingProvider(BaseModel):
+class ShippingProvider(Base):
     """Shipping provider configuration"""
     __tablename__ = "shipping_providers"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    name: Mapped[str] = mapped_column(String(100))
+    carrier: Mapped[ShippingCarrier] = mapped_column(PG_ENUM(ShippingCarrier, name="shipping_carrier"))
+    api_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Encrypted in production
+    api_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Encrypted in production
+    api_url: Mapped[str] = mapped_column(String(255))
+    tracking_url_template: Mapped[str] = mapped_column(String(500))  # Template for tracking URLs
+    webhook_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    configuration: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Provider-specific config
+    rate_limits: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # API rate limiting config
+
     __table_args__ = (
         Index('idx_shipping_providers_carrier', 'carrier'),
         Index('idx_shipping_providers_active', 'is_active'),
         {'extend_existing': True}
     )
-
-    name = Column(String(100), nullable=False)
-    carrier = Column(PG_ENUM(ShippingCarrier, name="shipping_carrier"), nullable=False)
-    api_key = Column(String(255), nullable=True)  # Encrypted in production
-    api_secret = Column(String(255), nullable=True)  # Encrypted in production
-    api_url = Column(String(255), nullable=False)
-    tracking_url_template = Column(String(500), nullable=False)  # Template for tracking URLs
-    webhook_url = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True)
-    configuration = Column(JSONB, nullable=True)  # Provider-specific config
-    rate_limits = Column(JSONB, nullable=True)  # API rate limiting config
 
     # Relationships
     shipments = relationship("ShipmentTracking", back_populates="provider")
@@ -111,9 +122,64 @@ class ShippingProvider(BaseModel):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
-class ShipmentTracking(BaseModel):
+class ShipmentTracking(Base):
     """Main shipment tracking model"""
     __tablename__ = "shipment_tracking"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Core shipment information
+    order_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
+    order_item_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("order_items.id"), nullable=True)  # For multi-item shipments
+    provider_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("shipping_providers.id"))
+
+    # Tracking details
+    tracking_number: Mapped[str] = mapped_column(String(100), unique=True)
+    carrier: Mapped[ShippingCarrier] = mapped_column(PG_ENUM(ShippingCarrier, name="shipment_carrier"))
+    status: Mapped[TrackingStatus] = mapped_column(PG_ENUM(TrackingStatus, name="tracking_status"), default=TrackingStatus.PENDING)
+    shipment_type: Mapped[ShipmentType] = mapped_column(PG_ENUM(ShipmentType, name="shipment_type"), default=ShipmentType.STANDARD)
+
+    # Timeline information
+    shipped_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    estimated_delivery: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    actual_delivery: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Location information
+    origin_address: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Pickup address
+    destination_address: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Delivery address
+    current_location: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Current location
+    delivery_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Package information
+    package_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Weight in kg
+    package_dimensions: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # {length, width, height} in cm
+    package_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Declared value
+    insurance_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Service details
+    service_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Express, Standard, etc.
+    delivery_signature_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    delivery_confirmation: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    # External tracking data
+    external_tracking_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Raw data from carrier API
+    last_api_sync: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, success, error
+
+    # Customer notifications
+    customer_notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    notification_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    # Metadata
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    internal_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     __table_args__ = (
         Index('idx_shipment_tracking_order_id', 'order_id'),
         Index('idx_shipment_tracking_carrier', 'carrier'),
@@ -123,52 +189,6 @@ class ShipmentTracking(BaseModel):
         Index('idx_shipment_tracking_estimated_delivery', 'estimated_delivery'),
         {'extend_existing': True}
     )
-
-    # Core shipment information
-    order_id = Column(GUID(), ForeignKey("orders.id"), nullable=False)
-    order_item_id = Column(GUID(), ForeignKey("order_items.id"), nullable=True)  # For multi-item shipments
-    provider_id = Column(GUID(), ForeignKey("shipping_providers.id"), nullable=False)
-    
-    # Tracking details
-    tracking_number = Column(String(100), nullable=False, unique=True)
-    carrier = Column(PG_ENUM(ShippingCarrier, name="shipment_carrier"), nullable=False)
-    status = Column(PG_ENUM(TrackingStatus, name="tracking_status"), default=TrackingStatus.PENDING)
-    shipment_type = Column(PG_ENUM(ShipmentType, name="shipment_type"), default=ShipmentType.STANDARD)
-    
-    # Timeline information
-    shipped_at = Column(DateTime(timezone=True), nullable=True)
-    estimated_delivery = Column(DateTime(timezone=True), nullable=True)
-    actual_delivery = Column(DateTime(timezone=True), nullable=True)
-    
-    # Location information
-    origin_address = Column(JSONB, nullable=True)  # Pickup address
-    destination_address = Column(JSONB, nullable=True)  # Delivery address
-    current_location = Column(JSONB, nullable=True)  # Current location
-    delivery_instructions = Column(Text, nullable=True)
-    
-    # Package information
-    package_weight = Column(Float, nullable=True)  # Weight in kg
-    package_dimensions = Column(JSONB, nullable=True)  # {length, width, height} in cm
-    package_value = Column(Float, nullable=True)  # Declared value
-    insurance_amount = Column(Float, nullable=True)
-    
-    # Service details
-    service_level = Column(String(50), nullable=True)  # Express, Standard, etc.
-    delivery_signature_required = Column(Boolean, default=False)
-    delivery_confirmation = Column(String(100), nullable=True)
-    
-    # External tracking data
-    external_tracking_data = Column(JSONB, nullable=True)  # Raw data from carrier API
-    last_api_sync = Column(DateTime(timezone=True), nullable=True)
-    sync_status = Column(String(50), default="pending")  # pending, success, error
-    
-    # Customer notifications
-    customer_notified = Column(Boolean, default=False)
-    notification_preferences = Column(JSONB, nullable=True)
-    
-    # Metadata
-    notes = Column(Text, nullable=True)
-    internal_notes = Column(Text, nullable=True)
 
     # Relationships
     order = relationship("Order", back_populates="shipments")
@@ -210,38 +230,47 @@ class ShipmentTracking(BaseModel):
             
         return template.replace("{tracking_number}", self.tracking_number)
 
-class ShipmentTrackingEvent(BaseModel):
+class ShipmentTrackingEvent(Base):
     """Individual tracking events for a shipment"""
     __tablename__ = "shipment_tracking_events"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    shipment_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("shipment_tracking.id"))
+    event_timestamp: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    event_type: Mapped[str] = mapped_column(String(50))  # picked_up, in_transit, out_for_delivery, delivered, etc.
+    event_description: Mapped[str] = mapped_column(Text)
+    event_location: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # {city, state, country, coordinates}
+
+    # Carrier-specific data
+    carrier_event_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    carrier_event_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    # Additional details
+    estimated_delivery: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    delay_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    exception_details: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    # Contact information
+    contact_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    # Metadata
+    source: Mapped[str] = mapped_column(String(50), default="api")  # api, webhook, manual
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
     __table_args__ = (
         Index('idx_tracking_events_shipment_id', 'shipment_id'),
         Index('idx_tracking_events_timestamp', 'event_timestamp'),
         Index('idx_tracking_events_event_type', 'event_type'),
         {'extend_existing': True}
     )
-
-    shipment_id = Column(GUID(), ForeignKey("shipment_tracking.id"), nullable=False)
-    event_timestamp = Column(DateTime(timezone=True), nullable=False)
-    event_type = Column(String(50), nullable=False)  # picked_up, in_transit, out_for_delivery, delivered, etc.
-    event_description = Column(Text, nullable=False)
-    event_location = Column(JSONB, nullable=True)  # {city, state, country, coordinates}
-    
-    # Carrier-specific data
-    carrier_event_code = Column(String(50), nullable=True)
-    carrier_event_data = Column(JSONB, nullable=True)
-    
-    # Additional details
-    estimated_delivery = Column(DateTime(timezone=True), nullable=True)
-    delay_reason = Column(String(255), nullable=True)
-    exception_details = Column(JSONB, nullable=True)
-    
-    # Contact information
-    contact_name = Column(String(100), nullable=True)
-    contact_phone = Column(String(20), nullable=True)
-    
-    # Metadata
-    source = Column(String(50), default="api")  # api, webhook, manual
-    raw_data = Column(JSONB, nullable=True)
 
     # Relationships
     shipment = relationship("ShipmentTracking", back_populates="tracking_events")
@@ -263,24 +292,33 @@ class ShipmentTrackingEvent(BaseModel):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
-class ShippingWebhook(BaseModel):
+class ShippingWebhook(Base):
     """Webhook configurations for shipping updates"""
     __tablename__ = "shipping_webhooks"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    provider_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("shipping_providers.id"))
+    webhook_url: Mapped[str] = mapped_column(String(500))
+    webhook_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    event_types: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)  # Which events to trigger on
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_triggered: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    success_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+
     __table_args__ = (
         Index('idx_shipping_webhooks_provider', 'provider_id'),
         Index('idx_shipping_webhooks_active', 'is_active'),
         {'extend_existing': True}
     )
-
-    provider_id = Column(GUID(), ForeignKey("shipping_providers.id"), nullable=False)
-    webhook_url = Column(String(500), nullable=False)
-    webhook_secret = Column(String(255), nullable=True)
-    event_types = Column(JSONB, nullable=True)  # Which events to trigger on
-    is_active = Column(Boolean, default=True)
-    retry_count = Column(Integer, default=0)
-    last_triggered = Column(DateTime(timezone=True), nullable=True)
-    success_count = Column(Integer, default=0)
-    error_count = Column(Integer, default=0)
 
     # Relationships
     provider = relationship("ShippingProvider")

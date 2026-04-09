@@ -2,12 +2,15 @@
 Consolidated payment models
 Includes: PaymentMethod, PaymentIntent, Transaction
 """
-from sqlalchemy import Column, String, Boolean, ForeignKey, Float, Text, Integer, DateTime, Index
+from sqlalchemy import String, Boolean, ForeignKey, Float, Text, Integer, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM as PG_ENUM
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID
-from typing import Dict, Any
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
+from typing import Dict, Any, Optional
 from enum import Enum
+from datetime import datetime as dt
+import uuid as uuid_module
 
 # Enums for Payment Method fields
 class PaymentType(str, Enum):
@@ -38,9 +41,32 @@ class CardBrand(str, Enum):
     OTHER = "other" # For less common or newly introduced card brands
 
 
-class PaymentMethod(BaseModel):
+class PaymentMethod(Base):
     """User payment methods - hard delete only"""
     __tablename__ = "payment_methods"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    # Use PG_ENUM for type to map to PostgreSQL enum type
+    type: Mapped[PaymentType] = mapped_column(PG_ENUM(PaymentType, name="payment_type"))
+    provider: Mapped[PaymentProvider] = mapped_column(PG_ENUM(PaymentProvider, name="payment_provider"))  # stripe, paypal, momo
+    last_four: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    expiry_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expiry_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    brand: Mapped[Optional[CardBrand]] = mapped_column(PG_ENUM(CardBrand, name="card_brand"), nullable=True)  # visa, mastercard, etc.
+    stripe_payment_method_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Only use JSONB for complex payment method data that needs querying
+    payment_method_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Store complex payment data
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_payment_methods_user_id', 'user_id'),
@@ -54,20 +80,6 @@ class PaymentMethod(BaseModel):
         Index('idx_payment_methods_user_default', 'user_id', 'is_default'),
         {'extend_existing': True}
     )
-
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
-    # Use PG_ENUM for type to map to PostgreSQL enum type
-    type = Column(PG_ENUM(PaymentType, name="payment_type"), nullable=False)
-    provider = Column(PG_ENUM(PaymentProvider, name="payment_provider"), nullable=False)  # stripe, paypal, momo
-    last_four = Column(String(4), nullable=True)
-    expiry_month = Column(Integer, nullable=True)
-    expiry_year = Column(Integer, nullable=True)
-    brand = Column(PG_ENUM(CardBrand, name="card_brand"), nullable=True)  # visa, mastercard, etc.
-    stripe_payment_method_id = Column(String(255), nullable=True, unique=True)
-    is_default = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    # Only use JSONB for complex payment method data that needs querying
-    payment_method_metadata = Column(JSONB, default=dict)  # Store complex payment data
 
     # Relationships
     user = relationship("User", back_populates="payment_methods")
@@ -91,9 +103,57 @@ class PaymentMethod(BaseModel):
         }
 
 
-class PaymentIntent(BaseModel):
+class PaymentIntent(Base):
     """Payment intent tracking with hard delete only"""
     __tablename__ = "payment_intents"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Stripe payment intent ID
+    stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), unique=True)
+
+    # User and subscription references
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    subscription_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)  # May be null for one-time payments
+    order_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)  # For order payments
+
+    # Amount breakdown (JSONB for complex cost structure that may need querying)
+    amount_breakdown: Mapped[dict] = mapped_column(JSONB)
+
+    # Currency
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Payment status
+    status: Mapped[str] = mapped_column(String(50), default="requires_payment_method")
+
+    # Stripe verification details (JSONB for structured data)
+    stripe_verification: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    # Payment method details
+    payment_method_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    payment_method_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # "card", "bank_account", etc.
+
+    # 3D Secure and SCA handling
+    requires_action: Mapped[bool] = mapped_column(Boolean, default=False)
+    client_secret: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # Expiration
+    expires_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Completion details
+    confirmed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Metadata for additional tracking (JSONB for structured payment data)
+    payment_intent_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_payment_intents_stripe_id', 'stripe_payment_intent_id'),
@@ -109,45 +169,6 @@ class PaymentIntent(BaseModel):
         Index('idx_payment_intents_status_created', 'status', 'created_at'),
         {'extend_existing': True}
     )
-
-    # Stripe payment intent ID
-    stripe_payment_intent_id = Column(String(255), nullable=False, unique=True, index=True)
-    
-    # User and subscription references
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, index=True)
-    subscription_id = Column(GUID(), nullable=True, index=True)  # May be null for one-time payments
-    order_id = Column(GUID(), ForeignKey("orders.id"), nullable=True, index=True)  # For order payments
-    
-    # Amount breakdown (JSONB for complex cost structure that may need querying)
-    amount_breakdown = Column(JSONB, nullable=False)
-    
-    # Currency
-    currency = Column(String(3), nullable=False, default="USD")
-    
-    # Payment status
-    status = Column(String(50), nullable=False, default="requires_payment_method")
-    
-    # Stripe verification details (JSONB for structured data)
-    stripe_verification = Column(JSONB, nullable=True)
-    
-    # Payment method details
-    payment_method_id = Column(String(255), nullable=True)
-    payment_method_type = Column(String(50), nullable=True)  # "card", "bank_account", etc.
-    
-    # 3D Secure and SCA handling
-    requires_action = Column(Boolean, default=False)
-    client_secret = Column(String(500), nullable=True)
-    
-    # Expiration
-    expires_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Completion details
-    confirmed_at = Column(DateTime(timezone=True), nullable=True)
-    failed_at = Column(DateTime(timezone=True), nullable=True)
-    failure_reason = Column(Text, nullable=True)
-    
-    # Metadata for additional tracking (JSONB for structured payment data)
-    payment_intent_metadata = Column(JSONB, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="payment_intents")
@@ -194,9 +215,41 @@ class PaymentIntent(BaseModel):
         return 0.0
 
 
-class Transaction(BaseModel):
+class Transaction(Base):
     """Financial transaction records - hard delete only"""
     __tablename__ = "transactions"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    order_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
+    payment_intent_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("payment_intents.id"), nullable=True)
+    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    amount: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # pending, succeeded, failed, cancelled, refunded
+    status: Mapped[str] = mapped_column(String(50))
+    # payment, refund, payout, chargeback
+    transaction_type: Mapped[str] = mapped_column(String(50))
+
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # GOLDEN RULE 2: Idempotency for payments
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    request_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # For tracking
+
+    # Additional transaction metadata (Text for simple key-value storage)
+    transaction_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Simple string metadata
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_transactions_user_id', 'user_id'),
@@ -216,29 +269,6 @@ class Transaction(BaseModel):
         Index('idx_transactions_status_created', 'status', 'created_at'),
         {'extend_existing': True}
     )
-
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
-    order_id = Column(GUID(), ForeignKey("orders.id"), nullable=True)
-    payment_intent_id = Column(GUID(), ForeignKey("payment_intents.id"), nullable=True)
-    stripe_payment_intent_id = Column(String(255), nullable=True)
-    
-    amount = Column(Float, nullable=False)
-    currency = Column(String(3), default="USD")
-    
-    # pending, succeeded, failed, cancelled, refunded
-    status = Column(String(50), nullable=False)
-    # payment, refund, payout, chargeback
-    transaction_type = Column(String(50), nullable=False)
-    
-    description = Column(Text, nullable=True)
-    failure_reason = Column(Text, nullable=True)
-    
-    # GOLDEN RULE 2: Idempotency for payments
-    idempotency_key = Column(String(255), unique=True, index=True, nullable=True)
-    request_id = Column(String(255), index=True, nullable=True)  # For tracking
-    
-    # Additional transaction metadata (Text for simple key-value storage)
-    transaction_metadata = Column(Text, nullable=True)  # Simple string metadata
 
     # Relationships
     user = relationship("User", back_populates="transactions")

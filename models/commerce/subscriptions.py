@@ -3,11 +3,14 @@ Consolidated subscription models
 Includes: Subscription and related subscription models
 Optimized for PostgreSQL with partial indexes for active subscriptions and products
 """
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Table, JSON, Text, Integer, Index
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Float, Table, JSON, Text, Integer, func, Index, Column
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID, Base
-from typing import Dict, Any
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
+from typing import Dict, Any, Optional
+from datetime import datetime as dt
+import uuid as uuid_module
 
 # --- Association table: Subscription <-> ProductVariant ---
 subscription_product_association = Table(
@@ -20,9 +23,29 @@ subscription_product_association = Table(
 )
 
 
-class SubscriptionProduct(BaseModel):
+class SubscriptionProduct(Base):
     """Tracks individual products within subscriptions with removal tracking"""
     __tablename__ = "subscription_products"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"))
+    product_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    unit_price: Mapped[float] = mapped_column(Float)
+    total_price: Mapped[float] = mapped_column(Float)
+    added_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+
+    # Removal tracking
+    removed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+
     __table_args__ = (
         # Basic indexes
         Index('idx_subscription_products_subscription_id', 'subscription_id'),
@@ -35,17 +58,6 @@ class SubscriptionProduct(BaseModel):
               postgresql_where=Column('removed_at').is_(None)),
         {'extend_existing': True}
     )
-
-    subscription_id = Column(GUID(), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(GUID(), ForeignKey("products.id"), nullable=False)
-    quantity = Column(Integer, nullable=False, default=1)
-    unit_price = Column(Float, nullable=False)
-    total_price = Column(Float, nullable=False)
-    added_at = Column(DateTime(timezone=True), server_default="NOW()", nullable=False)
-
-    # Removal tracking
-    removed_at = Column(DateTime(timezone=True), nullable=True)
-    removed_by = Column(GUID(), ForeignKey("users.id"), nullable=True)
 
     # Relationships
     subscription = relationship("Subscription", back_populates="subscription_products", lazy="select")
@@ -74,9 +86,76 @@ class SubscriptionProduct(BaseModel):
         }
 
 
-class Subscription(BaseModel):
+class Subscription(Base):
     """Robust subscription model with at-creation and current pricing for e-commerce"""
     __tablename__ = "subscriptions"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # --- Core fields ---
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(50), default="active")
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    billing_cycle: Mapped[str] = mapped_column(String(20), default="monthly")
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
+    current_period_start: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_billing_date: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    paused_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    pause_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_payment_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payment_retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_payment_attempt: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_retry_date: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # --- Payment info ---
+    payment_gateway: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    payment_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # --- Delivery info ---
+    delivery_type: Mapped[Optional[str]] = mapped_column(String(50), default="standard")
+    delivery_address_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("addresses.id"), nullable=True)
+
+    # --- Pricing at creation ---
+    price_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    variant_prices_at_creation: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    shipping_amount_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tax_amount_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tax_rate_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # --- Current/dynamic pricing ---
+    current_variant_prices: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    current_shipping_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    current_tax_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    current_tax_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # --- Products & variants ---
+    variant_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    subscription_products = relationship("SubscriptionProduct", back_populates="subscription", lazy="select")
+    products = relationship(
+        "ProductVariant",
+        secondary=subscription_product_association,
+        backref="subscriptions_containing",
+        lazy="selectin"
+    )
+
+    # --- Metadata ---
+    subscription_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # --- Discount fields ---
+    discount_id = Column(GUID(), ForeignKey("promocodes.id"), nullable=True)
+    discount_type = Column(String(20), nullable=True)  # "percentage" or "fixed"
+    discount_value = Column(Float, nullable=True)
+    discount_code = Column(String(50), nullable=True)
+
     __table_args__ = (
         # Single-column indexes
         Index('idx_subscriptions_user_id', 'user_id'),
@@ -91,64 +170,6 @@ class Subscription(BaseModel):
               postgresql_where=Column('status') == 'active'),
         {'extend_existing': True}
     )
-
-    # --- Core fields ---
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
-    name = Column(String(255), nullable=False)
-    status = Column(String(50), default="active")
-    currency = Column(String(3), default="USD")
-    billing_cycle = Column(String(20), default="monthly")
-    auto_renew = Column(Boolean, default=True)
-    current_period_start = Column(DateTime(timezone=True), nullable=True)
-    current_period_end = Column(DateTime(timezone=True), nullable=True)
-    cancelled_at = Column(DateTime(timezone=True), nullable=True)
-    next_billing_date = Column(DateTime(timezone=True), nullable=True)
-    paused_at = Column(DateTime(timezone=True), nullable=True)
-    pause_reason = Column(Text, nullable=True)
-    last_payment_error = Column(Text, nullable=True)
-    payment_retry_count = Column(Integer, default=0)
-    last_payment_attempt = Column(DateTime(timezone=True), nullable=True)
-    next_retry_date = Column(DateTime(timezone=True), nullable=True)
-
-    # --- Payment info ---
-    payment_gateway = Column(String(50), nullable=True)
-    payment_reference = Column(String(255), nullable=True)
-
-    # --- Delivery info ---
-    delivery_type = Column(String(50), nullable=True, default="standard")
-    delivery_address_id = Column(GUID(), ForeignKey("addresses.id"), nullable=True)
-
-    # --- Pricing at creation ---
-    price_at_creation = Column(Float, nullable=True)
-    variant_prices_at_creation = Column(JSON, nullable=True)
-    shipping_amount_at_creation = Column(Float, nullable=True)
-    tax_amount_at_creation = Column(Float, nullable=True)
-    tax_rate_at_creation = Column(Float, nullable=True)
-
-    # --- Current/dynamic pricing ---
-    current_variant_prices = Column(JSON, nullable=True)
-    current_shipping_amount = Column(Float, nullable=True)
-    current_tax_amount = Column(Float, nullable=True)
-    current_tax_rate = Column(Float, nullable=True)
-
-    # --- Products & variants ---
-    variant_ids = Column(JSON, nullable=True)
-    subscription_products = relationship("SubscriptionProduct", back_populates="subscription", lazy="select")
-    products = relationship(
-        "ProductVariant",
-        secondary=subscription_product_association,
-        backref="subscriptions_containing",
-        lazy="selectin"
-    )
-
-    # --- Metadata ---
-    subscription_metadata = Column(JSON, nullable=True)
-
-    # --- Discount fields ---
-    discount_id = Column(GUID(), ForeignKey("promocodes.id"), nullable=True)
-    discount_type = Column(String(20), nullable=True)  # "percentage" or "fixed"
-    discount_value = Column(Float, nullable=True)
-    discount_code = Column(String(50), nullable=True)
 
     # --- Relationships ---
     user = relationship("User", back_populates="subscriptions")

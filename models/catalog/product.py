@@ -1,15 +1,52 @@
 """
 Optimized product models with strategic JSONB usage
 """
-from sqlalchemy import Column, String, Boolean, ForeignKey, Text, Float, Integer, DateTime
+from sqlalchemy import String, Boolean, ForeignKey, Text, Float, Integer, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, CHAR_LENGTH, GUID, Index
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, CHAR_LENGTH, GUID
+from core.utils.uuid_utils import uuid7
+from datetime import datetime as dt
+from typing import Optional
+import uuid as uuid_module
 
 
-class Product(BaseModel):
+class Product(Base):
     """Optimized product model with hard delete only and strategic JSONB usage"""
     __tablename__ = "products"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Core product information as columns for performance
+    name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+    slug: Mapped[str] = mapped_column(String(CHAR_LENGTH), unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    short_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # Category as string field
+    category: Mapped[str] = mapped_column(String(100))
+
+    # Status fields as columns for indexing and fast filtering
+    product_status: Mapped[str] = mapped_column(String(50), default="active")  # active, inactive, draft, discontinued
+
+    # Quality metrics as columns for sorting/filtering (aggregated from variants)
+    rating_average: Mapped[float] = mapped_column(Float, default=0.0)
+    rating_count: Mapped[int] = mapped_column(Integer, default=0)
+    review_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Marketing flags as columns for fast filtering
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Dates for lifecycle management
+    published_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
         # Optimized indexes for product queries
         Index('idx_products_category_status', 'category', 'product_status'),
@@ -17,30 +54,6 @@ class Product(BaseModel):
         Index('idx_products_slug', 'slug'),
         {'extend_existing': True}
     )
-
-    # Core product information as columns for performance
-    name = Column(String(CHAR_LENGTH), nullable=False)
-    slug = Column(String(CHAR_LENGTH), unique=True, nullable=False)
-    description = Column(Text, nullable=True)
-    short_description = Column(String(500), nullable=True)
-
-    # Category as string field
-    category = Column(String(100), nullable=False)
-
-    # Status fields as columns for indexing and fast filtering
-    product_status = Column(String(50), default="active", nullable=False)  # active, inactive, draft, discontinued
-
-    # Quality metrics as columns for sorting/filtering (aggregated from variants)
-    rating_average = Column(Float, default=0.0)
-    rating_count = Column(Integer, default=0)
-    review_count = Column(Integer, default=0)
-
-    # Marketing flags as columns for fast filtering
-    is_featured = Column(Boolean, default=False)
-    is_bestseller = Column(Boolean, default=False)
-
-    # Dates for lifecycle management
-    published_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships with optimized lazy loading
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="selectin")
@@ -133,9 +146,42 @@ class Product(BaseModel):
         return data
 
 
-class ProductVariant(BaseModel):
+class ProductVariant(Base):
     """Product variants with hard delete only"""
     __tablename__ = "product_variants"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    product_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("products.id"))
+    sku: Mapped[str] = mapped_column(String(100), unique=True)
+    name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+
+    # Pricing as columns
+    base_price: Mapped[float] = mapped_column(Float)
+    sale_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Use JSONB only for complex attributes that need querying
+    attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # {"size": "1kg", "color": "red"}
+    specifications: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Technical specs that need filtering
+    dietary_tags: Mapped[dict] = mapped_column(JSONB, default=dict)  # Dietary information for filtering
+
+    # Simple tags as text for better performance
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # "organic,gluten-free,vegan"
+
+    # Status as column
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    availability_status: Mapped[str] = mapped_column(String(50), default="available")  # available, limited, out_of_stock
+
+    # Analytics as columns
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    purchase_count: Mapped[int] = mapped_column(Integer, default=0)
+
     __table_args__ = (
         Index('idx_variants_product_id', 'product_id'),
         Index('idx_variants_sku', 'sku'),
@@ -147,30 +193,6 @@ class ProductVariant(BaseModel):
         Index('idx_variants_dietary_tags', 'dietary_tags', postgresql_using='gin'),
         {'extend_existing': True}
     )
-
-    product_id = Column(GUID(), ForeignKey("products.id"), nullable=False)
-    sku = Column(String(100), unique=True, nullable=False)
-    name = Column(String(CHAR_LENGTH), nullable=False)
-    
-    # Pricing as columns
-    base_price = Column(Float, nullable=False)
-    sale_price = Column(Float, nullable=True)
-
-    # Use JSONB only for complex attributes that need querying
-    attributes = Column(JSONB, nullable=True)  # {"size": "1kg", "color": "red"}
-    specifications = Column(JSONB, nullable=True)  # Technical specs that need filtering
-    dietary_tags = Column(JSONB, nullable=False)  # Dietary information for filtering
-    
-    # Simple tags as text for better performance
-    tags = Column(Text, nullable=True)  # "organic,gluten-free,vegan"
-    
-    # Status as column
-    is_active = Column(Boolean, default=True)
-    availability_status = Column(String(50), default="available", nullable=False)  # available, limited, out_of_stock
-
-    # Analytics as columns
-    view_count = Column(Integer, default=0)
-    purchase_count = Column(Integer, default=0)
 
     # Relationships
     product = relationship("Product", back_populates="variants")
@@ -247,21 +269,30 @@ class ProductVariant(BaseModel):
         return data
 
 
-class ProductImage(BaseModel):
+class ProductImage(Base):
     """Product images - no soft delete needed"""
     __tablename__ = "product_images"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    url: Mapped[str] = mapped_column(String(500))
+    alt_text: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    format: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # jpg, png, webp
+
     __table_args__ = (
         Index('idx_images_variant_id', 'variant_id'),
         Index('idx_images_primary', 'is_primary'),
         {'extend_existing': True}
     )
-
-    variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False)
-    url = Column(String(500), nullable=False)
-    alt_text = Column(String(CHAR_LENGTH), nullable=True)
-    is_primary = Column(Boolean, default=False)
-    sort_order = Column(Integer, default=0)
-    format = Column(String(10), nullable=True)  # jpg, png, webp
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="images")

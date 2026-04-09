@@ -2,11 +2,12 @@
 Consolidated inventory models with atomic stock operations
 Includes: WarehouseLocation, Inventory, StockAdjustment
 """
-from sqlalchemy import Column, String, Integer, ForeignKey, Text, DateTime, Boolean, Index, select, update
+from sqlalchemy import Column, String, Integer, ForeignKey, Text, DateTime, Boolean, func, Index, select, update
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from core.db import BaseModel, CHAR_LENGTH, GUID
+from core.db import Base, CHAR_LENGTH, GUID
+from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
@@ -15,37 +16,42 @@ from core.logging import get_structured_logger
 logger = get_structured_logger(__name__)
 
 
-class WarehouseLocation(BaseModel):
+class WarehouseLocation(Base):
     """Warehouse locations for inventory management"""
     __tablename__ = "warehouse_locations"
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
+    name = Column(String(CHAR_LENGTH), nullable=False)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_warehouse_locations_name', 'name'),
         {'extend_existing': True}
     )
-
-    name = Column(String(CHAR_LENGTH), nullable=False)
     address = Column(String(CHAR_LENGTH), nullable=True)
     description = Column(Text, nullable=True)
 
     inventories = relationship("Inventory", back_populates="location")
 
 
-class Inventory(BaseModel):
+class Inventory(Base):
     """Product variant inventory tracking with atomic operations"""
     __tablename__ = "inventory"
-    __table_args__ = (
-        # Optimized indexes for atomic operations
-        Index('idx_inventory_variant_id', 'variant_id'),
-        Index('idx_inventory_location_id', 'location_id'),
-        Index('idx_inventory_quantity_available', 'quantity_available'),
-        Index('idx_inventory_low_stock', 'low_stock_threshold'),
-        Index('idx_inventory_status', 'inventory_status'),
-        # Composite indexes for common atomic queries
-        Index('idx_inventory_variant_status', 'variant_id', 'inventory_status'),
-        Index('idx_inventory_location_quantity', 'location_id', 'quantity_available'),
-        {'extend_existing': True}
-    )
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
 
     variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, unique=True)
     location_id = Column(GUID(), ForeignKey("warehouse_locations.id"), nullable=False)
@@ -69,6 +75,19 @@ class Inventory(BaseModel):
     
     # Legacy field for backward compatibility
     quantity = Column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        # Optimized indexes for atomic operations
+        Index('idx_inventory_variant_id', 'variant_id'),
+        Index('idx_inventory_location_id', 'location_id'),
+        Index('idx_inventory_quantity_available', 'quantity_available'),
+        Index('idx_inventory_low_stock', 'low_stock_threshold'),
+        Index('idx_inventory_status', 'inventory_status'),
+        # Composite indexes for common atomic queries
+        Index('idx_inventory_variant_status', 'variant_id', 'inventory_status'),
+        Index('idx_inventory_location_quantity', 'location_id', 'quantity_available'),
+        {'extend_existing': True}
+    )
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="inventory")
@@ -197,9 +216,24 @@ class Inventory(BaseModel):
         }
 
 
-class StockAdjustment(BaseModel):
+class StockAdjustment(Base):
     """Stock adjustment records for audit trail"""
     __tablename__ = "stock_adjustments"
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
+    inventory_id = Column(GUID(), ForeignKey("inventory.id"), nullable=False)
+    quantity_change = Column(Integer, nullable=False)  # Positive for add, negative for remove
+    reason = Column(String(CHAR_LENGTH), nullable=False)  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
+    adjusted_by_user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_stock_adjustments_inventory_id', 'inventory_id'),
@@ -210,12 +244,6 @@ class StockAdjustment(BaseModel):
         Index('idx_stock_adjustments_inventory_created', 'inventory_id', 'created_at'),
         {'extend_existing': True}
     )
-
-    inventory_id = Column(GUID(), ForeignKey("inventory.id"), nullable=False)
-    quantity_change = Column(Integer, nullable=False)  # Positive for add, negative for remove
-    reason = Column(String(CHAR_LENGTH), nullable=False)  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
-    adjusted_by_user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
-    notes = Column(Text, nullable=True)
 
     # Relationships
     inventory = relationship("Inventory", back_populates="adjustments")

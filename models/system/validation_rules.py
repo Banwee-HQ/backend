@@ -1,15 +1,31 @@
 """
 Validation rules models for tax and shipping fallback calculations
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Text, Integer, Index
+from sqlalchemy import Column, String, Boolean, DateTime, func, Float, Text, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
-from core.db import BaseModel
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
 from typing import Dict, Any
 
 
-class TaxValidationRule(BaseModel):
+class TaxValidationRule(Base):
     """Tax validation rules for fallback rate application"""
     __tablename__ = "tax_rules"
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
+    location_code = Column(String(10), nullable=False)  # Country/state code (e.g., "US-CA", "GB")
+    tax_rate = Column(Float, nullable=False)  # Tax rate as decimal (e.g., 0.08 for 8%)
+    minimum_tax = Column(Float, nullable=False, default=0.01)  # Minimum tax amount
+    is_active = Column(Boolean, default=True, nullable=False)
+    description = Column(Text, nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_tax_rules_location_code', 'location_code'),
@@ -19,12 +35,6 @@ class TaxValidationRule(BaseModel):
         Index('idx_tax_rules_location_active', 'location_code', 'is_active'),
         {'extend_existing': True}
     )
-
-    location_code = Column(String(10), nullable=False)  # Country/state code (e.g., "US-CA", "GB")
-    tax_rate = Column(Float, nullable=False)  # Tax rate as decimal (e.g., 0.08 for 8%)
-    minimum_tax = Column(Float, nullable=False, default=0.01)  # Minimum tax amount
-    is_active = Column(Boolean, default=True, nullable=False)
-    description = Column(Text, nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert tax rule to dictionary for API responses"""
@@ -48,9 +58,26 @@ class TaxValidationRule(BaseModel):
         return max(calculated_tax, self.minimum_tax)
 
 
-class ShippingValidationRule(BaseModel):
+class ShippingValidationRule(Base):
     """Shipping validation rules for fallback rate application"""
     __tablename__ = "shipping_rules"
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
+    location_code = Column(String(10), nullable=False)  # Country/state code (e.g., "US-CA", "GB")
+    weight_min = Column(Float, nullable=False, default=0.0)  # Minimum weight in kg
+    weight_max = Column(Float, nullable=False)  # Maximum weight in kg
+    base_rate = Column(Float, nullable=False)  # Base shipping rate
+    minimum_shipping = Column(Float, nullable=False, default=0.01)  # Minimum shipping amount
+    is_active = Column(Boolean, default=True, nullable=False)
+    description = Column(Text, nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_shipping_rules_location_code', 'location_code'),
@@ -62,14 +89,6 @@ class ShippingValidationRule(BaseModel):
         Index('idx_shipping_rules_weight_active', 'weight_min', 'weight_max', 'is_active'),
         {'extend_existing': True}
     )
-
-    location_code = Column(String(10), nullable=False)  # Country/state code (e.g., "US-CA", "GB")
-    weight_min = Column(Float, nullable=False, default=0.0)  # Minimum weight in kg
-    weight_max = Column(Float, nullable=False)  # Maximum weight in kg
-    base_rate = Column(Float, nullable=False)  # Base shipping rate
-    minimum_shipping = Column(Float, nullable=False, default=0.01)  # Minimum shipping amount
-    is_active = Column(Boolean, default=True, nullable=False)
-    description = Column(Text, nullable=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert shipping rule to dictionary for API responses"""

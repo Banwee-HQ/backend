@@ -2,10 +2,11 @@
 Analytics models for tracking business metrics
 Includes: UserSession, ConversionEvent, CartEvent, PurchaseMetrics
 """
-from sqlalchemy import Column, String, ForeignKey, Float, Text, Integer, DateTime, Boolean, Enum as SQLEnum
+from sqlalchemy import Column, String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID, Index
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
 from enum import Enum
 from typing import Dict, Any
 from datetime import datetime, timezone
@@ -40,20 +41,17 @@ class TrafficSource(Enum):
     UNKNOWN = "unknown"
 
 
-class UserSession(BaseModel):
+class UserSession(Base):
     """User session tracking for analytics"""
     __tablename__ = "user_sessions"
-    __table_args__ = (
-        Index('idx_user_sessions_user_id', 'user_id'),
-        Index('idx_user_sessions_session_id', 'session_id'),
-        Index('idx_user_sessions_created_at', 'created_at'),
-        Index('idx_user_sessions_source', 'traffic_source'),
-        Index('idx_user_sessions_device', 'device_type'),
-        # Composite indexes for analytics queries
-        Index('idx_user_sessions_user_created', 'user_id', 'created_at'),
-        Index('idx_user_sessions_source_created', 'traffic_source', 'created_at'),
-        {'extend_existing': True}
-    )
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
 
     # Session identification
     session_id = Column(String(255), unique=True, nullable=False)
@@ -121,21 +119,17 @@ class UserSession(BaseModel):
         }
 
 
-class AnalyticsEvent(BaseModel):
+class AnalyticsEvent(Base):
     """Individual analytics events"""
     __tablename__ = "analytics_events"
-    __table_args__ = (
-        Index('idx_analytics_events_session_id', 'session_id'),
-        Index('idx_analytics_events_user_id', 'user_id'),
-        Index('idx_analytics_events_type', 'event_type'),
-        Index('idx_analytics_events_created_at', 'created_at'),
-        Index('idx_analytics_events_order_id', 'order_id'),
-        # Composite indexes for analytics queries
-        Index('idx_analytics_events_type_created', 'event_type', 'created_at'),
-        Index('idx_analytics_events_user_type', 'user_id', 'event_type'),
-        Index('idx_analytics_events_session_type', 'session_id', 'event_type'),
-        {'extend_existing': True}
-    )
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
 
     # Event identification
     session_id = Column(String(255), ForeignKey("user_sessions.session_id"), nullable=False)
@@ -159,7 +153,20 @@ class AnalyticsEvent(BaseModel):
     
     # Timing
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    
+
+    __table_args__ = (
+        Index('idx_analytics_events_session_id', 'session_id'),
+        Index('idx_analytics_events_user_id', 'user_id'),
+        Index('idx_analytics_events_type', 'event_type'),
+        Index('idx_analytics_events_created_at', 'created_at'),
+        Index('idx_analytics_events_order_id', 'order_id'),
+        # Composite indexes for analytics queries
+        Index('idx_analytics_events_type_created', 'event_type', 'created_at'),
+        Index('idx_analytics_events_user_type', 'user_id', 'event_type'),
+        Index('idx_analytics_events_session_type', 'session_id', 'event_type'),
+        {'extend_existing': True}
+    )
+
     # Relationships
     session = relationship("UserSession", back_populates="events")
     user = relationship("User")
@@ -184,16 +191,17 @@ class AnalyticsEvent(BaseModel):
         }
 
 
-class ConversionFunnel(BaseModel):
+class ConversionFunnel(Base):
     """Conversion funnel tracking"""
     __tablename__ = "conversion_funnels"
-    __table_args__ = (
-        Index('idx_conversion_funnels_session_id', 'session_id'),
-        Index('idx_conversion_funnels_user_id', 'user_id'),
-        Index('idx_conversion_funnels_created_at', 'created_at'),
-        Index('idx_conversion_funnels_step', 'current_step'),
-        {'extend_existing': True}
-    )
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
 
     # Funnel identification
     session_id = Column(String(255), ForeignKey("user_sessions.session_id"), nullable=False)
@@ -218,21 +226,31 @@ class ConversionFunnel(BaseModel):
     # Financial data
     cart_value = Column(Float, nullable=True)
     purchase_value = Column(Float, nullable=True)
-    
+
+    __table_args__ = (
+        Index('idx_conversion_funnels_session_id', 'session_id'),
+        Index('idx_conversion_funnels_user_id', 'user_id'),
+        Index('idx_conversion_funnels_created_at', 'created_at'),
+        Index('idx_conversion_funnels_step', 'current_step'),
+        {'extend_existing': True}
+    )
+
     # Relationships
     session = relationship("UserSession")
     user = relationship("User")
 
 
-class CustomerLifecycleMetrics(BaseModel):
+class CustomerLifecycleMetrics(Base):
     """Customer lifecycle and repeat purchase tracking"""
     __tablename__ = "customer_lifecycle_metrics"
-    __table_args__ = (
-        Index('idx_customer_lifecycle_user_id', 'user_id'),
-        Index('idx_customer_lifecycle_created_at', 'created_at'),
-        Index('idx_customer_lifecycle_segment', 'customer_segment'),
-        {'extend_existing': True}
-    )
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
 
     # Customer identification
     user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, unique=True)
@@ -269,7 +287,14 @@ class CustomerLifecycleMetrics(BaseModel):
     
     # Last updated
     metrics_updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    
+
+    __table_args__ = (
+        Index('idx_customer_lifecycle_user_id', 'user_id'),
+        Index('idx_customer_lifecycle_created_at', 'created_at'),
+        Index('idx_customer_lifecycle_segment', 'customer_segment'),
+        {'extend_existing': True}
+    )
+
     # Relationships
     user = relationship("User", back_populates="lifecycle_metrics")
 

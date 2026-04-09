@@ -1,11 +1,26 @@
-from sqlalchemy import Column, String, Boolean, ForeignKey, Integer, Index
+from sqlalchemy import Column, String, Boolean, ForeignKey, Integer, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
 
 
-class Wishlist(BaseModel):
+class Wishlist(Base):
     __tablename__ = "wishlists"
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
+    name = Column(String(225), nullable=False)
+    is_default = Column(Boolean, default=False)
+    is_public = Column(Boolean, default=False)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_wishlists_user_id', 'user_id'),
@@ -17,20 +32,30 @@ class Wishlist(BaseModel):
         {'extend_existing': True}
     )
 
-    user_id = Column(GUID(), ForeignKey(
-        "users.id"), nullable=False)
-    name = Column(String(225), nullable=False)
-    is_default = Column(Boolean, default=False)
-    is_public = Column(Boolean, default=False)
-
     # Relationships
     user = relationship("User", back_populates="wishlists")
     items = relationship("WishlistItem", back_populates="wishlist",
                          cascade="all, delete-orphan", lazy="selectin")
 
 
-class WishlistItem(BaseModel):
+class WishlistItem(Base):
     __tablename__ = "wishlist_items"
+
+    # Common fields (previously from BaseModel)
+    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by = Column(GUID(), nullable=True, index=True)
+    updated_by = Column(GUID(), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+
+    wishlist_id = Column(GUID(), ForeignKey("wishlists.id"), nullable=False)
+    product_id = Column(GUID(), ForeignKey(
+        "products.id"), nullable=False)
+    variant_id = Column(GUID(), ForeignKey(
+        "product_variants.id"), nullable=True)
+    quantity = Column(Integer, default=1)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_wishlist_items_wishlist_id', 'wishlist_id'),
@@ -41,14 +66,6 @@ class WishlistItem(BaseModel):
         Index('idx_wishlist_items_wishlist_product', 'wishlist_id', 'product_id'),
         {'extend_existing': True}
     )
-
-    wishlist_id = Column(GUID(), ForeignKey(
-        "wishlists.id"), nullable=False)
-    product_id = Column(GUID(), ForeignKey(
-        "products.id"), nullable=False)
-    variant_id = Column(GUID(), ForeignKey(
-        "product_variants.id"), nullable=True)
-    quantity = Column(Integer, default=1)
 
     # Relationships
     wishlist = relationship("Wishlist", back_populates="items")

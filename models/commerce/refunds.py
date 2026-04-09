@@ -2,13 +2,15 @@
 Refund models for painless refund processing
 Includes: Refund, RefundItem, RefundReason
 """
-from sqlalchemy import Column, String, ForeignKey, Float, Text, Integer, DateTime, Boolean, Enum as SQLEnum
+from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, GUID, Index
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
 from enum import Enum
-from typing import Dict, Any
-from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+from datetime import datetime, timezone, datetime as dt
+import uuid as uuid_module
 
 
 class RefundStatus(Enum):
@@ -47,9 +49,62 @@ class RefundType(Enum):
     EXCHANGE = "exchange"
 
 
-class Refund(BaseModel):
+class Refund(Base):
     """Refund model for tracking refund requests and processing"""
     __tablename__ = "refunds"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # References
+    order_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("orders.id"))
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+
+    # Refund details
+    refund_number: Mapped[str] = mapped_column(String(50), unique=True)  # REF-XXXXXXXX
+    status: Mapped[RefundStatus] = mapped_column(SQLEnum(RefundStatus), default=RefundStatus.REQUESTED)
+    refund_type: Mapped[RefundType] = mapped_column(SQLEnum(RefundType), default=RefundType.FULL_REFUND)
+    reason: Mapped[RefundReason] = mapped_column(SQLEnum(RefundReason))
+
+    # Financial information
+    requested_amount: Mapped[float] = mapped_column(Float)
+    approved_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    processed_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Stripe integration
+    stripe_refund_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    stripe_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # Customer information
+    customer_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Customer's explanation
+    customer_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # Additional customer notes
+
+    # Admin information
+    admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # Internal admin notes
+    reviewed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)  # Admin who reviewed
+    processed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True) # Admin who processed
+
+    # Timestamps
+    requested_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reviewed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Automation flags
+    auto_approved: Mapped[bool] = mapped_column(Boolean, default=False)  # Was this auto-approved?
+    requires_return: Mapped[bool] = mapped_column(Boolean, default=True) # Does customer need to return items?
+    return_shipping_paid: Mapped[bool] = mapped_column(Boolean, default=False) # Did we pay for return shipping?
+
+    # Metadata for additional information
+    refund_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Store additional refund data
+
     __table_args__ = (
         # Indexes for efficient queries
         Index('idx_refunds_order_id', 'order_id'),
@@ -65,50 +120,6 @@ class Refund(BaseModel):
         {'extend_existing': True}
     )
 
-    # References
-    order_id = Column(GUID(), ForeignKey("orders.id"), nullable=False)
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
-    
-    # Refund details
-    refund_number = Column(String(50), unique=True, nullable=False)  # REF-XXXXXXXX
-    status = Column(SQLEnum(RefundStatus), default=RefundStatus.REQUESTED, nullable=False)
-    refund_type = Column(SQLEnum(RefundType), default=RefundType.FULL_REFUND, nullable=False)
-    reason = Column(SQLEnum(RefundReason), nullable=False)
-    
-    # Financial information
-    requested_amount = Column(Float, nullable=False)
-    approved_amount = Column(Float, nullable=True)
-    processed_amount = Column(Float, nullable=True)
-    currency = Column(String(3), default="USD", nullable=False)
-    
-    # Stripe integration
-    stripe_refund_id = Column(String(255), nullable=True, unique=True)
-    stripe_status = Column(String(50), nullable=True)
-    
-    # Customer information
-    customer_reason = Column(Text, nullable=True)  # Customer's explanation
-    customer_notes = Column(Text, nullable=True)   # Additional customer notes
-    
-    # Admin information
-    admin_notes = Column(Text, nullable=True)      # Internal admin notes
-    reviewed_by = Column(GUID(), ForeignKey("users.id"), nullable=True)  # Admin who reviewed
-    processed_by = Column(GUID(), ForeignKey("users.id"), nullable=True) # Admin who processed
-    
-    # Timestamps
-    requested_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    approved_at = Column(DateTime(timezone=True), nullable=True)
-    processed_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Automation flags
-    auto_approved = Column(Boolean, default=False)  # Was this auto-approved?
-    requires_return = Column(Boolean, default=True) # Does customer need to return items?
-    return_shipping_paid = Column(Boolean, default=False) # Did we pay for return shipping?
-    
-    # Metadata for additional information
-    refund_metadata = Column(JSONB, default=dict)  # Store additional refund data
-    
     # Relationships
     order = relationship("Order", back_populates="refunds")
     user = relationship("User", foreign_keys=[user_id], back_populates="created_refunds")
@@ -174,27 +185,36 @@ class Refund(BaseModel):
         )
 
 
-class RefundItem(BaseModel):
+class RefundItem(Base):
     """Individual items being refunded"""
     __tablename__ = "refund_items"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # References
+    refund_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("refunds.id"))
+    order_item_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("order_items.id"))
+
+    # Item details
+    quantity_to_refund: Mapped[int] = mapped_column(Integer)
+    unit_price: Mapped[float] = mapped_column(Float)
+    total_refund_amount: Mapped[float] = mapped_column(Float)
+
+    # Item condition
+    condition_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Customer notes about item condition
+
     __table_args__ = (
         Index('idx_refund_items_refund_id', 'refund_id'),
         Index('idx_refund_items_order_item_id', 'order_item_id'),
         {'extend_existing': True}
     )
 
-    # References
-    refund_id = Column(GUID(), ForeignKey("refunds.id"), nullable=False)
-    order_item_id = Column(GUID(), ForeignKey("order_items.id"), nullable=False)
-    
-    # Item details
-    quantity_to_refund = Column(Integer, nullable=False)
-    unit_price = Column(Float, nullable=False)
-    total_refund_amount = Column(Float, nullable=False)
-    
-    # Item condition
-    condition_notes = Column(Text, nullable=True)  # Customer notes about item condition
-    
     # Relationships
     refund = relationship("Refund", back_populates="refund_items")
     order_item = relationship("OrderItem")

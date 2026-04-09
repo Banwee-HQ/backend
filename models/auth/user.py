@@ -1,8 +1,10 @@
-from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Integer
+from sqlalchemy import String, Boolean, ForeignKey, DateTime, Integer, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
-from core.db import BaseModel, CHAR_LENGTH, GUID, Index
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from core.db import Base, CHAR_LENGTH, GUID
+from core.utils.uuid_utils import uuid7
 from enum import Enum
+import uuid as uuid_module
 
 class UserRole(str, Enum):
     GUEST = "guest"
@@ -13,9 +15,65 @@ class UserRole(str, Enum):
 class Gender(str, Enum):
     MALE = "male"
     FEMALE ="female"
-class User(BaseModel):
+class User(Base):
     """Optimized User model with hard delete only"""
     __tablename__ = "users"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Core identity fields - frequently queried
+    email: Mapped[str] = mapped_column(String(CHAR_LENGTH), unique=True)
+    firstname: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+    lastname: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+    hashed_password: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+
+    # Status fields as columns for fast filtering
+    role: Mapped[str] = mapped_column(String(50), default=UserRole.CUSTOMER)
+    account_status: Mapped[str] = mapped_column(String(50), default="active")  # active, inactive, suspended
+    verification_status: Mapped[str] = mapped_column(String(50), default="unverified")  # unverified, verified, pending
+
+    # Contact information
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Profile information - frequently accessed
+    country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    language: Mapped[str] = mapped_column(String(10), default="en")
+    timezone: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Optional profile fields
+    age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    # Activity tracking
+    last_login: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    login_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Security fields
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # External integrations
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True, unique=True)
+
+    # Use JSONB only for complex user preferences that need querying
+    preferences: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # User settings, notification prefs
+
+    # Simple fields as text for better performance
+    verification_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    token_expiration: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Password reset fields
+    reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reset_token_expires: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
         # Optimized indexes for common queries
         Index('idx_users_email_account_status', 'email', 'account_status'),
@@ -27,55 +85,6 @@ class User(BaseModel):
         Index('idx_users_gender', 'gender'),
         {'extend_existing': True}
     )
-
-    # Core identity fields - frequently queried
-    email = Column(String(CHAR_LENGTH), unique=True, nullable=False)
-    firstname = Column(String(CHAR_LENGTH), nullable=False)
-    lastname = Column(String(CHAR_LENGTH), nullable=False)
-    hashed_password = Column(String(CHAR_LENGTH), nullable=False)
-    
-    # Status fields as columns for fast filtering
-    role = Column(String(50), default=UserRole.CUSTOMER, nullable=False)
-    account_status = Column(String(50), default="active", nullable=False)  # active, inactive, suspended
-    verification_status = Column(String(50), default="unverified", nullable=False)  # unverified, verified, pending
-    
-    
-    # Contact information
-    phone = Column(String(20), nullable=True)
-    phone_verified = Column(Boolean, default=False)
-    
-    # Profile information - frequently accessed
-    country = Column(String(100), nullable=True)
-    language = Column(String(10), default="en")
-    timezone = Column(String(100), nullable=True)
-    avatar_url = Column(String(500), nullable=True)
-    # Optional profile fields
-    age = Column(Integer, nullable=True)
-    gender = Column(String(20), nullable=True)
-    
-    # Activity tracking
-    last_login = Column(DateTime(timezone=True), nullable=True)
-    last_activity_at = Column(DateTime(timezone=True), nullable=True)
-    login_count = Column(Integer, default=0)
-    
-    # Security fields
-    failed_login_attempts = Column(Integer, default=0)
-    locked_until = Column(DateTime(timezone=True), nullable=True)
-    
-    # External integrations
-    stripe_customer_id = Column(String(CHAR_LENGTH), nullable=True, unique=True)
-    
-    # Use JSONB only for complex user preferences that need querying
-    preferences = Column(JSONB, nullable=True)  # User settings, notification prefs
-    
-    # Simple fields as text for better performance
-    verification_token = Column(String(255), nullable=True)
-    token_expiration = Column(DateTime(timezone=True), nullable=True)
-    
-    # Password reset fields
-    reset_token = Column(String(255), nullable=True)
-    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
-    
 
     # Relationships with optimized lazy loading
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
@@ -146,9 +155,27 @@ class User(BaseModel):
         }
 
 
-class Address(BaseModel):
+class Address(Base):
     """Address model - no soft delete needed, addresses are typically replaced"""
     __tablename__ = "addresses"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
+    street: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+    city: Mapped[str] = mapped_column(String(100))
+    state: Mapped[str] = mapped_column(String(100))
+    country: Mapped[str] = mapped_column(String(100))
+    post_code: Mapped[str] = mapped_column(String(20))
+    kind: Mapped[str] = mapped_column(String(50), default="shipping")  # shipping, billing
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_addresses_user_id', 'user_id'),
@@ -164,15 +191,6 @@ class Address(BaseModel):
         Index('idx_addresses_country_city', 'country', 'city'),
         {'extend_existing': True}
     )
-
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
-    street = Column(String(CHAR_LENGTH), nullable=False)
-    city = Column(String(100), nullable=False)
-    state = Column(String(100), nullable=False)
-    country = Column(String(100), nullable=False)
-    post_code = Column(String(20), nullable=False)
-    kind = Column(String(50), default="shipping", nullable=False)  # shipping, billing
-    is_default = Column(Boolean, default=False)
 
     # Relationships
     user = relationship("User", back_populates="addresses")

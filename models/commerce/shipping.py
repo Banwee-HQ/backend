@@ -1,9 +1,34 @@
-from sqlalchemy import Column, String, Boolean, Float, Text, Integer, Index
-from core.db import BaseModel, CHAR_LENGTH
+from sqlalchemy import String, Boolean, DateTime, func, Float, Text, Integer, Index
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+from core.db import Base, CHAR_LENGTH, GUID
+from core.utils.uuid_utils import uuid7
+from datetime import datetime as dt
+from typing import Optional
+import uuid as uuid_module
 
 
-class ShippingMethod(BaseModel):
+class ShippingMethod(Base):
     __tablename__ = "shipping_methods"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price: Mapped[float] = mapped_column(Float)
+    estimated_days: Mapped[int] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Simple metadata
+    carrier: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tracking_url_template: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_shipping_methods_name', 'name'),
@@ -14,13 +39,3 @@ class ShippingMethod(BaseModel):
         Index('idx_shipping_methods_active_price', 'is_active', 'price'),
         {'extend_existing': True}
     )
-
-    name = Column(String(CHAR_LENGTH), nullable=False)
-    description = Column(Text, nullable=True)
-    price = Column(Float, nullable=False)
-    estimated_days = Column(Integer, nullable=False)
-    is_active = Column(Boolean, default=True)
-    
-    # Simple metadata
-    carrier = Column(String(100), nullable=True, comment="Shipping carrier name (e.g., FedEx, UPS, DHL)")
-    tracking_url_template = Column(String(500), nullable=True, comment="URL template for tracking with {tracking_number} placeholder")
