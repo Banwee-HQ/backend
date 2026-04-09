@@ -1,13 +1,29 @@
 """
 Optimized product models with strategic JSON usage
 """
-from sqlalchemy import Column, String, ForeignKey, DateTime, Float, Boolean, Text, Integer, func, Index, JSON
+from sqlalchemy import Column, String, ForeignKey, DateTime, Float, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
+from enum import Enum
+
+
+class ProductStatus(str, Enum):
+    """Product status types"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    DRAFT = "draft"
+    DISCONTINUED = "discontinued"
+
+
+class AvailabilityStatus(str, Enum):
+    """Product availability status types"""
+    AVAILABLE = "available"
+    LIMITED = "limited"
+    OUT_OF_STOCK = "out_of_stock"
 
 
 class Product(Base):
@@ -36,7 +52,7 @@ class Product(Base):
     category: Mapped[str] = mapped_column(String(100))
 
     # Status fields as columns for indexing and fast filtering
-    product_status: Mapped[str] = mapped_column(String(50), default="active")  # active, inactive, draft, discontinued
+    product_status: Mapped[ProductStatus] = mapped_column(SQLEnum(ProductStatus), default=ProductStatus.ACTIVE)
 
     # Quality metrics as columns for sorting/filtering (aggregated from variants)
     rating_average: Mapped[float] = mapped_column(Float, default=0.0)
@@ -183,7 +199,7 @@ class ProductVariant(Base):
 
     # Status as column
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    availability_status: Mapped[str] = mapped_column(String(50), default="available")  # available, limited, out_of_stock
+    availability_status: Mapped[AvailabilityStatus] = mapped_column(SQLEnum(AvailabilityStatus), default=AvailabilityStatus.AVAILABLE)
 
     # Analytics as columns
     view_count: Mapped[int] = mapped_column(Integer, default=0)

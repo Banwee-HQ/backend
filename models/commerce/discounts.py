@@ -6,9 +6,17 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, datetime as dt
+from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
+from enum import Enum
+
+
+class DiscountType(str, Enum):
+    """Discount type options"""
+    PERCENTAGE = "percentage"
+    FIXED_AMOUNT = "fixed_amount"
+    FREE_SHIPPING = "free_shipping"
 
 
 class Discount(Base):
@@ -35,7 +43,7 @@ class Discount(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
-    type: Mapped[str] = mapped_column(String(20))  # PERCENTAGE, FIXED_AMOUNT, FREE_SHIPPING
+    type: Mapped[DiscountType] = mapped_column(String(20))
     value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
     minimum_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     maximum_discount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from enum import Enum
-from datetime import datetime, timezone, datetime as dt
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import uuid
 
@@ -77,6 +77,24 @@ class ShipmentType(str, Enum):
     OVERNIGHT = "overnight"
     INTERNATIONAL = "international"
     FREIGHT = "freight"
+
+
+class SyncStatus(str, Enum):
+    """API sync status types"""
+    PENDING = "pending"
+    SUCCESS = "success"
+    ERROR = "error"
+
+
+class ShipmentEventType(str, Enum):
+    """Shipment tracking event types"""
+    PICKED_UP = "picked_up"
+    IN_TRANSIT = "in_transit"
+    OUT_FOR_DELIVERY = "out_for_delivery"
+    DELIVERED = "delivered"
+    EXCEPTION = "exception"
+    RETURNED = "returned"
+    CANCELLED = "cancelled"
 
 class ShippingProvider(Base):
     """Shipping provider configuration"""
@@ -172,7 +190,7 @@ class ShipmentTracking(Base):
     # External tracking data
     external_tracking_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Raw data from carrier API
     last_api_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    sync_status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, success, error
+    sync_status: Mapped[SyncStatus] = mapped_column(String(50), default=SyncStatus.PENDING)
 
     # Customer notifications
     customer_notified: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -239,7 +257,7 @@ class ShipmentTrackingEvent(Base):
 
     shipment_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("shipment_tracking.id"))
     event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    event_type: Mapped[str] = mapped_column(String(50))  # picked_up, in_transit, out_for_delivery, delivered, etc.
+    event_type: Mapped[ShipmentEventType] = mapped_column(String(50))
     event_description: Mapped[str] = mapped_column(Text)
     event_location: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {city, state, country, coordinates}
 
@@ -257,7 +275,7 @@ class ShipmentTrackingEvent(Base):
     contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # Metadata
-    source: Mapped[str] = mapped_column(String(50), default="api")  # api, webhook, manual
+    source: Mapped[SourceType] = mapped_column(String(50), default=SourceType.API)
     raw_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships

@@ -15,6 +15,28 @@ class UserRole(str, Enum):
 class Gender(str, Enum):
     MALE = "male"
     FEMALE ="female"
+
+
+class AccountStatus(str, Enum):
+    """User account status types"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+
+
+class VerificationStatus(str, Enum):
+    """User verification status types"""
+    UNVERIFIED = "unverified"
+    VERIFIED = "verified"
+    PENDING = "pending"
+
+
+class AddressKind(str, Enum):
+    """Address type kinds"""
+    SHIPPING = "shipping"
+    BILLING = "billing"
+
+
 class User(Base):
     """Optimized User model with hard delete only"""
     __tablename__ = "users"
@@ -42,9 +64,9 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(CHAR_LENGTH))
 
     # Status fields as columns for fast filtering
-    role: Mapped[str] = mapped_column(String(50), default=UserRole.CUSTOMER)
-    account_status: Mapped[str] = mapped_column(String(50), default="active")  # active, inactive, suspended
-    verification_status: Mapped[str] = mapped_column(String(50), default="unverified")  # unverified, verified, pending
+    role: Mapped[UserRole] = mapped_column(String(50), default=UserRole.CUSTOMER)
+    account_status: Mapped[AccountStatus] = mapped_column(String(50), default=AccountStatus.ACTIVE)
+    verification_status: Mapped[VerificationStatus] = mapped_column(String(50), default=VerificationStatus.UNVERIFIED)
 
     # Contact information
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -111,12 +133,12 @@ class User(Base):
     @property
     def verified(self) -> bool:
         """Compatibility property — True when verification_status is 'verified'."""
-        return self.verification_status == "verified"
+        return self.verification_status == VerificationStatus.VERIFIED
 
     @property
     def is_active(self) -> bool:
         """Compatibility property — True when account_status is 'active'."""
-        return self.account_status == "active"
+        return self.account_status == AccountStatus.ACTIVE
 
     @property
     def default_address(self):
@@ -136,8 +158,8 @@ class User(Base):
             "lastname": self.lastname,
             "full_name": self.full_name,
             "role": self.role.value,
-            "account_status": self.account_status,
-            "verification_status": self.verification_status,
+            "account_status": self.account_status.value,
+            "verification_status": self.verification_status.value,
             "phone": self.phone,
             "phone_verified": self.phone_verified,
             "avatar_url": self.avatar_url,
@@ -180,7 +202,7 @@ class Address(Base):
     state: Mapped[str] = mapped_column(String(100))
     country: Mapped[str] = mapped_column(String(100))
     post_code: Mapped[str] = mapped_column(String(20))
-    kind: Mapped[str] = mapped_column(String(50), default="shipping")  # shipping, billing
+    kind: Mapped[AddressKind] = mapped_column(String(50), default=AddressKind.SHIPPING)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships

@@ -8,13 +8,21 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta, datetime as dt
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
 from core.logging import get_structured_logger
 import uuid
+from enum import Enum
 
 logger = get_structured_logger(__name__)
+
+
+class InventoryStatus(str, Enum):
+    """Inventory status types"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    DISCONTINUED = "discontinued"
 
 
 class WarehouseLocation(Base):
@@ -70,7 +78,7 @@ class Inventory(Base):
     reorder_point: Mapped[int] = mapped_column(Integer, default=5)
 
     # Status tracking
-    inventory_status: Mapped[str] = mapped_column(String(50), default="active")
+    inventory_status: Mapped[InventoryStatus] = mapped_column(String(50), default=InventoryStatus.ACTIVE)
 
     # Timestamps for tracking
     last_restocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

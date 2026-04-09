@@ -41,6 +41,26 @@ class CardBrand(str, Enum):
     OTHER = "other" # For less common or newly introduced card brands
 
 
+class PaymentIntentStatus(str, Enum):
+    """Payment intent status types"""
+    REQUIRES_PAYMENT_METHOD = "requires_payment_method"
+    REQUIRES_CONFIRMATION = "requires_confirmation"
+    REQUIRES_ACTION = "requires_action"
+    PROCESSING = "processing"
+    REQUIRES_CAPTURE = "requires_capture"
+    CANCELLED = "cancelled"
+    SUCCEEDED = "succeeded"
+
+
+class TransactionType(str, Enum):
+    """Transaction type types"""
+    PAYMENT = "payment"
+    REFUND = "refund"
+    PAYOUT = "payout"
+    CHARGEBACK = "chargeback"
+    ADJUSTMENT = "adjustment"
+
+
 class PaymentMethod(Base):
     """User payment methods - hard delete only"""
     __tablename__ = "payment_methods"
@@ -138,7 +158,7 @@ class PaymentIntent(Base):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Payment status
-    status: Mapped[str] = mapped_column(String(50), default="requires_payment_method")
+    status: Mapped[PaymentIntentStatus] = mapped_column(String(50), default=PaymentIntentStatus.REQUIRES_PAYMENT_METHOD)
 
     # Stripe verification details (JSONB for structured data)
     stripe_verification: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -246,7 +266,7 @@ class Transaction(Base):
     # pending, succeeded, failed, cancelled, refunded
     status: Mapped[str] = mapped_column(String(50))
     # payment, refund, payout, chargeback
-    transaction_type: Mapped[str] = mapped_column(String(50))
+    transaction_type: Mapped[TransactionType] = mapped_column(String(50))
 
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

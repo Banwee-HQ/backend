@@ -4,13 +4,14 @@ Stores customer contact form submissions
 """
 
 from sqlalchemy import String, Text, DateTime
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 import uuid
 import enum
 from typing import Optional
-from core.db import Base
+from core.db import Base, GUID
+from core.utils.uuid_utils import uuid7
 
 
 class MessageStatus(str, enum.Enum):
@@ -36,7 +37,7 @@ class ContactMessage(Base):
         {'schema': 'system'},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(255))
     subject: Mapped[str] = mapped_column(String(255))
@@ -44,7 +45,7 @@ class ContactMessage(Base):
     status: Mapped[str] = mapped_column(ENUM('new', 'in_progress', 'resolved', 'closed', name='messagestatus', create_type=False), default='new')
     priority: Mapped[str] = mapped_column(ENUM('low', 'medium', 'high', 'urgent', name='messagepriority', create_type=False), default='medium')
     admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

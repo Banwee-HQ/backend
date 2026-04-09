@@ -11,6 +11,32 @@ from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
+from enum import Enum
+
+
+class SubscriptionStatus(str, Enum):
+    """Subscription status types"""
+    ACTIVE = "active"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+    PAST_DUE = "past_due"
+    UNPAID = "unpaid"
+    INCOMPLETE = "incomplete"
+
+
+class DeliveryType(str, Enum):
+    """Delivery type options"""
+    STANDARD = "standard"
+    EXPRESS = "express"
+    OVERNIGHT = "overnight"
+
+
+class BillingCycle(str, Enum):
+    """Billing cycle options"""
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
+
 
 # --- Association table: Subscription <-> ProductVariant ---
 subscription_product_association = Table(
@@ -108,9 +134,9 @@ class Subscription(Base):
     # --- Core fields ---
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(50), default="active")
+    status: Mapped[SubscriptionStatus] = mapped_column(String(50), default=SubscriptionStatus.ACTIVE)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
-    billing_cycle: Mapped[str] = mapped_column(String(20), default="monthly")
+    billing_cycle: Mapped[BillingCycle] = mapped_column(String(20), default=BillingCycle.MONTHLY)
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
     current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -128,7 +154,7 @@ class Subscription(Base):
     payment_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # --- Delivery info ---
-    delivery_type: Mapped[Optional[str]] = mapped_column(String(50), default="standard")
+    delivery_type: Mapped[Optional[DeliveryType]] = mapped_column(String(50), default=DeliveryType.STANDARD)
     delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("addresses.id"), nullable=True)
 
     # --- Pricing at creation ---

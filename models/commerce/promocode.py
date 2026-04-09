@@ -6,6 +6,13 @@ from core.utils.uuid_utils import uuid7
 from datetime import datetime
 from typing import Optional
 import uuid
+from enum import Enum
+
+
+class DiscountType(str, Enum):
+    """Discount type options"""
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
 
 
 class Promocode(Base):
@@ -31,7 +38,7 @@ class Promocode(Base):
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    discount_type: Mapped[str] = mapped_column(String(20))  # percentage, fixed
+    discount_type: Mapped[DiscountType] = mapped_column(String(20))
     value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
     minimum_order_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     maximum_discount_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
