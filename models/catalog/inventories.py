@@ -2,16 +2,17 @@
 Consolidated inventory models with atomic stock operations
 Includes: WarehouseLocation, Inventory, StockAdjustment
 """
-from sqlalchemy import Column, String, Integer, ForeignKey, Text, DateTime, Boolean, func, Index, select, update
-from sqlalchemy.orm import relationship
+from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Boolean, func, Index, select, update
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, datetime as dt
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
 from core.logging import get_structured_logger
+import uuid as uuid_module
 
 logger = get_structured_logger(__name__)
 
@@ -19,24 +20,23 @@ logger = get_structured_logger(__name__)
 class WarehouseLocation(Base):
     """Warehouse locations for inventory management"""
     __tablename__ = "warehouse_locations"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    name = Column(String(CHAR_LENGTH), nullable=False)
-
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_warehouse_locations_name', 'name'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
-    address = Column(String(CHAR_LENGTH), nullable=True)
-    description = Column(Text, nullable=True)
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
+    address: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     inventories = relationship("Inventory", back_populates="location")
 
@@ -44,38 +44,6 @@ class WarehouseLocation(Base):
 class Inventory(Base):
     """Product variant inventory tracking with atomic operations"""
     __tablename__ = "inventory"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, unique=True)
-    location_id = Column(GUID(), ForeignKey("warehouse_locations.id"), nullable=False)
-    
-    # Atomic stock tracking fields
-    quantity_available = Column(Integer, default=0, nullable=False)  # Available for sale
-    
-    # Thresholds
-    low_stock_threshold = Column(Integer, default=10, nullable=False)
-    reorder_point = Column(Integer, default=5, nullable=False)
-    
-    # Status tracking
-    inventory_status = Column(String(50), default="active", nullable=False)
-    
-    # Timestamps for tracking
-    last_restocked_at = Column(DateTime(timezone=True), nullable=True)
-    last_sold_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Optimistic locking for atomic operations
-    version = Column(Integer, default=1, nullable=False)
-    
-    # Legacy field for backward compatibility
-    quantity = Column(Integer, default=0, nullable=False)
-
     __table_args__ = (
         # Optimized indexes for atomic operations
         Index('idx_inventory_variant_id', 'variant_id'),
@@ -86,8 +54,36 @@ class Inventory(Base):
         # Composite indexes for common atomic queries
         Index('idx_inventory_variant_status', 'variant_id', 'inventory_status'),
         Index('idx_inventory_location_quantity', 'location_id', 'quantity_available'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"), unique=True)
+    location_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("warehouse_locations.id"))
+
+    # Atomic stock tracking fields
+    quantity_available: Mapped[int] = mapped_column(Integer, default=0)  # Available for sale
+
+    # Thresholds
+    low_stock_threshold: Mapped[int] = mapped_column(Integer, default=10)
+    reorder_point: Mapped[int] = mapped_column(Integer, default=5)
+
+    # Status tracking
+    inventory_status: Mapped[str] = mapped_column(String(50), default="active")
+
+    # Timestamps for tracking
+    last_restocked_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sold_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Legacy field for backward compatibility
+    quantity: Mapped[int] = mapped_column(Integer, default=0)
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="inventory")
@@ -219,21 +215,6 @@ class Inventory(Base):
 class StockAdjustment(Base):
     """Stock adjustment records for audit trail"""
     __tablename__ = "stock_adjustments"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    inventory_id = Column(GUID(), ForeignKey("inventory.id"), nullable=False)
-    quantity_change = Column(Integer, nullable=False)  # Positive for add, negative for remove
-    reason = Column(String(CHAR_LENGTH), nullable=False)  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
-    adjusted_by_user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
-    notes = Column(Text, nullable=True)
-
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_stock_adjustments_inventory_id', 'inventory_id'),
@@ -242,8 +223,22 @@ class StockAdjustment(Base):
         Index('idx_stock_adjustments_created_at', 'created_at'),
         # Composite indexes for common queries
         Index('idx_stock_adjustments_inventory_created', 'inventory_id', 'created_at'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    inventory_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("inventory.id"))
+    quantity_change: Mapped[int] = mapped_column(Integer)  # Positive for add, negative for remove
+    reason: Mapped[str] = mapped_column(String(CHAR_LENGTH))  # e.g., "initial_stock", "received", "sold", "returned", "damaged"
+    adjusted_by_user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     inventory = relationship("Inventory", back_populates="adjustments")

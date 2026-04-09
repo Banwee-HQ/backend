@@ -52,6 +52,20 @@ class RefundType(Enum):
 class Refund(Base):
     """Refund model for tracking refund requests and processing"""
     __tablename__ = "refunds"
+    __table_args__ = (
+        # Indexes for efficient queries
+        Index('idx_refunds_order_id', 'order_id'),
+        Index('idx_refunds_user_id', 'user_id'),
+        Index('idx_refunds_status', 'status'),
+        Index('idx_refunds_type', 'refund_type'),
+        Index('idx_refunds_created_at', 'created_at'),
+        Index('idx_refunds_stripe_refund_id', 'stripe_refund_id'),
+        # Composite indexes for common queries
+        Index('idx_refunds_user_status', 'user_id', 'status'),
+        Index('idx_refunds_order_status', 'order_id', 'status'),
+        Index('idx_refunds_status_created', 'status', 'created_at'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -103,22 +117,7 @@ class Refund(Base):
     return_shipping_paid: Mapped[bool] = mapped_column(Boolean, default=False) # Did we pay for return shipping?
 
     # Metadata for additional information
-    refund_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Store additional refund data
-
-    __table_args__ = (
-        # Indexes for efficient queries
-        Index('idx_refunds_order_id', 'order_id'),
-        Index('idx_refunds_user_id', 'user_id'),
-        Index('idx_refunds_status', 'status'),
-        Index('idx_refunds_type', 'refund_type'),
-        Index('idx_refunds_created_at', 'created_at'),
-        Index('idx_refunds_stripe_refund_id', 'stripe_refund_id'),
-        # Composite indexes for common queries
-        Index('idx_refunds_user_status', 'user_id', 'status'),
-        Index('idx_refunds_order_status', 'order_id', 'status'),
-        Index('idx_refunds_status_created', 'status', 'created_at'),
-        {'extend_existing': True}
-    )
+    refund_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     order = relationship("Order", back_populates="refunds")
@@ -188,6 +187,11 @@ class Refund(Base):
 class RefundItem(Base):
     """Individual items being refunded"""
     __tablename__ = "refund_items"
+    __table_args__ = (
+        Index('idx_refund_items_refund_id', 'refund_id'),
+        Index('idx_refund_items_order_item_id', 'order_item_id'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -207,13 +211,7 @@ class RefundItem(Base):
     total_refund_amount: Mapped[float] = mapped_column(Float)
 
     # Item condition
-    condition_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Customer notes about item condition
-
-    __table_args__ = (
-        Index('idx_refund_items_refund_id', 'refund_id'),
-        Index('idx_refund_items_order_item_id', 'order_item_id'),
-        {'extend_existing': True}
-    )
+    condition_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     refund = relationship("Refund", back_populates="refund_items")

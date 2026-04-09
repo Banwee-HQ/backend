@@ -1,11 +1,12 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, JSON, Text, Boolean, func, Index, Enum as SQLEnum
+from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, JSON, Text, Boolean, func, Index, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
-from typing import Dict, Any, List
-from datetime import datetime
+from typing import Dict, Any, List, Optional
+from datetime import datetime, datetime as dt
 from enum import Enum
+import uuid as uuid_module
 
 
 class TrackingActionType(str, Enum):
@@ -25,30 +26,6 @@ class AnalyticsPeriodType(str, Enum):
 class VariantTrackingEntry(Base):
     """Track when variants are added to subscriptions"""
     __tablename__ = "variant_tracking_entries"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Core tracking information
-    variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, index=True)
-    subscription_id = Column(GUID(), ForeignKey("subscriptions.id"), nullable=False, index=True)
-    
-    # Price tracking
-    price_at_time = Column(Float, nullable=False)
-    currency = Column(String(3), nullable=False, default="USD")
-    
-    # Tracking metadata
-    action_type = Column(SQLEnum(TrackingActionType), nullable=False, default=TrackingActionType.ADDED)  # "added", "removed", "price_changed"
-    tracking_timestamp = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    
-    # Additional context
-    entry_metadata = Column(JSON, nullable=True)
-
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_variant_tracking_entries_variant_id', 'variant_id'),
@@ -59,8 +36,31 @@ class VariantTrackingEntry(Base):
         # Composite indexes for common queries
         Index('idx_variant_tracking_entries_variant_action', 'variant_id', 'action_type'),
         Index('idx_variant_tracking_entries_sub_timestamp', 'subscription_id', 'tracking_timestamp'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Core tracking information
+    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    subscription_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("subscriptions.id"))
+
+    # Price tracking
+    price_at_time: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Tracking metadata
+    action_type: Mapped[TrackingActionType] = mapped_column(SQLEnum(TrackingActionType), default=TrackingActionType.ADDED)
+    tracking_timestamp: Mapped[dt] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    # Additional context
+    entry_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="tracking_entries")
@@ -85,36 +85,6 @@ class VariantTrackingEntry(Base):
 class VariantPriceHistory(Base):
     """Track price changes for variants over time"""
     __tablename__ = "variant_price_history"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Variant reference
-    variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, index=True)
-    
-    # Price information
-    old_price = Column(Float, nullable=True)
-    new_price = Column(Float, nullable=False)
-    old_sale_price = Column(Float, nullable=True)
-    new_sale_price = Column(Float, nullable=True)
-    currency = Column(String(3), nullable=False, default="USD")
-    
-    # Change metadata
-    change_reason = Column(String(100), nullable=True)
-    changed_by_user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
-    effective_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    
-    # Impact tracking
-    affected_subscriptions_count = Column(Integer, nullable=False, default=0)
-    
-    # Additional context
-    price_metadata = Column(JSON, nullable=True)
-
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_variant_price_history_variant_id', 'variant_id'),
@@ -124,8 +94,37 @@ class VariantPriceHistory(Base):
         Index('idx_variant_price_history_currency', 'currency'),
         # Composite indexes for common queries
         Index('idx_variant_price_history_variant_effective', 'variant_id', 'effective_date'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Variant reference
+    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+
+    # Price information
+    old_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    new_price: Mapped[float] = mapped_column(Float)
+    old_sale_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    new_sale_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Change metadata
+    change_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    changed_by_user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    effective_date: Mapped[dt] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    # Impact tracking
+    affected_subscriptions_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Additional context
+    price_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="price_history")
@@ -154,42 +153,6 @@ class VariantPriceHistory(Base):
 class VariantAnalytics(Base):
     """Aggregated analytics for product variants"""
     __tablename__ = "variant_analytics"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Variant reference
-    variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, index=True)
-    
-    # Time period for analytics
-    date = Column(DateTime(timezone=True), nullable=False, index=True)
-    period_type = Column(SQLEnum(AnalyticsPeriodType), nullable=False, default=AnalyticsPeriodType.DAILY)  # "daily", "weekly", "monthly"
-    
-    # Subscription metrics
-    total_subscriptions = Column(Integer, nullable=False, default=0)
-    new_subscriptions = Column(Integer, nullable=False, default=0)
-    canceled_subscriptions = Column(Integer, nullable=False, default=0)
-    active_subscriptions = Column(Integer, nullable=False, default=0)
-    
-    # Revenue metrics
-    total_revenue = Column(Float, nullable=False, default=0.0)
-    average_subscription_duration_days = Column(Integer, nullable=False, default=0)
-    
-    # Performance metrics
-    churn_rate = Column(Float, nullable=False, default=0.0)
-    popularity_rank = Column(Integer, nullable=True)
-    
-    # Currency
-    currency = Column(String(3), nullable=False, default="USD")
-    
-    # Additional metrics
-    additional_metrics = Column(JSON, nullable=True)
-
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_variant_analytics_variant_id', 'variant_id'),
@@ -201,8 +164,43 @@ class VariantAnalytics(Base):
         # Composite indexes for common queries
         Index('idx_variant_analytics_variant_date', 'variant_id', 'date'),
         Index('idx_variant_analytics_date_period', 'date', 'period_type'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Variant reference
+    variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+
+    # Time period for analytics
+    date: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    period_type: Mapped[AnalyticsPeriodType] = mapped_column(SQLEnum(AnalyticsPeriodType), default=AnalyticsPeriodType.DAILY)
+
+    # Subscription metrics
+    total_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    new_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    canceled_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    active_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Revenue metrics
+    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    average_subscription_duration_days: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Performance metrics
+    churn_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    popularity_rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Currency
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Additional metrics
+    additional_metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="analytics")
@@ -232,34 +230,6 @@ class VariantAnalytics(Base):
 class VariantSubstitution(Base):
     """Track variant substitution suggestions and usage"""
     __tablename__ = "variant_substitutions"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Original and substitute variants
-    original_variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, index=True)
-    substitute_variant_id = Column(GUID(), ForeignKey("product_variants.id"), nullable=False, index=True)
-    
-    # Substitution metadata
-    similarity_score = Column(Float, nullable=False, default=0.0)  # 0.0 to 1.0
-    substitution_reason = Column(String(100), nullable=True)  # "out_of_stock", "discontinued", "price_match"
-    
-    # Usage tracking
-    times_suggested = Column(Integer, nullable=False, default=0)
-    times_accepted = Column(Integer, nullable=False, default=0)
-    acceptance_rate = Column(Float, nullable=False, default=0.0)
-    
-    # Status
-    is_active = Column(Boolean, nullable=False, default=True)
-    
-    # Additional context
-    substitution_metadata = Column(JSON, nullable=True)
-
     __table_args__ = (
         # Indexes for search and performance
         Index('idx_variant_substitutions_original_id', 'original_variant_id'),
@@ -271,8 +241,35 @@ class VariantSubstitution(Base):
         # Composite indexes for common queries
         Index('idx_variant_substitutions_original_active', 'original_variant_id', 'is_active'),
         Index('idx_variant_substitutions_substitute_active', 'substitute_variant_id', 'is_active'),
-        {'extend_existing': True}
+        {'schema': 'catalog'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Original and substitute variants
+    original_variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+    substitute_variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("product_variants.id"))
+
+    # Substitution metadata
+    similarity_score: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0 to 1.0
+    substitution_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # "out_of_stock", "discontinued", "price_match"
+
+    # Usage tracking
+    times_suggested: Mapped[int] = mapped_column(Integer, default=0)
+    times_accepted: Mapped[int] = mapped_column(Integer, default=0)
+    acceptance_rate: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Status
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Additional context
+    substitution_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     original_variant = relationship("ProductVariant", foreign_keys=[original_variant_id], backref="substitution_suggestions")

@@ -44,6 +44,19 @@ class CardBrand(str, Enum):
 class PaymentMethod(Base):
     """User payment methods - hard delete only"""
     __tablename__ = "payment_methods"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_payment_methods_user_id', 'user_id'),
+        Index('idx_payment_methods_type', 'type'),
+        Index('idx_payment_methods_provider', 'provider'),
+        Index('idx_payment_methods_stripe_id', 'stripe_payment_method_id'),
+        Index('idx_payment_methods_default', 'is_default'),
+        Index('idx_payment_methods_active', 'is_active'),
+        # Composite indexes for common queries
+        Index('idx_payment_methods_user_active', 'user_id', 'is_active'),
+        Index('idx_payment_methods_user_default', 'user_id', 'is_default'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -66,20 +79,6 @@ class PaymentMethod(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Only use JSONB for complex payment method data that needs querying
     payment_method_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Store complex payment data
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_payment_methods_user_id', 'user_id'),
-        Index('idx_payment_methods_type', 'type'),
-        Index('idx_payment_methods_provider', 'provider'),
-        Index('idx_payment_methods_stripe_id', 'stripe_payment_method_id'),
-        Index('idx_payment_methods_default', 'is_default'),
-        Index('idx_payment_methods_active', 'is_active'),
-        # Composite indexes for common queries
-        Index('idx_payment_methods_user_active', 'user_id', 'is_active'),
-        Index('idx_payment_methods_user_default', 'user_id', 'is_default'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     user = relationship("User", back_populates="payment_methods")
@@ -106,6 +105,21 @@ class PaymentMethod(Base):
 class PaymentIntent(Base):
     """Payment intent tracking with hard delete only"""
     __tablename__ = "payment_intents"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_payment_intents_stripe_id', 'stripe_payment_intent_id'),
+        Index('idx_payment_intents_user_id', 'user_id'),
+        Index('idx_payment_intents_subscription_id', 'subscription_id'),
+        Index('idx_payment_intents_order_id', 'order_id'),
+        Index('idx_payment_intents_status', 'status'),
+        Index('idx_payment_intents_currency', 'currency'),
+        Index('idx_payment_intents_created_at', 'created_at'),
+        Index('idx_payment_intents_expires_at', 'expires_at'),
+        # Composite indexes for common queries
+        Index('idx_payment_intents_user_status', 'user_id', 'status'),
+        Index('idx_payment_intents_status_created', 'status', 'created_at'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -153,22 +167,6 @@ class PaymentIntent(Base):
 
     # Metadata for additional tracking (JSONB for structured payment data)
     payment_intent_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_payment_intents_stripe_id', 'stripe_payment_intent_id'),
-        Index('idx_payment_intents_user_id', 'user_id'),
-        Index('idx_payment_intents_subscription_id', 'subscription_id'),
-        Index('idx_payment_intents_order_id', 'order_id'),
-        Index('idx_payment_intents_status', 'status'),
-        Index('idx_payment_intents_currency', 'currency'),
-        Index('idx_payment_intents_created_at', 'created_at'),
-        Index('idx_payment_intents_expires_at', 'expires_at'),
-        # Composite indexes for common queries
-        Index('idx_payment_intents_user_status', 'user_id', 'status'),
-        Index('idx_payment_intents_status_created', 'status', 'created_at'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     user = relationship("User", back_populates="payment_intents")
@@ -218,6 +216,25 @@ class PaymentIntent(Base):
 class Transaction(Base):
     """Financial transaction records - hard delete only"""
     __tablename__ = "transactions"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_transactions_user_id', 'user_id'),
+        Index('idx_transactions_order_id', 'order_id'),
+        Index('idx_transactions_payment_intent_id', 'payment_intent_id'),
+        Index('idx_transactions_stripe_id', 'stripe_payment_intent_id'),
+        Index('idx_transactions_status', 'status'),
+        Index('idx_transactions_type', 'transaction_type'),
+        Index('idx_transactions_currency', 'currency'),
+        Index('idx_transactions_amount', 'amount'),
+        Index('idx_transactions_idempotency_key', 'idempotency_key'),
+        Index('idx_transactions_request_id', 'request_id'),
+        Index('idx_transactions_created_at', 'created_at'),
+        # Composite indexes for common queries
+        Index('idx_transactions_user_status', 'user_id', 'status'),
+        Index('idx_transactions_user_type', 'user_id', 'transaction_type'),
+        Index('idx_transactions_status_created', 'status', 'created_at'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -249,26 +266,6 @@ class Transaction(Base):
 
     # Additional transaction metadata (Text for simple key-value storage)
     transaction_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Simple string metadata
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_transactions_user_id', 'user_id'),
-        Index('idx_transactions_order_id', 'order_id'),
-        Index('idx_transactions_payment_intent_id', 'payment_intent_id'),
-        Index('idx_transactions_stripe_id', 'stripe_payment_intent_id'),
-        Index('idx_transactions_status', 'status'),
-        Index('idx_transactions_type', 'transaction_type'),
-        Index('idx_transactions_currency', 'currency'),
-        Index('idx_transactions_amount', 'amount'),
-        Index('idx_transactions_idempotency_key', 'idempotency_key'),
-        Index('idx_transactions_request_id', 'request_id'),
-        Index('idx_transactions_created_at', 'created_at'),
-        # Composite indexes for common queries
-        Index('idx_transactions_user_status', 'user_id', 'status'),
-        Index('idx_transactions_user_type', 'user_id', 'transaction_type'),
-        Index('idx_transactions_status_created', 'status', 'created_at'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     user = relationship("User", back_populates="transactions")

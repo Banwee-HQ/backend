@@ -2,14 +2,15 @@
 Analytics models for tracking business metrics
 Includes: UserSession, ConversionEvent, CartEvent, PurchaseMetrics
 """
-from sqlalchemy import Column, String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
+from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from enum import Enum
-from typing import Dict, Any
-from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+from datetime import datetime, timezone, datetime as dt
+import uuid as uuid_module
 
 
 class EventType(Enum):
@@ -44,50 +45,53 @@ class TrafficSource(Enum):
 class UserSession(Base):
     """User session tracking for analytics"""
     __tablename__ = "user_sessions"
+    __table_args__ = (
+        {'schema': 'admin'},
+    )
 
     # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Session identification
-    session_id = Column(String(255), unique=True, nullable=False)
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)  # Null for anonymous sessions
-    
+    session_id: Mapped[str] = mapped_column(String(255), unique=True)
+    user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+
     # Session metadata
-    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
-    user_agent = Column(Text, nullable=True)
-    device_type = Column(String(50), nullable=True)  # mobile, desktop, tablet
-    browser = Column(String(100), nullable=True)
-    os = Column(String(100), nullable=True)
-    
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    device_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    browser: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    os: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # Traffic attribution
-    traffic_source = Column(SQLEnum(TrafficSource), default=TrafficSource.DIRECT)
-    referrer_url = Column(Text, nullable=True)
-    utm_source = Column(String(255), nullable=True)
-    utm_medium = Column(String(255), nullable=True)
-    utm_campaign = Column(String(255), nullable=True)
-    utm_content = Column(String(255), nullable=True)
-    utm_term = Column(String(255), nullable=True)
-    
+    traffic_source: Mapped[TrafficSource] = mapped_column(SQLEnum(TrafficSource), default=TrafficSource.DIRECT)
+    referrer_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    utm_source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    utm_medium: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    utm_campaign: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    utm_content: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    utm_term: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     # Session timing
-    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    ended_at = Column(DateTime(timezone=True), nullable=True)
-    duration_seconds = Column(Integer, nullable=True)
-    
+    started_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    ended_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # Session metrics
-    page_views = Column(Integer, default=0)
-    events_count = Column(Integer, default=0)
-    converted = Column(Boolean, default=False)
-    conversion_value = Column(Float, nullable=True)
-    
+    page_views: Mapped[int] = mapped_column(Integer, default=0)
+    events_count: Mapped[int] = mapped_column(Integer, default=0)
+    converted: Mapped[bool] = mapped_column(Boolean, default=False)
+    conversion_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Geographic data
-    country = Column(String(2), nullable=True)  # ISO country code
-    region = Column(String(100), nullable=True)
-    city = Column(String(100), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+    region: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="sessions")
@@ -122,38 +126,6 @@ class UserSession(Base):
 class AnalyticsEvent(Base):
     """Individual analytics events"""
     __tablename__ = "analytics_events"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Event identification
-    session_id = Column(String(255), ForeignKey("user_sessions.session_id"), nullable=False)
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
-    event_type = Column(SQLEnum(EventType), nullable=False)
-    
-    # Event data
-    page_url = Column(Text, nullable=True)
-    page_title = Column(String(500), nullable=True)
-    event_data = Column(JSONB, default=dict)  # Flexible event properties
-    
-    # E-commerce specific fields
-    order_id = Column(GUID(), ForeignKey("orders.id"), nullable=True)
-    product_id = Column(GUID(), nullable=True)
-    variant_id = Column(GUID(), nullable=True)
-    category = Column(String(255), nullable=True)
-    
-    # Financial data
-    revenue = Column(Float, nullable=True)
-    quantity = Column(Integer, nullable=True)
-    
-    # Timing
-    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
     __table_args__ = (
         Index('idx_analytics_events_session_id', 'session_id'),
         Index('idx_analytics_events_user_id', 'user_id'),
@@ -164,8 +136,39 @@ class AnalyticsEvent(Base):
         Index('idx_analytics_events_type_created', 'event_type', 'created_at'),
         Index('idx_analytics_events_user_type', 'user_id', 'event_type'),
         Index('idx_analytics_events_session_type', 'session_id', 'event_type'),
-        {'extend_existing': True}
+        {'schema': 'admin'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Event identification
+    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
+    user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+    event_type: Mapped[EventType] = mapped_column(SQLEnum(EventType))
+
+    # Event data
+    page_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    page_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    event_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    # E-commerce specific fields
+    order_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("orders.id"), nullable=True)
+    product_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    variant_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # Financial data
+    revenue: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Timing
+    timestamp: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     session = relationship("UserSession", back_populates="events")
@@ -194,46 +197,45 @@ class AnalyticsEvent(Base):
 class ConversionFunnel(Base):
     """Conversion funnel tracking"""
     __tablename__ = "conversion_funnels"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Funnel identification
-    session_id = Column(String(255), ForeignKey("user_sessions.session_id"), nullable=False)
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=True)
-    
-    # Funnel steps (0-based)
-    current_step = Column(Integer, default=0)  # 0=landing, 1=product_view, 2=cart_add, 3=checkout_start, 4=purchase
-    max_step_reached = Column(Integer, default=0)
-    
-    # Step timestamps
-    landing_at = Column(DateTime(timezone=True), nullable=True)
-    product_view_at = Column(DateTime(timezone=True), nullable=True)
-    cart_add_at = Column(DateTime(timezone=True), nullable=True)
-    checkout_start_at = Column(DateTime(timezone=True), nullable=True)
-    purchase_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Funnel metadata
-    abandoned_at_step = Column(Integer, nullable=True)
-    abandoned_at = Column(DateTime(timezone=True), nullable=True)
-    completed = Column(Boolean, default=False)
-    
-    # Financial data
-    cart_value = Column(Float, nullable=True)
-    purchase_value = Column(Float, nullable=True)
-
     __table_args__ = (
         Index('idx_conversion_funnels_session_id', 'session_id'),
         Index('idx_conversion_funnels_user_id', 'user_id'),
         Index('idx_conversion_funnels_created_at', 'created_at'),
         Index('idx_conversion_funnels_step', 'current_step'),
-        {'extend_existing': True}
+        {'schema': 'admin'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Funnel identification
+    session_id: Mapped[str] = mapped_column(String(255), ForeignKey("user_sessions.session_id"))
+    user_id: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
+
+    # Funnel steps (0-based)
+    current_step: Mapped[int] = mapped_column(Integer, default=0)
+    max_step_reached: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Step timestamps
+    landing_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    product_view_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cart_add_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    checkout_start_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    purchase_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Funnel metadata
+    abandoned_at_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    abandoned_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Financial data
+    cart_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    purchase_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Relationships
     session = relationship("UserSession")
@@ -243,57 +245,56 @@ class ConversionFunnel(Base):
 class CustomerLifecycleMetrics(Base):
     """Customer lifecycle and repeat purchase tracking"""
     __tablename__ = "customer_lifecycle_metrics"
-
-    # Common fields (previously from BaseModel)
-    id = Column(GUID(), primary_key=True, default=uuid7, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-    created_by = Column(GUID(), nullable=True, index=True)
-    updated_by = Column(GUID(), nullable=True)
-    version = Column(Integer, default=1, nullable=False)
-
-    # Customer identification
-    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, unique=True)
-    
-    # Registration and first purchase
-    registered_at = Column(DateTime(timezone=True), nullable=False)
-    first_purchase_at = Column(DateTime(timezone=True), nullable=True)
-    time_to_first_purchase_hours = Column(Float, nullable=True)
-    
-    # Purchase behavior
-    total_orders = Column(Integer, default=0)
-    total_revenue = Column(Float, default=0.0)
-    average_order_value = Column(Float, default=0.0)
-    
-    # Timing metrics
-    last_purchase_at = Column(DateTime(timezone=True), nullable=True)
-    days_since_last_purchase = Column(Integer, nullable=True)
-    average_days_between_orders = Column(Float, nullable=True)
-    
-    # Refund metrics
-    total_refunds = Column(Integer, default=0)
-    total_refund_amount = Column(Float, default=0.0)
-    refund_rate = Column(Float, default=0.0)  # Percentage
-    
-    # Customer segmentation
-    customer_segment = Column(String(50), nullable=True)  # new, active, at_risk, churned, vip
-    lifetime_value = Column(Float, default=0.0)
-    predicted_ltv = Column(Float, nullable=True)
-    
-    # Engagement metrics
-    total_sessions = Column(Integer, default=0)
-    total_page_views = Column(Integer, default=0)
-    average_session_duration = Column(Float, default=0.0)
-    
-    # Last updated
-    metrics_updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
     __table_args__ = (
         Index('idx_customer_lifecycle_user_id', 'user_id'),
         Index('idx_customer_lifecycle_created_at', 'created_at'),
         Index('idx_customer_lifecycle_segment', 'customer_segment'),
-        {'extend_existing': True}
+        {'schema': 'admin'}
     )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    updated_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Customer identification
+    user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"), unique=True)
+
+    # Registration and first purchase
+    registered_at: Mapped[dt] = mapped_column(DateTime(timezone=True))
+    first_purchase_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    time_to_first_purchase_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Purchase behavior
+    total_orders: Mapped[int] = mapped_column(Integer, default=0)
+    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    average_order_value: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Timing metrics
+    last_purchase_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
+    days_since_last_purchase: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    average_days_between_orders: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Refund metrics
+    total_refunds: Mapped[int] = mapped_column(Integer, default=0)
+    total_refund_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    refund_rate: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Customer segmentation
+    customer_segment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    lifetime_value: Mapped[float] = mapped_column(Float, default=0.0)
+    predicted_ltv: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Engagement metrics
+    total_sessions: Mapped[int] = mapped_column(Integer, default=0)
+    total_page_views: Mapped[int] = mapped_column(Integer, default=0)
+    average_session_duration: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Last updated
+    metrics_updated_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user = relationship("User", back_populates="lifecycle_metrics")

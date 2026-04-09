@@ -14,6 +14,13 @@ import uuid as uuid_module
 class Product(Base):
     """Optimized product model with hard delete only and strategic JSONB usage"""
     __tablename__ = "products"
+    __table_args__ = (
+        # Optimized indexes for product queries
+        Index('idx_products_category_status', 'category', 'product_status'),
+        Index('idx_products_published', 'published_at', 'product_status'),
+        Index('idx_products_slug', 'slug'),
+        {'schema': 'catalog'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -46,14 +53,6 @@ class Product(Base):
 
     # Dates for lifecycle management
     published_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        # Optimized indexes for product queries
-        Index('idx_products_category_status', 'category', 'product_status'),
-        Index('idx_products_published', 'published_at', 'product_status'),
-        Index('idx_products_slug', 'slug'),
-        {'extend_existing': True}
-    )
 
     # Relationships with optimized lazy loading
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="selectin")
@@ -149,6 +148,17 @@ class Product(Base):
 class ProductVariant(Base):
     """Product variants with hard delete only"""
     __tablename__ = "product_variants"
+    __table_args__ = (
+        Index('idx_variants_product_id', 'product_id'),
+        Index('idx_variants_sku', 'sku'),
+        Index('idx_variants_active', 'is_active'),
+        Index('idx_variants_price', 'base_price', 'sale_price'),
+        Index('idx_variants_availability', 'availability_status'),
+        # GIN indexes for JSONB fields only
+        Index('idx_variants_specifications', 'specifications', postgresql_using='gin'),
+        Index('idx_variants_dietary_tags', 'dietary_tags', postgresql_using='gin'),
+        {'schema': 'catalog'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -181,18 +191,6 @@ class ProductVariant(Base):
     # Analytics as columns
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     purchase_count: Mapped[int] = mapped_column(Integer, default=0)
-
-    __table_args__ = (
-        Index('idx_variants_product_id', 'product_id'),
-        Index('idx_variants_sku', 'sku'),
-        Index('idx_variants_active', 'is_active'),
-        Index('idx_variants_price', 'base_price', 'sale_price'),
-        Index('idx_variants_availability', 'availability_status'),
-        # GIN indexes for JSONB fields only
-        Index('idx_variants_specifications', 'specifications', postgresql_using='gin'),
-        Index('idx_variants_dietary_tags', 'dietary_tags', postgresql_using='gin'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     product = relationship("Product", back_populates="variants")
@@ -272,6 +270,11 @@ class ProductVariant(Base):
 class ProductImage(Base):
     """Product images - no soft delete needed"""
     __tablename__ = "product_images"
+    __table_args__ = (
+        Index('idx_images_variant_id', 'variant_id'),
+        Index('idx_images_primary', 'is_primary'),
+        {'schema': 'catalog'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -287,12 +290,6 @@ class ProductImage(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     format: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # jpg, png, webp
-
-    __table_args__ = (
-        Index('idx_images_variant_id', 'variant_id'),
-        Index('idx_images_primary', 'is_primary'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     variant = relationship("ProductVariant", back_populates="images")

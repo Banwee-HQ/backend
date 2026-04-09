@@ -10,6 +10,19 @@ import uuid as uuid_module
 
 class Promocode(Base):
     __tablename__ = "promocodes"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_promocodes_code', 'code'),
+        Index('idx_promocodes_active', 'is_active'),
+        Index('idx_promocodes_discount_type', 'discount_type'),
+        Index('idx_promocodes_valid_from', 'valid_from'),
+        Index('idx_promocodes_valid_until', 'valid_until'),
+        Index('idx_promocodes_usage_limit', 'usage_limit'),
+        Index('idx_promocodes_used_count', 'used_count'),
+        # Composite indexes for common queries
+        Index('idx_promocodes_active_valid', 'is_active', 'valid_from', 'valid_until'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -30,17 +43,3 @@ class Promocode(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     valid_from: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_promocodes_code', 'code'),
-        Index('idx_promocodes_active', 'is_active'),
-        Index('idx_promocodes_discount_type', 'discount_type'),
-        Index('idx_promocodes_valid_from', 'valid_from'),
-        Index('idx_promocodes_valid_until', 'valid_until'),
-        Index('idx_promocodes_usage_limit', 'usage_limit'),
-        Index('idx_promocodes_used_count', 'used_count'),
-        # Composite indexes for common queries
-        Index('idx_promocodes_active_valid', 'is_active', 'valid_from', 'valid_until'),
-        {'extend_existing': True}
-    )

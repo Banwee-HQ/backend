@@ -18,6 +18,17 @@ class Gender(str, Enum):
 class User(Base):
     """Optimized User model with hard delete only"""
     __tablename__ = "users"
+    __table_args__ = (
+        # Optimized indexes for common queries
+        Index('idx_users_email_account_status', 'email', 'account_status'),
+        Index('idx_users_role_verification_status', 'role', 'verification_status'),
+        Index('idx_users_country_language', 'country', 'language'),
+        Index('idx_users_last_login', 'last_login'),
+        Index('idx_users_stripe_customer', 'stripe_customer_id'),
+        Index('idx_users_age', 'age'),
+        Index('idx_users_gender', 'gender'),
+        {'schema': 'auth'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -73,18 +84,6 @@ class User(Base):
     # Password reset fields
     reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     reset_token_expires: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        # Optimized indexes for common queries
-        Index('idx_users_email_account_status', 'email', 'account_status'),
-        Index('idx_users_role_verification_status', 'role', 'verification_status'),
-        Index('idx_users_country_language', 'country', 'language'),
-        Index('idx_users_last_login', 'last_login'),
-        Index('idx_users_stripe_customer', 'stripe_customer_id'),
-        Index('idx_users_age', 'age'),
-        Index('idx_users_gender', 'gender'),
-        {'extend_existing': True}
-    )
 
     # Relationships with optimized lazy loading
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
@@ -158,6 +157,21 @@ class User(Base):
 class Address(Base):
     """Address model - no soft delete needed, addresses are typically replaced"""
     __tablename__ = "addresses"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_addresses_user_id', 'user_id'),
+        Index('idx_addresses_city', 'city'),
+        Index('idx_addresses_state', 'state'),
+        Index('idx_addresses_country', 'country'),
+        Index('idx_addresses_post_code', 'post_code'),
+        Index('idx_addresses_kind', 'kind'),
+        Index('idx_addresses_default', 'is_default'),
+        # Composite indexes for common queries
+        Index('idx_addresses_user_default', 'user_id', 'is_default'),
+        Index('idx_addresses_user_kind', 'user_id', 'kind'),
+        Index('idx_addresses_country_city', 'country', 'city'),
+        {'schema': 'auth'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -175,22 +189,6 @@ class Address(Base):
     post_code: Mapped[str] = mapped_column(String(20))
     kind: Mapped[str] = mapped_column(String(50), default="shipping")  # shipping, billing
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_addresses_user_id', 'user_id'),
-        Index('idx_addresses_city', 'city'),
-        Index('idx_addresses_state', 'state'),
-        Index('idx_addresses_country', 'country'),
-        Index('idx_addresses_post_code', 'post_code'),
-        Index('idx_addresses_kind', 'kind'),
-        Index('idx_addresses_default', 'is_default'),
-        # Composite indexes for common queries
-        Index('idx_addresses_user_default', 'user_id', 'is_default'),
-        Index('idx_addresses_user_kind', 'user_id', 'kind'),
-        Index('idx_addresses_country_city', 'country', 'city'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     user = relationship("User", back_populates="addresses")

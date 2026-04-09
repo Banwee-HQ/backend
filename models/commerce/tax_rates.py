@@ -11,6 +11,10 @@ from core.utils.uuid_utils import uuid7
 class TaxRate(Base):
     """Tax rates by country and province/state"""
     __tablename__ = "tax_rates"
+    __table_args__ = (
+        Index('idx_tax_country_province', 'country_code', 'province_code'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -28,11 +32,6 @@ class TaxRate(Base):
     tax_name: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # e.g., "GST", "VAT", "Sales Tax"
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     effective_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    
-    # Composite index for fast lookups
-    __table_args__ = (
-        Index('idx_tax_country_province', 'country_code', 'province_code'),
-    )
 
     def __repr__(self):
         location = f"{self.country_code}"

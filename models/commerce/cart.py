@@ -9,6 +9,10 @@ import uuid as uuid_module
 
 class Cart(Base):
     __tablename__ = "carts"
+    __table_args__ = (
+        Index('idx_carts_user_id', 'user_id', unique=True),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -19,11 +23,6 @@ class Cart(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     user_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey('users.id'))
-
-    __table_args__ = (
-        Index('idx_carts_user_id', 'user_id', unique=True),
-        {'extend_existing': True}
-    )
     
     items = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
     user = relationship("User", back_populates="cart")
@@ -38,6 +37,13 @@ class Cart(Base):
 
 class CartItem(Base):
     __tablename__ = "cart_items"
+    __table_args__ = (
+        Index('idx_cart_items_cart_id', 'cart_id'),
+        Index('idx_cart_items_product_id', 'product_id'),
+        Index('idx_cart_items_variant_id', 'variant_id'),
+        Index('idx_cart_items_cart_product_variant', 'cart_id', 'product_id', 'variant_id', unique=True),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -52,14 +58,6 @@ class CartItem(Base):
     variant_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey('product_variants.id'))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     price_per_unit: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-
-    __table_args__ = (
-        Index('idx_cart_items_cart_id', 'cart_id'),
-        Index('idx_cart_items_product_id', 'product_id'),
-        Index('idx_cart_items_variant_id', 'variant_id'),
-        Index('idx_cart_items_cart_product_variant', 'cart_id', 'product_id', 'variant_id', unique=True),
-        {'extend_existing': True}
-    )
 
     cart = relationship("Cart", back_populates="items")
     product = relationship("Product")

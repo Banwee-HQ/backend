@@ -81,6 +81,11 @@ class ShipmentType(str, Enum):
 class ShippingProvider(Base):
     """Shipping provider configuration"""
     __tablename__ = "shipping_providers"
+    __table_args__ = (
+        Index('idx_shipping_providers_carrier', 'carrier'),
+        Index('idx_shipping_providers_active', 'is_active'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -99,13 +104,7 @@ class ShippingProvider(Base):
     webhook_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     configuration: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Provider-specific config
-    rate_limits: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # API rate limiting config
-
-    __table_args__ = (
-        Index('idx_shipping_providers_carrier', 'carrier'),
-        Index('idx_shipping_providers_active', 'is_active'),
-        {'extend_existing': True}
-    )
+    rate_limits: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     shipments = relationship("ShipmentTracking", back_populates="provider")
@@ -125,6 +124,15 @@ class ShippingProvider(Base):
 class ShipmentTracking(Base):
     """Main shipment tracking model"""
     __tablename__ = "shipment_tracking"
+    __table_args__ = (
+        Index('idx_shipment_tracking_order_id', 'order_id'),
+        Index('idx_shipment_tracking_carrier', 'carrier'),
+        Index('idx_shipment_tracking_tracking_number', 'tracking_number'),
+        Index('idx_shipment_tracking_status', 'status'),
+        Index('idx_shipment_tracking_created_at', 'created_at'),
+        Index('idx_shipment_tracking_estimated_delivery', 'estimated_delivery'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -180,16 +188,6 @@ class ShipmentTracking(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     internal_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    __table_args__ = (
-        Index('idx_shipment_tracking_order_id', 'order_id'),
-        Index('idx_shipment_tracking_carrier', 'carrier'),
-        Index('idx_shipment_tracking_tracking_number', 'tracking_number'),
-        Index('idx_shipment_tracking_status', 'status'),
-        Index('idx_shipment_tracking_created_at', 'created_at'),
-        Index('idx_shipment_tracking_estimated_delivery', 'estimated_delivery'),
-        {'extend_existing': True}
-    )
-
     # Relationships
     order = relationship("Order", back_populates="shipments")
     order_item = relationship("OrderItem", back_populates="shipment")
@@ -233,6 +231,12 @@ class ShipmentTracking(Base):
 class ShipmentTrackingEvent(Base):
     """Individual tracking events for a shipment"""
     __tablename__ = "shipment_tracking_events"
+    __table_args__ = (
+        Index('idx_tracking_events_shipment_id', 'shipment_id'),
+        Index('idx_tracking_events_timestamp', 'event_timestamp'),
+        Index('idx_tracking_events_event_type', 'event_type'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -265,13 +269,6 @@ class ShipmentTrackingEvent(Base):
     source: Mapped[str] = mapped_column(String(50), default="api")  # api, webhook, manual
     raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
-    __table_args__ = (
-        Index('idx_tracking_events_shipment_id', 'shipment_id'),
-        Index('idx_tracking_events_timestamp', 'event_timestamp'),
-        Index('idx_tracking_events_event_type', 'event_type'),
-        {'extend_existing': True}
-    )
-
     # Relationships
     shipment = relationship("ShipmentTracking", back_populates="tracking_events")
 
@@ -295,6 +292,11 @@ class ShipmentTrackingEvent(Base):
 class ShippingWebhook(Base):
     """Webhook configurations for shipping updates"""
     __tablename__ = "shipping_webhooks"
+    __table_args__ = (
+        Index('idx_shipping_webhooks_provider', 'provider_id'),
+        Index('idx_shipping_webhooks_active', 'is_active'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -313,12 +315,6 @@ class ShippingWebhook(Base):
     last_triggered: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
     success_count: Mapped[int] = mapped_column(Integer, default=0)
     error_count: Mapped[int] = mapped_column(Integer, default=0)
-
-    __table_args__ = (
-        Index('idx_shipping_webhooks_provider', 'provider_id'),
-        Index('idx_shipping_webhooks_active', 'is_active'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     provider = relationship("ShippingProvider")

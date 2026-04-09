@@ -53,6 +53,20 @@ class OrderSource(str, Enum):
 class Order(Base):
     """Simplified order model with essential pricing fields only"""
     __tablename__ = "orders"
+    __table_args__ = (
+        # Optimized indexes for common order queries
+        Index('idx_orders_user_status', 'user_id', 'order_status'),
+        Index('idx_orders_subscription_id', 'subscription_id'),
+        Index('idx_orders_payment_status', 'payment_status', 'created_at'),
+        Index('idx_orders_fulfillment_status', 'fulfillment_status'),
+        Index('idx_orders_order_number', 'order_number'),
+        Index('idx_orders_total_currency', 'total_amount', 'currency'),
+        Index('idx_orders_tracking', 'tracking_number'),
+        Index('idx_orders_confirmed_shipped', 'confirmed_at', 'shipped_at'),
+        # GIN index for address queries
+        Index('idx_orders_shipping_address', 'shipping_address', postgresql_using='gin'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -110,27 +124,7 @@ class Order(Base):
 
     # Idempotency and source tracking
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
-    source: Mapped[OrderSource] = mapped_column(SQLEnum(OrderSource), default=OrderSource.WEB)  # web, mobile, api
-    
-    # Legacy fields for backward compatibility — REMOVED
-    # All status tracking uses order_status, payment_status, fulfillment_status
-    # All carrier info uses carrier column
-    # All notes use customer_notes / internal_notes
-
-    __table_args__ = (
-        # Optimized indexes for common order queries
-        Index('idx_orders_user_status', 'user_id', 'order_status'),
-        Index('idx_orders_subscription_id', 'subscription_id'),
-        Index('idx_orders_payment_status', 'payment_status', 'created_at'),
-        Index('idx_orders_fulfillment_status', 'fulfillment_status'),
-        Index('idx_orders_order_number', 'order_number'),
-        Index('idx_orders_total_currency', 'total_amount', 'currency'),
-        Index('idx_orders_tracking', 'tracking_number'),
-        Index('idx_orders_confirmed_shipped', 'confirmed_at', 'shipped_at'),
-        # GIN index for address queries
-        Index('idx_orders_shipping_address', 'shipping_address', postgresql_using='gin'),
-        {'extend_existing': True}
-    )
+    source: Mapped[OrderSource] = mapped_column(SQLEnum(OrderSource), default=OrderSource.WEB)
 
     # Relationships with optimized lazy loading
     user = relationship("User", back_populates="orders")
@@ -179,6 +173,11 @@ class Order(Base):
 class OrderItem(Base):
     """Order items - hard delete with orders"""
     __tablename__ = "order_items"
+    __table_args__ = (
+        Index('idx_order_items_order_id', 'order_id'),
+        Index('idx_order_items_variant_id', 'variant_id'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -193,12 +192,6 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer)
     price_per_unit: Mapped[float] = mapped_column(Float)
     total_price: Mapped[float] = mapped_column(Float)
-
-    __table_args__ = (
-        Index('idx_order_items_order_id', 'order_id'),
-        Index('idx_order_items_variant_id', 'variant_id'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     order = relationship("Order", back_populates="items")
@@ -221,6 +214,11 @@ class OrderItem(Base):
 class TrackingEvent(Base):
     """Order tracking events - hard delete with orders"""
     __tablename__ = "tracking_events"
+    __table_args__ = (
+        Index('idx_tracking_events_order_id', 'order_id'),
+        Index('idx_tracking_events_created_at', 'created_at'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -234,12 +232,6 @@ class TrackingEvent(Base):
     status: Mapped[str] = mapped_column(String(100))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-
-    __table_args__ = (
-        Index('idx_tracking_events_order_id', 'order_id'),
-        Index('idx_tracking_events_created_at', 'created_at'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     order = relationship("Order", back_populates="tracking_events")

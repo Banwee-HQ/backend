@@ -3,11 +3,13 @@ Contact Message Model
 Stores customer contact form submissions
 """
 
-from sqlalchemy import Column, String, Text, DateTime
+from sqlalchemy import String, Text, DateTime
 from sqlalchemy.dialects.postgresql import UUID, ENUM
-from datetime import datetime
-import uuid
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime, datetime as dt
+import uuid as uuid_module
 import enum
+from typing import Optional
 from core.db import Base
 
 
@@ -29,21 +31,23 @@ class MessagePriority(str, enum.Enum):
 
 class ContactMessage(Base):
     """Contact message model for customer inquiries"""
-    
     __tablename__ = "contact_messages"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
-    email = Column(String(255), nullable=False)
-    subject = Column(String(255), nullable=False)
-    message = Column(Text, nullable=False)
-    status = Column(ENUM('new', 'in_progress', 'resolved', 'closed', name='messagestatus', create_type=False), default='new', nullable=False)
-    priority = Column(ENUM('low', 'medium', 'high', 'urgent', name='messagepriority', create_type=False), default='medium', nullable=False)
-    admin_notes = Column(Text, nullable=True)
-    assigned_to = Column(UUID(as_uuid=True), nullable=True)  # Admin user ID
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    resolved_at = Column(DateTime, nullable=True)
+    __table_args__ = (
+        {'schema': 'system'},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid_module.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str] = mapped_column(String(255))
+    subject: Mapped[str] = mapped_column(String(255))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(ENUM('new', 'in_progress', 'resolved', 'closed', name='messagestatus', create_type=False), default='new')
+    priority: Mapped[str] = mapped_column(ENUM('low', 'medium', 'high', 'urgent', name='messagepriority', create_type=False), default='medium')
+    admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_to: Mapped[Optional[uuid_module.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[dt] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[dt] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    resolved_at: Mapped[Optional[dt]] = mapped_column(DateTime, nullable=True)
     
     def __repr__(self):
         return f"<ContactMessage {self.id} - {self.subject}>"

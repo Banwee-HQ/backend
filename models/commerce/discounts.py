@@ -14,6 +14,20 @@ import uuid as uuid_module
 class Discount(Base):
     """Discount codes and promotional offers"""
     __tablename__ = "discounts"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_discounts_code', 'code'),
+        Index('idx_discounts_active', 'is_active'),
+        Index('idx_discounts_type', 'type'),
+        Index('idx_discounts_valid_from', 'valid_from'),
+        Index('idx_discounts_valid_until', 'valid_until'),
+        Index('idx_discounts_usage_limit', 'usage_limit'),
+        Index('idx_discounts_used_count', 'used_count'),
+        # Composite indexes for common queries
+        Index('idx_discounts_active_valid', 'is_active', 'valid_from', 'valid_until'),
+        Index('idx_discounts_code_active', 'code', 'is_active'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -34,21 +48,6 @@ class Discount(Base):
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_discounts_code', 'code'),
-        Index('idx_discounts_active', 'is_active'),
-        Index('idx_discounts_type', 'type'),
-        Index('idx_discounts_valid_from', 'valid_from'),
-        Index('idx_discounts_valid_until', 'valid_until'),
-        Index('idx_discounts_usage_limit', 'usage_limit'),
-        Index('idx_discounts_used_count', 'used_count'),
-        # Composite indexes for common queries
-        Index('idx_discounts_active_valid', 'is_active', 'valid_from', 'valid_until'),
-        Index('idx_discounts_code_active', 'code', 'is_active'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     subscription_discounts = relationship("SubscriptionDiscount", back_populates="discount", lazy="select")
@@ -109,6 +108,15 @@ class Discount(Base):
 class SubscriptionDiscount(Base):
     """Applied discounts tracking for subscriptions"""
     __tablename__ = "subscription_discounts"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_subscription_discounts_subscription_id', 'subscription_id'),
+        Index('idx_subscription_discounts_discount_id', 'discount_id'),
+        Index('idx_subscription_discounts_applied_at', 'applied_at'),
+        # Composite indexes for common queries
+        Index('idx_subscription_discounts_sub_discount', 'subscription_id', 'discount_id'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -122,16 +130,6 @@ class SubscriptionDiscount(Base):
     discount_id: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("discounts.id"))
     discount_amount: Mapped[float] = mapped_column(Float)
     applied_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_subscription_discounts_subscription_id', 'subscription_id'),
-        Index('idx_subscription_discounts_discount_id', 'discount_id'),
-        Index('idx_subscription_discounts_applied_at', 'applied_at'),
-        # Composite indexes for common queries
-        Index('idx_subscription_discounts_sub_discount', 'subscription_id', 'discount_id'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     subscription = relationship("Subscription", back_populates="applied_discounts", lazy="select")
@@ -154,6 +152,17 @@ class SubscriptionDiscount(Base):
 class ProductRemovalAudit(Base):
     """Audit trail for product removals from subscriptions"""
     __tablename__ = "product_removal_audit"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_product_removal_audit_subscription_id', 'subscription_id'),
+        Index('idx_product_removal_audit_product_id', 'product_id'),
+        Index('idx_product_removal_audit_removed_by', 'removed_by'),
+        Index('idx_product_removal_audit_removed_at', 'removed_at'),
+        # Composite indexes for common queries
+        Index('idx_product_removal_audit_sub_product', 'subscription_id', 'product_id'),
+        Index('idx_product_removal_audit_user_date', 'removed_by', 'removed_at'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -168,18 +177,6 @@ class ProductRemovalAudit(Base):
     removed_by: Mapped[uuid_module.UUID] = mapped_column(GUID(), ForeignKey("users.id"))
     removed_at: Mapped[dt] = mapped_column(DateTime(timezone=True), server_default="NOW()")
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_product_removal_audit_subscription_id', 'subscription_id'),
-        Index('idx_product_removal_audit_product_id', 'product_id'),
-        Index('idx_product_removal_audit_removed_by', 'removed_by'),
-        Index('idx_product_removal_audit_removed_at', 'removed_at'),
-        # Composite indexes for common queries
-        Index('idx_product_removal_audit_sub_product', 'subscription_id', 'product_id'),
-        Index('idx_product_removal_audit_user_date', 'removed_by', 'removed_at'),
-        {'extend_existing': True}
-    )
 
     # Relationships
     subscription = relationship("Subscription", lazy="select")

@@ -26,6 +26,18 @@ subscription_product_association = Table(
 class SubscriptionProduct(Base):
     """Tracks individual products within subscriptions with removal tracking"""
     __tablename__ = "subscription_products"
+    __table_args__ = (
+        # Basic indexes
+        Index('idx_subscription_products_subscription_id', 'subscription_id'),
+        Index('idx_subscription_products_product_id', 'product_id'),
+        Index('idx_subscription_products_removed_by', 'removed_by'),
+        # Composite indexes
+        Index('idx_subscription_products_sub_product', 'subscription_id', 'product_id'),
+        # Partial index for active products only (removed_at IS NULL)
+        Index('idx_subscription_products_active', 'subscription_id', 'product_id', unique=False,
+              postgresql_where=Column('removed_at').is_(None)),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -45,19 +57,6 @@ class SubscriptionProduct(Base):
     # Removal tracking
     removed_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), nullable=True)
     removed_by: Mapped[Optional[uuid_module.UUID]] = mapped_column(GUID(), ForeignKey("users.id"), nullable=True)
-
-    __table_args__ = (
-        # Basic indexes
-        Index('idx_subscription_products_subscription_id', 'subscription_id'),
-        Index('idx_subscription_products_product_id', 'product_id'),
-        Index('idx_subscription_products_removed_by', 'removed_by'),
-        # Composite indexes
-        Index('idx_subscription_products_sub_product', 'subscription_id', 'product_id'),
-        # Partial index for active products only (removed_at IS NULL)
-        Index('idx_subscription_products_active', 'subscription_id', 'product_id', unique=False,
-              postgresql_where=Column('removed_at').is_(None)),
-        {'extend_existing': True}
-    )
 
     # Relationships
     subscription = relationship("Subscription", back_populates="subscription_products", lazy="select")
@@ -89,6 +88,20 @@ class SubscriptionProduct(Base):
 class Subscription(Base):
     """Robust subscription model with at-creation and current pricing for e-commerce"""
     __tablename__ = "subscriptions"
+    __table_args__ = (
+        # Single-column indexes
+        Index('idx_subscriptions_user_id', 'user_id'),
+        Index('idx_subscriptions_status', 'status'),
+        Index('idx_subscriptions_next_billing_date', 'next_billing_date'),
+        Index('idx_subscriptions_delivery_address', 'delivery_address_id'),
+        # Composite indexes
+        Index('idx_subscriptions_user_status', 'user_id', 'status'),
+        Index('idx_subscriptions_status_next_billing', 'status', 'next_billing_date'),
+        # Partial index for active subscriptions
+        Index('idx_subscriptions_active', 'user_id', 'status', unique=False,
+              postgresql_where=Column('status') == 'active'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -155,21 +168,6 @@ class Subscription(Base):
     discount_type = Column(String(20), nullable=True)  # "percentage" or "fixed"
     discount_value = Column(Float, nullable=True)
     discount_code = Column(String(50), nullable=True)
-
-    __table_args__ = (
-        # Single-column indexes
-        Index('idx_subscriptions_user_id', 'user_id'),
-        Index('idx_subscriptions_status', 'status'),
-        Index('idx_subscriptions_next_billing_date', 'next_billing_date'),
-        Index('idx_subscriptions_delivery_address', 'delivery_address_id'),
-        # Composite indexes
-        Index('idx_subscriptions_user_status', 'user_id', 'status'),
-        Index('idx_subscriptions_status_next_billing', 'status', 'next_billing_date'),
-        # Partial index for active subscriptions
-        Index('idx_subscriptions_active', 'user_id', 'status', unique=False,
-              postgresql_where=Column('status') == 'active'),
-        {'extend_existing': True}
-    )
 
     # --- Relationships ---
     user = relationship("User", back_populates="subscriptions")

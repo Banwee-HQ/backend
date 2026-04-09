@@ -10,6 +10,16 @@ import uuid as uuid_module
 
 class ShippingMethod(Base):
     __tablename__ = "shipping_methods"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_shipping_methods_name', 'name'),
+        Index('idx_shipping_methods_active', 'is_active'),
+        Index('idx_shipping_methods_price', 'price'),
+        Index('idx_shipping_methods_estimated_days', 'estimated_days'),
+        # Composite indexes for common queries
+        Index('idx_shipping_methods_active_price', 'is_active', 'price'),
+        {'schema': 'commerce'}
+    )
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid_module.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
@@ -28,14 +38,3 @@ class ShippingMethod(Base):
     # Simple metadata
     carrier: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     tracking_url_template: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-
-    __table_args__ = (
-        # Indexes for search and performance
-        Index('idx_shipping_methods_name', 'name'),
-        Index('idx_shipping_methods_active', 'is_active'),
-        Index('idx_shipping_methods_price', 'price'),
-        Index('idx_shipping_methods_estimated_days', 'estimated_days'),
-        # Composite indexes for common queries
-        Index('idx_shipping_methods_active_price', 'is_active', 'price'),
-        {'extend_existing': True}
-    )
