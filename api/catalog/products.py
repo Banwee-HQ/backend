@@ -8,7 +8,6 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import ProductCreate, ProductUpdate
 from services.catalog.products import ProductService
-from services.catalog.search import SearchService
 from models.auth.user import User
 from services.auth.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
@@ -163,65 +162,33 @@ async def get_products(
     search_mode: Optional[str] = Query("basic", regex="^(basic|advanced)$", description="Search mode: basic or advanced"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get products with optional filtering, pagination, and advanced search."""
+    """Get products with optional filtering and pagination."""
     try:
-        # If there's a search query and advanced search is requested, use the search service
-        if q and len(q.strip()) >= 2 and search_mode == "advanced":
-            search_service = SearchService(db)
-            
-            # Build filters
-            filters = {}
-            if q:
-                filters["q"] = q
-            if min_price is not None:
-                filters["min_price"] = min_price
-            if max_price is not None:
-                filters["max_price"] = max_price
-            
-            # Use advanced search
-            search_results = await search_service.fuzzy_search_products(
-                query=q.strip(),
-                limit=limit,
-                filters=filters if filters else None
-            )
-            
-            # Convert search results to match the expected format
-            return Response.success( 
-                data={
-                    "data": search_results,
-                    "total": len(search_results),
-                    "page": page,
-                    "per_page": limit,
-                    "total_pages": 1,
-                    "search_mode": "advanced"
-                }
-            )
-        else:
-            # Use basic product service for regular queries
-            product_service = ProductService(db)
+        # Use basic product service for regular queries
+        product_service = ProductService(db)
 
-            filters = {
-                "q": q,
-                "min_price": min_price,
-                "max_price": max_price,
-                "min_rating": min_rating,
-                "max_rating": max_rating,
-                "availability": availability,
-                "featured": featured,
-                "popular": popular,
-                "sale": sale
-            }
+        filters = {
+            "q": q,
+            "min_price": min_price,
+            "max_price": max_price,
+            "min_rating": min_rating,
+            "max_rating": max_rating,
+            "availability": availability,
+            "featured": featured,
+            "popular": popular,
+            "sale": sale
+        }
 
-            result = await product_service.get_products(
-                page=page,
-                limit=limit,
-                filters=filters,
-                sort_by=sort_by,
-                sort_order=sort_order
-            )
-            
-            result["search_mode"] = "basic"
-            return Response.success(data=result)
+        result = await product_service.get_products(
+            page=page,
+            limit=limit,
+            filters=filters,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        result["search_mode"] = "basic"
+        return Response.success(data=result)
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

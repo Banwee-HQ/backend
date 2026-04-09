@@ -7,7 +7,6 @@ from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.auth.user import UserService, AddressService
-from services.catalog.search import SearchService
 # Import AddressResponse
 from schemas.auth.user import UserCreate, UserUpdate, AddressResponse
 from schemas.auth.user import AddressCreate, AddressUpdate
@@ -192,35 +191,13 @@ async def list_users(
     search_mode: Optional[str] = Query("basic", regex="^(basic|advanced)$", description="Search mode: basic or advanced"),
     db: AsyncSession = Depends(get_db)
 ):
-    """List users with optional search functionality."""
+    """List users with optional filtering and pagination."""
     try:
-        # If there's a search query and advanced search is requested, use the search service
-        if q and len(q.strip()) >= 2 and search_mode == "advanced":
-            search_service = SearchService(db)
-            
-            # Use advanced search
-            search_results = await search_service.search_users(
-                query=q.strip(),
-                limit=limit,
-                role_filter=role
-            )
-            
-            # Convert search results to match the expected format
-            return Response.success(data={
-                "data": search_results,
-                "total": len(search_results),
-                "page": page,
-                "per_page": limit,
-                "total_pages": 1,
-                "search_mode": "advanced"
-            })
-        else:
-            # Use basic user service for regular queries
-            service = UserService(db)
-            users = await service.get_users(page=page, limit=limit, role=role)
-            if isinstance(users, dict):
-                users["search_mode"] = "basic"
-            return Response.success(data=users)
+        service = UserService(db)
+        users = await service.get_users(page=page, limit=limit, role=role, query=q)
+        if isinstance(users, dict):
+            users["search_mode"] = "basic"
+        return Response.success(data=users)
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
