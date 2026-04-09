@@ -82,49 +82,6 @@ async def search_products(
         )
 
 
-@router.get("/categories/search")
-async def search_categories(
-    q: str = Query(..., min_length=2, description="Search query (minimum 2 characters)"),
-    limit: int = Query(20, ge=1, le=50, description="Maximum number of results"),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Advanced search for categories with prefix matching and fuzzy search.
-    """
-    try:
-        product_service = ProductService(db)
-        
-        categories = await product_service.search_categories(
-            query=q,
-            limit=limit
-        )
-        
-        return Response.success(
-            data={
-                "query": q,
-                "categories": categories,
-                "count": len(categories)
-            }
-        )
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to search categories: {str(e)}"
-        )
-
-
-@router.get("/categories")
-async def get_categories():
-    """Get all categories (hardcoded list)."""
-    try:
-        return Response.success(data=CATEGORIES)
-    except Exception as e:
-        logger.exception("Error fetching categories")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch categories: {str(e)}"
-        )
-
 @router.get("/home")
 async def get_home_data(
     db: AsyncSession = Depends(get_db)
@@ -270,28 +227,6 @@ async def get_products(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch products {str(e)}"
         )
-
-@router.get("/categories")
-async def get_categories():
-    """Get categories - now returns hardcoded list since we use string categories."""
-    from services.catalog.search import SearchService
-    
-    # Return hardcoded categories since we don't use Category model anymore
-    categories = [
-        {"name": "Grains, Cereals & Beans"},
-        {"name": "Fruits & Vegetables"},
-        {"name": "Meat, Poultry & Seafood"},
-        {"name": "Dairy, Eggs & Fats"},
-        {"name": "Spices, Herbs & Seasonings"},
-        {"name": "Pantry & Sweeteners"},
-        {"name": "Nuts, Seeds & Snacks"},
-        {"name": "Beverages, Tea & Coffee"},
-        {"name": "Bakery & Prepared Foods"},
-        {"name": "Fibers & Industrial Crops"}
-    ]
-    
-    return Response.success(data=categories)
-
 
 @router.get("/{product_id}/recommendations")
 async def get_recommended_products(

@@ -669,46 +669,6 @@ class ProductService:
             logger.error(f"Error in search_products: {e}")
             return []
 
-    async def search_categories(
-        self, 
-        query: str, 
-        limit: int = 20
-    ) -> List[Dict[str, Any]]:
-        """
-        Search hardcoded categories with simple text matching.
-        """
-        if not query or len(query.strip()) < 2:
-            return []
-            
-        # Hardcoded categories since we moved to string-based system
-        categories = [
-            {"name": "Grains, Cereals & Beans", "slug": "grains-pulses"},
-            {"name": "Fruits & Vegetables", "slug": "fruits-vegetables"},
-            {"name": "Meat, Poultry & Seafood", "slug": "meat-seafood"},
-            {"name": "Dairy, Eggs & Fats", "slug": "dairy-fats"},
-            {"name": "Spices, Herbs & Seasonings", "slug": "spices-herbs"},
-            {"name": "Pantry & Sweeteners", "slug": "pantry-sweeteners"},
-            {"name": "Nuts, Seeds & Snacks", "slug": "nuts-seeds-snacks"},
-            {"name": "Beverages, Tea & Coffee", "slug": "beverages"},
-            {"name": "Bakery & Prepared Foods", "slug": "bakery"},
-            {"name": "Fibers & Industrial Crops", "slug": "fibers"}
-        ]
-        
-        query = query.strip().lower()
-        
-        # Filter categories by name
-        filtered_categories = [
-            {
-                "id": cat["slug"],
-                "name": cat["name"],
-                "description": f"Products in {cat['name']} category",
-            }
-            for cat in categories
-            if query in cat["name"].lower()
-        ]
-        
-        return filtered_categories[:limit]
-
     async def create_product(self, product_data: ProductCreate, created_by: UUID) -> ProductResponse:
         """Create a new product."""
         # Create product
