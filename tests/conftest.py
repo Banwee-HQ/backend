@@ -12,6 +12,12 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Ensure backend package root is on sys.path so tests can import main
+import sys
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 # Load .env.dev first so we get the real DATABASE_URL
 env_path = Path(__file__).resolve().parents[1] / ".env.dev"
 if env_path.exists():
@@ -32,7 +38,7 @@ from core.db import get_db
 from core.config import settings
 from models.accounts.user import User, UserRole
 from services.accounts.auth import AuthService
-from schemas.accounts import UserCreate
+from schemas.accounts.user import Create as UserCreate
 
 # Use the actual database URL from environment (Supabase)
 TEST_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.vxemrvsdmrzsbhsozyco:7dQPJXWHWGnQBQvt@aws-1-us-east-1.pooler.supabase.com:5432/postgres")
