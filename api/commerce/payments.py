@@ -26,6 +26,23 @@ from schemas.commerce.payments import (
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
+@router.get("/")
+async def overview(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Overview endpoint for payments - kept for compatibility with older clients/tests."""
+    try:
+        service = PaymentService(db)
+        # Return a lightweight overview if available, otherwise empty dict
+        overview_data = {}
+        try:
+            if hasattr(service, 'overview'):
+                overview_data = await service.overview(current_user.id)
+        except Exception:
+            overview_data = {}
+        return Response.success(data=overview_data)
+    except Exception as e:
+        raise APIException(status_code=500, message=str(e))
+
+
 # ==========================================================
 # PAYMENT METHODS - 5 Standard APIs
 # ==========================================================

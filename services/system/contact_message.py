@@ -10,7 +10,7 @@ from uuid import UUID
 from datetime import datetime
 
 from models.system.contact_message import ContactMessage
-from schemas.system.contact_message import ContactMessageCreate, ContactMessageUpdate
+from schemas.system.contact_message import Create as ContactMessageCreate, Update as ContactMessageUpdate
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

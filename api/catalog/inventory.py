@@ -11,9 +11,9 @@ from models.accounts.user import User
 from services.accounts.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
 from schemas.catalog.inventory import (
-    WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
-    InventoryCreate, InventoryUpdate, InventoryResponse,
-    StockAdjustmentCreate, StockAdjustmentResponse
+    LocationCreate, LocationUpdate, LocationResponse,
+    Create, Update, Response,
+    AdjustmentCreate, AdjustmentResponse
 )
 from services.catalog.inventory import InventoryService
 
@@ -41,8 +41,8 @@ router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 # LOCATIONS - 5 Standard APIs
 # ==========================================================
 @router.post("/locations")
-async def create_location(
-    location_data: WarehouseLocationCreate,
+async def create(
+    location_data: LocationCreate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -57,7 +57,7 @@ async def create_location(
 
 
 @router.get("/locations/{location_id}")
-async def get_location(
+async def get(
     location_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
@@ -75,7 +75,7 @@ async def get_location(
 
 
 @router.get("/locations")
-async def list_locations(
+async def list(
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -88,9 +88,9 @@ async def list_locations(
 
 
 @router.patch("/locations/{location_id}")
-async def patch_location(
+async def patch(
     location_id: UUID,
-    location_data: WarehouseLocationUpdate,
+    location_data: LocationUpdate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -105,7 +105,7 @@ async def patch_location(
 
 
 @router.delete("/locations/{location_id}")
-async def delete_location(
+async def delete(
     location_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
@@ -125,7 +125,7 @@ async def delete_location(
 # ==========================================================
 @router.post("/")
 async def create(
-    inventory_data: InventoryCreate,
+    inventory_data: Create,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -200,7 +200,7 @@ async def list(
 @router.patch("/{inventory_id}")
 async def patch(
     inventory_id: UUID,
-    inventory_data: InventoryUpdate,
+    inventory_data: Update,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -234,8 +234,8 @@ async def delete(
 # ADJUSTMENTS - 5 Standard APIs
 # ==========================================================
 @router.post("/adjustments")
-async def create_adjustment(
-    adjustment_data: StockAdjustmentCreate,
+async def create_adj(
+    adjustment_data: AdjustmentCreate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -250,7 +250,7 @@ async def create_adjustment(
 
 
 @router.get("/adjustments/{adjustment_id}")
-async def get_adjustment(
+async def get_adj(
     adjustment_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
@@ -268,7 +268,7 @@ async def get_adjustment(
 
 
 @router.get("/adjustments")
-async def list_adjustments(
+async def list_adj(
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
@@ -281,7 +281,7 @@ async def list_adjustments(
 
 
 @router.delete("/adjustments/{adjustment_id}")
-async def delete_adjustment(
+async def delete_adj(
     adjustment_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)

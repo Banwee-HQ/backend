@@ -7,7 +7,7 @@ from core.logging import get_structured_logger as get_logger
 from services.commerce.cart import CartService
 from models.accounts.user import User
 from core.utils.response import Response
-from schemas.commerce.cart import AddToCartRequest, UpdateCartItemRequest
+from schemas.commerce.cart import Add, UpdateItem
 from core.dependencies import get_current_auth_user
 from typing import Optional
 
@@ -20,8 +20,8 @@ router = APIRouter(prefix="/cart", tags=["Cart"])
 # CART - 5 Standard APIs (operating on cart items)
 # ==========================================================
 @router.post("/")
-async def create_item(
-    request: AddToCartRequest,
+async def create(
+    request: Add,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -39,6 +39,16 @@ async def create_item(
         raise APIException(status_code=e.status_code, message=e.detail)
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to add item to cart: {str(e)}")
+
+
+@router.post("/add")
+async def add_alias(
+    payload: Add,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Legacy alias for adding item to cart at /cart/add"""
+    return await create(payload, current_user=current_user, db=db)
 
 
 @router.get("/")
@@ -66,9 +76,9 @@ async def get(
 
 
 @router.patch("/{item_id}")
-async def patch_item(
+async def patch(
     item_id: UUID,
-    request: UpdateCartItemRequest,
+    request: UpdateItem,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -88,8 +98,14 @@ async def patch_item(
         raise APIException(status_code=400, message=f"Failed to update cart item: {e}")
 
 
+@router.patch("/items/{item_id}")
+async def patch_item(item_id: UUID, request: UpdateItem, current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
+    """Compatibility: support PATCH /cart/items/{id}"""
+    return await patch(item_id=item_id, request=request, current_user=current_user, db=db)
+
+
 @router.delete("/{item_id}")
-async def delete_item(
+async def delete(
     item_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -108,8 +124,14 @@ async def delete_item(
         raise APIException(status_code=400, message=f"Failed to remove item: {e}")
 
 
+@router.delete("/items/{item_id}")
+async def delete_item(item_id: UUID, current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
+    """Compatibility: DELETE /cart/items/{id}"""
+    return await delete(item_id=item_id, current_user=current_user, db=db)
+
+
 @router.get("/count")
-async def item_count(
+async def count(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -127,7 +149,7 @@ async def item_count(
 
 
 @router.post("/validate")
-async def validate_cart(
+async def validate(
     request: Request,
     country: Optional[str] = None,
     province: Optional[str] = None,
@@ -187,7 +209,7 @@ async def validate_cart(
 
 
 @router.post("/calculate")
-async def calc_totals(
+async def calculate(
     data: dict,
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -208,7 +230,7 @@ async def calc_totals(
 
 
 @router.post("/clear")
-async def clear_cart(
+async def clear(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -229,7 +251,7 @@ async def clear_cart(
 
 
 @router.get("/checkout-summary")
-async def checkout_summary(
+async def summary(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)

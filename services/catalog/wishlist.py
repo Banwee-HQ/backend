@@ -10,7 +10,7 @@ from core.logging import get_structured_logger
 from models.catalog.wishlist import Wishlist, WishlistItem
 # Import Product and ProductVariant
 from models.catalog.product import Product, ProductVariant
-from schemas.catalog.wishlist import WishlistCreate, WishlistUpdate, WishlistItemCreate
+from schemas.catalog.wishlist import Create as WishlistCreate, Update as WishlistUpdate, ItemCreate as WishlistItemCreate
 
 # Configure logger
 logger = get_structured_logger(__name__)

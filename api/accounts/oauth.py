@@ -11,7 +11,7 @@ from core.db import get_db
 from core.config import settings
 from services.accounts.auth import AuthService
 from models.accounts.user import User
-from schemas.accounts import UserCreate
+from schemas.accounts.user import Create as UserCreate
 import secrets
 from datetime import datetime, timezone
 from core.utils.response import Response

@@ -16,8 +16,8 @@ from models.catalog.product import ProductVariant
 from models.commerce.shipping import ShippingMethod
 from models.commerce.payments import PaymentMethod
 from models.commerce.tax_rates import TaxRate
-from schemas.commerce.orders import OrderResponse, OrderItemResponse, CheckoutRequest, OrderCreate
-from schemas.catalog.inventory import StockAdjustmentCreate
+from schemas.commerce.orders import Response as OrderResponse, ItemResponse as OrderItemResponse, Checkout as CheckoutRequest, Create as OrderCreate
+from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
 from services.commerce.cart import CartService
 from services.commerce.payments import PaymentService
 from services.catalog.inventory import InventoryService 
@@ -654,7 +654,7 @@ class OrderService:
         """
         try:
             from services.commerce.refunds import RefundService
-            from schemas.commerce.refunds import RefundRequest
+            from schemas.commerce.refunds import Request as RefundRequest
             
             # Create refund service
             refund_service = RefundService(self.db)
@@ -2004,7 +2004,7 @@ class OrderService:
         """
         try:
             from services.commerce.refunds import RefundService
-            from schemas.commerce.refunds import RefundRequest
+            from schemas.commerce.refunds import Request as RefundRequest
             
             # Create refund service
             refund_service = RefundService(self.db)

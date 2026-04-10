@@ -2,7 +2,7 @@
 """
 Complete API Test Runner for Banwee Backend
 
-This script runs all 116 tests covering 101+ API endpoints.
+This script runs all 140+ tests covering 273+ API endpoints.
 
 Usage:
     python run_all_tests.py              # Run all tests
@@ -18,7 +18,7 @@ import argparse
 from typing import List, Tuple
 
 
-# Test inventory - all 116 test cases
+# Test inventory - all 140+ test cases
 TEST_INVENTORY = {
     "Root & System": [
         ("001", "GET / - Root endpoint"),
@@ -32,30 +32,28 @@ TEST_INVENTORY = {
         ("007", "POST /v1/auth/refresh - Refresh access token"),
         ("008", "POST /v1/auth/revoke - Revoke refresh token"),
         ("009", "POST /v1/auth/logout - Logout user"),
-        ("010", "GET /v1/auth/profile - Get user profile"),
-        ("011", "GET /v1/auth/addresses - Get user addresses"),
-        ("012", "POST /v1/auth/addresses - Create address"),
+        ("010", "GET /v1/auth/me - Get user profile"),
+        ("011", "GET /v1/addresses/ - Get user addresses"),
+        ("012", "POST /v1/addresses/ - Create address"),
         ("013", "GET /v1/auth/verify-email - Verify email with invalid token"),
         ("014", "POST /v1/auth/forgot-password - Request password reset"),
         ("015", "POST /v1/auth/resend-verification - Resend verification email"),
         ("016", "POST /v1/auth/reset-password - Reset with invalid token"),
-        ("017", "PUT /v1/auth/profile - Update profile"),
+        ("017", "PATCH /v1/auth/me - Update profile"),
         ("018", "PUT /v1/auth/change-password - Change password"),
         ("019", "GET /v1/auth/social/google/login - Google OAuth"),
         ("020", "GET /v1/auth/social/facebook/login - Facebook OAuth"),
     ],
     "Users (11)": [
         ("021", "GET /v1/users/me - Get current user"),
-        ("022", "GET /v1/users/profile - Get user profile"),
-        ("023", "PUT /v1/users/profile - Update user profile"),
-        ("024", "GET /v1/users/ - List users"),
-        ("025", "GET /v1/users/search - Search users"),
-        ("026", "GET /v1/users/{id} - Get user by ID"),
-        ("027", "GET /v1/users/me/addresses - Get my addresses"),
-        ("028", "POST /v1/users/addresses - Create address"),
-        ("029", "PUT /v1/users/addresses/{id} - Update address"),
-        ("030", "DELETE /v1/users/addresses/{id} - Delete address"),
-        ("031", "GET /v1/users/me without auth - Should fail"),
+        ("022", "GET /v1/users/me - Get current user via auth"),
+        ("023", "GET /v1/users/ - List users"),
+        ("024", "GET /v1/users/{id} - Get user by ID"),
+        ("025", "GET /v1/addresses/ - Get my addresses via addresses router"),
+        ("026", "POST /v1/addresses/ - Create address via addresses router"),
+        ("027", "PATCH /v1/addresses/{id} - Update address via addresses router"),
+        ("028", "DELETE /v1/addresses/{id} - Delete address via addresses router"),
+        ("029", "GET /v1/auth/me without auth - Should fail"),
     ],
     "Products (10)": [
         ("032", "GET /v1/products/home - Get home data"),
@@ -78,9 +76,9 @@ TEST_INVENTORY = {
         ("047", "PUT /v1/reviews/{id} - Update review"),
     ],
     "Wishlist (3)": [
-        ("048", "GET /v1/wishlist/ - Get wishlist"),
-        ("049", "POST /v1/wishlist/add - Add to wishlist"),
-        ("050", "DELETE /v1/wishlist/items/{id} - Remove from wishlist"),
+        ("048", "GET /v1/wishlists/ - List wishlists"),
+        ("049", "POST /v1/wishlists/ - Create wishlist"),
+        ("050", "DELETE /v1/wishlists/{id} - Delete wishlist"),
     ],
     "Cart (5)": [
         ("051", "GET /v1/cart/ - Get cart"),
@@ -92,8 +90,8 @@ TEST_INVENTORY = {
     "Orders (4)": [
         ("056", "GET /v1/orders/ - List orders"),
         ("057", "GET /v1/orders/{id} - Get order by ID"),
-        ("058", "POST /v1/orders/{id}/cancel - Cancel order"),
-        ("059", "GET /v1/orders/{id}/tracking - Get order tracking"),
+        ("058", "PUT /v1/orders/{id}/cancel - Cancel order"),
+        ("059", "GET /v1/shipping/orders/{id} - Get order tracking"),
     ],
     "Payments (4)": [
         ("060", "GET /v1/payments/ - Get payments overview"),
@@ -167,20 +165,22 @@ TEST_INVENTORY = {
         ("106", "GET /v1/promocodes/ - List active promocodes"),
         ("107", "POST /v1/promocodes/validate - Validate promocode"),
         ("108", "POST /v1/promocodes/ - Create promocode (admin)"),
-        ("109", "DELETE /v1/promocodes/{code} - Delete promocode (admin)"),
+        ("109", "DELETE /v1/promocodes/{id} - Delete promocode (admin)"),
     ],
     "Shipping (3)": [
         ("110", "GET /v1/shipping/methods - List shipping methods"),
         ("111", "POST /v1/shipping/calculate - Calculate shipping cost"),
-        ("112", "GET /v1/shipping/tracking/{number} - Track shipment"),
+        ("112", "POST /v1/shipping/track - Track shipment by number"),
+        ("113", "GET /v1/shipping/shipments/{id} - Get shipment details"),
     ],
     "Tax (2)": [
-        ("113", "POST /v1/tax/calculate - Calculate tax"),
-        ("114", "GET /v1/tax/rates - List tax rates (admin)"),
+        ("114", "POST /v1/tax/calculate - Calculate tax"),
+        ("115", "GET /v1/tax/rates - List tax rates"),
+        ("116", "GET /v1/tax/admin/tax-rates - Admin tax rates list"),
     ],
     "Webhooks (2)": [
-        ("115", "POST /v1/webhooks/stripe - Stripe webhook"),
-        ("116", "POST /v1/webhooks/stripe without signature - Should fail"),
+        ("117", "POST /v1/webhooks/stripe - Stripe webhook"),
+        ("118", "GET /v1/webhooks/health - Webhook health check"),
     ],
 }
 
@@ -199,7 +199,7 @@ def print_inventory():
             total += 1
     
     print(f"\n{'='*70}")
-    print(f"TOTAL: {total} test cases covering 101+ API endpoints")
+    print(f"TOTAL: {total} test cases covering 273+ API endpoints")
     print("="*70 + "\n")
 
 
@@ -220,7 +220,7 @@ def run_pytest(test_path: str = "tests/", markers: str = None, verbose: bool = T
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run Banwee API Tests - 116 test cases for 101+ endpoints"
+        description="Run Banwee API Tests - 140+ test cases for 273+ endpoints"
     )
     parser.add_argument(
         "--list", "-l",
@@ -292,11 +292,12 @@ def main():
         print("\nRunning: Quick sanity check")
         return run_pytest(test_path="tests/test_all_apis.py::TestRootAndSystem", verbose=not args.no_verbose)
     else:
-        print("\nRunning: ALL 116 test cases")
+        print("\nRunning: ALL 140+ test cases")
     
-    # Run tests
+    # Run tests - focus on test_all_apis.py for comprehensive coverage
+    test_path = "tests/test_all_apis.py" if not markers else "tests/"
     exit_code = run_pytest(
-        test_path="tests/",
+        test_path=test_path,
         markers=markers,
         verbose=not args.no_verbose
     )

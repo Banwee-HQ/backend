@@ -12,9 +12,14 @@ from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjust
 from models.catalog.product import ProductVariant, Product, ProductImage
 from models.accounts.user import User
 from schemas.catalog.inventory import (
-    WarehouseLocationCreate, WarehouseLocationUpdate, WarehouseLocationResponse,
-    InventoryCreate, InventoryUpdate, InventoryResponse,
-    StockAdjustmentCreate, StockAdjustmentResponse
+    LocationCreate as WarehouseLocationCreate,
+    LocationUpdate as WarehouseLocationUpdate,
+    LocationResponse as WarehouseLocationResponse,
+    Create as InventoryCreate,
+    Update as InventoryUpdate,
+    Response as InventoryResponse,
+    AdjustmentCreate as StockAdjustmentCreate,
+    AdjustmentResponse as StockAdjustmentResponse
 )
 from core.exceptions import APIException
 import asyncio

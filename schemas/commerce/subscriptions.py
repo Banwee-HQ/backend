@@ -27,7 +27,7 @@ class DiscountInfo(BaseModel):
     code: Optional[str] = None
 
 
-class CreateSubscription(BaseModel):
+class Create(BaseModel):
     """Create subscription"""
     name: Optional[str] = "My Subscription"
     variant_ids: Optional[List[str]] = []
@@ -42,7 +42,7 @@ class CreateSubscription(BaseModel):
     payment_method_id: Optional[str] = None
 
 
-class UpdateSubscription(BaseModel):
+class Update(BaseModel):
     """Update subscription"""
     name: Optional[str] = None
     delivery_type: Optional[DeliveryType] = None
@@ -52,7 +52,7 @@ class UpdateSubscription(BaseModel):
     variant_quantities: Optional[Dict[str, int]] = None
 
 
-class SubscriptionCostCalculationRequest(BaseModel):
+class CostCalculation(BaseModel):
     """Request to calculate subscription cost"""
     variant_ids: List[str]
     variant_quantities: Optional[Dict[str, int]] = {}
@@ -61,35 +61,35 @@ class SubscriptionCostCalculationRequest(BaseModel):
     currency: str = "USD"
 
 
-class SubscriptionAddProducts(BaseModel):
+class AddProducts(BaseModel):
     """Add products to subscription"""
     variant_ids: List[str]
     variant_quantities: Optional[Dict[str, int]] = {}
 
 
-class SubscriptionRemoveProducts(BaseModel):
+class RemoveProducts(BaseModel):
     """Remove products from subscription"""
     variant_ids: List[str]
 
 
-class SubscriptionUpdateQuantity(BaseModel):
+class UpdateQuantity(BaseModel):
     """Update variant quantity in subscription"""
     variant_id: str
     quantity: int = Field(gt=0, description="New quantity (must be greater than 0)")
 
 
-class SubscriptionQuantityChange(BaseModel):
+class QuantityChange(BaseModel):
     """Change variant quantity (increment/decrement)"""
     variant_id: str
     change: int = Field(description="Quantity change (positive to add, negative to subtract)")
 
 
-class DiscountApplicationRequest(BaseModel):
+class DiscountApplication(BaseModel):
     """Apply discount to subscription"""
     discount_code: str
 
 
-class SubscriptionResponse(BaseModel):
+class Response(BaseModel):
     """Subscription response"""
     id: str
     user_id: str

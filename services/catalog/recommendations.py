@@ -14,7 +14,7 @@ from models.catalog.product import Product, ProductVariant
 from models.commerce.orders import Order, OrderItem
 from models.commerce.cart import CartItem
 from models.catalog.review import Review
-from schemas.catalog.product import ProductResponse
+from schemas.catalog.product import Response as ProductResponse
 
 logger = get_structured_logger(__name__)
 

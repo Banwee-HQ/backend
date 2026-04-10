@@ -7,10 +7,37 @@ from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
-from schemas.accounts.user import UserCreate, UserUpdate
+from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
+from core.dependencies import get_current_auth_user
+from models.accounts.user import User as AuthUser
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.get("/me")
+async def me(current_user: AuthUser = Depends(get_current_auth_user)):
+    """Get current authenticated user (compat alias)."""
+    try:
+        user_data = {
+            "id": str(current_user.id),
+            "email": current_user.email,
+            "firstname": current_user.firstname,
+            "lastname": current_user.lastname,
+            "full_name": f"{current_user.firstname} {current_user.lastname}",
+            "phone": current_user.phone,
+            "role": current_user.role.value if hasattr(current_user.role, "value") else current_user.role,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        }
+        return Response.success(data=user_data)
+    except Exception as e:
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=str(e))
+
+
+@router.get("/profile")
+async def profile(current_user: AuthUser = Depends(get_current_auth_user)):
+    """Alias for profile under /users for legacy clients."""
+    return await me(current_user)
 
 
 @router.post("/")

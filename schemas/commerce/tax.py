@@ -188,7 +188,7 @@ class Currency(str, Enum):
 
 
 # Tax Calculation Schemas
-class TaxCalculationRequest(BaseModel):
+class Calculation(BaseModel):
     subtotal: float
     shipping: float = 0.0
     shipping_address_id: Optional[UUID] = None
@@ -198,7 +198,7 @@ class TaxCalculationRequest(BaseModel):
     currency: Currency = Currency.USD
 
 
-class TaxCalculationResponse(BaseModel):
+class CalculationResponse(BaseModel):
     tax_amount: float
     tax_rate: float
     tax_type: str
@@ -208,7 +208,7 @@ class TaxCalculationResponse(BaseModel):
 
 
 # Admin Tax Rate Management Schemas
-class TaxRateCreate(BaseModel):
+class RateCreate(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2, description="ISO 3166-1 alpha-2 country code")
     country_name: str = Field(..., min_length=1, max_length=100)
     province_code: Optional[str] = Field(None, max_length=10, description="State/Province code")
@@ -218,7 +218,7 @@ class TaxRateCreate(BaseModel):
     is_active: bool = True
 
 
-class TaxRateUpdate(BaseModel):
+class RateUpdate(BaseModel):
     country_name: Optional[str] = Field(None, min_length=1, max_length=100)
     province_name: Optional[str] = Field(None, max_length=100)
     tax_rate: Optional[float] = Field(None, ge=0, le=1)
@@ -226,7 +226,7 @@ class TaxRateUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class TaxRateResponse(BaseModel):
+class RateResponse(BaseModel):
     id: UUID
     country_code: str
     country_name: str

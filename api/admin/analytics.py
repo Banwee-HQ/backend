@@ -45,7 +45,7 @@ def get_analytics_service(db: AsyncSession = Depends(get_db)) -> AnalyticsServic
 
 
 @router.post("/track")
-async def track_event(
+async def track(
     event_data: dict,
     current_user: Optional[User] = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
@@ -86,7 +86,7 @@ async def track_event(
 
 
 @router.get("/conversion-rates")
-async def get_conversion_rates(
+async def conversion_rates(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     traffic_source: Optional[TrafficSource] = Query(None, description="Filter by traffic source"),
@@ -126,7 +126,7 @@ async def get_conversion_rates(
 
 
 @router.get("/cart-abandonment")
-async def get_cart_abandonment(
+async def cart_abandonment(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -164,7 +164,7 @@ async def get_cart_abandonment(
 
 
 @router.get("/time-to-purchase")
-async def get_time_to_purchase(
+async def time_to_purchase(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -202,7 +202,7 @@ async def get_time_to_purchase(
 
 
 @router.get("/refund-rates")
-async def get_refund_rates(
+async def refund_rates(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -240,7 +240,7 @@ async def get_refund_rates(
 
 
 @router.get("/repeat-customers")
-async def get_repeat_customers(
+async def repeat_customers(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -278,7 +278,7 @@ async def get_repeat_customers(
 
 
 @router.get("/simple-dashboard")
-async def get_simple_dashboard(
+async def simple_dashboard(
     current_user: User = Depends(get_current_auth_user)
 ):
     """Get simple dashboard data (no admin required for testing)"""
@@ -295,7 +295,7 @@ async def get_simple_dashboard(
 
 
 @router.get("/dashboard")
-async def get_dashboard_data(
+async def dashboard(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -361,7 +361,7 @@ async def get_dashboard_data(
 
 
 @router.get("/sales-trend")
-async def get_sales_trend(
+async def sales_trend(
     days: int = Query(30, description="Number of days to analyze"),
     current_user: User = Depends(require_admin),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
@@ -394,7 +394,7 @@ async def get_sales_trend(
 
 
 @router.get("/sales-overview")
-async def get_sales_overview(
+async def sales_overview(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -446,7 +446,7 @@ async def get_sales_overview(
 
 
 @router.get("/kpis")
-async def get_key_performance_indicators(
+async def kpis(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(7, description="Number of days back from today"),
@@ -554,7 +554,7 @@ async def get_key_performance_indicators(
 
 
 @router.get("/sales")
-async def get_sales_analytics(
+async def sales(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
@@ -582,7 +582,7 @@ async def get_sales_analytics(
 
 
 @router.get("/users")
-async def get_user_analytics(
+async def users(
     days: Optional[int] = Query(30),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -617,7 +617,7 @@ async def get_user_analytics(
 
 
 @router.get("/products")
-async def get_product_analytics(
+async def products(
     days: Optional[int] = Query(30),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -648,7 +648,7 @@ async def get_product_analytics(
 
 
 @router.get("/orders")
-async def get_order_analytics(
+async def orders(
     days: Optional[int] = Query(30),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -683,7 +683,7 @@ async def get_order_analytics(
 
 
 @router.get("/revenue")
-async def get_revenue_analytics(
+async def revenue(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),

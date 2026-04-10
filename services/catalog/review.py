@@ -5,7 +5,7 @@ from typing import Optional, List
 from models.catalog.review import Review
 from models.catalog.product import Product
 from models.accounts.user import User
-from schemas.catalog.review import ReviewCreate, ReviewUpdate, ReviewResponse
+from schemas.catalog.review import Create as ReviewCreate, Update as ReviewUpdate, Response as ReviewResponse
 from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7
 from uuid import UUID

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 from datetime import datetime
-from schemas.accounts.user import UserBase
+from schemas.accounts.user import Base as UserBase, Response as UserResponse
 from uuid import UUID
 
 
@@ -35,7 +35,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     expires_in: int
-    user: UserResponse
+    user: "UserResponse"
 
 
 class Refresh(BaseModel):
@@ -47,7 +47,7 @@ class Auth(BaseModel):
     token_type: str
     refresh_token: Optional[str] = None
     expires_in: int
-    user: UserResponse
+    user: "UserResponse"
 
 
 class ResendVerification(BaseModel):

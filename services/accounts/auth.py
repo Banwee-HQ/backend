@@ -11,7 +11,8 @@ from core.logging import get_structured_logger
 from core.utils.uuid_utils import uuid7
 from core.config import settings
 from models.accounts.user import User
-from schemas.accounts import UserCreate, Token, UserResponse, AuthResponse
+from schemas.accounts.user import Create as UserCreate, Response as UserResponse
+from schemas.accounts.auth import Token, Auth as AuthResponse
 from services.accounts.user import UserService
 from core.db import get_db
 from core.utils.messages.email import send_email

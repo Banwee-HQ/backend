@@ -14,7 +14,7 @@ from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReas
 from models.commerce.orders import Order, OrderItem
 from models.commerce.payments import Transaction
 from models.accounts.user import User
-from schemas.commerce.refunds import RefundRequest, RefundResponse, RefundItemRequest
+from schemas.commerce.refunds import Request as RefundRequest, Response as RefundResponse, ItemRequest as RefundItemRequest
 from core.config import settings
 from core.logging import get_structured_logger
 import stripe

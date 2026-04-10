@@ -3,20 +3,20 @@ from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 
-from schemas.catalog.product import ProductResponse, ProductVariantResponse
+from schemas.catalog.product import Response as ProductResponse, VariantResponse as ProductVariantResponse
 
 
-class WishlistItemBase(BaseModel):
+class ItemBase(BaseModel):
     product_id: UUID
     variant_id: Optional[UUID] = None
     quantity: int = Field(1, gt=0)
 
 
-class WishlistItemCreate(WishlistItemBase):
+class ItemCreate(ItemBase):
     pass
 
 
-class WishlistItemResponse(WishlistItemBase):
+class ItemResponse(ItemBase):
     id: UUID
     wishlist_id: UUID
     added_at: str = Field(..., description="ISO format datetime string")
@@ -26,25 +26,25 @@ class WishlistItemResponse(WishlistItemBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class WishlistBase(BaseModel):
+class Base(BaseModel):
     name: Optional[str] = None
     is_default: bool = False
 
 
-class WishlistCreate(WishlistBase):
+class Create(Base):
     pass
 
 
-class WishlistUpdate(WishlistBase):
+class Update(Base):
     name: Optional[str] = None
     is_default: Optional[bool] = None
 
 
-class WishlistResponse(WishlistBase):
+class Response(Base):
     id: UUID
     user_id: UUID
     created_at: str = Field(..., description="ISO format datetime string")
     updated_at: Optional[str] = Field(None, description="ISO format datetime string")
-    items: List[WishlistItemResponse] = []
+    items: List[ItemResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

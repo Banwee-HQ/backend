@@ -8,7 +8,7 @@ from core.utils.uuid_utils import uuid7
 from models.accounts.user import Address, User, AddressKind
 from models.commerce.orders import Order
 from core.exceptions import APIException
-from schemas.accounts.user import UserCreate, UserUpdate
+from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
 from datetime import datetime, timedelta, timezone
 import secrets
 from core.utils.messages.email import send_email
@@ -377,8 +377,8 @@ class UserService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def update(self, user_id: UUID, user_data: UserUpdate) -> Optional[User]:
-        """Update user"""
+    async def update(self, user_id: UUID, user_data) -> Optional[User]:
+        """Update user. Accepts either UserUpdate Pydantic model or a plain dict."""
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
         user = result.scalar_one_or_none()
@@ -386,8 +386,14 @@ class UserService:
         if not user:
             return None
 
+        # Handle both Pydantic models and plain dicts
+        if isinstance(user_data, dict):
+            data_dict = user_data
+        else:
+            data_dict = user_data.model_dump(exclude_unset=True)
+
         # Update fields
-        for field, value in user_data.model_dump(exclude_unset=True).items():
+        for field, value in data_dict.items():
             if hasattr(user, field):
                 setattr(user, field, value)
 

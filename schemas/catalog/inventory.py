@@ -7,23 +7,23 @@ from models.catalog.inventories import InventoryStatus
 
 
 # --- WarehouseLocation Schemas ---
-class WarehouseLocationBase(BaseModel):
+class LocationBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     address: Optional[str] = None
     description: Optional[str] = None
 
 
-class WarehouseLocationCreate(WarehouseLocationBase):
+class LocationCreate(LocationBase):
     pass
 
 
-class WarehouseLocationUpdate(BaseModel):
+class LocationUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     description: Optional[str] = None
 
 
-class WarehouseLocationResponse(WarehouseLocationBase):
+class LocationResponse(LocationBase):
     id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -37,25 +37,25 @@ class WarehouseLocationResponse(WarehouseLocationBase):
 
 
 # --- Inventory Schemas ---
-class InventoryBase(BaseModel):
+class Base(BaseModel):
     variant_id: UUID
     location_id: UUID
     quantity: int = Field(default=0, ge=0)
     low_stock_threshold: int = Field(default=10, ge=0)
 
 
-class InventoryCreate(InventoryBase):
+class Create(Base):
     pass
 
 
-class InventoryUpdate(BaseModel):
+class Update(BaseModel):
     location_id: Optional[UUID] = None
     location_name: Optional[str] = None
     quantity: Optional[int] = Field(default=None, ge=0)
     low_stock_threshold: Optional[int] = Field(default=None, ge=0)
 
 
-class InventoryResponse(InventoryBase):
+class Response(Base):
     id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -65,7 +65,7 @@ class InventoryResponse(InventoryBase):
     last_restocked_at: Optional[datetime] = None
     last_sold_at: Optional[datetime] = None
     version: Optional[int] = None
-    location: Optional[WarehouseLocationResponse] = None
+    location: Optional[LocationResponse] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -76,7 +76,7 @@ class InventoryResponse(InventoryBase):
 
 
 # --- StockAdjustment Schemas ---
-class StockAdjustmentBase(BaseModel):
+class AdjustmentBase(BaseModel):
     inventory_id: UUID
     quantity_change: int
     reason: str = Field(..., min_length=1, max_length=255)
@@ -84,7 +84,7 @@ class StockAdjustmentBase(BaseModel):
     notes: Optional[str] = None
 
 
-class StockAdjustmentCreate(BaseModel):
+class AdjustmentCreate(BaseModel):
     variant_id: Optional[UUID] = None
     product_id: Optional[UUID] = None  # Accept product_id as alias
     location_id: Optional[UUID] = None
@@ -94,7 +94,7 @@ class StockAdjustmentCreate(BaseModel):
     adjustment_type: Optional[str] = None  # add/remove/set - informational
 
 
-class StockAdjustmentResponse(StockAdjustmentBase):
+class AdjustmentResponse(AdjustmentBase):
     id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None

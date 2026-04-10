@@ -9,15 +9,15 @@ from core.db import get_db,logger
 from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
-    CreateSubscription, 
-    UpdateSubscription, 
-    SubscriptionResponse,
-    SubscriptionCostCalculationRequest,
-    SubscriptionAddProducts,
-    SubscriptionRemoveProducts,
-    SubscriptionUpdateQuantity,
-    SubscriptionQuantityChange,
-    DiscountApplicationRequest
+    Create, 
+    Update, 
+    Response,
+    CostCalculation,
+    AddProducts,
+    RemoveProducts,
+    UpdateQuantity,
+    QuantityChange,
+    DiscountApplication
 )
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
@@ -39,7 +39,7 @@ async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSe
 
 
 @router.post("/trigger-order-processing")
-async def trigger_subscription_order_processing(
+async def trigger_order_processing(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -60,7 +60,7 @@ async def trigger_subscription_order_processing(
 
 
 @router.post("/trigger-notifications")
-async def trigger_subscription_notifications(
+async def trigger_notifications(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -79,7 +79,7 @@ async def trigger_subscription_notifications(
 
 
 @router.get("/plans")
-async def get_subscription_plans(
+async def plans(
     db: AsyncSession = Depends(get_db)
 ):
     """Get available subscription plans (public endpoint)."""
@@ -138,8 +138,8 @@ async def get_subscription_plans(
 
 
 @router.post("/calculate-cost")
-async def calculate_subscription_cost(
-    cost_request: SubscriptionCostCalculationRequest,
+async def calculate(
+    cost_request: CostCalculation,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -206,8 +206,8 @@ async def calculate_subscription_cost(
 
 
 @router.post("/")
-async def create_subscription(
-    subscription_data: CreateSubscription,
+async def create(
+    subscription_data: Create,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -249,7 +249,7 @@ async def create_subscription(
             message=f"Failed to create subscription: {str(e)}"
         )
 @router.get("/")
-async def get_subscriptions(
+async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_auth_user),
@@ -279,9 +279,9 @@ async def get_subscriptions(
         message=f"Failed to get subscriptions: {str(e)}"
     )
 @router.post("/{subscription_id}/products")
-async def add_products_to_subscription(
+async def add_products(
     subscription_id: UUID,
-    request: SubscriptionAddProducts,
+    request: AddProducts,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -315,9 +315,9 @@ async def add_products_to_subscription(
             message=f"Failed to add products to subscription: {str(e)}"
         )
 @router.delete("/{subscription_id}/products")
-async def remove_products_from_subscription(
+async def remove_products(
     subscription_id: UUID,
-    request: SubscriptionRemoveProducts,
+    request: RemoveProducts,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -349,9 +349,9 @@ async def remove_products_from_subscription(
             message=f"Failed to remove products from subscription: {str(e)}"
         )
 @router.patch("/{subscription_id}/products/quantity")
-async def update_variant_quantity(
+async def update_quantity(
     subscription_id: UUID,
-    request: SubscriptionUpdateQuantity,
+    request: UpdateQuantity,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -376,9 +376,9 @@ async def update_variant_quantity(
             message=f"Failed to update variant quantity: {str(e)}"
         )
 @router.patch("/{subscription_id}/products/quantity")
-async def change_variant_quantity(
+async def change_quantity(
     subscription_id: UUID,
-    request: SubscriptionQuantityChange,
+    request: QuantityChange,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
@@ -404,7 +404,7 @@ async def change_variant_quantity(
             message=f"Failed to change variant quantity: {str(e)}"
         )
 @router.get("/{subscription_id}/products/quantities")
-async def get_subscription_variant_quantities(
+async def get_quantities(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -471,7 +471,7 @@ async def toggle_auto_renew(
             message="Failed to update auto-renew setting"
         )
 @router.get("/{subscription_id}")
-async def get_subscription(
+async def get(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -494,9 +494,9 @@ async def get_subscription(
             message=f"Failed to fetch subscription: {str(e)}"
         )
 @router.patch("/{subscription_id}")
-async def update_subscription(
+async def update(
     subscription_id: UUID,
-    subscription_data: UpdateSubscription,
+    subscription_data: Update,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -532,7 +532,7 @@ async def update_subscription(
             message=f"Failed to update subscription: {str(e)}"
         )
 @router.post("/{subscription_id}/cancel")
-async def cancel_subscription_endpoint(
+async def cancel(
     subscription_id: UUID,
     reason: str = None,
     current_user: User = Depends(get_current_auth_user),
@@ -554,7 +554,7 @@ async def cancel_subscription_endpoint(
             message=f"Subscription not found or failed to cancel: {str(e)}"
         )
 @router.delete("/{subscription_id}")
-async def delete_subscription(
+async def delete(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -575,7 +575,7 @@ async def delete_subscription(
             message=f"Failed to delete subscription: {str(e)}"
         )
 @router.post("/{subscription_id}/process-shipment")
-async def process_subscription_shipment(
+async def process_shipment(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -619,7 +619,7 @@ async def process_subscription_shipment(
             message=f"Failed to process subscription shipment: {str(e)}"
         )
 @router.post("/{subscription_id}/pause")
-async def pause_subscription(
+async def pause(
     subscription_id: UUID,
     pause_reason: str = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -644,7 +644,7 @@ async def pause_subscription(
             message=f"Failed to pause subscription: {str(e)}"
         )
 @router.post("/{subscription_id}/resume")
-async def resume_subscription(
+async def resume(
     subscription_id: UUID,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_auth_user),
@@ -669,7 +669,7 @@ async def resume_subscription(
             message=f"Failed to resume/activate subscription: {str(e)}"
         )
 @router.delete("/{subscription_id}/products/{product_id}")
-async def remove_product_from_subscription(
+async def remove_product(
     subscription_id: UUID,
     product_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -697,9 +697,9 @@ async def remove_product_from_subscription(
             message=f"Failed to remove product from subscription: {str(e)}"
         )
 @router.post("/{subscription_id}/discounts")
-async def apply_discount_to_subscription(
+async def apply_discount(
     subscription_id: UUID,
-    discount_request: DiscountApplicationRequest,
+    discount_request: DiscountApplication,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -721,7 +721,7 @@ async def apply_discount_to_subscription(
             message=f"Failed to apply discount: {str(e)}"
         )
 @router.delete("/{subscription_id}/discounts/{discount_id}")
-async def remove_discount_from_subscription(
+async def remove_discount(
     subscription_id: UUID,
     discount_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -745,7 +745,7 @@ async def remove_discount_from_subscription(
             message=f"Failed to remove discount: {str(e)}"
         )
 @router.get("/{subscription_id}/details")
-async def get_subscription_details(
+async def details(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -828,7 +828,7 @@ async def get_subscription_details(
             message=f"Failed to get subscription details: {str(e)}"
         )
 @router.get("/{subscription_id}/orders")
-async def get_subscription_orders(
+async def orders(
     subscription_id: UUID,
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),

@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from models.commerce.promocode import Promocode
-from schemas.commerce.promos import PromocodeCreate, PromocodeUpdate
+from schemas.commerce.promos import Create as PromocodeCreate, Update as PromocodeUpdate
 from core.exceptions import APIException
 
 

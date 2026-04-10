@@ -281,7 +281,7 @@ class SubscriptionScheduler:
             # STEP 4: UPDATE INVENTORY
             # ========================================
             from services.catalog.inventory import InventoryService
-            from schemas.catalog.inventory import StockAdjustmentCreate
+            from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
             
             inventory_service = InventoryService(self.db, None)
             

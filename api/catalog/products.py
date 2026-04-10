@@ -6,7 +6,7 @@ from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate
+from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
 from services.catalog.products import ProductService
 from models.accounts.user import User
 from services.accounts.auth import AuthService

@@ -19,8 +19,8 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/addresses", tags=["Addresses"])
 
 
-@router.post("/", response_model=Response[AddressResponse])
-async def create_address(
+@router.post("/")
+async def create(
     payload: AddressCreate,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -38,8 +38,8 @@ async def create_address(
         )
 
 
-@router.get("/{address_id}", response_model=Response[AddressResponse])
-async def get_address(
+@router.get("/{address_id}")
+async def get(
     address_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -60,8 +60,8 @@ async def get_address(
         )
 
 
-@router.get("/", response_model=Response[List[AddressResponse]])
-async def list_addresses(
+@router.get("/")
+async def list(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -77,8 +77,8 @@ async def list_addresses(
         )
 
 
-@router.patch("/{address_id}", response_model=Response[AddressResponse])
-async def patch_address(
+@router.patch("/{address_id}")
+async def patch(
     address_id: UUID,
     payload: AddressUpdate,
     current_user: User = Depends(get_current_auth_user),
@@ -102,7 +102,7 @@ async def patch_address(
 
 
 @router.delete("/{address_id}")
-async def delete_address(
+async def delete(
     address_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)

@@ -7,6 +7,7 @@ from fastapi import status
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime, date
+from sqlalchemy import inspect
 
 
 class Response(JSONResponse):
@@ -55,13 +56,16 @@ class Response(JSONResponse):
 
     def _serialize_data(self, data: Any) -> Any:
         """
-        Convert Pydantic models and other non-serializable objects to JSON-serializable format
+        Convert Pydantic models, SQLAlchemy models, and other non-serializable objects to JSON-serializable format
         """
         if data is None:
             return None
         elif isinstance(data, BaseModel):
             # Convert Pydantic model to dict with JSON serialization mode
             return data.model_dump(mode='json')
+        elif self._is_sqlalchemy_model(data):
+            # Convert SQLAlchemy model to dict
+            return self._sqlalchemy_model_to_dict(data)
         elif isinstance(data, UUID):
             # Convert UUID to string
             return str(data)
@@ -69,14 +73,34 @@ class Response(JSONResponse):
             # Convert datetime/date to ISO string
             return data.isoformat()
         elif isinstance(data, list):
-            # Convert list of items (may contain Pydantic models)
+            # Convert list of items (may contain Pydantic/SQLAlchemy models)
             return [self._serialize_data(item) for item in data]
         elif isinstance(data, dict):
-            # Convert dict values (may contain Pydantic models)
+            # Convert dict values (may contain Pydantic/SQLAlchemy models)
             return {key: self._serialize_data(value) for key, value in data.items()}
         else:
             # Return as-is for JSON-serializable types
             return data
+
+    def _is_sqlalchemy_model(self, obj: Any) -> bool:
+        """Check if an object is a SQLAlchemy model instance."""
+        try:
+            return inspect(obj).mapper is not None
+        except Exception:
+            return False
+
+    def _sqlalchemy_model_to_dict(self, obj: Any) -> Dict[str, Any]:
+        """Convert a SQLAlchemy model instance to a dictionary."""
+        result = {}
+        for column in inspect(obj).mapper.columns:
+            value = getattr(obj, column.key)
+            # Handle nested serialization for common types
+            if isinstance(value, UUID):
+                value = str(value)
+            elif isinstance(value, (datetime, date)):
+                value = value.isoformat() if value else None
+            result[column.key] = value
+        return result
 
     @staticmethod
     def success(

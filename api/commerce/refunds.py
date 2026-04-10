@@ -83,7 +83,14 @@ async def get(
     """Get refund by ID."""
     try:
         refund = await refund_service.get(user_id=current_user.id, refund_id=refund_id)
+        if not refund:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Refund not found"
+            )
         return Response.success(data=refund, message="Refund retrieved successfully")
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

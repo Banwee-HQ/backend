@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from models.commerce.shipping import ShippingMethod
-from schemas.commerce.shipping import ShippingMethodCreate, ShippingMethodUpdate
+from schemas.commerce.shipping import MethodCreate as ShippingMethodCreate, MethodUpdate as ShippingMethodUpdate
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 

@@ -131,6 +131,16 @@ async def cancel(
         raise APIException(status_code=400, message="Failed to cancel order")
 
 
+@router.post("/{order_id}/cancel")
+async def cancel_post(
+    order_id: UUID,
+    current_user: User = Depends(get_current_auth_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """Compatibility: allow POST to cancel an order."""
+    return await cancel(order_id=order_id, current_user=current_user, order_service=order_service)
+
+
 
 @router.get("/{order_id}/invoice")
 async def get_invoice(

@@ -2,15 +2,15 @@ from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
-from schemas.catalog.product import ProductVariantResponse, ProductImageResponse
+from schemas.catalog.product import VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse
 
 
-class AddToCartRequest(BaseModel):
+class Add(BaseModel):
     variant_id: UUID = Field(..., description="Product variant ID")
     quantity: int = Field(default=1, ge=1, description="Quantity must be at least 1")
 
 
-class ApplyPromocodeRequest(BaseModel):
+class ApplyPromo(BaseModel):
     code: str
 
 
@@ -73,11 +73,11 @@ class CartResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class UpdateCartItemRequest(BaseModel):
+class UpdateItem(BaseModel):
     quantity: int
 
 
-class CartValidationIssue(BaseModel):
+class ValidationIssue(BaseModel):
     """Individual cart validation issue"""
     variant_id: Optional[str] = None
     issue: str = Field(..., description="Type of issue (e.g., 'out_of_stock', 'price_changed')")
@@ -96,7 +96,7 @@ class CartValidationIssue(BaseModel):
     price_increased: Optional[bool] = None
 
 
-class CartValidationSummary(BaseModel):
+class ValidationSummary(BaseModel):
     """Summary of cart validation results"""
     total_items_checked: int
     valid_items: int
@@ -107,18 +107,18 @@ class CartValidationSummary(BaseModel):
     cart_updated: bool
 
 
-class CartValidationResponse(BaseModel):
+class ValidationResponse(BaseModel):
     """Comprehensive cart validation response"""
     valid: bool = Field(..., description="Whether the cart passed validation")
     can_checkout: bool = Field(..., description="Whether the cart can proceed to checkout")
     cart: CartResponse = Field(..., description="Updated cart after validation")
-    issues: List[CartValidationIssue] = Field(default=[], description="List of validation issues found")
-    summary: CartValidationSummary = Field(..., description="Summary of validation results")
+    issues: List[ValidationIssue] = Field(default=[], description="List of validation issues found")
+    summary: ValidationSummary = Field(..., description="Summary of validation results")
     validation_timestamp: str = Field(..., description="When validation was performed")
     error: Optional[str] = Field(None, description="Error message if validation failed")
 
 
-class CheckoutValidationRequest(BaseModel):
+class CheckoutValidation(BaseModel):
     """Request for checkout validation"""
     shipping_address_id: UUID
     shipping_method_id: UUID  # Reverted back to UUID since we're using database shipping methods
@@ -138,7 +138,7 @@ class EstimatedTotals(BaseModel):
 
 class CheckoutValidationResponse(BaseModel):
     """Response for checkout validation"""
-    cart_validation: CartValidationResponse
+    cart_validation: ValidationResponse
     shipping_address_valid: bool
     shipping_method_valid: bool
     payment_method_valid: bool

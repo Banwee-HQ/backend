@@ -8,10 +8,12 @@ from models.catalog.product import Product, ProductVariant, ProductStatus, Produ
 from models.catalog.inventories import Inventory
 from models.commerce.cart import CartItem
 from schemas.catalog.product import (
-    ProductCreate, ProductUpdate, ProductResponse,
-    ProductVariantCreate, ProductVariantUpdate, ProductVariantResponse, ProductImageResponse, PriceRange, ProductListResponse
+    Create as ProductCreate, Update as ProductUpdate, Response as ProductResponse,
+    VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate,
+    VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse,
+    PriceRange, ListResponse as ProductListResponse
 )
-from schemas.catalog.inventory import InventoryResponse
+from schemas.catalog.inventory import Response as InventoryResponse
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from fastapi import HTTPException
@@ -556,6 +558,13 @@ class ProductService:
 
     async def create(self, product_data: ProductCreate, created_by: UUID) -> ProductResponse:
         """Create a new product."""
+        # Build metadata including origin info
+        product_metadata = {}
+        origin_value = getattr(product_data, 'origin', None) or getattr(product_data, 'origin_country', None)
+        if origin_value:
+            product_metadata['origin'] = origin_value
+            product_metadata['origin_country'] = origin_value
+
         # Create product
         db_product = Product(
             id=uuid7(),
@@ -564,7 +573,7 @@ class ProductService:
             description=product_data.description,
             short_description=product_data.short_description,
             category=product_data.category,
-            origin=product_data.origin or getattr(product_data, 'origin_country', None),
+            product_metadata=product_metadata if product_metadata else None,
             is_featured=product_data.is_featured,
             is_bestseller=product_data.is_bestseller
         )
@@ -575,7 +584,7 @@ class ProductService:
         # Build variants list - support flat product data (auto-create default variant)
         variants_to_create = product_data.variants or []
         if not variants_to_create and product_data.base_price is not None:
-            from schemas.catalog.product import ProductVariantCreate as PVC
+            from schemas.catalog.product import VariantCreate as PVC
             variants_to_create = [PVC(
                 name=product_data.name,
                 base_price=product_data.base_price,

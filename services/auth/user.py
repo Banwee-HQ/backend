@@ -8,7 +8,7 @@ from core.utils.uuid_utils import uuid7
 from models.accounts.user import Address, User, AddressKind
 from models.commerce.orders import Order
 from core.exceptions import APIException
-from schemas.accounts.user import UserCreate, UserUpdate
+from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
 from datetime import datetime, timedelta, timezone
 import secrets
 from core.utils.messages.email import send_email

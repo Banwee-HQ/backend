@@ -5,7 +5,7 @@ from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
-from schemas.catalog.review import ReviewCreate, ReviewUpdate
+from schemas.catalog.review import Create, Update
 from services.catalog.review import ReviewService
 from models.accounts.user import User
 from services.accounts.auth import AuthService
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
 
 @router.get("/")
-async def get_reviews(
+async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     product_id: Optional[UUID] = Query(None, description="Filter by product ID"),
@@ -59,7 +59,7 @@ async def get_reviews(
 
 @router.post("/")
 async def create(
-    review_data: ReviewCreate,
+    review_data: Create,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -93,7 +93,7 @@ async def create(
 
 
 @router.get("/{review_id}")
-async def get_review(
+async def get(
     review_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):

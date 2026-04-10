@@ -22,10 +22,10 @@ from models.commerce.refunds import Refund, RefundStatus, RefundItem
 from models.commerce.orders import Order
 from models.commerce.payments import PaymentIntent, Transaction
 from services.accounts.auth import AuthService
-from schemas.accounts import UserCreate
-from schemas.accounts.user import UserUpdate
+from schemas.accounts.user import Create as UserCreate
+from schemas.accounts.user import Update as UserUpdate
 from schemas.catalog.product import Create as ProductCreate, Update as ProductUpdate
-from schemas.commerce.shipping import MethodCreate, MethodUpdate
+from schemas.commerce.shipping import MethodCreate as ShippingMethodCreate, MethodUpdate as ShippingMethodUpdate
 from schemas.admin.admin import (
     ShipOrder,
     UpdateOrderStatus,
@@ -962,6 +962,8 @@ async def delete(
         admin_service = AdminService(db)
         await admin_service.delete(user_id)
         return Response.success(message="User deleted successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1163,6 +1165,8 @@ async def update_product_admin(
         return Response.success(data=product, message="Product updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Failed to update product {product_id}")
         raise APIException(
@@ -1215,7 +1219,7 @@ async def patch_product_admin(
             update_data['seo_description'] = request.seo_description
         
         # Create ProductUpdate from partial data
-        from schemas.catalog.product import ProductUpdate
+        from schemas.catalog.product import Update as ProductUpdate
         product_update = ProductUpdate(**update_data)
         
         # Update product
@@ -1514,6 +1518,8 @@ async def update_user_admin(
         admin_service = AdminService(db)
         user = await admin_service.update(user_id, user_data)
         return Response.success(data=user, message="User updated successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1533,6 +1539,8 @@ async def patch_user_admin(
         admin_service = AdminService(db)
         user = await admin_service.update(user_id, user_data)
         return Response.success(data=user, message="User updated successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1871,7 +1879,7 @@ async def adjust_inventory_admin(
     """Adjust inventory (admin only)."""
     try:
         from services.catalog.inventory import InventoryService
-        from schemas.catalog.inventory import StockAdjustmentCreate
+        from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
         
         inventory_service = InventoryService(db)
         

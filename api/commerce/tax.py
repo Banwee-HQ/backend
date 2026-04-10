@@ -19,11 +19,11 @@ from models.commerce.tax_rates import TaxRate
 from services.commerce.tax import TaxService
 from schemas.commerce.tax import (
     Currency,
-    TaxCalculationRequest,
-    TaxCalculationResponse,
-    TaxRateCreate,
-    TaxRateUpdate,
-    TaxRateResponse,
+    Calculation,
+    CalculationResponse,
+    RateCreate,
+    RateUpdate,
+    RateResponse,
 )
 
 logger = get_logger(__name__)
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/tax", tags=["tax"])
 
 @router.post("/calculate")
 async def calculate_tax(
-    request: TaxCalculationRequest,
+    request: Calculation,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -90,7 +90,7 @@ async def calculate_tax(
 
 
 @router.get("/rates")
-async def get_tax_rates_alias(
+async def rates(
     country_code: Optional[str] = Query(None, description="Filter by country code"),
     province_code: Optional[str] = Query(None, description="Filter by province code"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
@@ -189,7 +189,7 @@ async def _list_tax_rates_internal(
         # Convert to response format
         response_data = []
         for rate in tax_rates:
-            response_data.append(TaxRateResponse(
+            response_data.append(RateResponse(
                 id=rate.id,
                 country_code=rate.country_code,
                 country_name=rate.country_name,
@@ -218,7 +218,7 @@ async def _list_tax_rates_internal(
 
 
 @router.get("/admin/tax-rates")
-async def list_tax_rates(
+async def list(
     country_code: Optional[str] = Query(None, description="Filter by country code"),
     province_code: Optional[str] = Query(None, description="Filter by province code"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
@@ -237,7 +237,7 @@ async def list_tax_rates(
 
 
 @router.get("/admin/tax-rates/countries")
-async def get_countries_with_tax_rates(
+async def countries(
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of countries that have tax rates configured"""
@@ -270,7 +270,7 @@ async def get_countries_with_tax_rates(
 
 
 @router.get("/admin/tax-rates/tax-types")
-async def get_available_tax_types(
+async def types(
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of all tax types currently in use"""
@@ -299,8 +299,8 @@ async def get_available_tax_types(
         )
 
 
-@router.get("/admin/tax-rates/{tax_rate_id}", response_model=TaxRateResponse)
-async def get_tax_rate(
+@router.get("/admin/tax-rates/{tax_rate_id}", response_model=RateResponse)
+async def get(
     tax_rate_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
@@ -314,7 +314,7 @@ async def get_tax_rate(
         if not tax_rate:
             raise HTTPException(status_code=404, detail="Tax rate not found")
         
-        return TaxRateResponse(
+        return RateResponse(
             id=tax_rate.id,
             country_code=tax_rate.country_code,
             country_name=tax_rate.country_name,
@@ -337,9 +337,9 @@ async def get_tax_rate(
         )
 
 
-@router.post("/admin/tax-rates", response_model=TaxRateResponse, status_code=status.HTTP_201_CREATED)
-async def create_tax_rate(
-    data: TaxRateCreate,
+@router.post("/admin/tax-rates", response_model=RateResponse, status_code=status.HTTP_201_CREATED)
+async def create(
+    data: RateCreate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -377,7 +377,7 @@ async def create_tax_rate(
         await db.commit()
         await db.refresh(tax_rate)
         
-        return TaxRateResponse(
+        return RateResponse(
             id=tax_rate.id,
             country_code=tax_rate.country_code,
             country_name=tax_rate.country_name,
@@ -401,10 +401,10 @@ async def create_tax_rate(
         )
 
 
-@router.patch("/admin/tax-rates/{tax_rate_id}", response_model=TaxRateResponse)
-async def update_tax_rate(
+@router.patch("/admin/tax-rates/{tax_rate_id}", response_model=RateResponse)
+async def update(
     tax_rate_id: UUID,
-    data: TaxRateUpdate,
+    data: RateUpdate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -433,7 +433,7 @@ async def update_tax_rate(
         await db.commit()
         await db.refresh(tax_rate)
         
-        return TaxRateResponse(
+        return RateResponse(
             id=tax_rate.id,
             country_code=tax_rate.country_code,
             country_name=tax_rate.country_name,
@@ -458,7 +458,7 @@ async def update_tax_rate(
 
 
 @router.delete("/admin/tax-rates/{tax_rate_id}")
-async def delete_tax_rate(
+async def delete(
     tax_rate_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -489,7 +489,7 @@ async def delete_tax_rate(
 
 
 @router.post("/admin/tax-rates/bulk-update")
-async def bulk_update_tax_rates(
+async def bulk_update(
     updates: List[dict],
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
