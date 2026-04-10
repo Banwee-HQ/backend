@@ -225,14 +225,11 @@ async def list(
         )
         shipments = result.scalars().all()
 
-        return APIResponse.success(data={
-            "shipments": [s.to_dict() for s in shipments],
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": max(1, (total + limit - 1) // limit)
-            }
+        return APIResponse.success(data=[s.to_dict() for s in shipments], pagination={
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": max(1, (total + limit - 1) // limit)
         })
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to list shipments: {str(e)}")

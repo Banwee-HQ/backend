@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_db
 from services.commerce.webhooks import WebhookService
 from core.logging import get_structured_logger as get_logger
+from core.utils.response import Response
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,7 @@ async def stripe_webhook(
             signature=sig_header
         )
         
-        return result
+        return Response.success(data=result)
         
     except HTTPException:
         raise
@@ -53,4 +54,4 @@ async def stripe_webhook(
 @router.get("/health")
 async def webhook_health():
     """Health check endpoint for webhook service"""
-    return {"status": "healthy", "service": "webhooks"}
+    return Response.success(data={"status": "healthy", "service": "webhooks"})

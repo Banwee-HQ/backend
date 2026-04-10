@@ -484,7 +484,7 @@ async def get(
 @router.put("/refunds/{refund_id}/status")
 async def update_refund_status(
     refund_id: UUID,
-    payload: UpdateRefundStatusRequest,
+    payload: UpdateRefundStatus,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -547,7 +547,7 @@ async def update_refund_status(
 @router.patch("/refunds/{refund_id}")
 async def patch_refund_status(
     refund_id: UUID,
-    payload: UpdateRefundStatusRequest,
+    payload: UpdateRefundStatus,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -610,7 +610,7 @@ async def patch_refund_status(
 @router.post("/orders/{order_id}/ship")
 async def ship_order(
     order_id: str,
-    request: ShipOrderRequest,
+    request: ShipOrder,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -642,7 +642,7 @@ async def ship_order(
 @router.put("/orders/{order_id}/status")
 async def update_status(
     order_id: str,
-    request: UpdateOrderStatusRequest,
+    request: UpdateOrderStatus,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -680,7 +680,7 @@ async def update_status(
 @router.patch("/orders/{order_id}/status")
 async def patch_order_status(
     order_id: str,
-    request: UpdateOrderStatusRequest,
+    request: UpdateOrderStatus,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -718,7 +718,7 @@ async def patch_order_status(
 @router.patch("/orders/{order_id}")
 async def patch_order(
     order_id: UUID,
-    request: OrderPatchRequest,
+    request: OrderPatch,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1173,7 +1173,7 @@ async def update_product_admin(
 @router.patch("/products/{product_id}")
 async def patch_product_admin(
     product_id: UUID,
-    request: ProductPatchRequest,
+    request: ProductPatch,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -2214,7 +2214,7 @@ async def get_shipping_method(
 
 
 # Tax Rates Admin Routes
-@router.get("/tax-rates/", response_model=List[TaxRateResponse])
+@router.get("/tax-rates/", response_model=List[TaxResponse])
 async def list_tax_rates(
     country_code: Optional[str] = Query(None, description="Filter by country code"),
     province_code: Optional[str] = Query(None, description="Filter by province code"),
@@ -2266,7 +2266,7 @@ async def list_tax_rates(
         # Format response
         response_data = []
         for rate in tax_rates:
-            response_data.append(TaxRateResponse(
+            response_data.append(TaxResponse(
                 id=rate.id,
                 country_code=rate.country_code,
                 country_name=rate.country_name,
@@ -2327,7 +2327,7 @@ async def list_countries(
         )
 
 
-@router.get("/tax-rates/{tax_rate_id}", response_model=TaxRateResponse)
+@router.get("/tax-rates/{tax_rate_id}", response_model=TaxResponse)
 async def get_tax_rate(
     tax_rate_id: UUID,
     current_user: User = Depends(require_admin),
@@ -2349,7 +2349,7 @@ async def get_tax_rate(
                 message="Tax rate not found"
             )
         
-        return TaxRateResponse(
+        return TaxResponse(
             id=tax_rate.id,
             country_code=tax_rate.country_code,
             country_name=tax_rate.country_name,
@@ -2372,9 +2372,9 @@ async def get_tax_rate(
         )
 
 
-@router.post("/tax-rates/", response_model=TaxRateResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/tax-rates/", response_model=TaxResponse, status_code=status.HTTP_201_CREATED)
 async def create_tax_rate(
-    data: TaxRateCreate,
+    data: TaxCreate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -2415,7 +2415,7 @@ async def create_tax_rate(
         await db.commit()
         await db.refresh(tax_rate)
         
-        return TaxRateResponse(
+        return TaxResponse(
             id=tax_rate.id,
             country_code=tax_rate.country_code,
             country_name=tax_rate.country_name,
@@ -2439,10 +2439,10 @@ async def create_tax_rate(
         )
 
 
-@router.put("/tax-rates/{tax_rate_id}", response_model=TaxRateResponse)
+@router.put("/tax-rates/{tax_rate_id}", response_model=TaxResponse)
 async def update_tax_rate(
     tax_rate_id: UUID,
-    data: TaxRateUpdate,
+    data: TaxUpdate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -2477,7 +2477,7 @@ async def update_tax_rate(
         await db.commit()
         await db.refresh(tax_rate)
         
-        return TaxRateResponse(
+        return TaxResponse(
             id=tax_rate.id,
             country_code=tax_rate.country_code,
             country_name=tax_rate.country_name,

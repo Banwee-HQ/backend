@@ -58,6 +58,9 @@ async def list(
     try:
         service = UserService(db)
         users = await service.list(page=page, limit=limit, role=role, query=q)
+        if isinstance(users, dict) and "users" in users:
+            return Response.success(data=users.get("users", []), pagination=users.get("pagination", {}))
+        # Fallback
         return Response.success(data=users)
     except Exception as e:
         raise APIException(

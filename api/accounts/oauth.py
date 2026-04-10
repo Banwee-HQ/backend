@@ -14,6 +14,7 @@ from models.accounts.user import User
 from schemas.accounts import UserCreate
 import secrets
 from datetime import datetime, timezone
+from core.utils.response import Response
 
 # Also register social login routes for compatibility
 router = APIRouter(prefix="/auth/social", tags=["OAuth"])
@@ -63,7 +64,7 @@ async def oauth_login(provider: str):
         }
         auth_url = f"{provider_config['auth_url']}?{httpx.QueryParams(params)}"
     
-    return {"auth_url": auth_url}
+    return Response.success(data={"auth_url": auth_url})
 
 @router.get("/callback/{provider}")
 async def oauth_callback(
@@ -101,27 +102,24 @@ async def oauth_callback(
         access_token = auth_service.make_access_token(token_data)
         refresh_token = await auth_service.make_refresh_token(token_data)
         
-        return {
-            "success": True,
-            "data": {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "refresh_token": refresh_token,
-                "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-                "user": {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "firstname": user.firstname,
-                    "lastname": user.lastname,
-                    "phone": user.phone,
-                    "role": user.role,
-                    "verified": user.verified,
-                    "is_active": user.is_active,
-                    "avatar_url": user.avatar_url,
-                    "created_at": user.created_at.isoformat() if user.created_at else None
-                }
+        return Response.success(data={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "refresh_token": refresh_token,
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "firstname": user.firstname,
+                "lastname": user.lastname,
+                "phone": user.phone,
+                "role": user.role,
+                "verified": user.verified,
+                "is_active": user.is_active,
+                "avatar_url": user.avatar_url,
+                "created_at": user.created_at.isoformat() if user.created_at else None
             }
-        }
+        })
         
     except Exception as e:
         raise HTTPException(

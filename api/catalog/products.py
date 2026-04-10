@@ -196,7 +196,13 @@ async def get_deals(
             sort_by="created_at",
             sort_order="desc"
         )
-        return Response.success(data=result)
+        pagination = {
+            "page": result.get("page", page),
+            "limit": result.get("per_page", result.get("limit", limit)),
+            "total": result.get("total", 0),
+            "pages": result.get("total_pages", 1)
+        }
+        return Response.success(data=result.get("data", result), pagination=pagination)
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -58,6 +58,14 @@ async def list(
             page=page,
             limit=limit
         )
+        if isinstance(result, dict) and "items" in result:
+            pagination = {
+                "page": result.get("page", page),
+                "limit": result.get("limit", limit),
+                "total": result.get("total", 0),
+                "pages": result.get("pages", 1)
+            }
+            return Response.success(data=result.get("items", []), pagination=pagination, message="Refunds retrieved successfully")
         return Response.success(data=result, message="Refunds retrieved successfully")
     except Exception as e:
         raise APIException(
@@ -84,7 +92,7 @@ async def get(
 
 
 @router.post("/orders/{order_id}")
-async def request_refund(
+async def request(
     order_id: UUID,
     request: Request,
     current_user: User = Depends(get_current_auth_user),

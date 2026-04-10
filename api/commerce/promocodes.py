@@ -36,33 +36,31 @@ async def list(
         promocodes, total = await promocode_service.list(
             page=page, limit=limit, is_active=is_active
         )
-        
-        return Response.success(data={
-            "promocodes": [
-                {
-                    "id": str(p.id),
-                    "code": p.code,
-                    "description": p.description,
-                    "discount_type": p.discount_type,
-                    "value": p.value,
-                    "minimum_order_amount": p.minimum_order_amount,
-                    "maximum_discount_amount": p.maximum_discount_amount,
-                    "usage_limit": p.usage_limit,
-                    "used_count": p.used_count,
-                    "is_active": p.is_active,
-                    "valid_from": p.valid_from.isoformat() if p.valid_from else None,
-                    "valid_until": p.valid_until.isoformat() if p.valid_until else None,
-                    "created_at": p.created_at.isoformat() if p.created_at else None,
-                    "updated_at": p.updated_at.isoformat() if p.updated_at else None
-                }
-                for p in promocodes
-            ],
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": max(1, (total + limit - 1) // limit)
+        promocodes_serialized = [
+            {
+                "id": str(p.id),
+                "code": p.code,
+                "description": p.description,
+                "discount_type": p.discount_type,
+                "value": p.value,
+                "minimum_order_amount": p.minimum_order_amount,
+                "maximum_discount_amount": p.maximum_discount_amount,
+                "usage_limit": p.usage_limit,
+                "used_count": p.used_count,
+                "is_active": p.is_active,
+                "valid_from": p.valid_from.isoformat() if p.valid_from else None,
+                "valid_until": p.valid_until.isoformat() if p.valid_until else None,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None
             }
+            for p in promocodes
+        ]
+
+        return Response.success(data=promocodes_serialized, pagination={
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": max(1, (total + limit - 1) // limit)
         })
     except APIException:
         raise
@@ -74,7 +72,7 @@ async def list(
 
 
 @router.post("/validate")
-async def validate_promocode(
+async def validate(
     request: ValidateRequest,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)

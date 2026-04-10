@@ -66,6 +66,18 @@ async def list(
     """List user's orders."""
     try:
         orders = await order_service.list(current_user.id, page, limit, status_filter)
+        if isinstance(orders, dict):
+            # support different shapes returned by service
+            if "orders" in orders and "pagination" in orders:
+                return Response.success(data=orders.get("orders", []), pagination=orders.get("pagination", {}))
+            if "data" in orders:
+                pagination = {
+                    "page": orders.get("page", page),
+                    "limit": orders.get("limit", limit),
+                    "total": orders.get("total", 0),
+                    "pages": orders.get("pages", 1)
+                }
+                return Response.success(data=orders.get("data", []), pagination=pagination)
         return Response.success(data=orders)
     except APIException:
         raise
@@ -77,7 +89,7 @@ async def list(
 # KEPT ROUTES
 # ==========================================================
 @router.post("/checkout/validate")
-async def validate_checkout(
+async def validate(
     request: Checkout,
     current_user: User = Depends(get_current_auth_user),
     order_service: OrderService = Depends(get_order_service)
@@ -91,7 +103,7 @@ async def validate_checkout(
 
 
 @router.post("/checkout")
-async def place_simple(
+async def checkout(
     request: Checkout,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_auth_user),
@@ -121,7 +133,7 @@ async def cancel(
 
 
 @router.get("/{order_id}/invoice")
-async def get_order_invoice(
+async def get_invoice(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     order_service: OrderService = Depends(get_order_service)
@@ -145,7 +157,7 @@ async def get_order_invoice(
 # NOTES - Create, Get, List Only (Immutable Audit Records)
 # ==========================================================
 @router.post("/{order_id}/notes")
-async def create_note(
+async def create(
     order_id: UUID,
     request: Note,
     current_user: User = Depends(get_current_auth_user),
@@ -160,7 +172,7 @@ async def create_note(
 
 
 @router.get("/{order_id}/notes/{note_index}")
-async def get_note(
+async def get(
     order_id: UUID,
     note_index: int,
     current_user: User = Depends(get_current_auth_user),
@@ -179,7 +191,7 @@ async def get_note(
 
 
 @router.get("/{order_id}/notes")
-async def list_notes(
+async def list(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     order_service: OrderService = Depends(get_order_service)

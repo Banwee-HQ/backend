@@ -64,6 +64,23 @@ async def list(
     try:
         wishlist_service = WishlistService(db)
         result = await wishlist_service.list(current_user.id, page=page, limit=limit)
+        if isinstance(result, dict):
+            if "items" in result:
+                pagination = {
+                    "page": result.get("page", page),
+                    "limit": result.get("limit", limit),
+                    "total": result.get("total", 0),
+                    "pages": result.get("pages", 1)
+                }
+                return Response.success(data=result.get("items", []), pagination=pagination)
+            if "data" in result:
+                pagination = {
+                    "page": result.get("page", page),
+                    "limit": result.get("limit", limit),
+                    "total": result.get("total", 0),
+                    "pages": result.get("pages", 1)
+                }
+                return Response.success(data=result.get("data", []), pagination=pagination)
         return Response.success(data=result)
     except Exception as e:
         logger.error(f"Error listing wishlists for user {current_user.id}: {e}")

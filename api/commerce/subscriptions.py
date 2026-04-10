@@ -128,10 +128,7 @@ async def get_subscription_plans(
             }
         ]
         
-        return Response.success(data={
-            "plans": plans,
-            "message": "Subscription plans retrieved successfully"
-        })
+        return Response.success(data=plans, message="Subscription plans retrieved successfully")
     except Exception as e:
         logger.error(f"Error fetching subscription plans: {e}")
         raise APIException(
@@ -264,14 +261,12 @@ async def get_subscriptions(
         subscriptions, total = await subscription_service.list(
             user_id=current_user.id, page=page, limit=limit
         )
-        return Response.success(data={
-            "subscriptions": [sub.to_dict(include_products=True) for sub in subscriptions],
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": max(1, (total + limit - 1) // limit)
-            }
+        serialized = [sub.to_dict(include_products=True) for sub in subscriptions]
+        return Response.success(data=serialized, pagination={
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": max(1, (total + limit - 1) // limit)
         })
     except APIException:
         raise APIException(

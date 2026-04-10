@@ -203,14 +203,11 @@ async def _list_tax_rates_internal(
                 updated_at=rate.updated_at.isoformat() if rate.updated_at else None
             ))
         
-        return Response.success(data={
-            "data": response_data,
-            "pagination": {
-                "page": page,
-                "limit": per_page,
-                "total": total,
-                "pages": pages
-            }
+        return Response.success(data=response_data, pagination={
+            "page": page,
+            "limit": per_page,
+            "total": total,
+            "pages": pages
         })
         
     except Exception as e:
@@ -263,7 +260,7 @@ async def get_countries_with_tax_rates(
                 "rate_count": row.rate_count
             })
         
-        return countries
+        return Response.success(data=countries)
         
     except Exception as e:
         raise HTTPException(
@@ -293,7 +290,7 @@ async def get_available_tax_types(
                 "usage_count": row.usage_count
             })
         
-        return tax_types
+        return Response.success(data=tax_types)
         
     except Exception as e:
         raise HTTPException(
@@ -479,7 +476,7 @@ async def delete_tax_rate(
         await db.delete(tax_rate)
         await db.commit()
         
-        return {"message": "Tax rate deleted successfully"}
+        return Response.success(message="Tax rate deleted successfully")
         
     except HTTPException:
         raise

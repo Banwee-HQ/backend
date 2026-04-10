@@ -182,6 +182,14 @@ async def list(
             sort_by=sort_by,
             sort_order=sort_order
         )
+        if isinstance(items, dict) and "data" in items:
+            pagination = {
+                "page": items.get("page", page),
+                "limit": items.get("limit", limit),
+                "total": items.get("total", 0),
+                "pages": items.get("pages", 1)
+            }
+            return Response.success(data=items.get("data", []), pagination=pagination)
         return Response.success(data=items)
     except APIException:
         raise

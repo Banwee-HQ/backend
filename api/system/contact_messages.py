@@ -12,10 +12,10 @@ import math
 from core.db import get_db
 from core.dependencies import get_current_user, require_admin
 from schemas.system.contact_message import (
-    ContactMessageCreate,
-    ContactMessageUpdate,
-    ContactMessageResponse,
-    ContactMessageListResponse,
+    Create,
+    Update,
+    Response,
+    ListResponse,
     MessageStatus,
     MessagePriority
 )
@@ -29,8 +29,8 @@ router = APIRouter(prefix="/contact-messages", tags=["Contact Messages"], redire
 
 
 @router.post("/")
-async def create_contact_message(
-    message_data: ContactMessageCreate,
+async def create(
+    message_data: Create,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -65,7 +65,7 @@ async def create_contact_message(
 
 
 @router.get("/")
-async def get_all_contact_messages(
+async def list(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status_filter: Optional[MessageStatus] = Query(None, alias="status"),
@@ -128,7 +128,7 @@ async def get_all_contact_messages(
 
 
 @router.get("/{message_id}")
-async def get_contact_message(
+async def get(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)
@@ -164,9 +164,9 @@ async def get_contact_message(
 
 
 @router.patch("/{message_id}")
-async def update_contact_message(
+async def patch(
     message_id: UUID,
-    update_data: ContactMessageUpdate,
+    update_data: Update,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)
 ):
@@ -210,7 +210,7 @@ async def update_contact_message(
 
 
 @router.delete("/{message_id}")
-async def delete_contact_message(
+async def delete(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)

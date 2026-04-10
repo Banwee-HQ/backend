@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 from datetime import datetime
+from core.utils.response import Response
 
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -13,8 +14,8 @@ async def liveness_check():
     Basic liveness check - returns 200 if the service is running
     Used by load balancers and orchestrators
     """
-    return {
+    return Response.success(data={
         "status": "alive",
         "timestamp": datetime.now().isoformat(),
         "service": "banwee-api"
-    }
+    })

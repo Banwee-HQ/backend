@@ -70,7 +70,7 @@ async def login(
 
 
 @router.post("/refresh")
-async def refresh_token(
+async def refresh(
     request: Refresh,
     db: AsyncSession = Depends(get_db)
 ):
@@ -87,7 +87,7 @@ async def refresh_token(
 
 
 @router.post("/revoke")
-async def revoke_token(
+async def revoke(
     refresh_token: str,
     db: AsyncSession = Depends(get_db)
 ):
@@ -118,7 +118,7 @@ async def logout(
 
 
 @router.get("/me")
-async def get_profile(
+async def me(
     current_user: User = Depends(get_current_auth_user)
 ):
     """Get current user profile."""
@@ -202,7 +202,7 @@ RATE_LIMIT_WINDOW = 300  # 5 minutes
 RATE_LIMIT_COUNT = 3    # Max 3 requests per window
 
 @router.post("/resend-verification")
-async def resend_verification_email(
+async def resend(
     request: ResendVerification,
     x_resend_token: str = Header(None, description="Resend verification token for security"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -272,7 +272,7 @@ async def forgot_password(
 
 
 @router.post("/reset-password")
-async def reset_pwd(
+async def reset(
     request: ResetPassword,
     db: AsyncSession = Depends(get_db)
 ):
@@ -289,7 +289,7 @@ async def reset_pwd(
 
 
 @router.patch("/me")
-async def update_profile(
+async def update(
     user_data: dict,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -354,7 +354,7 @@ async def update_profile(
 
 
 @router.patch("/me/password")
-async def change_password(
+async def password(
     req: Request,
     current_password: str = Query(None),
     new_password: str = Query(None),
@@ -406,7 +406,7 @@ async def change_password(
 
 
 @router.delete("/me")
-async def delete_account(
+async def delete(
     password: str,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
