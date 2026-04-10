@@ -389,16 +389,17 @@ class TestPromocodeEndpoints:
             json={
                 "code": "NEWCODE20",
                 "discount_type": "percentage",
-                "discount_value": 20,
-                "max_uses": 100,
-                "min_order_amount": 50.00
+                "value": 20.0,
+                "usage_limit": 100,
+                "minimum_order_amount": 50.00
             }
         )
         assert response.status_code in [200, 201, 403]
 
     async def test_109_promocodes_delete_as_admin(self, async_client: AsyncClient, admin_headers):
-        """DELETE /v1/promocodes/{code} - Delete promocode (admin)."""
-        response = await async_client.delete("/v1/promocodes/OLDCODE", headers=admin_headers)
+        """DELETE /v1/promocodes/{id} - Delete promocode (admin)."""
+        promo_id = str(uuid4())
+        response = await async_client.delete(f"/v1/promocodes/{promo_id}", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
 

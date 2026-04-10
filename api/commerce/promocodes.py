@@ -5,7 +5,7 @@ from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
-from schemas.commerce.promos import PromocodeCreate, PromocodeUpdate
+from schemas.commerce.promos import Create, Update, ValidateRequest, ValidateResponse
 from services.commerce.promocode import PromocodeService
 from models.accounts.user import User
 from core.dependencies import get_current_auth_user
@@ -13,23 +13,6 @@ from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter(prefix="/promocodes", tags=["promocodes"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-from pydantic import BaseModel
-
-
-class ValidatePromocodeRequest(BaseModel):
-    code: str
-
-
-class ValidatePromocodeResponse(BaseModel):
-    valid: bool
-    code: str
-    discount_type: Optional[str] = None
-    value: Optional[float] = None
-    minimum_order_amount: Optional[float] = None
-    maximum_discount_amount: Optional[float] = None
-    message: Optional[str] = None
 
 
 @router.get("/")
@@ -92,7 +75,7 @@ async def list(
 
 @router.post("/validate")
 async def validate_promocode(
-    request: ValidatePromocodeRequest,
+    request: ValidateRequest,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -121,62 +104,6 @@ async def validate_promocode(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to validate promocode: {str(e)}"
-        )
-
-
-@router.get("/active")
-async def get_active_promocodes(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all active promocodes (public endpoint)."""
-    try:
-        promocode_service = PromocodeService(db)
-        promocodes, total = await promocode_service.list(
-            page=page, limit=limit, is_active=True
-        )
-        
-        # Filter out expired promocodes
-        from datetime import datetime, timezone
-        current_time = datetime.now(timezone.utc)
-        
-        active_promocodes = []
-        for p in promocodes:
-            # Skip if expired
-            if p.valid_until and p.valid_until <= current_time:
-                continue
-            # Skip if not yet valid
-            if p.valid_from and p.valid_from > current_time:
-                continue
-            # Skip if usage limit reached
-            if p.usage_limit and p.used_count >= p.usage_limit:
-                continue
-                
-            active_promocodes.append({
-                "id": str(p.id),
-                "code": p.code,
-                "description": p.description,
-                "discount_type": p.discount_type,
-                "value": p.value,
-                "minimum_order_amount": p.minimum_order_amount,
-                "maximum_discount_amount": p.maximum_discount_amount,
-                "valid_until": p.valid_until.isoformat() if p.valid_until else None
-            })
-        
-        return Response.success(data={
-            "promocodes": active_promocodes,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": len(active_promocodes),
-                "pages": max(1, (len(active_promocodes) + limit - 1) // limit)
-            }
-        })
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch active promocodes: {str(e)}"
         )
 
 
@@ -231,7 +158,7 @@ async def get(
 
 @router.post("/")
 async def create(
-    promocode_data: PromocodeCreate,
+    promocode_data: Create,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -272,10 +199,10 @@ async def create(
         )
 
 
-@router.put("/{promocode_id}")
+@router.patch("/{promocode_id}")
 async def update(
     promocode_id: UUID,
-    promocode_data: PromocodeUpdate,
+    promocode_data: Update,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):

@@ -1,10 +1,9 @@
 """
-Painless refund API routes
-Provides simple, automated refund processing with intelligent approval
+Refunds API - Standard CRUD routes
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from core.db import get_db
@@ -12,13 +11,7 @@ from core.dependencies import get_current_auth_user
 from core.utils.response import Response
 from models.accounts.user import User
 from models.commerce.refunds import RefundStatus
-from schemas.commerce.refunds import (
-    RefundRequest, 
-    RefundResponse, 
-    RefundListResponse,
-    RefundEligibilityResponse,
-    RefundStatsResponse
-)
+from schemas.commerce.refunds import Request
 from services.commerce.refunds import RefundService
 from core.exceptions import APIException
 
@@ -31,123 +24,21 @@ def get_refund_service(db: AsyncSession = Depends(get_db)) -> RefundService:
 
 
 @router.post("/")
-async def create_refund_admin(
+async def create(
     refund_data: dict,
     current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
+    refund_service: RefundService = Depends(get_refund_service)
 ):
-    """
-    Create a refund directly (Admin only).
-    Accepts: order_id, amount, reason, items
-    """
+    """Create a refund request."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Admin access required"
-            )
-        order_id = refund_data.get("order_id")
-        if not order_id:
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="order_id is required"
-            )
-
-        # Validate order exists
-        from sqlalchemy import select
-        from models.commerce.orders import Order
-        result = await db.execute(select(Order).where(Order.id == UUID(order_id)))
-        order = result.scalar_one_or_none()
-        if not order:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Order not found"
-            )
-
-        return Response.success(data={
-            "order_id": order_id,
-            "amount": refund_data.get("amount"),
-            "reason": refund_data.get("reason"),
-            "status": "pending",
-            "message": "Refund request queued for processing"
-        }, message="Refund created successfully")
+        refund = await refund_service.create(user_id=current_user.id, data=refund_data)
+        return Response.success(data=refund, message="Refund created successfully")
     except APIException:
         raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to create refund: {str(e)}"
-        )
-
-
-@router.post("/orders/{order_id}/request")
-async def request(
-    order_id: UUID,
-    refund_request: RefundRequest,
-    current_user: User = Depends(get_current_auth_user),
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """
-    Request a refund for an order
-    
-    This endpoint provides intelligent refund processing:
-    - Automatic approval for eligible refunds (defective items, wrong items, etc.)
-    - Instant processing for auto-approved refunds
-    - Clear timeline and status updates
-    - Automatic return label generation when needed
-    """
-    try:
-        refund = await refund_service.request(
-            user_id=current_user.id,
-            order_id=order_id,
-            refund_request=refund_request
-        )
-        
-        return Response.success(
-            data=refund,
-            message="Refund request submitted successfully" if not refund.auto_approved 
-                   else "Refund automatically approved and processing"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to process refund request: {str(e)}"
-        )
-
-
-@router.get("/orders/{order_id}/eligibility")
-async def check_refund_eligibility(
-    order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """
-    Check if an order is eligible for refund
-    
-    Returns eligibility status, maximum refund amount, and refund window information.
-    Use this before showing the refund request form to provide better UX.
-    """
-    try:
-        eligibility = await refund_service.eligibility(
-            user_id=current_user.id,
-            order_id=order_id
-        )
-        
-        return Response.success(
-            data=eligibility,
-            message="Refund eligibility checked successfully"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to check refund eligibility: {str(e)}"
         )
 
 
@@ -159,61 +50,7 @@ async def list(
     current_user: User = Depends(get_current_auth_user),
     refund_service: RefundService = Depends(get_refund_service)
 ):
-    """
-    Get all refunds (Admin only) or user's refund history
-    
-    Returns paginated list of refunds with current status and timeline.
-    Admin users can see all refunds, regular users only see their own.
-    """
-    try:
-        from models.accounts.user import UserRole
-        
-        # Check if user is admin
-        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
-        
-        if is_admin:
-            # Admin can see all refunds - use a special admin list method or filter
-            # For now, we'll return an empty list or implement admin listing
-            result = await refund_service.list(
-                user_id=None,  # No user filter for admin
-                status=refund_status,
-                page=page,
-                limit=limit
-            )
-        else:
-            # Regular users should not access this endpoint - return 403
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Admin access required to view all refunds"
-            )
-        
-        return Response.success(
-            data=result,
-            message="Refunds retrieved successfully"
-        )
-        
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve refunds: {str(e)}"
-        )
-
-
-@router.get("/my-refunds")
-async def list_my_refunds(
-    refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    current_user: User = Depends(get_current_auth_user),
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """
-    Get current user's refund history
-    
-    Returns paginated list of user's refunds with current status and timeline.
-    """
+    """Get user's refund history."""
     try:
         result = await refund_service.list(
             user_id=current_user.id,
@@ -221,12 +58,7 @@ async def list_my_refunds(
             page=page,
             limit=limit
         )
-        
-        return Response.success(
-            data=result,
-            message="Refunds retrieved successfully"
-        )
-        
+        return Response.success(data=result, message="Refunds retrieved successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -240,109 +72,35 @@ async def get(
     current_user: User = Depends(get_current_auth_user),
     refund_service: RefundService = Depends(get_refund_service)
 ):
-    """
-    Get detailed refund information
-    
-    Returns complete refund details including timeline, items, and current status.
-    """
+    """Get refund by ID."""
     try:
-        refund = await refund_service.get(
-            user_id=current_user.id,
-            refund_id=refund_id
-        )
-        
-        return Response.success(
-            data=refund,
-            message="Refund details retrieved successfully"
-        )
-        
-    except HTTPException:
-        raise
+        refund = await refund_service.get(user_id=current_user.id, refund_id=refund_id)
+        return Response.success(data=refund, message="Refund retrieved successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve refund details: {str(e)}"
+            message=f"Failed to retrieve refund: {str(e)}"
         )
 
 
-@router.put("/{refund_id}/cancel")
-async def cancel(
-    refund_id: UUID,
+@router.post("/orders/{order_id}")
+async def request_refund(
+    order_id: UUID,
+    request: Request,
     current_user: User = Depends(get_current_auth_user),
     refund_service: RefundService = Depends(get_refund_service)
 ):
-    """
-    Cancel a pending refund request
-    
-    Allows users to cancel refund requests that haven't been processed yet.
-    Only works for refunds in 'requested' or 'pending_review' status.
-    """
+    """Request refund for an order."""
     try:
-        refund = await refund_service.cancel(
+        refund = await refund_service.request(
             user_id=current_user.id,
-            refund_id=refund_id
+            order_id=order_id,
+            refund_request=request
         )
-        
-        return Response.success(
-            data=refund,
-            message="Refund request cancelled successfully"
-        )
-        
-    except HTTPException:
-        raise
+        return Response.success(data=refund, message="Refund request submitted")
     except Exception as e:
         raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to cancel refund: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to request refund: {str(e)}"
         )
 
-
-@router.get("/stats/summary")
-async def get_refund_stats(
-    current_user: User = Depends(get_current_auth_user),
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """
-    Get user's refund statistics
-    
-    Returns summary statistics about user's refund history for dashboard display.
-    """
-    try:
-        stats = await refund_service.stats(current_user.id)
-        
-        return Response.success(
-            data=stats,
-            message="Refund statistics retrieved successfully"
-        )
-        
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve refund statistics: {str(e)}"
-        )
-
-
-# Admin endpoints (if needed)
-@router.post("/process-automatic")
-async def process_auto(
-    # Add admin authentication here
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """
-    Process pending automatic refunds (Admin/Background job endpoint)
-    
-    This endpoint is called by background jobs to process auto-approved refunds.
-    """
-    try:
-        result = await refund_service.process_auto()
-        
-        return Response.success(
-            data=result,
-            message=f"Processed {result['processed']} automatic refunds"
-        )
-        
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to process automatic refunds: {str(e)}"
-        )

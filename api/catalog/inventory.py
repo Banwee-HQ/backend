@@ -34,107 +34,12 @@ def require_admin(current_user: User = Depends(get_current_auth_user)):
 def get_inventory_service(db: AsyncSession = Depends(get_db)):
     return InventoryService(db)
 
-logger = get_logger(__name__)
-
 router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 
 
-# --- Public Stock Check Endpoint ---
-@router.get("/check-stock/{variant_id}")
-async def check_stock(
-    variant_id: UUID,
-    quantity: int = Query(..., gt=0, description="Quantity to check"),
-    inventory_service: InventoryService = Depends(get_inventory_service)
-):
-    """Check stock availability for a product variant (Public endpoint)."""
-    try:
-        # Validate variant_id format
-        if not variant_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid variant ID provided"
-            )
-        
-        stock_check = await inventory_service.check_stock(variant_id, quantity)
-        return Response.success(data=stock_check, message="Stock check completed")
-    except ValueError as e:
-        # Handle invalid UUID format
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid variant ID format"
-        )
-    except APIException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Failed to check stock: {e}"
-        )
-
-
-# --- Bulk Stock Check Endpoint for Checkout ---
-@router.post("/check-stock/bulk")
-async def check_bulk_stock_availability(
-    items: List[dict],
-    inventory_service: InventoryService = Depends(get_inventory_service)
-):
-    """Check stock availability for multiple items at once (Public endpoint for Checkout)."""
-    try:
-        results = []
-        
-        for item in items:
-            variant_id = item.get("variant_id")
-            quantity = item.get("quantity", 1)
-            
-            if not variant_id:
-                results.append({
-                    "variant_id": None,
-                    "available": False,
-                    "message": "Invalid variant ID",
-                    "stock_status": "error"
-                })
-                continue
-            
-            try:
-                stock_check = await inventory_service.check_stock(
-                    UUID(variant_id), quantity
-                )
-                results.append({
-                    "variant_id": str(variant_id),
-                    "quantity_requested": quantity,
-                    **stock_check
-                })
-            except Exception as e:
-                results.append({
-                    "variant_id": str(variant_id),
-                    "quantity_requested": quantity,
-                    "available": False,
-                    "message": f"Stock check failed: {str(e)}",
-                    "stock_status": "error"
-                })
-        
-        # Calculate overall availability
-        all_available = all(result.get("available", False) for result in results)
-        unavailable_count = sum(1 for result in results if not result.get("available", False))
-        
-        return Response.success(
-            data={
-                "items": results,
-                "all_available": all_available,
-                "unavailable_count": unavailable_count,
-                "total_items": len(results)
-            },
-            message="Bulk stock check completed"
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check bulk stock: {e}"
-        )
-
-
-# --- WarehouseLocation Endpoints ---
+# ==========================================================
+# LOCATIONS - 5 Standard APIs
+# ==========================================================
 @router.post("/locations")
 async def create_location(
     location_data: WarehouseLocationCreate,
@@ -151,21 +56,8 @@ async def create_location(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create location: {e}")
 
 
-@router.get("/locations")
-async def get_all_warehouse_locations(
-    current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
-):
-    """Get all warehouse locations (Admin access)."""
-    try:
-        locations = await inventory_service.list_locations()
-        return Response.success(data=locations)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch locations: {e}")
-
-
 @router.get("/locations/{location_id}")
-async def get_warehouse_location(
+async def get_location(
     location_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
@@ -182,14 +74,27 @@ async def get_warehouse_location(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch location: {e}")
 
 
-@router.put("/locations/{location_id}")
-async def update_location(
+@router.get("/locations")
+async def list_locations(
+    current_user: User = Depends(require_admin),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+):
+    """List all warehouse locations (Admin access)."""
+    try:
+        locations = await inventory_service.list_locations()
+        return Response.success(data=locations)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch locations: {e}")
+
+
+@router.patch("/locations/{location_id}")
+async def patch_location(
     location_id: UUID,
     location_data: WarehouseLocationUpdate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Update a warehouse location (Admin access)."""
+    """Partially update a warehouse location (Admin access)."""
     try:
         location = await inventory_service.update_location(location_id, location_data)
         return Response.success(data=location, message="Warehouse location updated successfully")
@@ -215,8 +120,9 @@ async def delete_location(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete location: {e}")
 
 
-# --- Inventory Item Endpoints ---
-# --- Inventory CRUD Endpoints ---
+# ==========================================================
+# INVENTORY - 5 Standard APIs
+# ==========================================================
 @router.post("/")
 async def create(
     inventory_data: InventoryCreate,
@@ -233,42 +139,8 @@ async def create(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create inventory item: {e}")
 
 
-@router.get("/")
-async def list(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    product_id: Optional[UUID] = Query(None),
-    location_id: Optional[UUID] = Query(None),
-    low_stock: Optional[bool] = Query(None),
-    search: Optional[str] = Query(None),
-    sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
-    sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
-    current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
-):
-    """Get all inventory items with filters (Admin access)."""
-    try:
-        logger.info(f"API endpoint received params: page={page}, limit={limit}, sort_by={sort_by}, sort_order={sort_order}, low_stock={low_stock}, search={search}")
-        items = await inventory_service.list(
-            page=page,
-            limit=limit,
-            product_id=product_id,
-            location_id=location_id,
-            low_stock=low_stock,
-            search=search,
-            sort_by=sort_by,
-            sort_order=sort_order
-        )
-        return Response.success(data=items)
-    except APIException:
-        raise
-    except Exception as e:
-        logger.exception("Failed to fetch inventory items")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch inventory items: {e}")
-
-
 @router.get("/{inventory_id}")
-async def get_inventory_item(
+async def get(
     inventory_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
@@ -285,14 +157,46 @@ async def get_inventory_item(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch inventory item: {e}")
 
 
-@router.put("/{inventory_id}")
-async def update(
+@router.get("/")
+async def list(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    product_id: Optional[UUID] = Query(None),
+    location_id: Optional[UUID] = Query(None),
+    low_stock: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
+    sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
+    current_user: User = Depends(require_admin),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+):
+    """List inventory items with filters (Admin access)."""
+    try:
+        items = await inventory_service.list(
+            page=page,
+            limit=limit,
+            product_id=product_id,
+            location_id=location_id,
+            low_stock=low_stock,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        return Response.success(data=items)
+    except APIException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch inventory items: {e}")
+
+
+@router.patch("/{inventory_id}")
+async def patch(
     inventory_id: UUID,
     inventory_data: InventoryUpdate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Update an inventory item (Admin access)."""
+    """Partially update an inventory item (Admin access)."""
     try:
         item = await inventory_service.update(inventory_id, inventory_data)
         return Response.success(data=item, message="Inventory item updated successfully")
@@ -318,14 +222,16 @@ async def delete(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete inventory item: {e}")
 
 
-# --- Stock Adjustment Endpoints ---
+# ==========================================================
+# ADJUSTMENTS - 5 Standard APIs
+# ==========================================================
 @router.post("/adjustments")
-async def adjust_stock(
+async def create_adjustment(
     adjustment_data: StockAdjustmentCreate,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Adjust stock quantity for an inventory item (Admin access)."""
+    """Create a stock adjustment (Admin access)."""
     try:
         updated_inventory = await inventory_service.adjust_stock(adjustment_data, adjusted_by_user_id=current_user.id)
         return Response.success(data=updated_inventory, message="Stock adjusted successfully")
@@ -335,36 +241,50 @@ async def adjust_stock(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to adjust stock: {e}")
 
 
-@router.get("/{inventory_id}/adjustments")
-async def get_stock_adjustments(
-    inventory_id: UUID,
+@router.get("/adjustments/{adjustment_id}")
+async def get_adjustment(
+    adjustment_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get all stock adjustments for an inventory item (Admin access)."""
+    """Get a specific stock adjustment by ID (Admin access)."""
     try:
-        adjustments = await inventory_service.adjustments(inventory_id)
-        return Response.success(data=adjustments)
+        adjustment = await inventory_service.get_adjustment(adjustment_id)
+        if not adjustment:
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
+        return Response.success(data=adjustment)
     except APIException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustment: {e}")
+
+
+@router.get("/adjustments")
+async def list_adjustments(
+    current_user: User = Depends(require_admin),
+    inventory_service: InventoryService = Depends(get_inventory_service)
+):
+    """List all stock adjustments (Admin access)."""
+    try:
+        adjustments = await inventory_service.all_adjustments()
+        return Response.success(data=adjustments)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustments: {e}")
 
 
-@router.get("/adjustments/all")
-async def all_adjustments(
+@router.delete("/adjustments/{adjustment_id}")
+async def delete_adjustment(
+    adjustment_id: UUID,
     current_user: User = Depends(require_admin),
     inventory_service: InventoryService = Depends(get_inventory_service)
 ):
-    """Get all stock adjustments across all inventory items (Admin access)."""
+    """Delete a stock adjustment (Admin access)."""
     try:
-        adjustments = await inventory_service.all_adjustments()
-        return Response.success(data=adjustments)
+        deleted = await inventory_service.delete_adjustment(adjustment_id)
+        if not deleted:
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
+        return Response.success(message="Stock adjustment deleted successfully")
     except APIException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch all stock adjustments: {e}")
-
-
-# --- Warehouse Location Endpoints ---
-# (Already defined above, removing duplicates)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete stock adjustment: {e}")

@@ -63,7 +63,7 @@ class AddressResponse(AddressBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserBase(BaseModel):
+class Base(BaseModel):
     email: EmailStr
     firstname: Optional[str] = None
     lastname: Optional[str] = None
@@ -84,12 +84,12 @@ class UserBase(BaseModel):
         return self
 
 
-class UserCreate(UserBase):
+class Create(Base):
     password: str
     phone: Optional[str] = None
 
 
-class UserUpdate(BaseModel):
+class Update(BaseModel):
     firstname: Optional[str] = None
     lastname: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -102,7 +102,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class UserResponse(BaseModel):
+class Response(BaseModel):
     id: UUID
     email: EmailStr
     firstname: str

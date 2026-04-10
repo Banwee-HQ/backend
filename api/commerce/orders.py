@@ -1,263 +1,44 @@
 from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, status, BackgroundTasks, Header
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
 from typing import Optional
 from core.logging import get_structured_logger as get_logger
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from services.commerce.orders import OrderService
-from models.accounts.user import User, Address
-from models.commerce.orders import Order
-from models.commerce.shipping import ShippingMethod
-from models.commerce.payments import PaymentMethod
-from services.accounts.auth import AuthService
-from schemas.commerce.orders import OrderCreate, CheckoutRequest
-from core.dependencies import get_current_auth_user, get_order_service, require_admin
-
+from models.accounts.user import User
+from schemas.commerce.orders import Create, Checkout, Note
+from core.dependencies import get_current_auth_user, get_order_service
 logger = get_logger(__name__)
-
-from fastapi.security import OAuth2PasswordBearer
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
+# ==========================================================
+# ORDERS - 5 Standard APIs
+# ==========================================================
 @router.post("/")
-async def create_order(
-    request: OrderCreate,
+async def create(
+    request: Create,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new order from OrderCreate request."""
+    """Create a new order."""
     try:
-        # First, create or get shipping address
-        from services.accounts.user import AddressService
-        address_service = AddressService(db)
-        
-        # Create shipping address
-        shipping_address = await address_service.create(
-            user_id=current_user.id,
-            street=request.shipping_address.street,
-            city=request.shipping_address.city,
-            state=request.shipping_address.state,
-            country=request.shipping_address.country,
-            post_code=request.shipping_address.post_code,
-            kind="Shipping"
-        )
-        
-        # Get a default shipping method
-        from models.commerce.shipping import ShippingMethod
-        shipping_method_result = await db.execute(
-            select(ShippingMethod).where(ShippingMethod.is_active == True).limit(1)
-        )
-        shipping_method = shipping_method_result.scalar_one_or_none()
-        
-        if not shipping_method:
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="No shipping methods available"
-            )
-        
-        # Get or create a payment method (simplified for testing)
-        from models.commerce.payments import PaymentMethod
-        payment_method_result = await db.execute(
-            select(PaymentMethod).where(PaymentMethod.user_id == current_user.id).limit(1)
-        )
-        payment_method = payment_method_result.scalar_one_or_none()
-        
-        if not payment_method:
-            # Create a dummy payment method for testing
-            from core.utils.uuid_utils import uuid7
-            payment_method = PaymentMethod(
-                id=uuid7(),
-                user_id=current_user.id,
-                type="card",
-                provider="stripe",  # Use valid enum value
-                last_four="1234",
-                is_default=True
-            )
-            db.add(payment_method)
-            await db.commit()
-            await db.refresh(payment_method)
-        
-        # Add items to cart first
-        from services.commerce.cart import CartService
-        cart_service = CartService(db)
-        
-        for item in request.items:
-            await cart_service.add_to_cart(
-                user_id=current_user.id,
-                variant_id=item.variant_id,
-                quantity=item.quantity
-            )
-        
-        # Create CheckoutRequest from OrderCreate
-        checkout_request = CheckoutRequest(
-            shipping_address_id=shipping_address.id,
-            shipping_method_id=shipping_method.id,
-            payment_method_id=payment_method.id,
-            notes=request.notes,
-            currency="USD",
-            country_code="US"
-        )
-        
-        # Now use the existing place_order method
         order_service = OrderService(db)
-        order = await order_service.place_simple(current_user.id, checkout_request, background_tasks)
-        
+        order = await order_service.create(current_user.id, request, background_tasks)
         return Response.success(data=order, message="Order created successfully")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to create order: {str(e)}"
-        )
-
-
-@router.post("/create-payment-intent")
-async def create_intent(
-    request: dict,
-    current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create payment intent for order"""
-    try:
-        from services.commerce.payments import PaymentService
-        payment_service = PaymentService(db)
-        
-        payment_intent = await payment_service.create_intent(
-            user_id=current_user.id,
-            amount=request.get("amount", 0),
-            currency=request.get("currency", "USD"),
-            order_id=request.get("order_id"),
-            metadata=request.get("metadata", {})
-        )
-        
-        return Response.success(data=payment_intent)
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to create payment intent: {str(e)}"
-        )
-
-
-@router.post("/checkout/validate")
-async def validate_checkout(
-    request: CheckoutRequest,
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """
-    Comprehensive checkout validation with pricing calculation
-    Returns detailed validation results and pricing breakdown
-    """
-    try:
-        logger.info(f"Validating checkout for user {current_user.id}")
-        logger.info(f"Request data: {request.dict()}")
-        
-        # Perform comprehensive validation
-        validation_result = await order_service.validate_checkout(
-            current_user.id, 
-            request
-        )
-        
-        logger.info(f"Validation result: valid={validation_result['valid']}, can_proceed={validation_result['can_proceed']}")
-        
-        if validation_result['valid']:
-            return Response.success(
-                data=validation_result,
-                message="Checkout validation successful"
-            )
-        else:
-            # Return validation errors but still with success=True so frontend can handle
-            return Response.success(
-                data=validation_result,
-                message="Checkout validation completed with issues"
-            )
-            
-    except APIException:
-        raise
-    except Exception as e:
-        logger.error(f"Checkout validation error: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Checkout validation failed: {str(e)}"
-        )
-
-
-@router.post("/checkout")
-async def place_simple(
-    request: CheckoutRequest,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """
-    Place order with comprehensive validation and security checks
-    """
-    try:
-        logger.info(f"Placing order for user {current_user.id}")
-        
-        # Generate idempotency key if not provided
-        idempotency_key = request.idempotency_key or f"order_{current_user.id}_{int(datetime.utcnow().timestamp())}"
-        
-        # Place order with comprehensive validation
-        order = await order_service.place(
-            current_user.id,
-            request,
-            background_tasks,
-            idempotency_key
-        )
-        
-        logger.info(f"Order placed successfully: {order.id}")
-        
-        return Response.success(
-            data=order,
-            message="Order placed successfully"
-        )
-        
-    except APIException:
-        raise
-    except Exception as e:
-        logger.error(f"Order placement error: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Order placement failed: {str(e)}"
-        )
-
-
-@router.get("/")
-async def get_orders(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    status_filter: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """Get user's orders."""
-    try:
-        orders = await order_service.list(
-            current_user.id, page, limit, status_filter
-        )
-        return Response.success(data=orders)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch orders: {str(e)}"
-        )
+        raise APIException(status_code=400, message=f"Failed to create order: {str(e)}")
 
 
 @router.get("/{order_id}")
-async def get_order(
+async def get(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     order_service: OrderService = Depends(get_order_service)
@@ -266,21 +47,65 @@ async def get_order(
     try:
         order = await order_service.get(order_id, current_user.id)
         if not order:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Order not found"
-            )
+            raise APIException(status_code=404, message="Order not found")
         return Response.success(data=order)
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch order: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to fetch order: {str(e)}")
 
 
-@router.put("/{order_id}/cancel")
+@router.get("/")
+async def list(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    status_filter: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_auth_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """List user's orders."""
+    try:
+        orders = await order_service.list(current_user.id, page, limit, status_filter)
+        return Response.success(data=orders)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch orders: {str(e)}")
+
+
+# ==========================================================
+# KEPT ROUTES
+# ==========================================================
+@router.post("/checkout/validate")
+async def validate_checkout(
+    request: Checkout,
+    current_user: User = Depends(get_current_auth_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """Comprehensive checkout validation."""
+    try:
+        validation_result = await order_service.validate_checkout(current_user.id, request)
+        return Response.success(data=validation_result)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Checkout validation failed: {str(e)}")
+
+
+@router.post("/checkout")
+async def place_simple(
+    request: Checkout,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_auth_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """Place order with comprehensive validation."""
+    try:
+        order = await order_service.place(current_user.id, request, background_tasks)
+        return Response.success(data=order, message="Order placed successfully")
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Order placement failed: {str(e)}")
+
+
+@router.patch("/{order_id}/cancel")
 async def cancel(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -291,91 +116,8 @@ async def cancel(
         order = await order_service.cancel(order_id, current_user.id)
         return Response.success(data=order, message="Order cancelled successfully")
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message="Failed to cancel order"
-        )
+        raise APIException(status_code=400, message="Failed to cancel order")
 
-
-@router.get("/{order_id}/tracking")
-async def tracking(
-    order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """Get order tracking information (authenticated)."""
-    try:
-        tracking = await order_service.tracking(order_id, current_user.id)
-        if tracking is None:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Order not found or tracking information unavailable"
-            )
-        return Response.success(data=tracking)
-    except APIException:
-        raise
-    except ValueError as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Invalid order ID: {str(e)}"
-        )
-    except Exception as e:
-        logger.error(f"Error fetching tracking for order {order_id}: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch tracking information: {str(e)}"
-        )
-
-
-@router.get("/track/{order_id}")
-async def track_order_public(
-    order_id: UUID,
-    order_service: OrderService = Depends(get_order_service)
-):
-    """Get order tracking information (public - no authentication required)."""
-    try:
-        tracking = await order_service.tracking_public(order_id)
-        return Response.success(data=tracking)
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message="Order not found or tracking information unavailable"
-        )
-
-
-@router.post("/{order_id}/refund")
-async def request(
-    order_id: UUID,
-    request: dict,
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """Request order refund."""
-    try:
-        result = await order_service.request(order_id, current_user.id, request)
-        return Response.success(data=result, message="Refund request submitted")
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to request refund: {str(e)}"
-        )
-
-
-@router.post("/{order_id}/reorder")
-async def reorder(
-    order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """Create new order from existing order."""
-    try:
-        order = await order_service.reorder(order_id, current_user.id)
-        return Response.success(data=order, message="Order recreated successfully")
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to reorder: {str(e)}"
-        )
 
 
 @router.get("/{order_id}/invoice")
@@ -384,66 +126,67 @@ async def get_order_invoice(
     current_user: User = Depends(get_current_auth_user),
     order_service: OrderService = Depends(get_order_service)
 ):
-    """Get order invoice."""
-    from fastapi.responses import FileResponse
-    import os
-    
+    """Get order invoice (PDF)."""
     try:
         invoice_result = await order_service.invoice(order_id, current_user.id)
         if invoice_result.get('success') and invoice_result.get('pdf_bytes'):
-            # Return PDF bytes as response
             from fastapi.responses import Response
             return Response(
                 content=invoice_result['pdf_bytes'],
                 media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename=invoice-{invoice_result.get('invoice_ref', 'unknown')}.pdf"
-                }
+                headers={"Content-Disposition": f"attachment; filename=invoice-{invoice_result.get('invoice_ref', 'unknown')}.pdf"}
             )
-        else:
-            raise APIException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=invoice_result.get('message', 'Failed to generate invoice')
-            )
-            
+        raise APIException(status_code=500, message=invoice_result.get('message', 'Failed to generate invoice'))
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to generate invoice: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to generate invoice: {str(e)}")
 
 
+# ==========================================================
+# NOTES - Create, Get, List Only (Immutable Audit Records)
+# ==========================================================
 @router.post("/{order_id}/notes")
-async def add_note(
+async def create_note(
     order_id: UUID,
-    request: dict,
+    request: Note,
     current_user: User = Depends(get_current_auth_user),
     order_service: OrderService = Depends(get_order_service)
 ):
     """Add note to order."""
     try:
-        result = await order_service.add_note(order_id, current_user.id, request.get("note", ""))
+        result = await order_service.add_note(order_id, current_user.id, request.note)
         return Response.success(data=result, message="Note added successfully")
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to add note: {str(e)}"
-        )
+        raise APIException(status_code=400, message=f"Failed to add note: {str(e)}")
+
+
+@router.get("/{order_id}/notes/{note_index}")
+async def get_note(
+    order_id: UUID,
+    note_index: int,
+    current_user: User = Depends(get_current_auth_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """Get a specific note by index."""
+    try:
+        note = await order_service.get_note(order_id, current_user.id, note_index)
+        if not note:
+            raise APIException(status_code=404, message="Note not found")
+        return Response.success(data=note)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to get note: {str(e)}")
 
 
 @router.get("/{order_id}/notes")
-async def notes(
+async def list_notes(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
+    order_service: OrderService = Depends(get_order_service)
 ):
-    """Get all notes for an order."""
+    """List all notes for an order."""
     try:
-        order_service = OrderService(db)
         notes = await order_service.notes(order_id, current_user.id)
         return Response.success(data=notes)
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to get order notes - {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to get notes: {str(e)}")

@@ -6,7 +6,7 @@ from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.catalog.product import ProductCreate, ProductUpdate
+from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate
 from services.catalog.products import ProductService
 from models.accounts.user import User
 from services.accounts.auth import AuthService
@@ -162,36 +162,6 @@ async def list(
             message=f"Failed to fetch products {str(e)}"
         )
 
-@router.get("/search")
-async def search_products(
-    q: str = Query(..., min_length=1, description="Search query"),
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
-):
-    """Search products by name, description, or tags."""
-    try:
-        product_service = ProductService(db)
-        result = await product_service.list(
-            page=page,
-            limit=limit,
-            filters={"q": q},
-            sort_by="created_at",
-            sort_order="desc"
-        )
-        return Response.success(data=result)
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to search products: {str(e)}"
-        )
-
-
-@router.get("/categories")
-async def get_categories(db: AsyncSession = Depends(get_db)):
-    """Get all product categories."""
-    return Response.success(data=CATEGORIES)
-
 
 @router.get("/featured")
 async def get_featured(
@@ -292,9 +262,6 @@ async def get_variant(
             message=f"Failed to fetch product variant - {str(e)}"
         )
 
-
-
-
 @router.get("/{product_id}")
 async def get_product(
     product_id: str,
@@ -332,7 +299,7 @@ async def get_product(
 
 @router.post("/")
 async def create(
-    product_data: ProductCreate,
+    product_data: Create,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -357,10 +324,10 @@ async def create(
         )
 
 
-@router.put("/{product_id}")
-async def update(
+@router.patch("/{product_id}")
+async def patch(
     product_id: UUID,
-    product_data: ProductUpdate,
+    product_data: Update,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -396,3 +363,221 @@ async def delete(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message="Failed to delete product"
         )
+
+
+# ==========================================================
+# VARIANTS - 5 Standard APIs
+# ==========================================================
+@router.post("/{product_id}/variants")
+async def create_variant(
+    product_id: UUID,
+    variant_data: ProductVariantCreate,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new variant for a product (admin only)."""
+    try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Only admins can create variants")
+        
+        product_service = ProductService(db)
+        variant = await product_service.create_variant(product_id, variant_data)
+        return Response.success(data=variant, message="Variant created successfully", code=status.HTTP_201_CREATED)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to create variant: {str(e)}")
+
+
+@router.get("/variants/{variant_id}")
+async def get_variant(
+    variant_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific variant by ID."""
+    try:
+        product_service = ProductService(db)
+        variant = await product_service.get_variant(variant_id)
+        if not variant:
+            raise APIException(status_code=404, message="Variant not found")
+        return Response.success(data=variant)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch variant: {str(e)}")
+
+
+@router.get("/{product_id}/variants")
+async def list_variants(
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all variants for a product."""
+    try:
+        product_service = ProductService(db)
+        variants = await product_service.variants(product_id)
+        return Response.success(data=variants)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch variants: {str(e)}")
+
+
+@router.patch("/variants/{variant_id}")
+async def patch_variant(
+    variant_id: UUID,
+    variant_data: ProductVariantUpdate,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a variant (admin only)."""
+    try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Only admins can update variants")
+        
+        product_service = ProductService(db)
+        variant = await product_service.update_variant(variant_id, variant_data)
+        return Response.success(data=variant, message="Variant updated successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to update variant: {str(e)}")
+
+
+@router.delete("/variants/{variant_id}")
+async def delete_variant(
+    variant_id: UUID,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a variant (admin only)."""
+    try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Only admins can delete variants")
+        
+        product_service = ProductService(db)
+        deleted = await product_service.delete_variant(variant_id)
+        if not deleted:
+            raise APIException(status_code=404, message="Variant not found")
+        return Response.success(message="Variant deleted successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to delete variant: {str(e)}")
+
+
+# ==========================================================
+# VARIANT IMAGES - 5 Standard APIs
+# ==========================================================
+@router.post("/variants/{variant_id}/images")
+async def create_image(
+    variant_id: UUID,
+    image_data: ImageCreate,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new image for a variant (admin only)."""
+    try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Only admins can create images")
+        
+        product_service = ProductService(db)
+        image = await product_service.create_image(
+            variant_id=variant_id,
+            url=image_data.url,
+            alt_text=image_data.alt_text,
+            is_primary=image_data.is_primary,
+            sort_order=image_data.sort_order
+        )
+        return Response.success(data=image, message="Image created successfully", code=status.HTTP_201_CREATED)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to create image: {str(e)}")
+
+
+@router.get("/images/{image_id}")
+async def get_image(
+    image_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific image by ID."""
+    try:
+        product_service = ProductService(db)
+        image = await product_service.get_image(image_id)
+        if not image:
+            raise APIException(status_code=404, message="Image not found")
+        return Response.success(data=image)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch image: {str(e)}")
+
+
+@router.get("/variants/{variant_id}/images")
+async def list_images(
+    variant_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all images for a variant."""
+    try:
+        product_service = ProductService(db)
+        images = await product_service.list_images(variant_id)
+        return Response.success(data=images)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch images: {str(e)}")
+
+
+@router.patch("/images/{image_id}")
+async def patch_image(
+    image_id: UUID,
+    image_data: ImageUpdate,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an image (admin only)."""
+    try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Only admins can update images")
+        
+        product_service = ProductService(db)
+        image = await product_service.update_image(
+            image_id=image_id,
+            url=image_data.url,
+            alt_text=image_data.alt_text,
+            is_primary=image_data.is_primary,
+            sort_order=image_data.sort_order
+        )
+        if not image:
+            raise APIException(status_code=404, message="Image not found")
+        return Response.success(data=image, message="Image updated successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to update image: {str(e)}")
+
+
+@router.delete("/images/{image_id}")
+async def delete_image(
+    image_id: UUID,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete an image (admin only)."""
+    try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Only admins can delete images")
+        
+        product_service = ProductService(db)
+        deleted = await product_service.delete_image(image_id)
+        if not deleted:
+            raise APIException(status_code=404, message="Image not found")
+        return Response.success(message="Image deleted successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to delete image: {str(e)}")

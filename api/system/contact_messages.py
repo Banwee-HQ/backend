@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/contact-messages", tags=["Contact Messages"], redirect_slashes=False)
 
 
-@router.post("")
+@router.post("/")
 async def create_contact_message(
     message_data: ContactMessageCreate,
     db: AsyncSession = Depends(get_db)
@@ -64,7 +64,7 @@ async def create_contact_message(
         )
 
 
-@router.get("")
+@router.get("/")
 async def get_all_contact_messages(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),

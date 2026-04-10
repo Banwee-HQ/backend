@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
@@ -16,9 +15,10 @@ from core.exceptions import APIException
 from models.accounts.user import User
 from services.commerce.shipping import ShippingService
 from schemas.commerce.shipping import (
-    ShippingMethodCreate,
-    ShippingMethodUpdate,
-    ShippingMethodInDB
+    MethodCreate,
+    MethodUpdate,
+    MethodInDB,
+    Calculate
 )
 
 logger = get_logger(__name__)
@@ -26,17 +26,14 @@ router = APIRouter(prefix="/shipping", tags=["shipping"])
 
 
 @router.get("/methods")
-async def get_shipping_methods(
+async def list(
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get all active shipping methods
-    """
+    """List all active shipping methods."""
     try:
         shipping_service = ShippingService(db)
         methods = await shipping_service.list_active()
-        # Convert SQLAlchemy objects to Pydantic models
-        methods_data = [ShippingMethodInDB.model_validate(method) for method in methods]
+        methods_data = [MethodInDB.model_validate(method) for method in methods]
         return Response.success(
             data=methods_data,
             message="Active shipping methods retrieved successfully"
@@ -50,29 +47,24 @@ async def get_shipping_methods(
 
 
 @router.get("/methods/{method_id}")
-async def get_shipping_method(
+async def get(
     method_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific shipping method by ID"""
+    """Get a specific shipping method."""
     try:
         shipping_service = ShippingService(db)
         method = await shipping_service.get(method_id)
-        
         if not method:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Shipping method not found"
             )
-        
-        # Convert SQLAlchemy object to Pydantic model
-        method_data = ShippingMethodInDB.model_validate(method)
-        
+        method_data = MethodInDB.model_validate(method)
         return Response.success(
             data=method_data,
             message="Shipping method retrieved successfully"
         )
-        
     except APIException:
         raise
     except Exception as e:
@@ -85,23 +77,20 @@ async def get_shipping_method(
 
 @router.post("/methods", dependencies=[Depends(require_admin)])
 async def create(
-    method_data: ShippingMethodCreate,
+    method_data: MethodCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new shipping method (Admin only)"""
+    """Create a shipping method (Admin only)."""
     try:
         shipping_service = ShippingService(db)
         method = await shipping_service.create(method_data)
-        
-        # Convert SQLAlchemy object to Pydantic model
-        method_data = ShippingMethodInDB.model_validate(method)
-        
+        method_data = MethodInDB.model_validate(method)
         return Response.success(
             data=method_data,
-            message="Shipping method created successfully"
+            message="Shipping method created successfully",
+            code=status.HTTP_201_CREATED
         )
-        
     except Exception as e:
         logger.error(f"Error creating shipping method: {e}")
         raise APIException(
@@ -110,32 +99,27 @@ async def create(
         )
 
 
-@router.put("/methods/{method_id}", dependencies=[Depends(require_admin)])
-async def update(
+@router.patch("/methods/{method_id}", dependencies=[Depends(require_admin)])
+async def patch(
     method_id: UUID,
-    method_data: ShippingMethodUpdate,
+    method_data: MethodUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update a shipping method (Admin only)"""
+    """Update a shipping method (Admin only)."""
     try:
         shipping_service = ShippingService(db)
         method = await shipping_service.update(method_id, method_data)
-        
         if not method:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Shipping method not found"
             )
-        
-        # Convert SQLAlchemy object to Pydantic model
-        method_data = ShippingMethodInDB.model_validate(method)
-        
+        method_data = MethodInDB.model_validate(method)
         return Response.success(
             data=method_data,
             message="Shipping method updated successfully"
         )
-        
     except APIException:
         raise
     except Exception as e:
@@ -152,22 +136,18 @@ async def delete(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a shipping method (Admin only)"""
+    """Delete a shipping method (Admin only)."""
     try:
         shipping_service = ShippingService(db)
         success = await shipping_service.delete(method_id)
-        
         if not success:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Shipping method not found"
             )
-        
         return Response.success(
-            data={"deleted": True},
             message="Shipping method deleted successfully"
         )
-        
     except APIException:
         raise
     except Exception as e:
@@ -178,21 +158,15 @@ async def delete(
         )
 
 
-class ShippingCalculateRequest(BaseModel):
-    order_amount: Optional[float] = None
-    shipping_method_id: Optional[UUID] = None
-    destination_country: Optional[str] = "US"
-    # Accept alternative fields from tests
-    address_id: Optional[UUID] = None
-    items: Optional[list] = None
-
-
+# ==========================================================
+# CALCULATE - Kept Route
+# ==========================================================
 @router.post("/calculate")
 async def calc_cost(
-    body: ShippingCalculateRequest,
+    body: Calculate,
     db: AsyncSession = Depends(get_db)
 ):
-    """Calculate shipping cost for a specific order amount and method"""
+    """Calculate shipping cost."""
     try:
         shipping_service = ShippingService(db)
         address = {'country': body.destination_country or 'US'}

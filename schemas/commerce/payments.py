@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import datetime
 
 
-class PaymentMethodBase(BaseModel):
+class MethodBase(BaseModel):
     type: str = Field(..., description="Type of payment method (e.g., credit_card, paypal)")
     provider: Optional[str] = Field(None, description="Payment provider (e.g., Visa, PayPal)")
     last_four: Optional[str] = Field(None, max_length=4, description="Last four digits of the card number")
@@ -13,7 +13,7 @@ class PaymentMethodBase(BaseModel):
     is_default: bool = Field(False, description="Whether this is the default payment method")
 
 
-class PaymentMethodCreate(BaseModel):
+class MethodCreate(BaseModel):
     stripe_payment_method_id: Optional[str] = Field(None, description="Stripe payment method ID for modern API")
     stripe_token: Optional[str] = Field(None, description="Stripe token for legacy API (deprecated)")
     type: str = Field(..., description="Type of payment method (e.g., card)")
@@ -24,12 +24,12 @@ class PaymentMethodCreate(BaseModel):
     is_default: bool = Field(False, description="Whether to set this as the default payment method")
 
 
-class PaymentMethodUpdate(BaseModel):
+class MethodUpdate(BaseModel):
     is_default: Optional[bool] = None
     meta_data: Optional[dict] = None
 
 
-class PaymentMethodResponse(PaymentMethodBase):
+class MethodResponse(MethodBase):
     id: UUID
     user_id: UUID
     created_at: datetime
@@ -39,25 +39,25 @@ class PaymentMethodResponse(PaymentMethodBase):
 
 
 # Payment Intent schemas
-class PaymentIntentBase(BaseModel):
+class IntentBase(BaseModel):
     amount: float
     currency: str = "USD"
     status: str = "pending"
     payment_method_id: Optional[UUID] = None
 
 
-class PaymentIntentCreate(BaseModel):
+class IntentCreate(BaseModel):
     amount: float
     currency: str = "USD"
     order_id: Optional[UUID] = None
 
 
-class PaymentIntentUpdate(BaseModel):
+class IntentUpdate(BaseModel):
     status: Optional[str] = None
     amount: Optional[float] = None
 
 
-class PaymentIntentResponse(PaymentIntentBase):
+class IntentResponse(IntentBase):
     id: UUID
     user_id: UUID
     order_id: Optional[UUID] = None
@@ -70,7 +70,7 @@ class PaymentIntentResponse(PaymentIntentBase):
 
 
 # Transaction schemas
-class TransactionBase(BaseModel):
+class TxnBase(BaseModel):
     amount: float
     currency: str = "USD"
     transaction_type: str  # matches model field name
@@ -78,18 +78,18 @@ class TransactionBase(BaseModel):
     description: Optional[str] = None
 
 
-class TransactionCreate(TransactionBase):
+class TxnCreate(TxnBase):
     user_id: UUID
     payment_intent_id: Optional[UUID] = None
     order_id: Optional[UUID] = None
 
 
-class TransactionUpdate(BaseModel):
+class TxnUpdate(BaseModel):
     status: Optional[str] = None
     description: Optional[str] = None
 
 
-class TransactionResponse(TransactionBase):
+class TxnResponse(TxnBase):
     id: UUID
     user_id: UUID
     payment_intent_id: Optional[UUID] = None
@@ -99,3 +99,10 @@ class TransactionResponse(TransactionBase):
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Refund schemas
+class Refund(BaseModel):
+    payment_intent_id: UUID
+    amount: Optional[float] = None
+    reason: str = "requested_by_customer"

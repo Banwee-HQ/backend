@@ -6,7 +6,7 @@ from uuid import UUID
 from models.catalog.product import ProductStatus, AvailabilityStatus
 
 
-class ProductImageResponse(BaseModel):
+class ImageResponse(BaseModel):
     id: UUID
     variant_id: UUID
     url: str
@@ -21,7 +21,7 @@ class ProductImageResponse(BaseModel):
     })
 
 
-class ProductVariantCreate(BaseModel):
+class VariantCreate(BaseModel):
     sku: Optional[str] = None  # Optional - will be auto-generated if not provided
     name: str
     base_price: float
@@ -35,13 +35,13 @@ class ProductVariantCreate(BaseModel):
     image_urls: Optional[List[str]] = []  # jsDelivr CDN URLs
 
 
-class ProductCreate(BaseModel):
+class Create(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
     short_description: Optional[str] = None
     category: str
-    variants: Optional[List[ProductVariantCreate]] = None
+    variants: Optional[List[VariantCreate]] = None
     origin: Optional[str] = None
     is_featured: bool = False
     is_bestseller: bool = False
@@ -57,7 +57,7 @@ class ProductCreate(BaseModel):
     is_active: Optional[bool] = True
 
 
-class ProductVariantUpdate(BaseModel):
+class VariantUpdate(BaseModel):
     id: Optional[UUID] = None  # Include ID for existing variants
     sku: Optional[str] = None
     name: Optional[str] = None
@@ -73,7 +73,7 @@ class ProductVariantUpdate(BaseModel):
     images: Optional[List[Dict[str, Any]]] = None  # List of image objects with id, url, alt_text, is_primary, sort_order
 
 
-class ProductUpdate(BaseModel):
+class Update(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     description: Optional[str] = None
@@ -83,7 +83,7 @@ class ProductUpdate(BaseModel):
     product_status: Optional[ProductStatus] = None
     is_featured: Optional[bool] = None
     is_bestseller: Optional[bool] = None
-    variants: Optional[List[ProductVariantUpdate]] = None
+    variants: Optional[List[VariantUpdate]] = None
 
 
 class InventoryResponse(BaseModel):
@@ -95,7 +95,7 @@ class InventoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProductVariantResponse(BaseModel):
+class VariantResponse(BaseModel):
     id: UUID
     product_id: UUID
     sku: str
@@ -113,8 +113,8 @@ class ProductVariantResponse(BaseModel):
     view_count: int = 0
     purchase_count: int = 0
     is_active: bool
-    images: List[ProductImageResponse] = []
-    primary_image: Optional[ProductImageResponse] = None
+    images: List[ImageResponse] = []
+    primary_image: Optional[ImageResponse] = None
     inventory: Optional[InventoryResponse] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -134,7 +134,7 @@ class PriceRange(BaseModel):
     max: float
 
 
-class ProductResponse(BaseModel):
+class Response(BaseModel):
     id: UUID
     name: str
     slug: Optional[str] = None
@@ -151,8 +151,8 @@ class ProductResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     # Relationships
-    variants: List[ProductVariantResponse] = []
-    primary_variant: Optional[ProductVariantResponse] = None
+    variants: List[VariantResponse] = []
+    primary_variant: Optional[VariantResponse] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -162,16 +162,30 @@ class ProductResponse(BaseModel):
     )
 
 
-class ProductListResponse(BaseModel):
-    products: List[ProductResponse]
+class ListResponse(BaseModel):
+    products: List[Response]
     total: int
     page: int
     per_page: int
     pages: int
 
 
-class ProductDetailResponse(ProductResponse):
+class DetailResponse(Response):
     # Includes all product fields plus additional details
     pass
+
+
+# Product image schemas
+class ImageCreate(BaseModel):
+    url: str
+    alt_text: Optional[str] = None
+    is_primary: bool = False
+    sort_order: int = 0
+
+
+class ImageUpdate(BaseModel):
+    url: Optional[str] = None
+    alt_text: Optional[str] = None
+    is_primary: Optional[bool] = None
 
 

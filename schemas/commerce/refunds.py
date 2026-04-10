@@ -10,20 +10,20 @@ from enum import Enum
 from models.commerce.refunds import RefundStatus, RefundReason, RefundType
 
 
-class RefundItemRequest(BaseModel):
+class ItemRequest(BaseModel):
     """Request schema for individual refund items"""
     order_item_id: UUID = Field(..., description="ID of the order item to refund")
     quantity: int = Field(..., ge=1, description="Quantity to refund")
     condition_notes: Optional[str] = Field(None, max_length=500, description="Notes about item condition")
 
 
-class RefundRequest(BaseModel):
+class Request(BaseModel):
     """Request schema for creating a refund"""
     refund_type: RefundType = Field(RefundType.FULL_REFUND, description="Type of refund requested")
     reason: RefundReason = Field(..., description="Reason for refund")
     customer_reason: Optional[str] = Field(None, max_length=1000, description="Customer's detailed explanation")
     customer_notes: Optional[str] = Field(None, max_length=1000, description="Additional customer notes")
-    items: List[RefundItemRequest] = Field(..., min_items=1, description="Items to refund")
+    items: List[ItemRequest] = Field(..., min_items=1, description="Items to refund")
 
     @validator('items')
     def validate_items(cls, v):
@@ -32,7 +32,7 @@ class RefundRequest(BaseModel):
         return v
 
 
-class RefundItemResponse(BaseModel):
+class ItemResponse(BaseModel):
     """Response schema for refund items"""
     order_item_id: UUID
     quantity: int
@@ -40,7 +40,7 @@ class RefundItemResponse(BaseModel):
     condition_notes: Optional[str]
 
 
-class RefundTimelineItem(BaseModel):
+class TimelineItem(BaseModel):
     """Timeline item for refund progress"""
     status: str
     title: str
@@ -49,7 +49,7 @@ class RefundTimelineItem(BaseModel):
     completed: bool
 
 
-class RefundResponse(BaseModel):
+class Response(BaseModel):
     """Response schema for refund details"""
     id: UUID
     order_id: UUID
@@ -70,22 +70,22 @@ class RefundResponse(BaseModel):
     approved_at: Optional[datetime]
     processed_at: Optional[datetime]
     completed_at: Optional[datetime]
-    items: List[RefundItemResponse]
-    timeline: List[RefundTimelineItem]
+    items: List[ItemResponse]
+    timeline: List[TimelineItem]
 
     class Config:
         from_attributes = True
 
 
-class RefundListResponse(BaseModel):
+class ListResponse(BaseModel):
     """Response schema for refund list"""
-    refunds: List[RefundResponse]
+    refunds: List[Response]
     total: int
     page: int
     limit: int
 
 
-class RefundEligibilityResponse(BaseModel):
+class EligibilityResponse(BaseModel):
     """Response schema for refund eligibility check"""
     eligible: bool
     reason: Optional[str]
@@ -94,7 +94,7 @@ class RefundEligibilityResponse(BaseModel):
     order_age_days: int
 
 
-class RefundStatsResponse(BaseModel):
+class StatsResponse(BaseModel):
     """Response schema for refund statistics"""
     total_refunds: int
     total_amount: float

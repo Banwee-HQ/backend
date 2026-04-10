@@ -353,7 +353,7 @@ async def remove_products_from_subscription(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to remove products from subscription: {str(e)}"
         )
-@router.put("/{subscription_id}/products/quantity")
+@router.patch("/{subscription_id}/products/quantity")
 async def update_variant_quantity(
     subscription_id: UUID,
     request: SubscriptionUpdateQuantity,
@@ -498,7 +498,7 @@ async def get_subscription(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch subscription: {str(e)}"
         )
-@router.put("/{subscription_id}")
+@router.patch("/{subscription_id}")
 async def update_subscription(
     subscription_id: UUID,
     subscription_data: UpdateSubscription,

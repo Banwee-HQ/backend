@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,7 +8,7 @@ from core.utils.response import Response as APIResponse
 from core.exceptions import APIException
 from core.config import settings
 from core.logging import get_structured_logger as get_logger
-from schemas.accounts import UserCreate, UserLogin, RefreshTokenRequest, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
+from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword, ChangePassword
 from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
 from services.accounts.auth import AuthService
 from services.accounts.user import UserService, AddressService
@@ -48,7 +48,7 @@ async def register(
 @router.post("/login")
 async def login(
     background_tasks: BackgroundTasks,
-    user_login: UserLogin,
+    user_login: Login,
     db: AsyncSession = Depends(get_db)
 ):
     """Login user and return access token."""
@@ -71,7 +71,7 @@ async def login(
 
 @router.post("/refresh")
 async def refresh_token(
-    request: RefreshTokenRequest,
+    request: Refresh,
     db: AsyncSession = Depends(get_db)
 ):
     """Refresh access token using refresh token."""
@@ -117,7 +117,7 @@ async def logout(
     return APIResponse(success=True, message="Logged out successfully")
 
 
-@router.get("/profile")
+@router.get("/me")
 async def get_profile(
     current_user: User = Depends(get_current_auth_user)
 ):
@@ -157,97 +157,6 @@ async def get_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get profile: {str(e)}"
         )
-
-
-@router.get("/addresses")
-async def get_addresses(
-    current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all addresses for the current user."""
-    try:
-        address_service = AddressService(db)
-        addresses = await address_service.list(current_user.id)
-        return APIResponse.success(data=[AddressResponse.from_orm(address) for address in addresses])
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch addresses - {str(e)}"
-        )
-
-
-@router.post("/addresses")
-async def create(
-    address_data: AddressCreate,
-    current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a new address for the current user."""
-    try:
-        address_service = AddressService(db)
-        address = await address_service.create(
-            user_id=current_user.id,
-            **address_data.dict()
-        )
-        return APIResponse.success(data=AddressResponse.from_orm(address), message="Address created successfully")
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to create address - {str(e)}"
-        )
-
-
-@router.put("/addresses/{address_id}")
-async def update(
-    address_id: UUID,
-    address_data: AddressUpdate,
-    current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update an existing address for the current user."""
-    try:
-        address_service = AddressService(db)
-        address = await address_service.update(
-            address_id=address_id,
-            user_id=current_user.id,  # Ensure user owns the address
-            **address_data.dict(exclude_unset=True)
-        )
-        if not address:
-            raise APIException(status_code=status.HTTP_404_NOT_FOUND,
-                               message="Address not found or not owned by user")
-        return APIResponse.success(data=AddressResponse.from_orm(address), message="Address updated successfully")
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to update address - {str(e)}"
-        )
-
-
-@router.delete("/addresses/{address_id}")
-async def delete(
-    address_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete an address for the current user."""
-    try:
-        address_service = AddressService(db)
-        # Pass user_id for ownership check
-        deleted = await address_service.delete(address_id, current_user.id)
-        if not deleted:
-            raise APIException(status_code=status.HTTP_404_NOT_FOUND,
-                               message="Address not found or not owned by user")
-        return APIResponse.success(message="Address deleted successfully")
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to delete address - {str(e)}"
-        )
-
 
 @router.get("/verify-email")  # Changed to GET as it's typically a link click
 async def verify(
@@ -294,7 +203,7 @@ RATE_LIMIT_COUNT = 3    # Max 3 requests per window
 
 @router.post("/resend-verification")
 async def resend_verification_email(
-    request: ResendVerificationRequest,
+    request: ResendVerification,
     x_resend_token: str = Header(None, description="Resend verification token for security"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db)
@@ -348,7 +257,7 @@ async def resend_verification_email(
 
 @router.post("/forgot-password")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    request: ForgotPassword,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
@@ -364,7 +273,7 @@ async def forgot_password(
 
 @router.post("/reset-password")
 async def reset_pwd(
-    request: ResetPasswordRequest,
+    request: ResetPassword,
     db: AsyncSession = Depends(get_db)
 ):
     """Reset password with token."""
@@ -379,7 +288,7 @@ async def reset_pwd(
         )
 
 
-@router.put("/profile")
+@router.patch("/me")
 async def update_profile(
     user_data: dict,
     current_user: User = Depends(get_current_auth_user),
@@ -444,15 +353,9 @@ async def update_profile(
 
 
 
-from pydantic import BaseModel as _BaseModel
-
-class ChangePasswordRequest(_BaseModel):
-    current_password: str
-    new_password: str
-
-@router.put("/change-password")
+@router.patch("/me/password")
 async def change_password(
-    request: ChangePasswordRequest = None,
+    req: Request,
     current_password: str = Query(None),
     new_password: str = Query(None),
     current_user: User = Depends(get_current_auth_user),
@@ -460,9 +363,18 @@ async def change_password(
 ):
     """Change user password. Accepts JSON body or query params."""
     try:
-        # Support both JSON body and query params
-        curr_pwd = (request.current_password if request else None) or current_password or ""
-        new_pwd = (request.new_password if request else None) or new_password or ""
+        # Try to parse JSON body first
+        body_curr = None
+        body_new = None
+        try:
+            body = await req.json()
+            body_curr = body.get("current_password")
+            body_new = body.get("new_password")
+        except Exception:
+            pass
+
+        curr_pwd = body_curr or current_password or ""
+        new_pwd = body_new or new_password or ""
 
         if not curr_pwd or not new_pwd:
             raise APIException(
@@ -493,7 +405,7 @@ async def change_password(
         )
 
 
-@router.delete("/delete-account")
+@router.delete("/me")
 async def delete_account(
     password: str,
     current_user: User = Depends(get_current_auth_user),

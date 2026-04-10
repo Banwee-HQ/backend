@@ -6,12 +6,12 @@ from uuid import UUID
 from models.commerce.orders import OrderStatus, PaymentStatus, FulfillmentStatus
 
 
-class OrderItemCreate(BaseModel):
+class ItemCreate(BaseModel):
     variant_id: UUID
     quantity: int
 
 
-class AddressCreate(BaseModel):
+class Address(BaseModel):
     street: str
     city: str
     state: str
@@ -19,7 +19,7 @@ class AddressCreate(BaseModel):
     post_code: str
 
 
-class CheckoutRequest(BaseModel):
+class Checkout(BaseModel):
     shipping_address_id: UUID
     shipping_method_id: UUID  # Reverted back to UUID since we're using database shipping methods
     payment_method_id: UUID
@@ -30,15 +30,15 @@ class CheckoutRequest(BaseModel):
     idempotency_key: Optional[str] = None  # For duplicate prevention
 
 
-class OrderCreate(BaseModel):
-    items: List[OrderItemCreate]
-    shipping_address: AddressCreate
-    billing_address: Optional[AddressCreate] = None
+class Create(BaseModel):
+    items: List[ItemCreate]
+    shipping_address: Address
+    billing_address: Optional[Address] = None
     payment_method: str
     notes: Optional[str] = None
 
 
-class OrderUpdate(BaseModel):
+class Update(BaseModel):
     order_status: Optional[OrderStatus] = None
     payment_status: Optional[PaymentStatus] = None
     fulfillment_status: Optional[FulfillmentStatus] = None
@@ -46,7 +46,7 @@ class OrderUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class OrderItemResponse(BaseModel):
+class ItemResponse(BaseModel):
     id: UUID
     variant_id: UUID
     quantity: int
@@ -57,7 +57,7 @@ class OrderItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class OrderResponse(BaseModel):
+class Response(BaseModel):
     id: UUID
     user_id: UUID
     order_status: OrderStatus
@@ -73,7 +73,7 @@ class OrderResponse(BaseModel):
     estimated_delivery: Optional[str]
     shipping_address: Optional[dict] = None
     billing_address: Optional[dict] = None
-    items: List[OrderItemResponse]
+    items: List[ItemResponse]
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -86,25 +86,30 @@ class OrderResponse(BaseModel):
 
 
 # Order Intent schemas
-class OrderIntentBase(BaseModel):
+class IntentBase(BaseModel):
     user_id: UUID
     total_amount: float
     currency: str = "USD"
     status: str = "pending"
 
 
-class OrderIntentCreate(OrderIntentBase):
+class IntentCreate(IntentBase):
     pass
 
 
-class OrderIntentUpdate(BaseModel):
+class IntentUpdate(BaseModel):
     status: Optional[str] = None
     total_amount: Optional[float] = None
 
 
-class OrderIntentResponse(OrderIntentBase):
+class IntentResponse(IntentBase):
     id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Order note schemas
+class Note(BaseModel):
+    note: str

@@ -1,4 +1,4 @@
-from .auth import (
+from .accounts import (
     auth_router, oauth_router, user_router, addresses_router, oauth_social_router
 )
 from .catalog import products_router, review_router, inventory_router, wishlist_router

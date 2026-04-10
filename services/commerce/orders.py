@@ -2387,6 +2387,92 @@ class OrderService:
                 detail="Failed to retrieve order notes"
             )
 
+    async def get_note(self, order_id: UUID, user_id: UUID, note_index: int) -> Optional[Dict[str, Any]]:
+        """Get a specific note by index"""
+        try:
+            notes_result = await self.notes(order_id, user_id)
+            notes = notes_result.get("notes", [])
+            if 0 <= note_index < len(notes):
+                return {
+                    "order_id": str(order_id),
+                    "note_index": note_index,
+                    **notes[note_index]
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get note {note_index} for order {order_id}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve note")
+
+    async def update_note(self, order_id: UUID, user_id: UUID, note_index: int, new_note: str) -> Dict[str, Any]:
+        """Update a specific note by index"""
+        try:
+            query = select(Order).where(Order.id == order_id, Order.user_id == user_id)
+            result = await self.db.execute(query)
+            order = result.scalar_one_or_none()
+            if not order:
+                raise HTTPException(status_code=404, detail="Order not found")
+            
+            notes_result = await self.notes(order_id, user_id)
+            notes = notes_result.get("notes", [])
+            if not (0 <= note_index < len(notes)):
+                raise HTTPException(status_code=404, detail="Note not found")
+            
+            # Rebuild notes with updated one
+            updated_notes = []
+            for i, note in enumerate(notes):
+                if i == note_index:
+                    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    updated_notes.append(f"[{timestamp}] {new_note}")
+                else:
+                    updated_notes.append(f"[{note['timestamp']}] {note['note']}")
+            
+            order.customer_notes = "\n\n".join(updated_notes)
+            await self.db.commit()
+            await self.db.refresh(order)
+            
+            return {
+                "order_id": str(order_id),
+                "note_index": note_index,
+                "updated_note": new_note,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update note {note_index} for order {order_id}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to update note")
+
+    async def delete_note(self, order_id: UUID, user_id: UUID, note_index: int) -> bool:
+        """Delete a specific note by index"""
+        try:
+            query = select(Order).where(Order.id == order_id, Order.user_id == user_id)
+            result = await self.db.execute(query)
+            order = result.scalar_one_or_none()
+            if not order:
+                raise HTTPException(status_code=404, detail="Order not found")
+            
+            notes_result = await self.notes(order_id, user_id)
+            notes = notes_result.get("notes", [])
+            if not (0 <= note_index < len(notes)):
+                return False
+            
+            # Rebuild notes without deleted one
+            updated_notes = []
+            for i, note in enumerate(notes):
+                if i != note_index:
+                    updated_notes.append(f"[{note['timestamp']}] {note['note']}")
+            
+            order.customer_notes = "\n\n".join(updated_notes) if updated_notes else None
+            await self.db.commit()
+            await self.db.refresh(order)
+            
+            return True
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete note {note_index} for order {order_id}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete note")
+
     def _calculate_estimated_delivery(self, order: Order) -> Optional[str]:
         """Calculate estimated delivery date based on order status and shipping method"""
         try:

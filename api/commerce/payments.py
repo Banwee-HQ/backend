@@ -1,71 +1,42 @@
-# Consolidated payment routes
-# This file includes all payment-related routes
+# Consolidated payment routes with 5 standard APIs per entity
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
+from pydantic import BaseModel
 
 from core.db import get_db
 from core.dependencies import get_current_user
 from core.utils.response import Response
+from core.exceptions import APIException
 from models.accounts.user import User
 from services.commerce.payments import PaymentService
 from schemas.commerce.payments import (
-    PaymentMethodResponse,
-    PaymentMethodCreate,
-    PaymentMethodUpdate,
-    PaymentIntentResponse,
-    PaymentIntentCreate,
-    TransactionResponse
+    MethodResponse,
+    MethodCreate,
+    MethodUpdate,
+    IntentResponse,
+    IntentCreate,
+    TxnResponse,
+    Refund
 )
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
-@router.get("/")
-async def get_payments_overview(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get payments overview for current user"""
-    service = PaymentService(db)
-    payment_methods = await service.list_methods(current_user.id)
-    return Response.success(
-        data={
-            "payment_methods": [PaymentMethodResponse.from_orm(pm) for pm in payment_methods],
-            "total_methods": len(payment_methods) if payment_methods else 0
-        },
-        message="Payments overview retrieved"
-    )
-
-
-@router.get("/methods")
-async def get_payment_methods(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get user's payment methods"""
-    service = PaymentService(db)
-    payment_methods = await service.list_methods(current_user.id)
-    # Always return an array, even if empty
-    if not payment_methods:
-        payment_methods = []
-    
-    return Response.success(data=[PaymentMethodResponse.from_orm(pm) for pm in payment_methods])
-
-
+# ==========================================================
+# PAYMENT METHODS - 5 Standard APIs
+# ==========================================================
 @router.post("/methods")
 async def create_method(
-    payment_method_data: PaymentMethodCreate,
+    payment_method_data: MethodCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new payment method"""
     service = PaymentService(db)
-    
-    # Prepare payment method data for the service
     method_data = {
         "type": payment_method_data.type,
         "provider": payment_method_data.provider,
@@ -73,7 +44,6 @@ async def create_method(
         "expiry_month": payment_method_data.expiry_month,
         "expiry_year": payment_method_data.expiry_year,
     }
-    
     payment_method = await service.create_method(
         user_id=current_user.id,
         stripe_payment_method_id=payment_method_data.stripe_payment_method_id,
@@ -81,7 +51,53 @@ async def create_method(
         payment_method_data=method_data,
         is_default=payment_method_data.is_default
     )
-    return Response.success(data=PaymentMethodResponse.from_orm(payment_method))
+    return Response.success(data=MethodResponse.from_orm(payment_method), code=status.HTTP_201_CREATED)
+
+
+@router.get("/methods/{payment_method_id}")
+async def get_method(
+    payment_method_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific payment method"""
+    service = PaymentService(db)
+    method = await service.get_method(payment_method_id, current_user.id)
+    if not method:
+        raise APIException(status_code=404, message="Payment method not found")
+    return Response.success(data=MethodResponse.from_orm(method))
+
+
+@router.get("/methods")
+async def list_methods(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all payment methods for user"""
+    service = PaymentService(db)
+    payment_methods = await service.list_methods(current_user.id)
+    if not payment_methods:
+        payment_methods = []
+    return Response.success(data=[MethodResponse.from_orm(pm) for pm in payment_methods])
+
+
+@router.patch("/methods/{payment_method_id}")
+async def patch_method(
+    payment_method_id: UUID,
+    payment_method_data: MethodUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a payment method (partial)"""
+    service = PaymentService(db)
+    updated_method = await service.update_method(
+        payment_method_id=payment_method_id,
+        user_id=current_user.id,
+        update_data=payment_method_data.dict(exclude_unset=True)
+    )
+    if not updated_method:
+        raise APIException(status_code=404, message="Payment method not found")
+    return Response.success(data=MethodResponse.from_orm(updated_method))
 
 
 @router.delete("/methods/{payment_method_id}")
@@ -93,60 +109,17 @@ async def delete_method(
     """Delete a payment method"""
     service = PaymentService(db)
     success = await service.delete_method(payment_method_id, current_user.id)
-    
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment method not found"
-        )
-    
-    return {"message": "Payment method deleted successfully"}
+        raise APIException(status_code=404, message="Payment method not found")
+    return Response.success(message="Payment method deleted successfully")
 
 
-@router.put("/methods/{payment_method_id}")
-async def update_method(
-    payment_method_id: UUID,
-    payment_method_data: PaymentMethodUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update a payment method"""
-    service = PaymentService(db)
-    updated_method = await service.update_method(
-        payment_method_id=payment_method_id,
-        user_id=current_user.id,
-        update_data=payment_method_data.dict(exclude_unset=True)
-    )
-    if not updated_method:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment method not found"
-        )
-    return Response.success(data=PaymentMethodResponse.from_orm(updated_method))
-
-
-@router.put("/methods/{payment_method_id}/default")
-async def set_default_method(
-    payment_method_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Set a payment method as default"""
-    service = PaymentService(db)
-    success = await service.set_default_method(payment_method_id, current_user.id)
-    
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment method not found"
-        )
-    
-    return {"message": "Payment method set as default successfully"}
-
-
+# ==========================================================
+# PAYMENT INTENTS - 5 Standard APIs
+# ==========================================================
 @router.post("/intents")
 async def create_intent(
-    payment_intent_data: PaymentIntentCreate,
+    payment_intent_data: IntentCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -157,12 +130,122 @@ async def create_intent(
         amount=payment_intent_data.amount,
         currency=payment_intent_data.currency,
         order_id=payment_intent_data.order_id,
-        subscription_id=None,  # Not provided in schema
-        metadata={}  # Default empty metadata
+        subscription_id=None,
+        metadata={}
     )
-    return Response.success(data=PaymentIntentResponse.from_orm(payment_intent))
+    return Response.success(data=IntentResponse.from_orm(payment_intent), code=status.HTTP_201_CREATED)
 
 
+@router.get("/intents/{payment_intent_id}")
+async def get_intent(
+    payment_intent_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific payment intent"""
+    service = PaymentService(db)
+    intent = await service.get_intent(payment_intent_id, current_user.id)
+    if not intent:
+        raise APIException(status_code=404, message="Payment intent not found")
+    return Response.success(data=IntentResponse.from_orm(intent))
+
+
+@router.get("/intents")
+async def list_intents(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List payment intents for user"""
+    service = PaymentService(db)
+    intents = await service.list_intents(current_user.id, page=page, limit=limit)
+    return Response.success(data=intents)
+
+
+# ==========================================================
+# TRANSACTIONS - Read Only (system creates automatically)
+# ==========================================================
+@router.get("/transactions/{transaction_id}")
+async def get_transaction(
+    transaction_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific transaction"""
+    service = PaymentService(db)
+    transaction = await service.get_transaction(transaction_id, current_user.id)
+    if not transaction:
+        raise APIException(status_code=404, message="Transaction not found")
+    return Response.success(data=TxnResponse.from_orm(transaction))
+
+
+@router.get("/transactions")
+async def list_transactions(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List transactions for user"""
+    service = PaymentService(db)
+    transactions = await service.transactions(current_user.id, page=page, limit=limit)
+    return Response.success(data=transactions)
+
+
+# ==========================================================
+# REFUNDS - Create & List Only (immutable after processing)
+# ==========================================================
+@router.post("/refunds")
+async def create_refund(
+    request: Refund,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a refund"""
+    from models.accounts.user import UserRole
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise APIException(status_code=403, message="Only admins can create refunds")
+    
+    service = PaymentService(db)
+    transaction = await service.refund(
+        payment_intent_id=request.payment_intent_id,
+        amount=request.amount,
+        reason=request.reason
+    )
+    return Response.success(data=TxnResponse.from_orm(transaction), code=status.HTTP_201_CREATED)
+
+
+@router.get("/refunds/{refund_id}")
+async def get_refund(
+    refund_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific refund"""
+    service = PaymentService(db)
+    refund = await service.get_refund(refund_id, current_user.id)
+    if not refund:
+        raise APIException(status_code=404, message="Refund not found")
+    return Response.success(data=TxnResponse.from_orm(refund))
+
+
+@router.get("/refunds")
+async def list_refunds(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List refunds for user"""
+    service = PaymentService(db)
+    refunds = await service.list_refunds(current_user.id, page=page, limit=limit)
+    return Response.success(data=refunds)
+
+
+# ==========================================================
+# KEPT ROUTES - Additional functionality
+# ==========================================================
 @router.post("/intents/{payment_intent_id}/confirm")
 async def confirm_intent(
     payment_intent_id: UUID,
@@ -176,7 +259,21 @@ async def confirm_intent(
         payment_intent_id=payment_intent_id,
         payment_method_id=payment_method_id
     )
-    return Response.success(data=PaymentIntentResponse.from_orm(payment_intent))
+    return Response.success(data=IntentResponse.from_orm(payment_intent))
+
+
+@router.post("/methods/{payment_method_id}/default")
+async def set_default_method(
+    payment_method_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Set a payment method as default"""
+    service = PaymentService(db)
+    success = await service.set_default_method(payment_method_id, current_user.id)
+    if not success:
+        raise APIException(status_code=404, message="Payment method not found")
+    return Response.success(message="Payment method set as default successfully")
 
 
 @router.post("/process")
@@ -188,7 +285,7 @@ async def process_payment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Process a payment (simplified)"""
+    """Process a payment"""
     service = PaymentService(db)
     result = await service.process(
         user_id=current_user.id,
@@ -197,54 +294,12 @@ async def process_payment(
         order_id=order_id,
         subscription_id=subscription_id
     )
-    return result
+    return Response.success(data=result)
 
 
-@router.get("/transactions")
-async def transactions(
-    page: int = 1,
-    limit: int = 20,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get user transaction history"""
-    service = PaymentService(db)
-    transactions = await service.transactions(
-        user_id=current_user.id,
-        page=page,
-        limit=limit
-    )
-    return Response.success(data=transactions)
-
-
-@router.post("/refunds/{payment_intent_id}")
-async def refund(
-    payment_intent_id: UUID,
-    amount: Optional[float] = None,
-    reason: str = "requested_by_customer",
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a refund for a payment (admin only)"""
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can create refunds"
-        )
-    
-    service = PaymentService(db)
-    transaction = await service.refund(
-        payment_intent_id=payment_intent_id,
-        amount=amount,
-        reason=reason
-    )
-    return Response.success(data=TransactionResponse.from_orm(transaction))
-
-# ============================================================================
-# PAYMENT FAILURE HANDLING ROUTES
-# ============================================================================
-
+# ==========================================================
+# FAILURE HANDLING - Kept routes
+# ==========================================================
 @router.get("/failures/{payment_intent_id}/status")
 async def failure_status(
     payment_intent_id: UUID,
@@ -252,215 +307,32 @@ async def failure_status(
     db: AsyncSession = Depends(get_db)
 ):
     """Get detailed status of a failed payment"""
-    try:
-        service = PaymentService(db)
-        failure_details = await service.failure_status(
-            payment_intent_id=payment_intent_id,
-            user_id=current_user.id
-        )
-        return Response.success(
-            data=failure_details,
-            message="Payment failure details retrieved"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to get payment failure status"
-        )
+    service = PaymentService(db)
+    failure_details = await service.failure_status(payment_intent_id, current_user.id)
+    return Response.success(data=failure_details, message="Payment failure details retrieved")
 
 
 @router.post("/failures/{payment_intent_id}/retry")
-async def retry(
+async def retry_payment(
     payment_intent_id: UUID,
     new_payment_method_id: Optional[UUID] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retry a failed payment with optional new payment method"""
-    try:
-        service = PaymentService(db)
-        
-        # Verify payment intent belongs to user first
-        failure_details = await service.failure_status(
-            payment_intent_id=payment_intent_id,
-            user_id=current_user.id
-        )
-        
-        # Retry the payment
-        retry_result = await service.retry(
-            payment_intent_id=payment_intent_id,
-            new_payment_method_id=new_payment_method_id
-        )
-        
-        return Response.success(
-            data=retry_result,
-            message="Payment retry initiated successfully"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to retry payment"
-        )
+    """Retry a failed payment"""
+    service = PaymentService(db)
+    retry_result = await service.retry(payment_intent_id, new_payment_method_id)
+    return Response.success(data=retry_result, message="Payment retry initiated")
 
 
-@router.get("/failures/user/failed-payments")
-async def failed_payments(
-    page: int = 1,
-    limit: int = 10,
+@router.get("/failures")
+async def list_failures(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get user's failed payments with retry options"""
-    try:
-        service = PaymentService(db)
-        failed_payments_data = await service.failed_payments(
-            user_id=current_user.id,
-            page=page,
-            limit=limit
-        )
-        
-        return Response.success(
-            data=failed_payments_data,
-            message="Failed payments retrieved successfully"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to get failed payments"
-        )
-
-
-@router.post("/failures/{payment_intent_id}/abandon")
-async def abandon_failed_payment(
-    payment_intent_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Abandon a failed payment (mark as permanently failed)"""
-    try:
-        from models.commerce.payments import PaymentIntent
-        from sqlalchemy import select
-        
-        # Get payment intent with lock
-        result = await db.execute(
-            select(PaymentIntent).where(
-                PaymentIntent.id == payment_intent_id,
-                PaymentIntent.user_id == current_user.id
-            ).with_for_update()
-        )
-        payment_intent = result.scalar_one_or_none()
-        
-        if not payment_intent:
-            raise HTTPException(
-                status_code=404,
-                detail="Payment intent not found"
-            )
-        
-        if payment_intent.status != "failed":
-            raise HTTPException(
-                status_code=400,
-                detail="Can only abandon failed payments"
-            )
-        
-        # Mark as abandoned
-        payment_intent.status = "abandoned"
-        if not payment_intent.failure_metadata:
-            payment_intent.failure_metadata = {}
-        payment_intent.failure_metadata["abandoned_at"] = datetime.utcnow().isoformat()
-        payment_intent.failure_metadata["abandoned_by_user"] = True
-        
-        await db.commit()
-        
-        return Response.success(
-            data={
-                "payment_intent_id": str(payment_intent_id),
-                "status": "abandoned"
-            },
-            message="Payment marked as abandoned"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to abandon payment"
-        )
-
-
-@router.get("/failures/analytics/failure-reasons")
-async def get_failure_analytics(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get analytics on payment failure reasons for the user"""
-    try:
-        from models.commerce.payments import PaymentIntent
-        from sqlalchemy import select, func
-        from services.commerce.payments import PaymentFailureReason
-        
-        # Get failure reason distribution
-        result = await db.execute(
-            select(
-                PaymentIntent.failure_reason,
-                func.count(PaymentIntent.id).label("count")
-            ).where(
-                PaymentIntent.user_id == current_user.id,
-                PaymentIntent.status.in_(["failed", "abandoned"])
-            ).group_by(PaymentIntent.failure_reason)
-        )
-        
-        failure_reasons = result.all()
-        
-        # Process results
-        service = PaymentService(db)
-        analytics = {
-            "failure_distribution": [],
-            "total_failed_payments": 0,
-            "recommendations": []
-        }
-        
-        total_failures = 0
-        for reason, count in failure_reasons:
-            total_failures += count
-            
-            try:
-                failure_enum = PaymentFailureReason(reason) if reason else PaymentFailureReason.UNKNOWN
-                user_message = service._get_user_friendly_message(failure_enum)
-                next_steps = service._get_next_steps(failure_enum)
-            except ValueError:
-                failure_enum = PaymentFailureReason.UNKNOWN
-                user_message = "Unknown payment issue"
-                next_steps = ["Contact support for assistance"]
-            
-            analytics["failure_distribution"].append({
-                "reason": reason or "unknown",
-                "count": count,
-                "percentage": 0,  # Will calculate after getting total
-                "user_message": user_message,
-                "recommended_actions": next_steps
-            })
-        
-        # Calculate percentages
-        for item in analytics["failure_distribution"]:
-            item["percentage"] = round((item["count"] / total_failures * 100), 2) if total_failures > 0 else 0
-        
-        analytics["total_failed_payments"] = total_failures
-        
-        # Generate recommendations based on most common failures
-        if analytics["failure_distribution"]:
-            most_common = max(analytics["failure_distribution"], key=lambda x: x["count"])
-            analytics["recommendations"] = most_common["recommended_actions"]
-        
-        return Response.success(
-            data=analytics,
-            message="Payment failure analytics retrieved"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to get failure analytics"
-        )
+    """List user's failed payments"""
+    service = PaymentService(db)
+    failed_payments = await service.failed_payments(current_user.id, page=page, limit=limit)
+    return Response.success(data=failed_payments)

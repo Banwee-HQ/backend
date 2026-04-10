@@ -572,6 +572,30 @@ class InventoryService:
         adjustments = result.scalars().all()
         return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
 
+    async def get_adjustment(self, adjustment_id: UUID) -> Optional[StockAdjustmentResponse]:
+        """Get a specific stock adjustment by ID"""
+        result = await self.db.execute(
+            select(StockAdjustment)
+            .filter(StockAdjustment.id == adjustment_id)
+            .options(joinedload(StockAdjustment.adjusted_by))
+        )
+        adjustment = result.scalar_one_or_none()
+        if adjustment:
+            return StockAdjustmentResponse.model_validate(adjustment)
+        return None
+
+    async def delete_adjustment(self, adjustment_id: UUID) -> bool:
+        """Delete a stock adjustment"""
+        result = await self.db.execute(
+            select(StockAdjustment).filter(StockAdjustment.id == adjustment_id)
+        )
+        adjustment = result.scalar_one_or_none()
+        if not adjustment:
+            return False
+        await self.db.delete(adjustment)
+        await self.db.commit()
+        return True
+
     async def is_low_stock(self, inventory_id: UUID) -> bool:
         inventory_item = await self.get(inventory_id)
         if not inventory_item:

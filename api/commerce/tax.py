@@ -404,7 +404,7 @@ async def create_tax_rate(
         )
 
 
-@router.put("/admin/tax-rates/{tax_rate_id}", response_model=TaxRateResponse)
+@router.patch("/admin/tax-rates/{tax_rate_id}", response_model=TaxRateResponse)
 async def update_tax_rate(
     tax_rate_id: UUID,
     data: TaxRateUpdate,

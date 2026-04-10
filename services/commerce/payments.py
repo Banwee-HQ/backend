@@ -246,6 +246,16 @@ class PaymentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create payment method: {str(e)}")
 
+    async def get_method(self, payment_method_id: UUID, user_id: UUID) -> Optional[PaymentMethod]:
+        """Get a specific payment method by ID"""
+        result = await self.db.execute(
+            select(PaymentMethod).where(
+                PaymentMethod.id == payment_method_id,
+                PaymentMethod.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def list_methods(self, user_id: UUID) -> List[PaymentMethod]:
         """Get all payment methods for a user"""
         result = await self.db.execute(
@@ -542,6 +552,81 @@ class PaymentService:
                     )
             
             raise HTTPException(status_code=400, detail=f"Payment failed: {str(e)}")
+
+    async def get_intent(self, payment_intent_id: UUID, user_id: UUID) -> Optional[PaymentIntent]:
+        """Get a specific payment intent by ID"""
+        result = await self.db.execute(
+            select(PaymentIntent).where(
+                PaymentIntent.id == payment_intent_id,
+                PaymentIntent.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_intents(self, user_id: UUID, page: int = 1, limit: int = 20) -> Dict[str, Any]:
+        """List payment intents for a user"""
+        offset = (page - 1) * limit
+        result = await self.db.execute(
+            select(PaymentIntent).where(
+                PaymentIntent.user_id == user_id
+            ).offset(offset).limit(limit).order_by(PaymentIntent.created_at.desc())
+        )
+        intents = result.scalars().all()
+        
+        # Get total count
+        count_result = await self.db.execute(
+            select(PaymentIntent).where(PaymentIntent.user_id == user_id)
+        )
+        total = len(count_result.scalars().all())
+        
+        return {
+            "items": intents,
+            "total": total,
+            "page": page,
+            "limit": limit
+        }
+
+    async def update_intent(self, payment_intent_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[PaymentIntent]:
+        """Update a payment intent (limited fields)"""
+        result = await self.db.execute(
+            select(PaymentIntent).where(
+                PaymentIntent.id == payment_intent_id,
+                PaymentIntent.user_id == user_id
+            )
+        )
+        intent = result.scalar_one_or_none()
+        if not intent:
+            return None
+        
+        # Only allow updating metadata and description
+        if "metadata" in update_data:
+            intent.metadata = update_data["metadata"]
+        if "description" in update_data:
+            intent.description = update_data["description"]
+        
+        await self.db.commit()
+        await self.db.refresh(intent)
+        return intent
+
+    async def delete_intent(self, payment_intent_id: UUID, user_id: UUID) -> bool:
+        """Delete a payment intent (only if not succeeded)"""
+        result = await self.db.execute(
+            select(PaymentIntent).where(
+                PaymentIntent.id == payment_intent_id,
+                PaymentIntent.user_id == user_id
+            )
+        )
+        intent = result.scalar_one_or_none()
+        if not intent:
+            return False
+        
+        # Only allow deletion of pending or failed intents
+        if intent.status in ["succeeded", "processing"]:
+            raise HTTPException(status_code=400, detail="Cannot delete succeeded or processing payment intents")
+        
+        await self.db.delete(intent)
+        await self.db.commit()
+        return True
 
     async def process(
         self,
@@ -1007,6 +1092,73 @@ class PaymentService:
             }
         }
 
+    async def get_transaction(self, transaction_id: UUID, user_id: UUID) -> Optional[Transaction]:
+        """Get a specific transaction by ID"""
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == transaction_id,
+                Transaction.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create_transaction(self, user_id: UUID, transaction_data: Dict[str, Any]) -> Transaction:
+        """Create a manual transaction record (for admin use)"""
+        transaction = Transaction(
+            user_id=user_id,
+            order_id=transaction_data.get("order_id"),
+            payment_intent_id=transaction_data.get("payment_intent_id"),
+            stripe_payment_intent_id=transaction_data.get("stripe_payment_intent_id"),
+            amount=transaction_data.get("amount", 0),
+            currency=transaction_data.get("currency", "USD"),
+            status=transaction_data.get("status", "pending"),
+            transaction_type=transaction_data.get("transaction_type", "manual"),
+            description=transaction_data.get("description", "Manual transaction"),
+            transaction_metadata=transaction_data.get("metadata", {})
+        )
+        self.db.add(transaction)
+        await self.db.commit()
+        await self.db.refresh(transaction)
+        return transaction
+
+    async def update_transaction(self, transaction_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[Transaction]:
+        """Update a transaction (limited fields)"""
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == transaction_id,
+                Transaction.user_id == user_id
+            )
+        )
+        transaction = result.scalar_one_or_none()
+        if not transaction:
+            return None
+        
+        # Only allow updating description and metadata
+        if "description" in update_data:
+            transaction.description = update_data["description"]
+        if "metadata" in update_data:
+            transaction.transaction_metadata = update_data["metadata"]
+        
+        await self.db.commit()
+        await self.db.refresh(transaction)
+        return transaction
+
+    async def delete_transaction(self, transaction_id: UUID, user_id: UUID) -> bool:
+        """Delete a transaction (admin only, for corrections)"""
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == transaction_id,
+                Transaction.user_id == user_id
+            )
+        )
+        transaction = result.scalar_one_or_none()
+        if not transaction:
+            return False
+        
+        await self.db.delete(transaction)
+        await self.db.commit()
+        return True
+
     async def refund(
         self,
         payment_intent_id: UUID,
@@ -1056,6 +1208,82 @@ class PaymentService:
             
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=400, detail=f"Refund failed: {str(e)}")
+
+    async def get_refund(self, refund_transaction_id: UUID, user_id: UUID) -> Optional[Transaction]:
+        """Get a specific refund transaction by ID"""
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == refund_transaction_id,
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == "refund"
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_refunds(self, user_id: UUID, page: int = 1, limit: int = 20) -> Dict[str, Any]:
+        """List refund transactions for a user"""
+        offset = (page - 1) * limit
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == "refund"
+            ).offset(offset).limit(limit).order_by(Transaction.created_at.desc())
+        )
+        refunds = result.scalars().all()
+        
+        count_result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == "refund"
+            )
+        )
+        total = len(count_result.scalars().all())
+        
+        return {
+            "items": [r.to_dict() for r in refunds],
+            "total": total,
+            "page": page,
+            "limit": limit
+        }
+
+    async def update_refund(self, refund_transaction_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[Transaction]:
+        """Update a refund transaction (limited fields)"""
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == refund_transaction_id,
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == "refund"
+            )
+        )
+        refund = result.scalar_one_or_none()
+        if not refund:
+            return None
+        
+        if "description" in update_data:
+            refund.description = update_data["description"]
+        if "metadata" in update_data:
+            refund.transaction_metadata = update_data["metadata"]
+        
+        await self.db.commit()
+        await self.db.refresh(refund)
+        return refund
+
+    async def delete_refund(self, refund_transaction_id: UUID, user_id: UUID) -> bool:
+        """Delete a refund transaction record"""
+        result = await self.db.execute(
+            select(Transaction).where(
+                Transaction.id == refund_transaction_id,
+                Transaction.user_id == user_id,
+                Transaction.transaction_type == "refund"
+            )
+        )
+        refund = result.scalar_one_or_none()
+        if not refund:
+            return False
+        
+        await self.db.delete(refund)
+        await self.db.commit()
+        return True
     
     async def _send_payment_notification(
         self,

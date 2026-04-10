@@ -24,36 +24,25 @@ from models.commerce.payments import PaymentIntent, Transaction
 from services.accounts.auth import AuthService
 from schemas.accounts import UserCreate
 from schemas.accounts.user import UserUpdate
-from schemas.catalog.product import ProductCreate, ProductUpdate
-from schemas.commerce.shipping import ShippingMethodCreate, ShippingMethodUpdate
+from schemas.catalog.product import Create as ProductCreate, Update as ProductUpdate
+from schemas.commerce.shipping import MethodCreate, MethodUpdate
+from schemas.admin.admin import (
+    ShipOrder,
+    UpdateOrderStatus,
+    UpdateRefundStatus,
+    UserUpdate as AdminUserUpdate,
+    OrderPatch,
+    ProductPatch,
+    TaxCreate,
+    TaxUpdate,
+    TaxResponse
+)
 from core.dependencies import get_current_auth_user
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
-class ShipOrderRequest(BaseModel):
-    tracking_number: str
-    carrier_name: str
-
-class UpdateOrderStatusRequest(BaseModel):
-    status: str
-    tracking_number: Optional[str] = None
-    carrier_name: Optional[str] = None
-    location: Optional[str] = None
-    description: Optional[str] = None
-
-class UpdateRefundStatusRequest(BaseModel):
-    status: str
-    admin_notes: Optional[str] = None
-
-class AdminUserUpdate(BaseModel):
-    firstname: Optional[str] = None
-    lastname: Optional[str] = None
-    email: Optional[EmailStr] = None
-    role: Optional[str] = None
-    is_active: Optional[bool] = None
-    password: Optional[str] = None
 
 def require_admin(current_user: User = Depends(get_current_auth_user)):
     """Require admin role."""
@@ -238,6 +227,33 @@ async def get_all_subscriptions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch subscriptions: {str(e)}"
         )
+
+
+@router.get("/subscriptions/{subscription_id}")
+async def get_subscription_by_id_admin(
+    subscription_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single subscription by ID (admin only)."""
+    try:
+        result = await db.execute(
+            select(Subscription)
+            .options(selectinload(Subscription.user), selectinload(Subscription.products))
+            .where(Subscription.id == subscription_id)
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Subscription not found")
+        return Response.success(data=sub.to_dict(include_products=True))
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch subscription: {str(e)}"
+        )
+
 
 # Basic Admin Routes
 @router.get("/stats")
@@ -590,7 +606,8 @@ async def patch_refund_status(
             message=f"Failed to update refund status: {str(e)}"
         )
 
-@router.put("/orders/{order_id}/ship")
+
+@router.post("/orders/{order_id}/ship")
 async def ship_order(
     order_id: str,
     request: ShipOrderRequest,
@@ -696,15 +713,6 @@ async def patch_order_status(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to update order status: {str(e)}"
         )
-
-
-class OrderPatchRequest(BaseModel):
-    """Request model for partial order updates via PATCH."""
-    status: Optional[str] = None
-    tracking_number: Optional[str] = None
-    carrier_name: Optional[str] = None
-    notes: Optional[str] = None
-    admin_notes: Optional[str] = None
 
 
 @router.patch("/orders/{order_id}")
@@ -1161,20 +1169,6 @@ async def update_product_admin(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to update product: {str(e)}"
         )
-
-class ProductPatchRequest(BaseModel):
-    """Request model for partial product updates via PATCH."""
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    compare_at_price: Optional[float] = None
-    category: Optional[str] = None
-    status: Optional[str] = None
-    is_active: Optional[bool] = None
-    is_featured: Optional[bool] = None
-    tags: Optional[list] = None
-    seo_title: Optional[str] = None
-    seo_description: Optional[str] = None
 
 @router.patch("/products/{product_id}")
 async def patch_product_admin(
@@ -2219,47 +2213,7 @@ async def get_shipping_method(
         )
 
 
-# Include tax rates admin routes
 # Tax Rates Admin Routes
-from pydantic import Field
-from typing import List
-
-# Schemas for tax rates
-class TaxRateCreate(BaseModel):
-    country_code: str = Field(..., min_length=2, max_length=2, description="ISO 3166-1 alpha-2 country code")
-    country_name: str = Field(..., min_length=1, max_length=100)
-    province_code: Optional[str] = Field(None, max_length=10, description="State/Province code")
-    province_name: Optional[str] = Field(None, max_length=100)
-    tax_rate: float = Field(..., ge=0, le=1, description="Tax rate as decimal (e.g., 0.0725 for 7.25%)")
-    tax_name: Optional[str] = Field(None, max_length=50, description="e.g., GST, VAT, Sales Tax")
-    is_active: bool = True
-
-
-class TaxRateUpdate(BaseModel):
-    country_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    province_name: Optional[str] = Field(None, max_length=100)
-    tax_rate: Optional[float] = Field(None, ge=0, le=1)
-    tax_name: Optional[str] = Field(None, max_length=50)
-    is_active: Optional[bool] = None
-
-
-class TaxRateResponse(BaseModel):
-    id: UUID
-    country_code: str
-    country_name: str
-    province_code: Optional[str]
-    province_name: Optional[str]
-    tax_rate: float
-    tax_percentage: float  # Computed: tax_rate * 100
-    tax_name: Optional[str]
-    is_active: bool
-    created_at: str
-    updated_at: Optional[str]
-
-    class Config:
-        from_attributes = True
-
-
 @router.get("/tax-rates/", response_model=List[TaxRateResponse])
 async def list_tax_rates(
     country_code: Optional[str] = Query(None, description="Filter by country code"),

@@ -14,8 +14,9 @@ class TestAuthEndpoints:
 
     async def test_register_user(self, async_client: AsyncClient):
         """Test user registration."""
+        from uuid import uuid4
         user_data = {
-            "email": "newuser@test.com",
+            "email": f"newuser_{uuid4().hex[:8]}@test.com",
             "password": "SecurePass123!",
             "first_name": "New",
             "last_name": "User",
@@ -133,7 +134,11 @@ class TestAuthEndpoints:
     async def test_resend_verification(self, async_client: AsyncClient, test_user: User):
         """Test resending verification email."""
         data = {"email": test_user.email}
-        response = await async_client.post("/v1/auth/resend-verification", json=data)
+        response = await async_client.post(
+            "/v1/auth/resend-verification",
+            json=data,
+            headers={"X-Resend-Token": "test-resend-token-12345678"}
+        )
         assert response.status_code in [200, 202]
 
 

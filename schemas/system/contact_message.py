@@ -26,7 +26,7 @@ class MessagePriority(str, Enum):
     URGENT = "urgent"
 
 
-class ContactMessageCreate(BaseModel):
+class Create(BaseModel):
     """Schema for creating a contact message"""
     name: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
@@ -34,7 +34,7 @@ class ContactMessageCreate(BaseModel):
     message: str = Field(..., min_length=10)
 
 
-class ContactMessageUpdate(BaseModel):
+class Update(BaseModel):
     """Schema for updating a contact message (admin only)"""
     status: Optional[MessageStatus] = None
     priority: Optional[MessagePriority] = None
@@ -42,7 +42,7 @@ class ContactMessageUpdate(BaseModel):
     assigned_to: Optional[UUID] = None
 
 
-class ContactMessageResponse(BaseModel):
+class Response(BaseModel):
     """Schema for contact message response"""
     id: UUID
     name: str
@@ -65,9 +65,9 @@ class ContactMessageResponse(BaseModel):
     )
 
 
-class ContactMessageListResponse(BaseModel):
+class ListResponse(BaseModel):
     """Schema for paginated contact message list"""
-    messages: list[ContactMessageResponse]
+    messages: list[Response]
     total: int
     page: int
     page_size: int

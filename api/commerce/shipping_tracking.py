@@ -19,49 +19,22 @@ from models.commerce.shipping_tracking import (
     TrackingStatus, ShipmentType
 )
 from services.commerce.shipping_tracking import ShippingTrackingService
-from pydantic import BaseModel, Field
 from datetime import datetime
 
+from schemas.commerce.shipping_tracking import (
+    Create,
+    Update,
+    Track
+)
+
 router = APIRouter(prefix="/shipping-tracking", tags=["Shipping Tracking"])
-
-# Pydantic models for request/response
-class ShipmentCreateRequest(BaseModel):
-    order_id: str = Field(..., description="Order ID")
-    order_item_id: Optional[str] = Field(None, description="Order item ID for multi-item shipments")
-    carrier: ShippingCarrier = Field(..., description="Shipping carrier")
-    tracking_number: str = Field(..., description="Tracking number")
-    shipment_type: ShipmentType = Field(ShipmentType.STANDARD, description="Shipment type")
-    origin_address: Optional[dict] = Field(None, description="Origin address")
-    destination_address: Optional[dict] = Field(None, description="Destination address")
-    delivery_instructions: Optional[str] = Field(None, description="Delivery instructions")
-    package_weight: Optional[float] = Field(None, description="Package weight in kg")
-    package_dimensions: Optional[dict] = Field(None, description="Package dimensions")
-    package_value: Optional[float] = Field(None, description="Package value")
-    insurance_amount: Optional[float] = Field(None, description="Insurance amount")
-    service_level: Optional[str] = Field(None, description="Service level")
-    delivery_signature_required: bool = Field(False, description="Signature required")
-    delivery_confirmation: Optional[str] = Field(None, description="Delivery confirmation")
-    notes: Optional[str] = Field(None, description="Notes")
-    internal_notes: Optional[str] = Field(None, description="Internal notes")
-    shipped_at: Optional[datetime] = Field(None, description="Shipped at timestamp")
-
-class ShipmentUpdateRequest(BaseModel):
-    status: TrackingStatus = Field(..., description="New tracking status")
-    event_description: Optional[str] = Field(None, description="Event description")
-    event_location: Optional[dict] = Field(None, description="Event location")
-    contact_name: Optional[str] = Field(None, description="Contact name")
-    contact_phone: Optional[str] = Field(None, description="Contact phone")
-
-class TrackingRequest(BaseModel):
-    tracking_number: str = Field(..., description="Tracking number")
-    carrier: ShippingCarrier = Field(..., description="Shipping carrier")
 
 def get_shipping_tracking_service(db: AsyncSession = Depends(get_db)):
     return ShippingTrackingService(db)
 
 @router.post("/shipments")
 async def create_shipment(
-    shipment_data: ShipmentCreateRequest,
+    shipment_data: Create,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_auth_user),
     shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
@@ -97,7 +70,7 @@ async def create_shipment(
         )
 
 @router.get("/shipments/{shipment_id}")
-async def get_shipment_tracking(
+async def get(
     shipment_id: str,
     current_user: User = Depends(get_current_auth_user),
     shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
@@ -138,7 +111,7 @@ async def get_order_shipments(
 
 @router.post("/track")
 async def track_shipment(
-    tracking_request: TrackingRequest,
+    tracking_request: Track,
     current_user: User = Depends(get_current_auth_user),
     shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
 ):
@@ -162,10 +135,10 @@ async def track_shipment(
             message=f"Failed to track shipment: {str(e)}"
         )
 
-@router.put("/shipments/{shipment_id}/status")
+@router.patch("/shipments/{shipment_id}/status")
 async def update_shipment_status(
     shipment_id: str,
-    update_data: ShipmentUpdateRequest,
+    update_data: Update,
     current_user: User = Depends(get_current_auth_user),
     shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
 ):
@@ -191,7 +164,7 @@ async def update_shipment_status(
         )
 
 @router.get("/carriers")
-async def get_supported_carriers(
+async def list_carriers(
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of supported shipping carriers (public)"""
@@ -220,7 +193,7 @@ async def get_supported_carriers(
 
 
 @router.get("/shipments")
-async def list_user_shipments(
+async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_auth_user),
@@ -265,7 +238,7 @@ async def list_user_shipments(
         raise APIException(status_code=500, message=f"Failed to list shipments: {str(e)}")
 
 @router.post("/providers")
-async def create_shipping_provider(
+async def create_provider(
     provider_data: dict,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
@@ -301,7 +274,7 @@ async def create_shipping_provider(
         )
 
 @router.get("/providers")
-async def get_shipping_providers(
+async def list_providers(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -320,8 +293,8 @@ async def get_shipping_providers(
             message=f"Failed to get shipping providers: {str(e)}"
         )
 
-@router.put("/providers/{provider_id}")
-async def update_shipping_provider(
+@router.patch("/providers/{provider_id}")
+async def patch_provider(
     provider_id: str,
     provider_data: dict,
     current_user: User = Depends(get_current_admin_user),
@@ -359,7 +332,7 @@ async def update_shipping_provider(
         )
 
 @router.delete("/providers/{provider_id}")
-async def delete_shipping_provider(
+async def delete_provider(
     provider_id: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
@@ -390,44 +363,6 @@ async def delete_shipping_provider(
             message=f"Failed to delete shipping provider: {str(e)}"
         )
 
-@router.post("/sync/all")
-async def sync_all_shipments(
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Sync all active shipments with carrier APIs (Admin only)"""
-    try:
-        # Get all active shipments
-        result = await db.execute(
-            select(ShipmentTracking).where(
-                ShipmentTracking.status.in_([
-                    TrackingStatus.PENDING,
-                    TrackingStatus.IN_TRANSIT,
-                    TrackingStatus.OUT_FOR_DELIVERY
-                ])
-            )
-        )
-        shipments = result.scalars().all()
-        
-        # Queue background tasks for each shipment
-        for shipment in shipments:
-            background_tasks.add_task(
-                track_shipment_background,
-                shipment.tracking_number,
-                shipment.carrier
-            )
-        
-        return APIResponse.success(
-            message=f"Queued {len(shipments)} shipments for tracking sync"
-        )
-    
-    except Exception as e:
-        raise APIException(
-            status_code=500,
-            message=f"Failed to sync shipments: {str(e)}"
-        )
-
 # Background task for tracking shipments
 async def track_shipment_background(tracking_number: str, carrier: ShippingCarrier):
     """Background task to track shipments"""
@@ -443,6 +378,45 @@ async def track_shipment_background(tracking_number: str, carrier: ShippingCarri
             await shipping_service.track_shipment(tracking_number, carrier)
         except Exception as e:
             print(f"Background tracking failed for {tracking_number}: {e}")
+
+# ==========================================================
+# ORDER TRACKING - From orders module
+# ==========================================================
+@router.get("/orders/{order_id}")
+async def get_order_tracking(
+    order_id: UUID,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order tracking information (authenticated)."""
+    try:
+        # Get order from orders service
+        from services.commerce.orders import OrderService
+        order_service = OrderService(db)
+        tracking = await order_service.tracking(order_id, current_user.id)
+        if tracking is None:
+            raise APIException(status_code=404, message="Order not found or tracking unavailable")
+        return APIResponse.success(data=tracking)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
+
+
+@router.get("/track/{order_id}")
+async def get_public_tracking(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order tracking (public - no auth required)."""
+    try:
+        from services.commerce.orders import OrderService
+        order_service = OrderService(db)
+        tracking = await order_service.tracking_public(order_id)
+        return APIResponse.success(data=tracking)
+    except Exception:
+        raise APIException(status_code=404, message="Order not found or tracking unavailable")
+
 
 # Webhook endpoints for carrier notifications
 @router.post("/webhooks/{carrier}")

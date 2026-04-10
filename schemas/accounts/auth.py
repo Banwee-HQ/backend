@@ -10,12 +10,12 @@ class UserCreate(UserBase):
     phone: Optional[str] = None
 
 
-class UserLogin(BaseModel):
+class Login(BaseModel):
     email: EmailStr
     password: str
 
 
-class UserResponse(BaseModel):
+class Response(BaseModel):
     id: UUID
     email: str
     firstname: str
@@ -38,11 +38,11 @@ class Token(BaseModel):
     user: UserResponse
 
 
-class RefreshTokenRequest(BaseModel):
+class Refresh(BaseModel):
     refresh_token: str
 
 
-class AuthResponse(BaseModel):
+class Auth(BaseModel):
     access_token: str
     token_type: str
     refresh_token: Optional[str] = None
@@ -50,14 +50,19 @@ class AuthResponse(BaseModel):
     user: UserResponse
 
 
-class ResendVerificationRequest(BaseModel):
+class ResendVerification(BaseModel):
     email: EmailStr
 
 
-class ForgotPasswordRequest(BaseModel):
+class ForgotPassword(BaseModel):
     email: EmailStr
 
 
-class ResetPasswordRequest(BaseModel):
+class ResetPassword(BaseModel):
     token: str
+    new_password: str
+
+
+class ChangePassword(BaseModel):
+    current_password: str
     new_password: str
