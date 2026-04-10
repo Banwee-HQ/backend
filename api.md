@@ -184,13 +184,9 @@ Delete category. 🔒 Admin
 
 ## Products
 
-### GET /products/search
-Search products.
 
 **Query:** `q, category?, page?, limit?`
 
-### GET /products/categories/search
-Search products by category.
 
 ### GET /products/home
 Get home page products (featured, popular, deals).
@@ -200,8 +196,6 @@ List products.
 
 **Query:** `page?, limit?, category?, featured?, popular?, sale?`
 
-### GET /products/categories
-List product categories.
 
 ### GET /products/{id}
 Get product by ID.
@@ -215,8 +209,6 @@ Get product variants.
 ### GET /products/variants/{id}
 Get variant by ID.
 
-### GET /products/categories/{id}
-Get products by category ID.
 
 ### POST /products
 Create product. 🔒 Admin

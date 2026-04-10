@@ -40,43 +40,28 @@ class AddressService:
 
 
     async def create(
-
         self,
-
         user_id: UUID,
-
         street: Optional[str] = None,
-
         city: Optional[str] = None,
-
         state: Optional[str] = None,
-
         country: Optional[str] = None,
-
         post_code: Optional[str] = None,
-
         kind: str = "Shipping",
-
+        is_default: bool = False,
+        **kwargs
     ) -> Address:
-
         """Create a new address for a user."""
-
         address = Address(
             id=uuid7(),
             user_id=user_id,
-
-            street=street,
-
-            city=city,
-
-            state=state,
-
-            country=country,
-
-            post_code=post_code,
-
+            street=street or "",
+            city=city or "",
+            state=state or "",
+            country=country or "",
+            post_code=post_code or "",
             kind=kind,
-
+            is_default=is_default,
         )
 
         self.db.add(address)
@@ -430,13 +415,66 @@ class UserService:
         role_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Advanced search for users with prefix matching on name and email.
+        Search for users with prefix matching on name and email.
+        Falls back to simple LIKE search if pg_trgm is unavailable.
         """
         if not query or len(query.strip()) < 2:
             return []
-            
-        query = query.strip().lower()
-        
+
+        q = query.strip().lower()
+
+        try:
+            return await self._search_with_similarity(q, limit, role_filter)
+        except Exception:
+            # pg_trgm not available - fall back to simple LIKE search
+            return await self._search_simple(q, limit, role_filter)
+
+    async def _search_simple(
+        self,
+        query: str,
+        limit: int,
+        role_filter: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Simple LIKE-based user search fallback."""
+        from sqlalchemy import select, or_
+        search_term = f"%{query}%"
+        stmt = (
+            select(User)
+            .where(User.is_active == True)
+            .where(
+                or_(
+                    User.firstname.ilike(search_term),
+                    User.lastname.ilike(search_term),
+                    User.email.ilike(search_term),
+                )
+            )
+            .limit(limit)
+        )
+        if role_filter:
+            stmt = stmt.where(User.role == role_filter)
+        result = await self.db.execute(stmt)
+        users = []
+        for user in result.scalars().all():
+            users.append({
+                "id": str(user.id),
+                "firstname": user.firstname,
+                "lastname": user.lastname,
+                "full_name": f"{user.firstname} {user.lastname}",
+                "email": user.email,
+                "role": user.role.value if hasattr(user.role, "value") else user.role,
+                "verified": user.verified,
+                "relevance_score": 1.0,
+                "type": "user"
+            })
+        return users
+
+    async def _search_with_similarity(
+        self,
+        query: str,
+        limit: int = 20,
+        role_filter: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Advanced search using pg_trgm similarity."""
         # Build base conditions
         base_conditions = ["u.is_active = true"]
         params = {

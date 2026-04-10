@@ -306,11 +306,24 @@ async def tracking(
     """Get order tracking information (authenticated)."""
     try:
         tracking = await order_service.tracking(order_id, current_user.id)
+        if tracking is None:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Order not found or tracking information unavailable"
+            )
         return Response.success(data=tracking)
+    except APIException:
+        raise
+    except ValueError as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Invalid order ID: {str(e)}"
+        )
     except Exception as e:
+        logger.error(f"Error fetching tracking for order {order_id}: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to fetch tracking information"
+            message=f"Failed to fetch tracking information: {str(e)}"
         )
 
 

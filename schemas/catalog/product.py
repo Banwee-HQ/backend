@@ -41,10 +41,20 @@ class ProductCreate(BaseModel):
     description: Optional[str] = None
     short_description: Optional[str] = None
     category: str
-    variants: List[ProductVariantCreate]
+    variants: Optional[List[ProductVariantCreate]] = None
     origin: Optional[str] = None
     is_featured: bool = False
     is_bestseller: bool = False
+    # Flat fields for simple product creation (auto-creates a default variant)
+    base_price: Optional[float] = None
+    sale_price: Optional[float] = None
+    cost_price: Optional[float] = None
+    quantity: Optional[int] = 0
+    sku: Optional[str] = None
+    weight_kg: Optional[float] = None
+    tags: Optional[List[str]] = []
+    origin_country: Optional[str] = None
+    is_active: Optional[bool] = True
 
 
 class ProductVariantUpdate(BaseModel):
@@ -127,6 +137,7 @@ class PriceRange(BaseModel):
 class ProductResponse(BaseModel):
     id: UUID
     name: str
+    slug: Optional[str] = None
     description: Optional[str]
     category: Optional[str] = None
     featured: bool

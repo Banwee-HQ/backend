@@ -89,8 +89,8 @@ async def calculate_tax(
 # ============================================================================
 
 
-@router.get("/admin/tax-rates")
-async def list_tax_rates(
+@router.get("/rates")
+async def get_tax_rates_alias(
     country_code: Optional[str] = Query(None, description="Filter by country code"),
     province_code: Optional[str] = Query(None, description="Filter by province code"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
@@ -99,9 +99,27 @@ async def list_tax_rates(
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all tax rates with filtering and pagination (Admin only)"""
+    """List all tax rates with filtering and pagination (alias for /admin/tax-rates, Admin only)"""
+    return await _list_tax_rates_internal(
+        country_code, province_code, is_active, search, sort_by, sort_order, page, per_page, db
+    )
+
+
+async def _list_tax_rates_internal(
+    country_code: Optional[str],
+    province_code: Optional[str],
+    is_active: Optional[bool],
+    search: Optional[str],
+    sort_by: Optional[str],
+    sort_order: Optional[str],
+    page: int,
+    per_page: int,
+    db: AsyncSession
+):
+    """Internal function to list tax rates."""
     try:
         # Build query
         query = select(TaxRate)
@@ -200,6 +218,25 @@ async def list_tax_rates(
             status_code=500,
             detail=f"Failed to fetch tax rates: {str(e)}"
         )
+
+
+@router.get("/admin/tax-rates")
+async def list_tax_rates(
+    country_code: Optional[str] = Query(None, description="Filter by country code"),
+    province_code: Optional[str] = Query(None, description="Filter by province code"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    search: Optional[str] = Query(None, description="Search in country/province names"),
+    sort_by: Optional[str] = Query(None, regex="^(created_at|country_name|tax_rate|tax_name)$"),
+    sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all tax rates with filtering and pagination (Admin only)"""
+    return await _list_tax_rates_internal(
+        country_code, province_code, is_active, search, sort_by, sort_order, page, per_page, db
+    )
 
 
 @router.get("/admin/tax-rates/countries")

@@ -1,259 +1,256 @@
 #!/usr/bin/env python3
 """
-Seed script to populate database with test products for API testing
+Seed script — populates the database with products, shipping methods,
+tax rates, and an admin user ready for API testing.
 """
 import asyncio
 import os
 import sys
+import re
 
-# Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from core.db import AsyncSessionDB
-from core.utils.uuid_utils import uuid7
 from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
+
+from core.config import settings
+from core.db import db_manager
+from core.utils.uuid_utils import uuid7
+from core.utils.encryption import PasswordManager
+
+from models.accounts.user import User
 from models.catalog.product import Product, ProductVariant, ProductImage
 from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
-from core.db import db_manager
-from core.config import settings
+from models.commerce.shipping import ShippingMethod
+from models.commerce.tax_rates import TaxRate
 
-async def seed_products():
-    """Create sample products with variants and inventory"""
-    # Initialize database
-    db_manager.initialize(settings.SQLALCHEMY_DATABASE_URI, settings.ENVIRONMENT == "local")
-    
+
+# ─────────────────────────────────────────────
+# Product catalogue data
+# ─────────────────────────────────────────────
+PRODUCTS = [
+    {
+        "name": "Organic Ghanaian Cocoa Powder",
+        "slug": "organic-ghanaian-cocoa-powder",
+        "description": "Premium organic cocoa powder sourced from Ghana's finest cocoa farms. Rich flavour perfect for baking and beverages.",
+        "short_description": "Premium organic cocoa powder from Ghana",
+        "category": "food",
+        "product_metadata": {"origin": "Ghana", "certifications": ["organic", "fair-trade"], "shelf_life_months": 24},
+        "variants": [
+            {"sku": "COCO-250G", "name": "250g Bag",  "base_price": 12.99, "quantity": 50,
+             "attributes": {"weight": "250g", "package_type": "bag"},
+             "specifications": {"dimensions": "15x10x5 cm", "weight_kg": 0.25},
+             "dietary_tags": {"vegan": True, "gluten_free": True, "organic": True},
+             "tags": "organic,vegan,gluten-free,baking"},
+            {"sku": "COCO-500G", "name": "500g Bag",  "base_price": 22.99, "quantity": 40,
+             "attributes": {"weight": "500g", "package_type": "bag"},
+             "specifications": {"dimensions": "20x15x8 cm", "weight_kg": 0.5},
+             "dietary_tags": {"vegan": True, "gluten_free": True, "organic": True},
+             "tags": "organic,vegan,gluten-free,baking,value"},
+            {"sku": "COCO-1KG",  "name": "1kg Bag",   "base_price": 39.99, "quantity": 30,
+             "attributes": {"weight": "1kg", "package_type": "bag"},
+             "specifications": {"dimensions": "25x20x12 cm", "weight_kg": 1.0},
+             "dietary_tags": {"vegan": True, "gluten_free": True, "organic": True},
+             "tags": "organic,vegan,gluten-free,baking,bulk"},
+        ],
+    },
+    {
+        "name": "Shea Butter Moisturizer",
+        "slug": "shea-butter-moisturizer",
+        "description": "Pure African shea butter for deep skin hydration. Natural and unrefined from Ghana and Burkina Faso.",
+        "short_description": "Pure African shea butter for deep hydration",
+        "category": "beauty",
+        "product_metadata": {"origin": "Ghana/Burkina Faso", "skin_types": ["all", "dry", "sensitive"]},
+        "variants": [
+            {"sku": "SHEA-100ML", "name": "100ml Jar", "base_price": 9.99,  "quantity": 60,
+             "attributes": {"volume": "100ml", "container": "jar"},
+             "specifications": {"dimensions": "6x6x5 cm", "weight_kg": 0.12},
+             "dietary_tags": {}, "tags": "natural,moisturizer,skincare,travel-size"},
+            {"sku": "SHEA-250ML", "name": "250ml Jar", "base_price": 18.99, "quantity": 45,
+             "attributes": {"volume": "250ml", "container": "jar"},
+             "specifications": {"dimensions": "8x8x7 cm", "weight_kg": 0.28},
+             "dietary_tags": {}, "tags": "natural,moisturizer,skincare"},
+            {"sku": "SHEA-500ML", "name": "500ml Jar", "base_price": 32.99, "quantity": 25,
+             "attributes": {"volume": "500ml", "container": "jar"},
+             "specifications": {"dimensions": "10x10x9 cm", "weight_kg": 0.55},
+             "dietary_tags": {}, "tags": "natural,moisturizer,skincare,family-size"},
+        ],
+    },
+    {
+        "name": "Handwoven Kente Cloth",
+        "slug": "handwoven-kente-cloth",
+        "description": "Authentic Ghanaian Kente cloth handwoven by skilled artisans. Traditional patterns with rich cultural significance.",
+        "short_description": "Authentic handwoven Ghanaian Kente cloth",
+        "category": "fashion",
+        "product_metadata": {"origin": "Ghana", "craft": "handwoven", "material": "cotton/silk blend"},
+        "variants": [
+            {"sku": "KENTE-STOLE", "name": "Graduation Stole", "base_price": 45.99, "quantity": 20,
+             "attributes": {"size": "stole", "length": "72 inches"},
+             "specifications": {"dimensions": "180x15 cm", "weight_kg": 0.3},
+             "dietary_tags": {}, "tags": "handwoven,traditional,graduation,gift"},
+            {"sku": "KENTE-2YARD", "name": "2 Yards",           "base_price": 89.99, "quantity": 15,
+             "attributes": {"size": "2 yards", "width": "46 inches"},
+             "specifications": {"dimensions": "180x117 cm", "weight_kg": 0.8},
+             "dietary_tags": {}, "tags": "handwoven,traditional,ceremonial"},
+            {"sku": "KENTE-4YARD", "name": "4 Yards",           "base_price": 169.99, "quantity": 10,
+             "attributes": {"size": "4 yards", "width": "46 inches"},
+             "specifications": {"dimensions": "360x117 cm", "weight_kg": 1.5},
+             "dietary_tags": {}, "tags": "handwoven,traditional,ceremonial,premium"},
+        ],
+    },
+    {
+        "name": "Baobab Superfood Powder",
+        "slug": "baobab-superfood-powder",
+        "description": "Nutrient-rich baobab fruit powder. High in vitamin C, fibre, and antioxidants. Sustainably harvested from African baobab trees.",
+        "short_description": "Nutrient-rich African baobab superfood powder",
+        "category": "food",
+        "product_metadata": {"origin": "Zimbabwe/Malawi", "superfood": True},
+        "variants": [
+            {"sku": "BAOBAB-100G", "name": "100g Pouch", "base_price": 14.99, "quantity": 80,
+             "attributes": {"weight": "100g", "package_type": "pouch"},
+             "specifications": {"dimensions": "12x8x2 cm", "weight_kg": 0.1},
+             "dietary_tags": {"vegan": True, "gluten_free": True, "raw": True},
+             "tags": "superfood,vegan,gluten-free,immune-boost"},
+            {"sku": "BAOBAB-250G", "name": "250g Pouch", "base_price": 29.99, "quantity": 50,
+             "attributes": {"weight": "250g", "package_type": "pouch"},
+             "specifications": {"dimensions": "18x12x4 cm", "weight_kg": 0.25},
+             "dietary_tags": {"vegan": True, "gluten_free": True, "raw": True},
+             "tags": "superfood,vegan,gluten-free,immune-boost,value"},
+            {"sku": "BAOBAB-500G", "name": "500g Pouch", "base_price": 49.99, "quantity": 30,
+             "attributes": {"weight": "500g", "package_type": "pouch"},
+             "specifications": {"dimensions": "22x16x6 cm", "weight_kg": 0.5},
+             "dietary_tags": {"vegan": True, "gluten_free": True, "raw": True},
+             "tags": "superfood,vegan,gluten-free,immune-boost,bulk"},
+        ],
+    },
+    {
+        "name": "African Black Soap",
+        "slug": "african-black-soap",
+        "description": "Traditional African black soap made with plantain skins, cocoa pod powder, and palm kernel oil. Great for all skin types.",
+        "short_description": "Traditional African black soap for all skin types",
+        "category": "beauty",
+        "product_metadata": {"origin": "Ghana/Nigeria", "skin_concerns": ["acne", "eczema", "dark spots"]},
+        "variants": [
+            {"sku": "BLACKSOAP-1BAR",  "name": "Single Bar", "base_price": 6.99,  "quantity": 100,
+             "attributes": {"size": "single", "weight": "150g"},
+             "specifications": {"dimensions": "8x5x3 cm", "weight_kg": 0.15},
+             "dietary_tags": {}, "tags": "natural,skincare,acne,traditional"},
+            {"sku": "BLACKSOAP-3PACK", "name": "3-Pack",     "base_price": 18.99, "quantity": 50,
+             "attributes": {"size": "3-pack", "weight": "450g total"},
+             "specifications": {"dimensions": "15x10x4 cm", "weight_kg": 0.45},
+             "dietary_tags": {}, "tags": "natural,skincare,acne,traditional,value-pack"},
+            {"sku": "BLACKSOAP-6PACK", "name": "6-Pack",     "base_price": 34.99, "quantity": 30,
+             "attributes": {"size": "6-pack", "weight": "900g total"},
+             "specifications": {"dimensions": "20x15x6 cm", "weight_kg": 0.9},
+             "dietary_tags": {}, "tags": "natural,skincare,acne,traditional,bulk-save"},
+        ],
+    },
+    {
+        "name": "Moringa Leaf Powder",
+        "slug": "moringa-leaf-powder",
+        "description": "Pure moringa leaf powder from East Africa. Packed with vitamins, minerals, and amino acids. The ultimate superfood.",
+        "short_description": "Pure East African moringa leaf powder",
+        "category": "food",
+        "product_metadata": {"origin": "Kenya/Tanzania", "superfood": True},
+        "variants": [
+            {"sku": "MORINGA-100G", "name": "100g Pouch", "base_price": 11.99, "quantity": 90,
+             "attributes": {"weight": "100g", "package_type": "pouch"},
+             "specifications": {"dimensions": "12x8x2 cm", "weight_kg": 0.1},
+             "dietary_tags": {"vegan": True, "gluten_free": True},
+             "tags": "superfood,vegan,gluten-free,moringa"},
+            {"sku": "MORINGA-250G", "name": "250g Pouch", "base_price": 24.99, "quantity": 60,
+             "attributes": {"weight": "250g", "package_type": "pouch"},
+             "specifications": {"dimensions": "18x12x4 cm", "weight_kg": 0.25},
+             "dietary_tags": {"vegan": True, "gluten_free": True},
+             "tags": "superfood,vegan,gluten-free,moringa,value"},
+        ],
+    },
+]
+
+
+async def seed():
+    db_manager.initialize(settings.SQLALCHEMY_DATABASE_URI, False)
     from core.db import AsyncSessionDB
     async with AsyncSessionDB() as db:
-        # Check if products already exist
-        result = await db.execute(select(Product).limit(1))
-        if result.scalar_one_or_none():
-            print("Products already exist, skipping seed")
-            return
-        
-        # Create sample products with full schema support
-        products_data = [
-            {
-                "name": "Organic Ghanaian Cocoa Powder",
-                "description": "Premium organic cocoa powder sourced from Ghana's finest cocoa farms. Rich flavor perfect for baking and beverages.",
-                "short_description": "Premium organic cocoa powder from Ghana",
-                "category": "food",
-                "base_price": 24.99,
-                "product_metadata": {"origin": "Ghana", "certifications": ["organic", "fair-trade"], "shelf_life_months": 24},
-                "variants": [
-                    {
-                        "sku": "COCO-250G", "name": "250g Bag", "price": 12.99, "quantity": 50,
-                        "attributes": {"weight": "250g", "package_type": "bag"},
-                        "specifications": {"dimensions": "15x10x5 cm", "weight_kg": 0.25},
-                        "dietary_tags": {"vegan": True, "gluten_free": True, "organic": True},
-                        "tags": "organic,vegan,gluten-free,baking"
-                    },
-                    {
-                        "sku": "COCO-500G", "name": "500g Bag", "price": 22.99, "quantity": 40,
-                        "attributes": {"weight": "500g", "package_type": "bag"},
-                        "specifications": {"dimensions": "20x15x8 cm", "weight_kg": 0.5},
-                        "dietary_tags": {"vegan": True, "gluten_free": True, "organic": True},
-                        "tags": "organic,vegan,gluten-free,baking,value"
-                    },
-                    {
-                        "sku": "COCO-1KG", "name": "1kg Bag", "price": 39.99, "quantity": 30,
-                        "attributes": {"weight": "1kg", "package_type": "bag"},
-                        "specifications": {"dimensions": "25x20x12 cm", "weight_kg": 1.0},
-                        "dietary_tags": {"vegan": True, "gluten_free": True, "organic": True},
-                        "tags": "organic,vegan,gluten-free,baking,bulk"
-                    },
-                ]
-            },
-            {
-                "name": "Shea Butter Moisturizer",
-                "description": "Pure African shea butter for deep skin hydration. Natural and unrefined from Ghana and Burkina Faso.",
-                "short_description": "Pure African shea butter for deep hydration",
-                "category": "beauty",
-                "base_price": 18.99,
-                "product_metadata": {"origin": "Ghana/Burkina Faso", "skin_types": ["all", "dry", "sensitive"], "usage": ["face", "body", "hair"]},
-                "variants": [
-                    {
-                        "sku": "SHEA-100ML", "name": "100ml Jar", "price": 9.99, "quantity": 60,
-                        "attributes": {"volume": "100ml", "container": "jar"},
-                        "specifications": {"dimensions": "6x6x5 cm", "weight_kg": 0.12},
-                        "dietary_tags": {},
-                        "tags": "natural,moisturizer,skincare,travel-size"
-                    },
-                    {
-                        "sku": "SHEA-250ML", "name": "250ml Jar", "price": 18.99, "quantity": 45,
-                        "attributes": {"volume": "250ml", "container": "jar"},
-                        "specifications": {"dimensions": "8x8x7 cm", "weight_kg": 0.28},
-                        "dietary_tags": {},
-                        "tags": "natural,moisturizer,skincare,regular"
-                    },
-                    {
-                        "sku": "SHEA-500ML", "name": "500ml Jar", "price": 32.99, "quantity": 25,
-                        "attributes": {"volume": "500ml", "container": "jar"},
-                        "specifications": {"dimensions": "10x10x9 cm", "weight_kg": 0.55},
-                        "dietary_tags": {},
-                        "tags": "natural,moisturizer,skincare,family-size"
-                    },
-                ]
-            },
-            {
-                "name": "Handwoven Kente Cloth",
-                "description": "Authentic Ghanaian Kente cloth handwoven by skilled artisans. Traditional patterns with rich cultural significance.",
-                "short_description": "Authentic handwoven Ghanaian Kente cloth",
-                "category": "fashion",
-                "base_price": 89.99,
-                "product_metadata": {"origin": "Ghana", "craft": "handwoven", "material": "cotton/silk blend"},
-                "variants": [
-                    {
-                        "sku": "KENTE-STOLE", "name": "Graduation Stole", "price": 45.99, "quantity": 20,
-                        "attributes": {"size": "stole", "length": "72 inches"},
-                        "specifications": {"dimensions": "180x15 cm", "weight_kg": 0.3},
-                        "dietary_tags": {},
-                        "tags": "handwoven,traditional,graduation,gift"
-                    },
-                    {
-                        "sku": "KENTE-2YARD", "name": "2 Yards", "price": 89.99, "quantity": 15,
-                        "attributes": {"size": "2 yards", "width": "46 inches"},
-                        "specifications": {"dimensions": "180x117 cm", "weight_kg": 0.8},
-                        "dietary_tags": {},
-                        "tags": "handwoven,traditional,ceremonial"
-                    },
-                    {
-                        "sku": "KENTE-4YARD", "name": "4 Yards", "price": 169.99, "quantity": 10,
-                        "attributes": {"size": "4 yards", "width": "46 inches"},
-                        "specifications": {"dimensions": "360x117 cm", "weight_kg": 1.5},
-                        "dietary_tags": {},
-                        "tags": "handwoven,traditional,ceremonial,premium"
-                    },
-                ]
-            },
-            {
-                "name": "Baobab Superfood Powder",
-                "description": "Nutrient-rich baobab fruit powder. High in vitamin C, fiber, and antioxidants. Sustainably harvested from African baobab trees.",
-                "short_description": "Nutrient-rich African baobab superfood powder",
-                "category": "food",
-                "base_price": 29.99,
-                "product_metadata": {"origin": "Zimbabwe/Malawi", "superfood": True, "health_benefits": ["immune support", "digestive health"]},
-                "variants": [
-                    {
-                        "sku": "BAOBAB-100G", "name": "100g Pouch", "price": 14.99, "quantity": 80,
-                        "attributes": {"weight": "100g", "package_type": "pouch"},
-                        "specifications": {"dimensions": "12x8x2 cm", "weight_kg": 0.1},
-                        "dietary_tags": {"vegan": True, "gluten_free": True, "raw": True, "superfood": True},
-                        "tags": "superfood,vegan,gluten-free,immune-boost"
-                    },
-                    {
-                        "sku": "BAOBAB-250G", "name": "250g Pouch", "price": 29.99, "quantity": 50,
-                        "attributes": {"weight": "250g", "package_type": "pouch"},
-                        "specifications": {"dimensions": "18x12x4 cm", "weight_kg": 0.25},
-                        "dietary_tags": {"vegan": True, "gluten_free": True, "raw": True, "superfood": True},
-                        "tags": "superfood,vegan,gluten-free,immune-boost,value"
-                    },
-                    {
-                        "sku": "BAOBAB-500G", "name": "500g Pouch", "price": 49.99, "quantity": 30,
-                        "attributes": {"weight": "500g", "package_type": "pouch"},
-                        "specifications": {"dimensions": "22x16x6 cm", "weight_kg": 0.5},
-                        "dietary_tags": {"vegan": True, "gluten_free": True, "raw": True, "superfood": True},
-                        "tags": "superfood,vegan,gluten-free,immune-boost,bulk"
-                    },
-                ]
-            },
-            {
-                "name": "African Black Soap",
-                "description": "Traditional African black soap made with natural ingredients like plantain skins, cocoa pod powder, and palm kernel oil. Great for all skin types, especially acne-prone skin.",
-                "short_description": "Traditional African black soap for all skin types",
-                "category": "beauty",
-                "base_price": 12.99,
-                "product_metadata": {"origin": "Ghana/Nigeria", "skin_concerns": ["acne", "eczema", "dark spots"], "ph_balanced": True},
-                "variants": [
-                    {
-                        "sku": "BLACKSOAP-1BAR", "name": "Single Bar", "price": 6.99, "quantity": 100,
-                        "attributes": {"size": "single", "weight": "150g"},
-                        "specifications": {"dimensions": "8x5x3 cm", "weight_kg": 0.15},
-                        "dietary_tags": {},
-                        "tags": "natural,skincare,acne,traditional"
-                    },
-                    {
-                        "sku": "BLACKSOAP-3PACK", "name": "3-Pack", "price": 18.99, "quantity": 50,
-                        "attributes": {"size": "3-pack", "weight": "450g total"},
-                        "specifications": {"dimensions": "15x10x4 cm", "weight_kg": 0.45},
-                        "dietary_tags": {},
-                        "tags": "natural,skincare,acne,traditional,value-pack"
-                    },
-                    {
-                        "sku": "BLACKSOAP-6PACK", "name": "6-Pack", "price": 34.99, "quantity": 30,
-                        "attributes": {"size": "6-pack", "weight": "900g total"},
-                        "specifications": {"dimensions": "20x15x6 cm", "weight_kg": 0.9},
-                        "dietary_tags": {},
-                        "tags": "natural,skincare,acne,traditional,bulk-save"
-                    },
-                ]
-            }
-        ]
-        
-        # Create default warehouse location
+        now = datetime.now(timezone.utc)
+        pm = PasswordManager()
+
+        # ── Admin user ──────────────────────────────────────────────
+        admin = User(
+            id=uuid7(),
+            email="admin@banwee.com",
+            firstname="Admin",
+            lastname="Banwee",
+            hashed_password=pm.hash_password("AdminPass123!"),
+            role="admin",
+            account_status="active",
+            verification_status="verified",
+            phone_verified=False,
+            language="en",
+            failed_login_attempts=0,
+        )
+        db.add(admin)
+
+        # ── Warehouse location ──────────────────────────────────────
         location = WarehouseLocation(
             id=uuid7(),
             name="Main Warehouse",
             address="Accra, Ghana",
-            description="Primary fulfillment center"
+            description="Primary fulfilment centre",
         )
         db.add(location)
         await db.flush()
-        
-        now = datetime.now(timezone.utc)
-        created_variants = 0
-        created_images = 0
-        
-        for product_data in products_data:
-            # Create product with all fields
-            import re
-            slug = re.sub(r'[^\w]+', '-', product_data["name"].lower()).strip('-')
+
+        # ── Products, variants, inventory ──────────────────────────
+        total_variants = 0
+        for p_data in PRODUCTS:
             product = Product(
                 id=uuid7(),
-                name=product_data["name"],
-                slug=slug,
-                description=product_data["description"],
-                short_description=product_data.get("short_description"),
-                category=product_data["category"],
+                name=p_data["name"],
+                slug=p_data["slug"],
+                description=p_data["description"],
+                short_description=p_data.get("short_description"),
+                category=p_data["category"],
                 product_status="active",
+                rating_average=0.0,
+                rating_count=0,
+                review_count=0,
                 is_featured=True,
                 is_bestseller=False,
                 published_at=now,
-                product_metadata=product_data.get("product_metadata"),
+                product_metadata=p_data.get("product_metadata"),
             )
             db.add(product)
             await db.flush()
-            
-            # Create variants with full attributes
-            for idx, var_data in enumerate(product_data["variants"]):
+
+            for idx, v in enumerate(p_data["variants"]):
                 variant = ProductVariant(
                     id=uuid7(),
                     product_id=product.id,
-                    sku=var_data["sku"],
-                    name=var_data["name"],
-                    base_price=var_data["price"],
+                    sku=v["sku"],
+                    name=v["name"],
+                    base_price=v["base_price"],
                     sale_price=None,
                     availability_status="available",
                     is_active=True,
-                    attributes=var_data.get("attributes"),
-                    specifications=var_data.get("specifications"),
-                    dietary_tags=var_data.get("dietary_tags", {}),
-                    tags=var_data.get("tags"),
+                    attributes=v.get("attributes", {}),
+                    specifications=v.get("specifications", {}),
+                    dietary_tags=v.get("dietary_tags", {}),
+                    tags=v.get("tags"),
                     view_count=0,
                     purchase_count=0,
                 )
                 db.add(variant)
                 await db.flush()
-                created_variants += 1
-                
-                # Create inventory with full fields
+                total_variants += 1
+
                 inventory = Inventory(
                     id=uuid7(),
                     variant_id=variant.id,
                     location_id=location.id,
-                    quantity_available=var_data["quantity"],
-                    quantity=var_data["quantity"],
+                    quantity_available=v["quantity"],
+                    quantity=v["quantity"],
                     low_stock_threshold=10,
                     reorder_point=5,
                     inventory_status="active",
@@ -262,36 +259,56 @@ async def seed_products():
                 )
                 db.add(inventory)
                 await db.flush()
-                
-                # Create stock adjustment record for audit trail
-                adjustment = StockAdjustment(
+
+                db.add(StockAdjustment(
                     id=uuid7(),
                     inventory_id=inventory.id,
-                    quantity_change=var_data["quantity"],
+                    quantity_change=v["quantity"],
                     reason="initial_stock",
-                    adjusted_by_user_id=None,
-                    notes=f"Initial stock seed for {var_data['sku']}"
-                )
-                db.add(adjustment)
-                
-                # Create a primary product image for each variant
-                image_url = f"https://cdn.banwee.com/products/{slug}-{idx+1}.jpg"
-                product_image = ProductImage(
+                    notes=f"Seed: {v['sku']}",
+                ))
+
+                db.add(ProductImage(
                     id=uuid7(),
                     variant_id=variant.id,
-                    url=image_url,
-                    alt_text=f"{product_data['name']} - {var_data['name']}",
-                    is_primary=(idx == 0),  # First variant is primary
+                    url=f"https://cdn.banwee.com/products/{p_data['slug']}-{idx+1}.jpg",
+                    alt_text=f"{p_data['name']} — {v['name']}",
+                    is_primary=(idx == 0),
                     sort_order=idx,
                     format="jpg",
-                )
-                db.add(product_image)
-                created_images += 1
-        
+                ))
+
+        # ── Shipping methods ────────────────────────────────────────
+        shipping_methods = [
+            ShippingMethod(id=uuid7(), name="Standard Shipping",  description="5-7 business days",  price=4.99,  estimated_days=6,  is_active=True, carrier="standard"),
+            ShippingMethod(id=uuid7(), name="Express Shipping",   description="2-3 business days",  price=12.99, estimated_days=2,  is_active=True, carrier="express"),
+            ShippingMethod(id=uuid7(), name="Overnight Shipping", description="Next business day",  price=24.99, estimated_days=1,  is_active=True, carrier="overnight"),
+            ShippingMethod(id=uuid7(), name="Free Shipping",      description="7-10 business days", price=0.00,  estimated_days=8,  is_active=True, carrier="standard"),
+        ]
+        for sm in shipping_methods:
+            db.add(sm)
+
+        # ── Tax rates ───────────────────────────────────────────────
+        tax_rates = [
+            TaxRate(id=uuid7(), country_code="US", country_name="United States", province_code="CA", province_name="California", tax_rate=0.0725, tax_name="CA Sales Tax", is_active=True),
+            TaxRate(id=uuid7(), country_code="US", country_name="United States", province_code="NY", province_name="New York",    tax_rate=0.08,   tax_name="NY Sales Tax", is_active=True),
+            TaxRate(id=uuid7(), country_code="US", country_name="United States", province_code=None, province_name=None,          tax_rate=0.06,   tax_name="US Sales Tax", is_active=True),
+            TaxRate(id=uuid7(), country_code="GB", country_name="United Kingdom", province_code=None, province_name=None,         tax_rate=0.20,   tax_name="VAT",          is_active=True),
+            TaxRate(id=uuid7(), country_code="GH", country_name="Ghana",          province_code=None, province_name=None,         tax_rate=0.125,  tax_name="VAT",          is_active=True),
+            TaxRate(id=uuid7(), country_code="CA", country_name="Canada",         province_code="ON", province_name="Ontario",    tax_rate=0.13,   tax_name="HST",          is_active=True),
+            TaxRate(id=uuid7(), country_code="AU", country_name="Australia",      province_code=None, province_name=None,         tax_rate=0.10,   tax_name="GST",          is_active=True),
+        ]
+        for tr in tax_rates:
+            db.add(tr)
+
         await db.commit()
-        print(f"✓ Created {len(products_data)} products with {created_variants} variants")
-        print(f"✓ Created {created_images} product images")
-        print(f"✓ Created stock adjustment records for audit trail")
+
+        print(f"✓ Admin user:       admin@banwee.com / AdminPass123!")
+        print(f"✓ Products:         {len(PRODUCTS)} products, {total_variants} variants")
+        print(f"✓ Shipping methods: {len(shipping_methods)}")
+        print(f"✓ Tax rates:        {len(tax_rates)} countries/regions")
+        print("Seed complete.")
+
 
 if __name__ == "__main__":
-    asyncio.run(seed_products())
+    asyncio.run(seed())

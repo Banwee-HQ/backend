@@ -34,7 +34,8 @@ class ReviewCreate(ReviewBase):
     pass
 
 
-class ReviewUpdate(ReviewBase):
+class ReviewUpdate(BaseModel):
+    product_id: UUID = None
     rating: Optional[int] = Field(None, ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=1000)
 

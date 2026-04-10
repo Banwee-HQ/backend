@@ -218,7 +218,22 @@ async def get(user_id: UUID, db: AsyncSession = Depends(get_db)):
     if not user:
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-    return Response.success(data=user)
+    # Serialize user to dict
+    user_data = {
+        "id": str(user.id),
+        "email": user.email,
+        "firstname": user.firstname,
+        "lastname": user.lastname,
+        "phone": user.phone,
+        "role": user.role.value if hasattr(user.role, "value") else user.role,
+        "account_status": user.account_status,
+        "verification_status": user.verification_status,
+        "verified": user.verified,
+        "is_active": user.is_active,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+    return Response.success(data=user_data)
 
 
 @router.post("/")
@@ -235,7 +250,22 @@ async def update(user_id: UUID, payload: UserUpdate, db: AsyncSession = Depends(
     if not updated_user:
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-    return Response.success(data=updated_user)
+    # Serialize user to dict
+    user_data = {
+        "id": str(updated_user.id),
+        "email": updated_user.email,
+        "firstname": updated_user.firstname,
+        "lastname": updated_user.lastname,
+        "phone": updated_user.phone,
+        "role": updated_user.role.value if hasattr(updated_user.role, "value") else updated_user.role,
+        "account_status": updated_user.account_status,
+        "verification_status": updated_user.verification_status,
+        "verified": updated_user.verified,
+        "is_active": updated_user.is_active,
+        "created_at": updated_user.created_at.isoformat() if updated_user.created_at else None,
+        "updated_at": updated_user.updated_at.isoformat() if updated_user.updated_at else None,
+    }
+    return Response.success(data=user_data)
 
 
 @router.delete("/{user_id}")
@@ -306,9 +336,9 @@ async def create_user_address(
     """Create address for current user (requires authentication)"""
     try:
         service = AddressService(db)
-        address = await service.create(user_id=current_user.id, **payload.model_dump())
+        address = await service.create(user_id=current_user.id, **payload.model_dump(exclude_none=True))
         return Response.success(
-            data=address,
+            data=AddressResponse.from_orm(address),
             message="Address created successfully",
             status_code=status.HTTP_201_CREATED
         )
@@ -330,13 +360,13 @@ async def update_user_address(
     """Update address for current user (requires authentication)"""
     try:
         service = AddressService(db)
-        updated = await service.update(address_id, current_user.id, **payload.model_dump(exclude_unset=True))
+        updated = await service.update(address_id, current_user.id, **payload.model_dump(exclude_unset=True, exclude_none=True))
         if not updated:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Address not found"
             )
-        return Response.success(data=updated, message="Address updated successfully")
+        return Response.success(data=AddressResponse.from_orm(updated), message="Address updated successfully")
     except APIException:
         raise
     except Exception as e:

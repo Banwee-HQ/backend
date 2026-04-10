@@ -29,14 +29,17 @@ class DiscountInfo(BaseModel):
 
 class CreateSubscription(BaseModel):
     """Create subscription"""
-    name: str
-    variant_ids: List[str]
+    name: Optional[str] = "My Subscription"
+    variant_ids: Optional[List[str]] = []
     variant_quantities: Optional[Dict[str, int]] = {}
     delivery_type: DeliveryType = DeliveryType.STANDARD
     delivery_address_id: Optional[UUID] = None
     billing_cycle: BillingCycle = BillingCycle.MONTHLY
     currency: str = "USD"
     discount_code: Optional[str] = None
+    # Accept plan_id for compatibility with tests
+    plan_id: Optional[str] = None
+    payment_method_id: Optional[str] = None
 
 
 class UpdateSubscription(BaseModel):

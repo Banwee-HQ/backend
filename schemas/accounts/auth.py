@@ -7,6 +7,7 @@ from uuid import UUID
 
 class UserCreate(UserBase):
     password: str
+    phone: Optional[str] = None
 
 
 class UserLogin(BaseModel):

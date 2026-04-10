@@ -162,6 +162,7 @@ class ProductService:
             return ProductResponse(
                 id=product.id,
                 name=product.name,
+                slug=getattr(product, 'slug', None),
                 description=product.description,
                 featured=product.is_featured,
                 rating=product.rating_average,
@@ -183,6 +184,7 @@ class ProductService:
             return ProductResponse(
                 id=product.id,
                 name=getattr(product, 'name', ''),
+                slug=getattr(product, 'slug', None),
                 description=getattr(product, 'description', ''),
                 featured=getattr(product, 'is_featured', False),
                 rating=getattr(product, 'rating_average', 0.0),
@@ -464,6 +466,20 @@ class ProductService:
             return self._convert_product_to_response(product)
         return None
 
+    async def get_by_slug(self, slug: str) -> Optional[ProductResponse]:
+        """Get product by slug."""
+        query = select(Product).options(
+            selectinload(Product.variants).selectinload(ProductVariant.images),
+            selectinload(Product.variants).selectinload(ProductVariant.inventory)
+        ).where(Product.slug == slug)
+
+        result = await self.db.execute(query)
+        product = result.scalar_one_or_none()
+
+        if product:
+            return self._convert_product_to_response(product)
+        return None
+
     async def get_variant(self, variant_id: UUID) -> Optional[ProductVariantResponse]:
         """Get product variant by ID."""
         query = select(ProductVariant).options(
@@ -548,7 +564,7 @@ class ProductService:
             description=product_data.description,
             short_description=product_data.short_description,
             category=product_data.category,
-            origin=product_data.origin,
+            origin=product_data.origin or getattr(product_data, 'origin_country', None),
             is_featured=product_data.is_featured,
             is_bestseller=product_data.is_bestseller
         )
@@ -556,8 +572,20 @@ class ProductService:
         self.db.add(db_product)
         await self.db.flush()  # Get the product ID
 
+        # Build variants list - support flat product data (auto-create default variant)
+        variants_to_create = product_data.variants or []
+        if not variants_to_create and product_data.base_price is not None:
+            from schemas.catalog.product import ProductVariantCreate as PVC
+            variants_to_create = [PVC(
+                name=product_data.name,
+                base_price=product_data.base_price,
+                sale_price=product_data.sale_price,
+                stock=product_data.quantity or 0,
+                sku=product_data.sku,
+            )]
+
         # Create variants
-        for v_idx, variant_data in enumerate(product_data.variants):
+        for v_idx, variant_data in enumerate(variants_to_create):
             # Auto-generate SKU: PROD-{product_id[:8]}-{variant_index}
             # Format: First 3 chars of product name + first 8 chars of product ID + variant index
             product_prefix = db_product.name[:3].upper().replace(' ', '')

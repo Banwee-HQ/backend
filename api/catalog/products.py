@@ -145,13 +145,94 @@ async def list(
             sort_order=sort_order
         )
         
-        result["search_mode"] = "basic"
-        return Response.success(data=result)
+        # Format response with pagination at the correct level
+        pagination = {
+            "page": result["page"],
+            "limit": result["per_page"],
+            "total": result["total"],
+            "pages": result["total_pages"]
+        }
+        return Response.success(
+            data=result["data"],
+            pagination=pagination
+        )
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch products {str(e)}"
         )
+
+@router.get("/search")
+async def search_products(
+    q: str = Query(..., min_length=1, description="Search query"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Search products by name, description, or tags."""
+    try:
+        product_service = ProductService(db)
+        result = await product_service.list(
+            page=page,
+            limit=limit,
+            filters={"q": q},
+            sort_by="created_at",
+            sort_order="desc"
+        )
+        return Response.success(data=result)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to search products: {str(e)}"
+        )
+
+
+@router.get("/categories")
+async def get_categories(db: AsyncSession = Depends(get_db)):
+    """Get all product categories."""
+    return Response.success(data=CATEGORIES)
+
+
+@router.get("/featured")
+async def get_featured(
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get featured products."""
+    try:
+        product_service = ProductService(db)
+        products = await product_service.featured(limit=limit)
+        return Response.success(data=products)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch featured products: {str(e)}"
+        )
+
+
+@router.get("/deals")
+async def get_deals(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get products on sale/deals."""
+    try:
+        product_service = ProductService(db)
+        result = await product_service.list(
+            page=page,
+            limit=limit,
+            filters={"sale": True},
+            sort_by="created_at",
+            sort_order="desc"
+        )
+        return Response.success(data=result)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch deals: {str(e)}"
+        )
+
 
 @router.get("/{product_id}/recommendations")
 async def recommended(
@@ -216,20 +297,28 @@ async def get_variant(
 
 @router.get("/{product_id}")
 async def get_product(
-    product_id: UUID,
+    product_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific product by ID."""
+    """Get a specific product by ID or slug."""
     try:
-        logger.debug(f"Fetching product with ID: {product_id}")
+        logger.debug(f"Fetching product with ID/slug: {product_id}")
         product_service = ProductService(db)
-        product = await product_service.get(product_id)
+        product = None
+        # Try UUID first
+        try:
+            from uuid import UUID as _UUID
+            uid = _UUID(product_id)
+            product = await product_service.get(uid)
+        except (ValueError, AttributeError):
+            # Try slug
+            product = await product_service.get_by_slug(product_id)
         if not product:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Product not found"
             )
-        logger.debug(f"Successfully fetched product: {product.name}")
+        logger.debug(f"Successfully fetched product")
         return Response(success=True, data=product)
     except APIException:
         raise

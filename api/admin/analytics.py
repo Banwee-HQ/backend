@@ -553,6 +553,135 @@ async def get_key_performance_indicators(
         )
 
 
+@router.get("/sales")
+async def get_sales_analytics(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    days: Optional[int] = Query(30, description="Number of days back from today"),
+    current_user: User = Depends(require_admin),
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
+):
+    """Get sales analytics. Requires admin access."""
+    try:
+        if not end_date:
+            end_dt = datetime.now(timezone.utc)
+        else:
+            end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
+        if not start_date:
+            start_dt = end_dt - timedelta(days=days)
+        else:
+            start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+
+        metrics = await analytics_service.get_revenue_metrics(start_date=start_dt, end_date=end_dt)
+        return Response.success(data=metrics, message="Sales analytics retrieved successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve sales analytics: {str(e)}"
+        )
+
+
+@router.get("/users")
+async def get_user_analytics(
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user analytics. Requires admin access."""
+    try:
+        from sqlalchemy import select, func
+        from models.accounts.user import User as UserModel
+        from datetime import datetime, timezone, timedelta
+
+        end_dt = datetime.now(timezone.utc)
+        start_dt = end_dt - timedelta(days=days)
+
+        total_result = await db.execute(select(func.count()).select_from(UserModel))
+        total_users = total_result.scalar() or 0
+
+        new_result = await db.execute(
+            select(func.count()).select_from(UserModel).where(UserModel.created_at >= start_dt)
+        )
+        new_users = new_result.scalar() or 0
+
+        return Response.success(data={
+            "total_users": total_users,
+            "new_users": new_users,
+            "period_days": days,
+        }, message="User analytics retrieved successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve user analytics: {str(e)}"
+        )
+
+
+@router.get("/products")
+async def get_product_analytics(
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get product analytics. Requires admin access."""
+    try:
+        from sqlalchemy import select, func
+        from models.catalog.product import Product
+
+        total_result = await db.execute(select(func.count()).select_from(Product))
+        total_products = total_result.scalar() or 0
+
+        active_result = await db.execute(
+            select(func.count()).select_from(Product).where(Product.is_active == True)
+        )
+        active_products = active_result.scalar() or 0
+
+        return Response.success(data={
+            "total_products": total_products,
+            "active_products": active_products,
+            "period_days": days,
+        }, message="Product analytics retrieved successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve product analytics: {str(e)}"
+        )
+
+
+@router.get("/orders")
+async def get_order_analytics(
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order analytics. Requires admin access."""
+    try:
+        from sqlalchemy import select, func
+        from models.commerce.orders import Order
+        from datetime import datetime, timezone, timedelta
+
+        end_dt = datetime.now(timezone.utc)
+        start_dt = end_dt - timedelta(days=days)
+
+        total_result = await db.execute(select(func.count()).select_from(Order))
+        total_orders = total_result.scalar() or 0
+
+        recent_result = await db.execute(
+            select(func.count()).select_from(Order).where(Order.created_at >= start_dt)
+        )
+        recent_orders = recent_result.scalar() or 0
+
+        return Response.success(data={
+            "total_orders": total_orders,
+            "recent_orders": recent_orders,
+            "period_days": days,
+        }, message="Order analytics retrieved successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve order analytics: {str(e)}"
+        )
+
+
 @router.get("/revenue")
 async def get_revenue_analytics(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),

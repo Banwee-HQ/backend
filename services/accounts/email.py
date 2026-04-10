@@ -397,8 +397,12 @@ class EmailQueue:
     @staticmethod
     async def _send_direct(email_type: str, recipient: str, **kwargs):
         """Send email directly without a queue."""
-        from core.worker import send_email_task
-        await send_email_task(email_type, recipient, **kwargs)
+        try:
+            from core.worker import send_email_task
+            await send_email_task(email_type, recipient, **kwargs)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Background email task failed ({email_type} to {recipient}): {e}")
 
     @classmethod
     def send_order_confirmation(

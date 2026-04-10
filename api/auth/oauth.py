@@ -15,6 +15,7 @@ from schemas.accounts import UserCreate
 import secrets
 from datetime import datetime, timezone
 
+# Also register social login routes for compatibility
 router = APIRouter(prefix="/auth/social", tags=["OAuth"])
 
 # OAuth provider configurations
@@ -64,7 +65,7 @@ async def oauth_login(provider: str):
     
     return {"auth_url": auth_url}
 
-@router.get("/{provider}/callback")
+@router.get("/callback/{provider}")
 async def oauth_callback(
     provider: str, 
     code: str, 

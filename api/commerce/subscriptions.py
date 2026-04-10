@@ -78,6 +78,68 @@ async def trigger_subscription_notifications(
         )
 
 
+@router.get("/plans")
+async def get_subscription_plans(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get available subscription plans (public endpoint)."""
+    try:
+        # Return subscription plan information
+        # This is a simplified version - in a real app, you might have a SubscriptionPlan model
+        plans = [
+            {
+                "id": "monthly",
+                "name": "Monthly Plan",
+                "description": "Monthly subscription with flexible delivery",
+                "billing_cycle": "monthly",
+                "features": [
+                    "Flexible delivery scheduling",
+                    "Skip or pause anytime",
+                    "10% off all orders",
+                    "Free shipping on orders over $50"
+                ]
+            },
+            {
+                "id": "quarterly",
+                "name": "Quarterly Plan",
+                "description": "Quarterly subscription with best value",
+                "billing_cycle": "quarterly",
+                "features": [
+                    "Save 15% compared to monthly",
+                    "Priority delivery scheduling",
+                    "15% off all orders",
+                    "Free shipping on all orders",
+                    "Exclusive access to new products"
+                ]
+            },
+            {
+                "id": "yearly",
+                "name": "Yearly Plan",
+                "description": "Annual subscription with maximum savings",
+                "billing_cycle": "yearly",
+                "features": [
+                    "Save 25% compared to monthly",
+                    "VIP delivery scheduling",
+                    "20% off all orders",
+                    "Free express shipping",
+                    "Exclusive access to new products",
+                    "Dedicated customer support"
+                ]
+            }
+        ]
+        
+        return Response.success(data={
+            "plans": plans,
+            "message": "Subscription plans retrieved successfully"
+        })
+    except Exception as e:
+        logger.error(f"Error fetching subscription plans: {e}")
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch subscription plans: {str(e)}"
+        )
+
+
 @router.post("/calculate-cost")
 async def calculate_subscription_cost(
     cost_request: SubscriptionCostCalculationRequest,
@@ -131,7 +193,7 @@ async def calculate_subscription_cost(
         return Response.success(
             data={
                 "cost_breakdown": cost_breakdown,
-                "estimated_total": cost_breakdown["total_amount"],
+                "estimated_total": cost_breakdown.get("total", cost_breakdown.get("total_amount", 0)),
                 "currency": cost_request.currency,
                 "calculation_timestamp": datetime.now(timezone.utc)
             },
@@ -156,8 +218,16 @@ async def create_subscription(
     try:
         subscription_service = SubscriptionService(db)
         # Extract data from request
-        product_variant_ids = subscription_data.product_variant_ids
+        product_variant_ids = subscription_data.variant_ids or []
         variant_quantities = subscription_data.variant_quantities
+
+        # If no variant_ids provided (e.g. plan_id based request), return 400
+        if not product_variant_ids:
+            raise APIException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="variant_ids is required to create a subscription"
+            )
+
         # Create subscription with quantities
         subscription = await subscription_service.create(
             user_id=current_user.id,
@@ -421,11 +491,8 @@ async def get_subscription(
                 message="Subscription not found"
             )
         return Response.success(data=subscription.to_dict(include_products=True))
-    except APIException as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch subscription: {str(e)}"
-        )
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -443,7 +510,7 @@ async def update_subscription(
     try:
         subscription_service = SubscriptionService(db)
         # Extract product_variant_ids and other data
-        product_variant_ids = subscription_data.product_variant_ids
+        product_variant_ids = getattr(subscription_data, 'variant_ids', None) or getattr(subscription_data, 'product_variant_ids', None)
         # Pass data directly to the service method
         subscription = await subscription_service.update(
             subscription_id=subscription_id,
@@ -484,15 +551,12 @@ async def cancel_subscription_endpoint(
             data=subscription.to_dict(include_products=True), 
             message="Subscription cancelled successfully"
         )
-    except APIException as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to cancel subscription: {str(e)}"
-        )
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to cancel subscription: {str(e)}"
+            status_code=status.HTTP_404_NOT_FOUND,
+            message=f"Subscription not found or failed to cancel: {str(e)}"
         )
 @router.delete("/{subscription_id}")
 async def delete_subscription(

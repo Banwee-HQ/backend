@@ -2062,6 +2062,7 @@ class OrderService:
 
     async def tracking(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get order tracking information for authenticated user"""
+        from core.exceptions import APIException
         try:
             # Get order with tracking events
             query = select(Order).where(
@@ -2074,7 +2075,7 @@ class OrderService:
             order = result.scalar_one_or_none()
             
             if not order:
-                raise HTTPException(status_code=404, detail="Order not found")
+                raise APIException(status_code=404, message="Order not found")
             
             # Format tracking events
             tracking_events = []
@@ -2101,13 +2102,13 @@ class OrderService:
                 "shipping_address": order.shipping_address
             }
             
-        except HTTPException:
+        except APIException:
             raise
         except Exception as e:
             logger.error(f"Failed to get order tracking for order {order_id}: {e}")
-            raise HTTPException(
+            raise APIException(
                 status_code=500,
-                detail="Failed to retrieve tracking information"
+                message="Failed to retrieve tracking information"
             )
 
     async def tracking_public(self, order_id: UUID) -> Dict[str, Any]:

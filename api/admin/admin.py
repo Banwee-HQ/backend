@@ -524,7 +524,70 @@ async def update_refund_status(
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to update refund status {str(e)}"
+            message=f"Failed to update refund status: {str(e)}"
+        )
+
+
+@router.patch("/refunds/{refund_id}")
+async def patch_refund_status(
+    refund_id: UUID,
+    payload: UpdateRefundStatusRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update refund status (admin only)."""
+    try:
+        result = await db.execute(select(Refund).where(Refund.id == refund_id))
+        refund = result.scalars().first()
+
+        if not refund:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Refund not found"
+            )
+
+        try:
+            new_status = RefundStatus(payload.status)
+        except Exception:
+            raise APIException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="Invalid refund status"
+            )
+
+        refund.status = new_status
+        if payload.admin_notes is not None:
+            refund.admin_notes = payload.admin_notes
+
+        now = datetime.now(timezone.utc)
+        if new_status == RefundStatus.APPROVED:
+            refund.approved_at = now
+            refund.reviewed_at = now
+            refund.reviewed_by = current_user.id
+            if refund.approved_amount is None:
+                refund.approved_amount = refund.requested_amount
+        elif new_status == RefundStatus.REJECTED:
+            refund.reviewed_at = now
+            refund.reviewed_by = current_user.id
+        elif new_status == RefundStatus.PROCESSING:
+            refund.processed_at = now
+            refund.processed_by = current_user.id
+            if refund.processed_amount is None:
+                refund.processed_amount = refund.approved_amount or refund.requested_amount
+        elif new_status == RefundStatus.COMPLETED:
+            refund.completed_at = now
+
+        await db.commit()
+        await db.refresh(refund)
+
+        refund_data = refund.to_dict()
+        refund_data["customer_name"] = refund.user.full_name if refund.user else ""
+        return Response.success(data=refund_data, message="Refund status updated")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update refund status: {str(e)}"
         )
 
 @router.put("/orders/{order_id}/ship")
@@ -594,6 +657,103 @@ async def update_status(
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to update order status: {str(e)}"
+        )
+
+
+@router.patch("/orders/{order_id}/status")
+async def patch_order_status(
+    order_id: str,
+    request: UpdateOrderStatusRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update order status with tracking information (admin only)."""
+    try:
+        from services.commerce.orders import OrderService
+        
+        order_service = OrderService(db)
+        order = await order_service.update_status(
+            order_id=UUID(order_id),
+            status=request.status,
+            tracking_number=request.tracking_number,
+            carrier_name=request.carrier_name,
+            location=request.location,
+            description=request.description,
+            background_tasks=background_tasks
+        )
+        
+        return Response.success(data={
+            "id": str(order.id),
+            "order_status": order.order_status.value if hasattr(order.order_status, 'value') else str(order.order_status),
+            "tracking_number": order.tracking_number,
+            "carrier": order.carrier
+        }, message=f"Order status updated to {request.status}")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update order status: {str(e)}"
+        )
+
+
+class OrderPatchRequest(BaseModel):
+    """Request model for partial order updates via PATCH."""
+    status: Optional[str] = None
+    tracking_number: Optional[str] = None
+    carrier_name: Optional[str] = None
+    notes: Optional[str] = None
+    admin_notes: Optional[str] = None
+
+
+@router.patch("/orders/{order_id}")
+async def patch_order(
+    order_id: UUID,
+    request: OrderPatchRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update order details (admin only)."""
+    try:
+        from services.commerce.orders import OrderService
+        
+        order_service = OrderService(db)
+        
+        # Get current order
+        order = await order_service.get(order_id)
+        if not order:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Order not found"
+            )
+        
+        # Apply partial updates
+        update_data = {}
+        if request.status is not None:
+            update_data['status'] = request.status
+        if request.tracking_number is not None:
+            update_data['tracking_number'] = request.tracking_number
+        if request.carrier_name is not None:
+            update_data['carrier'] = request.carrier_name
+        if request.notes is not None:
+            update_data['notes'] = request.notes
+        if request.admin_notes is not None:
+            update_data['admin_notes'] = request.admin_notes
+        
+        # Update order with partial data
+        updated_order = await order_service.update(order_id, update_data)
+        
+        return Response.success(
+            data=updated_order,
+            message="Order updated successfully"
+        )
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update order: {str(e)}"
         )
 
 @router.get("/orders/{order_id}/invoice")
@@ -1002,6 +1162,84 @@ async def update_product_admin(
             message=f"Failed to update product: {str(e)}"
         )
 
+class ProductPatchRequest(BaseModel):
+    """Request model for partial product updates via PATCH."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    compare_at_price: Optional[float] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_featured: Optional[bool] = None
+    tags: Optional[list] = None
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+
+@router.patch("/products/{product_id}")
+async def patch_product_admin(
+    product_id: UUID,
+    request: ProductPatchRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update a product (admin only)."""
+    try:
+        product_service = ProductService(db)
+        
+        # Get current product
+        product = await product_service.get(product_id)
+        if not product:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Product not found"
+            )
+        
+        # Build partial update data
+        update_data = {}
+        if request.name is not None:
+            update_data['name'] = request.name
+        if request.description is not None:
+            update_data['description'] = request.description
+        if request.price is not None:
+            update_data['price'] = request.price
+        if request.compare_at_price is not None:
+            update_data['compare_at_price'] = request.compare_at_price
+        if request.category is not None:
+            update_data['category'] = request.category
+        if request.status is not None:
+            update_data['status'] = request.status
+        if request.is_active is not None:
+            update_data['is_active'] = request.is_active
+        if request.is_featured is not None:
+            update_data['is_featured'] = request.is_featured
+        if request.tags is not None:
+            update_data['tags'] = request.tags
+        if request.seo_title is not None:
+            update_data['seo_title'] = request.seo_title
+        if request.seo_description is not None:
+            update_data['seo_description'] = request.seo_description
+        
+        # Create ProductUpdate from partial data
+        from schemas.catalog.product import ProductUpdate
+        product_update = ProductUpdate(**update_data)
+        
+        # Update product
+        updated_product = await product_service.update(product_id, product_update, current_user.id, is_admin=True)
+        
+        return Response.success(
+            data=updated_product,
+            message="Product updated successfully"
+        )
+    except APIException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to patch product {product_id}")
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update product: {str(e)}"
+        )
+
 @router.delete("/products/{product_id}")
 async def delete_product_admin(
     product_id: UUID,
@@ -1287,6 +1525,26 @@ async def update_user_admin(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to update user: {str(e)}"
         )
+
+
+@router.patch("/users/{user_id}")
+async def patch_user_admin(
+    user_id: str,
+    user_data: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update user details (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        user = await admin_service.update(user_id, user_data)
+        return Response.success(data=user, message="User updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update user: {str(e)}"
+        )
+
 
 @router.put("/users/{user_id}/verify")
 async def verify_user_admin(
@@ -1610,6 +1868,74 @@ async def update_inventory_admin(
         )
 
 
+@router.post("/inventory/adjust")
+async def adjust_inventory_admin(
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Adjust inventory (admin only)."""
+    try:
+        from services.catalog.inventory import InventoryService
+        from schemas.catalog.inventory import StockAdjustmentCreate
+        
+        inventory_service = InventoryService(db)
+        
+        # Extract data from request
+        variant_id = request.get("variant_id") or request.get("product_id")
+        quantity = request.get("quantity_change", request.get("quantity", 0))
+        reason = request.get("reason", "Manual adjustment")
+        adjustment_type = request.get("adjustment_type", "set")
+        
+        if not variant_id:
+            raise APIException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="variant_id or product_id is required"
+            )
+        
+        # Convert to UUID
+        from uuid import UUID
+        variant_uuid = UUID(variant_id) if isinstance(variant_id, str) else variant_id
+        
+        # Perform adjustment
+        adjustment = StockAdjustmentCreate(
+            variant_id=variant_uuid,
+            quantity_change=quantity,
+            reason=reason,
+            adjustment_type=adjustment_type
+        )
+        
+        result = await inventory_service.adjust_stock(adjustment, current_user.id)
+        
+        return Response.success(data=result, message="Inventory adjusted successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to adjust inventory: {str(e)}"
+        )
+
+
+@router.patch("/inventory/{variant_id}")
+async def patch_inventory_admin(
+    variant_id: UUID,
+    inventory_data: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update inventory (admin only)."""
+    try:
+        admin_service = AdminService(db)
+        inventory = await admin_service.update_inventory(variant_id, inventory_data)
+        return Response.success(data=inventory, message="Inventory updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update inventory: {str(e)}"
+        )
+
+
 # Subscription Management Enhancement Routes
 @router.put("/subscriptions/{subscription_id}")
 async def update_subscription_admin(
@@ -1618,16 +1944,38 @@ async def update_subscription_admin(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update subscription (admin only)."""
+    """Update subscription details (admin only)."""
     try:
-        admin_service = AdminService(db)
-        subscription = await admin_service.update_subscription(subscription_id, subscription_data)
+        from services.commerce.subscriptions import SubscriptionService
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.update(subscription_id, subscription_data)
         return Response.success(data=subscription, message="Subscription updated successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to update subscription: {str(e)}"
         )
+
+
+@router.patch("/subscriptions/{subscription_id}")
+async def patch_subscription_admin(
+    subscription_id: UUID,
+    subscription_data: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update subscription details (admin only)."""
+    try:
+        from services.commerce.subscriptions import SubscriptionService
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.update(subscription_id, subscription_data)
+        return Response.success(data=subscription, message="Subscription updated successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to update subscription: {str(e)}"
+        )
+
 
 @router.post("/subscriptions/{subscription_id}/cancel")
 async def cancel_subscription_admin(
@@ -1696,8 +2044,8 @@ async def export_subscriptions_admin(
 
 
 # Shipping Methods Management Routes
-@router.get("/shipping-methods")
-async def list_all(
+@router.get("/shipping/methods")
+async def list_all_shipping_methods(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1706,7 +2054,6 @@ async def list_all(
         shipping_service = ShippingService(db)
         methods = await shipping_service.list_all()
         
-        # Convert to dict format for API response
         methods_data = []
         for method in methods:
             methods_data.append({
@@ -1729,47 +2076,9 @@ async def list_all(
             message=f"Failed to fetch shipping methods: {str(e)}"
         )
 
-@router.get("/shipping-methods/{method_id}")
-async def get_shipping_method(
-    method_id: UUID,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a single shipping method by ID (admin only)."""
-    try:
-        shipping_service = ShippingService(db)
-        method = await shipping_service.get(method_id)
-        
-        if not method:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Shipping method not found"
-            )
-        
-        method_data = {
-            "id": str(method.id),
-            "name": method.name,
-            "description": method.description,
-            "price": float(method.price),
-            "estimated_days": method.estimated_days,
-            "is_active": method.is_active,
-            "carrier": method.carrier,
-            "tracking_url_template": method.tracking_url_template,
-            "created_at": method.created_at.isoformat() if method.created_at else None,
-            "updated_at": method.updated_at.isoformat() if method.updated_at else None
-        }
-        
-        return Response.success(data=method_data)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch shipping method: {str(e)}"
-        )
 
-@router.post("/shipping-methods")
-async def create(
+@router.post("/shipping/methods")
+async def create_shipping_method(
     method_data: ShippingMethodCreate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -1801,8 +2110,9 @@ async def create(
             message=f"Failed to create shipping method: {str(e)}"
         )
 
-@router.put("/shipping-methods/{method_id}")
-async def update(
+
+@router.put("/shipping/methods/{method_id}")
+async def update_shipping_method(
     method_id: UUID,
     method_data: ShippingMethodUpdate,
     current_user: User = Depends(require_admin),
@@ -1841,8 +2151,9 @@ async def update(
             message=f"Failed to update shipping method: {str(e)}"
         )
 
-@router.delete("/shipping-methods/{method_id}")
-async def delete(
+
+@router.delete("/shipping/methods/{method_id}")
+async def delete_shipping_method(
     method_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -1865,6 +2176,46 @@ async def delete(
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to delete shipping method: {str(e)}"
+        )
+
+
+@router.get("/shipping/methods/{method_id}")
+async def get_shipping_method(
+    method_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single shipping method by ID (admin only)."""
+    try:
+        shipping_service = ShippingService(db)
+        method = await shipping_service.get(method_id)
+        
+        if not method:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Shipping method not found"
+            )
+        
+        method_data = {
+            "id": str(method.id),
+            "name": method.name,
+            "description": method.description,
+            "price": float(method.price),
+            "estimated_days": method.estimated_days,
+            "is_active": method.is_active,
+            "carrier": method.carrier,
+            "tracking_url_template": method.tracking_url_template,
+            "created_at": method.created_at.isoformat() if method.created_at else None,
+            "updated_at": method.updated_at.isoformat() if method.updated_at else None
+        }
+        
+        return Response.success(data=method_data)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch shipping method: {str(e)}"
         )
 
 
@@ -2472,4 +2823,117 @@ async def recalc_ratings(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to recalculate product ratings: {str(e)}"
+        )
+
+
+# Analytics Aliases - These routes provide access to analytics under /admin prefix
+@router.get("/analytics/sales")
+async def get_sales_analytics_admin(
+    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
+    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    days: int = Query(30, description="Number of days to analyze"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get sales analytics (alias for /analytics/revenue)"""
+    from services.admin.analytics import AnalyticsService
+    try:
+        analytics_service = AnalyticsService(db)
+        if not end_date:
+            end_date = datetime.now(timezone.utc)
+        if not start_date:
+            start_date = end_date - timedelta(days=days)
+        
+        data = await analytics_service.get_revenue_analytics(start_date, end_date)
+        return Response.success(data=data, message="Sales analytics retrieved successfully")
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve sales analytics: {str(e)}"
+        )
+
+
+@router.get("/analytics/users")
+async def get_user_analytics_admin(
+    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
+    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    days: int = Query(30, description="Number of days to analyze"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user analytics"""
+    try:
+        from services.accounts.auth import AuthService
+        auth_service = AuthService(db)
+        users = await auth_service.list_users(page=1, limit=1000)
+        
+        return Response.success(
+            data={
+                "total_users": len(users.get("users", [])),
+                "period_days": days
+            },
+            message="User analytics retrieved successfully"
+        )
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve user analytics: {str(e)}"
+        )
+
+
+@router.get("/analytics/products")
+async def get_product_analytics_admin(
+    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
+    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    days: int = Query(30, description="Number of days to analyze"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get product analytics"""
+    try:
+        product_service = ProductService(db)
+        products_result = await product_service.list(page=1, limit=1000)
+        
+        return Response.success(
+            data={
+                "total_products": products_result.get("total", 0),
+                "period_days": days
+            },
+            message="Product analytics retrieved successfully"
+        )
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve product analytics: {str(e)}"
+        )
+
+
+@router.get("/analytics/orders")
+async def get_order_analytics_admin(
+    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
+    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    days: int = Query(30, description="Number of days to analyze"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order analytics"""
+    try:
+        admin_service = AdminService(db)
+        orders = await admin_service.list_all(
+            page=1, limit=1000, status=None, q=None, 
+            date_from=start_date.isoformat() if start_date else None,
+            date_to=end_date.isoformat() if end_date else None
+        )
+        
+        return Response.success(
+            data={
+                "total_orders": orders.get("pagination", {}).get("total", 0),
+                "period_days": days
+            },
+            message="Order analytics retrieved successfully"
+        )
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve order analytics: {str(e)}"
         )

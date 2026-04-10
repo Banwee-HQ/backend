@@ -86,10 +86,12 @@ class StockAdjustmentBase(BaseModel):
 
 class StockAdjustmentCreate(BaseModel):
     variant_id: Optional[UUID] = None
+    product_id: Optional[UUID] = None  # Accept product_id as alias
     location_id: Optional[UUID] = None
     quantity_change: int
     reason: str = Field(..., min_length=1, max_length=255)
     notes: Optional[str] = None
+    adjustment_type: Optional[str] = None  # add/remove/set - informational
 
 
 class StockAdjustmentResponse(StockAdjustmentBase):

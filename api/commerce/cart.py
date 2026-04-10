@@ -52,6 +52,7 @@ async def get_cart(
 
 
 @router.post("/add")
+@router.post("/items")
 async def add_to_cart(
     request: AddToCartRequest,
     req: Request,
@@ -190,6 +191,7 @@ async def remove_from_cart(
 
 
 @router.post("/promocode")
+@router.post("/promo")
 async def apply_promo(
     request: ApplyPromocodeRequest,
     req: Request,
@@ -210,6 +212,7 @@ async def apply_promo(
 
 
 @router.delete("/promocode")
+@router.post("/promo/remove")
 async def remove_promo(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -276,36 +279,27 @@ async def validate_cart(
             province_code=province_code
         )
         
-        # Determine response status based on validation results
-        if result.get("valid", False) and result.get("can_checkout", False):
-            return Response(
-                success=True, 
-                data=result, 
-                message="Cart validation successful - ready for checkout"
-            )
-        elif result.get("issues"):
-            # Cart has issues but may be recoverable
-            error_count = len([issue for issue in result["issues"] if issue.get("severity") == "error"])
-            warning_count = len([issue for issue in result["issues"] if issue.get("severity") == "warning"])
-            
+        # Convert result to dict for response
+        result_dict = {
+            "valid": result.valid,
+            "can_checkout": result.can_checkout,
+            "issues": result.issues,
+            "summary": result.summary,
+        }
+
+        if result.valid and result.can_checkout:
+            return Response(success=True, data=result_dict, message="Cart validation successful - ready for checkout")
+        elif result.issues:
+            error_count = len([i for i in result.issues if i.get("severity") == "error"])
+            warning_count = len([i for i in result.issues if i.get("severity") == "warning"])
             if error_count > 0:
-                return Response(
-                    success=False,
-                    data=result,
-                    message=f"Cart validation failed with {error_count} error(s) and {warning_count} warning(s). Please review your cart."
-                )
+                return Response(success=False, data=result_dict, message=f"Cart validation failed with {error_count} error(s) and {warning_count} warning(s).")
             else:
-                return Response(
-                    success=True,
-                    data=result,
+                return Response(success=True, data=result_dict,
                     message=f"Cart validation completed with {warning_count} warning(s). You can proceed to checkout."
                 )
         else:
-            return Response(
-                success=False,
-                data=result,
-                message="Cart validation failed"
-            )
+            return Response(success=False, data=result_dict, message="Cart validation failed")
             
     except Exception as e:
         raise APIException(

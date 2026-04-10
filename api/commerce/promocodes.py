@@ -15,6 +15,23 @@ router = APIRouter(prefix="/promocodes", tags=["promocodes"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
+from pydantic import BaseModel
+
+
+class ValidatePromocodeRequest(BaseModel):
+    code: str
+
+
+class ValidatePromocodeResponse(BaseModel):
+    valid: bool
+    code: str
+    discount_type: Optional[str] = None
+    value: Optional[float] = None
+    minimum_order_amount: Optional[float] = None
+    maximum_discount_amount: Optional[float] = None
+    message: Optional[str] = None
+
+
 @router.get("/")
 async def list(
     page: int = Query(1, ge=1),
@@ -70,6 +87,96 @@ async def list(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch promocodes: {str(e)}"
+        )
+
+
+@router.post("/validate")
+async def validate_promocode(
+    request: ValidatePromocodeRequest,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Validate a promocode."""
+    try:
+        promocode_service = PromocodeService(db)
+        is_valid, error_message, promocode = await promocode_service.validate(request.code)
+        
+        if is_valid and promocode:
+            return Response.success(data={
+                "valid": True,
+                "code": promocode.code,
+                "discount_type": promocode.discount_type,
+                "value": promocode.value,
+                "minimum_order_amount": promocode.minimum_order_amount,
+                "maximum_discount_amount": promocode.maximum_discount_amount,
+                "message": "Promocode is valid"
+            })
+        else:
+            return Response.success(data={
+                "valid": False,
+                "code": request.code,
+                "message": error_message or "Invalid promocode"
+            }, status_code=status.HTTP_200_OK)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to validate promocode: {str(e)}"
+        )
+
+
+@router.get("/active")
+async def get_active_promocodes(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all active promocodes (public endpoint)."""
+    try:
+        promocode_service = PromocodeService(db)
+        promocodes, total = await promocode_service.list(
+            page=page, limit=limit, is_active=True
+        )
+        
+        # Filter out expired promocodes
+        from datetime import datetime, timezone
+        current_time = datetime.now(timezone.utc)
+        
+        active_promocodes = []
+        for p in promocodes:
+            # Skip if expired
+            if p.valid_until and p.valid_until <= current_time:
+                continue
+            # Skip if not yet valid
+            if p.valid_from and p.valid_from > current_time:
+                continue
+            # Skip if usage limit reached
+            if p.usage_limit and p.used_count >= p.usage_limit:
+                continue
+                
+            active_promocodes.append({
+                "id": str(p.id),
+                "code": p.code,
+                "description": p.description,
+                "discount_type": p.discount_type,
+                "value": p.value,
+                "minimum_order_amount": p.minimum_order_amount,
+                "maximum_discount_amount": p.maximum_discount_amount,
+                "valid_until": p.valid_until.isoformat() if p.valid_until else None
+            })
+        
+        return Response.success(data={
+            "promocodes": active_promocodes,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": len(active_promocodes),
+                "pages": max(1, (len(active_promocodes) + limit - 1) // limit)
+            }
+        })
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch active promocodes: {str(e)}"
         )
 
 
