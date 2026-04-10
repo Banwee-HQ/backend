@@ -20,6 +20,8 @@ from core.logging import get_structured_logger
 import stripe
 import json
 import time
+from sqlalchemy import exc as sa_exc
+from models.commerce.payments import CardBrand
 
 # Configure Stripe
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', '')
@@ -113,7 +115,38 @@ class PaymentService:
                     for pm in existing_defaults.scalars().all():
                         pm.is_default = False
                 
-                payment_method = PaymentMethod(
+                    # Normalize brand to DB enum values (lowercase names expected)
+                    def _normalize_brand(raw_brand: str) -> str:
+                        if not raw_brand:
+                            return CardBrand.UNKNOWN.value
+                        s = raw_brand.strip().lower()
+                        mapping = {
+                            "visa": "visa",
+                            "mastercard": "mastercard",
+                            "master card": "mastercard",
+                            "american express": "amex",
+                            "amex": "amex",
+                            "discover": "discover",
+                            "jcb": "jcb",
+                            "diners": "diners_club",
+                            "diners_club": "diners_club",
+                            "unionpay": "unionpay",
+                            "verve": "verve",
+                        }
+                        return mapping.get(s, CardBrand.OTHER.value)
+
+                    brand_value = None
+                    try:
+                        brand_raw = None
+                        if hasattr(stripe_pm, 'card') and getattr(stripe_pm, 'card'):
+                            brand_raw = stripe_pm.card.brand
+                        elif payment_method_data:
+                            brand_raw = payment_method_data.get('provider')
+                        brand_value = _normalize_brand(brand_raw)
+                    except Exception:
+                        brand_value = CardBrand.UNKNOWN.value
+
+                    payment_method = PaymentMethod(
                     user_id=user_id,
                     type=stripe_pm.type,
                     provider="stripe",
@@ -126,8 +159,8 @@ class PaymentService:
                 if stripe_pm.type == "card" and stripe_pm.card:
                     payment_method.last_four = stripe_pm.card.last4
                     payment_method.expiry_month = stripe_pm.card.exp_month
-                    payment_method.expiry_year = stripe_pm.card.exp_year
-                    payment_method.brand = stripe_pm.card.brand
+                        payment_method.expiry_year = stripe_pm.card.exp_year
+                        payment_method.brand = brand_value
             
             # Handle legacy token API (deprecated but supported for backward compatibility)
             elif stripe_token:
@@ -202,7 +235,7 @@ class PaymentService:
                     payment_method.last_four = stripe_token_obj.card.last4
                     payment_method.expiry_month = stripe_token_obj.card.exp_month
                     payment_method.expiry_year = stripe_token_obj.card.exp_year
-                    payment_method.brand = stripe_token_obj.card.brand
+                    payment_method.brand = _normalize_brand(stripe_token_obj.card.brand)
             
             # Handle direct payment method data (from frontend)
             elif payment_method_data:
@@ -224,7 +257,7 @@ class PaymentService:
                     last_four=payment_method_data.get("last_four"),
                     expiry_month=payment_method_data.get("expiry_month"),
                     expiry_year=payment_method_data.get("expiry_year"),
-                    brand=payment_method_data.get("provider"),  # Use provider as brand for now
+                    brand=_normalize_brand(payment_method_data.get("provider")),
                     is_default=is_default,
                     is_active=True
                 )
@@ -235,11 +268,37 @@ class PaymentService:
                     detail="Either stripe_payment_method_id, stripe_token, or payment_method_data must be provided"
                 )
             
-            self.db.add(payment_method)
-            await self.db.commit()
-            await self.db.refresh(payment_method)
-            
-            return payment_method
+            # Try to insert; if a payment method with same stripe id exists, return it instead
+            try:
+                self.db.add(payment_method)
+                await self.db.commit()
+                await self.db.refresh(payment_method)
+                return payment_method
+            except sa_exc.IntegrityError as ie:
+                # Check for duplicate stripe_payment_method_id and return existing record
+                await self.db.rollback()
+                try:
+                    existing = await self.db.execute(
+                        select(PaymentMethod).where(PaymentMethod.stripe_payment_method_id == (stripe_payment_method_id or stripe_pm.id))
+                    )
+                    existing_pm = existing.scalar_one_or_none()
+                    if existing_pm:
+                        # If requested as default and belongs to same user, ensure flags
+                        if is_default and existing_pm.user_id == user_id:
+                            # unset other defaults then set this one
+                            ed = await self.db.execute(
+                                select(PaymentMethod).where(
+                                    and_(PaymentMethod.user_id == user_id, PaymentMethod.is_default == True)
+                                ).with_for_update()
+                            )
+                            for pm in ed.scalars().all():
+                                pm.is_default = False
+                            existing_pm.is_default = True
+                            await self.db.commit()
+                        return existing_pm
+                except Exception:
+                    pass
+                raise
             
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
