@@ -22,7 +22,9 @@ class TestHealthEndpoints:
         """Test the health check endpoint."""
         response = await async_client.get("/v1/health/")
         assert response.status_code == 200
-        data = response.json()
+        json_resp = response.json()
+        # endpoint uses Response.success wrapper -> payload under `data`
+        data = json_resp.get("data", json_resp)
         assert data["status"] == "alive"
         assert "timestamp" in data
         assert data["service"] == "banwee-api"
