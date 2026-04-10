@@ -123,9 +123,11 @@ class SubscriptionScheduler:
                 raise Exception(f"No valid variants found for subscription {subscription.id}")
             
             # Recalculate current pricing
-            from services.subscriptions.service import SubscriptionService
+            # Subscription service lives under services.commerce.subscriptions
+            from services.commerce.subscriptions import SubscriptionService
             subscription_service = SubscriptionService(self.db)
-            pricing = await subscription_service.recalculate_current_pricing(subscription)
+            # Use the implemented method name to recalculate pricing
+            pricing = await subscription_service.recalc_pricing(subscription)
             
             # ========================================
             # STEP 1: PROCESS PAYMENT FIRST
