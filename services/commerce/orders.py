@@ -1150,67 +1150,114 @@ class OrderService:
 
         return await self._format_order_response(order)
 
-    async def list(self, user_id: UUID, page: int = 1, limit: int = 10, status_filter: Optional[str] = None) -> Dict[str, Any]:
-        """Get paginated list of user's orders"""
-        try:
-            query = select(Order).where(Order.user_id == user_id).options(
-                selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
-                selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
+    async def list(
+        self, 
+        user_id: Optional[UUID] = None, 
+        page: int = 1, 
+        limit: int = 10, 
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        q: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get paginated list of orders. If user_id is None, returns all orders (admin)."""
+        from sqlalchemy import func
+
+        offset = (page - 1) * limit
+
+        # Build base query
+        base_query = select(Order).options(
+            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
+            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+            selectinload(Order.user)
+        )
+        count_query = select(func.count()).select_from(Order)
+
+        # Apply filters
+        conditions = []
+
+        if user_id:
+            conditions.append(Order.user_id == user_id)
+
+        if status:
+            conditions.append(Order.order_status == status)
+
+        if q:
+            conditions.append(
+                or_(
+                    Order.id.cast(String).ilike(f"%{q}%"),
+                    Order.user.has(User.email.ilike(f"%{q}%"))
+                )
             )
 
-            if status_filter:
-                query = query.where(Order.order_status == status_filter)
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                conditions.append(Order.created_at >= from_date)
+            except ValueError:
+                pass
 
-            query = query.order_by(desc(Order.created_at))
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                conditions.append(Order.created_at <= to_date)
+            except ValueError:
+                pass
 
-            # Calculate offset
-            offset = (page - 1) * limit
+        if min_price is not None:
+            conditions.append(Order.total_amount >= min_price)
 
-            # Get total count using COUNT() instead of loading all records
-            from sqlalchemy import func
-            count_query = select(func.count(Order.id)).where(Order.user_id == user_id)
-            if status_filter:
-                count_query = count_query.where(Order.order_status == status_filter)
+        if max_price is not None:
+            conditions.append(Order.total_amount <= max_price)
 
-            total_result = await self.db.execute(count_query)
-            total = total_result.scalar() or 0
+        # Apply all conditions
+        if conditions:
+            base_query = base_query.where(and_(*conditions))
+            count_query = count_query.where(and_(*conditions))
 
-            # Get paginated results
-            result = await self.db.execute(query.offset(offset).limit(limit))
-            orders = result.scalars().all()
+        # Apply sorting
+        sort_column = Order.created_at
+        if sort_by == "total":
+            sort_column = Order.total_amount
+        elif sort_by == "status":
+            sort_column = Order.order_status
 
-            formatted_orders = []
-            for order in orders:
-                formatted_orders.append(await self._format_order_response(order))
+        if sort_order == "asc":
+            base_query = base_query.order_by(sort_column.asc())
+        else:
+            base_query = base_query.order_by(sort_column.desc())
 
-            return {
-                "orders": formatted_orders,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "pages": (total + limit - 1) // limit
+        # Get total count
+        total = await self.db.scalar(count_query) or 0
+
+        # Get paginated results
+        result = await self.db.execute(base_query.offset(offset).limit(limit))
+        orders = result.scalars().all()
+
+        formatted_orders = []
+        for order in orders:
+            order_dict = await self._format_order_response(order)
+            if order.user:
+                order_dict["customer"] = {
+                    "id": str(order.user.id),
+                    "email": order.user.email,
+                    "name": f"{order.user.firstname} {order.user.lastname}"
                 }
+            formatted_orders.append(order_dict)
+
+        return {
+            "orders": formatted_orders,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if limit > 0 else 1
             }
-        except Exception as e:
-            # Log the full error for debugging
-            logger.error("Order retrieval failed", exception=e, metadata={
-                "user_id": str(user_id),
-                "operation": "get_user_orders",
-                "critical": False
-            })
-            
-            # Re-raise with more context
-            from core.exceptions import APIException
-            raise APIException(
-                message=f"Failed to fetch orders: {str(e)}",
-                metadata={
-                    "user_id": str(user_id),
-                    "page": page,
-                    "limit": limit,
-                    "status_filter": status_filter
-                }
-            )
+        }
 
     async def get(self, order_id: UUID, user_id: UUID) -> Optional[OrderResponse]:
         """Get a specific order by ID"""
@@ -2533,71 +2580,22 @@ class OrderService:
             }
         }
 
-    async def update_status(self, order_id: str, status: Optional[str], notes: Optional[str] = None) -> dict:
-        """Update order status (admin only)."""
-        query = select(Order).where(Order.id == UUID(order_id))
-        result = await self.db.execute(query)
-        order = result.scalar_one_or_none()
-
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-
-        if status:
-            order.order_status = status
-
-        if notes:
-            current_notes = order.admin_notes or ""
-            order.admin_notes = current_notes + f"\n[{datetime.utcnow().isoformat()}] {notes}"
-
-        await self.db.commit()
-        await self.db.refresh(order)
-
-        return await self._format_order_response(order)
-
     async def deliver(self, order_id: str, notes: Optional[str] = None) -> dict:
         """Mark order as delivered (admin only)."""
-        query = select(Order).where(Order.id == UUID(order_id))
-        result = await self.db.execute(query)
-        order = result.scalar_one_or_none()
-
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-
-        order.order_status = "delivered"
-        order.delivered_at = datetime.utcnow()
-        order.fulfillment_status = FulfillmentStatus.DELIVERED
-
-        if notes:
-            current_notes = order.admin_notes or ""
-            order.admin_notes = current_notes + f"\n[{datetime.utcnow().isoformat()}] Delivered: {notes}"
-
-        await self.db.commit()
-        await self.db.refresh(order)
-
-        return await self._format_order_response(order)
+        return await self.update_status(
+            order_id=UUID(order_id),
+            status="delivered",
+            description=notes
+        )
 
     async def ship(self, order_id: str, carrier: Optional[str], tracking_number: Optional[str]) -> dict:
         """Ship order (admin only)."""
-        query = select(Order).where(Order.id == UUID(order_id))
-        result = await self.db.execute(query)
-        order = result.scalar_one_or_none()
-
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-
-        order.order_status = "shipped"
-        order.shipped_at = datetime.utcnow()
-        order.fulfillment_status = FulfillmentStatus.SHIPPED
-
-        if carrier:
-            order.shipping_method = carrier
-        if tracking_number:
-            order.tracking_number = tracking_number
-
-        await self.db.commit()
-        await self.db.refresh(order)
-
-        return await self._format_order_response(order)
+        return await self.update_status(
+            order_id=UUID(order_id),
+            status="shipped",
+            carrier_name=carrier,
+            tracking_number=tracking_number
+        )
 
     async def get_statistics(self, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
         """Get order statistics (admin only)."""

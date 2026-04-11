@@ -284,27 +284,115 @@ class SubscriptionService:
         return result.scalar_one_or_none()
 
     async def list(
-        self, user_id: UUID, status: Optional[str] = None,
-        page: int = 1, limit: int = 10
-    ):
-        """Get paginated subscriptions for a user"""
-        from sqlalchemy import func
-        base_query = select(Subscription).where(Subscription.user_id == user_id).options(
-            selectinload(Subscription.products).selectinload(ProductVariant.product),
-            selectinload(Subscription.products).selectinload(ProductVariant.images)
-        )
-        count_query = select(func.count()).select_from(Subscription).where(Subscription.user_id == user_id)
+        self, 
+        user_id: Optional[UUID] = None, 
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        page: int = 1, 
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """Get paginated subscriptions. If user_id is None, returns all subscriptions (admin)."""
+        from sqlalchemy import func as sqlfunc
+        from models.accounts.user import User
 
+        offset = (page - 1) * limit
+
+        # Build base query
+        if user_id:
+            # User-specific query
+            base_query = select(Subscription).where(Subscription.user_id == user_id).options(
+                selectinload(Subscription.products).selectinload(ProductVariant.product),
+                selectinload(Subscription.products).selectinload(ProductVariant.images)
+            )
+            count_query = select(sqlfunc.count()).select_from(Subscription).where(Subscription.user_id == user_id)
+        else:
+            # Admin query - includes user info
+            base_query = (
+                select(Subscription, User)
+                .join(User, Subscription.user_id == User.id)
+                .options(selectinload(Subscription.products))
+            )
+            count_query = select(sqlfunc.count()).select_from(Subscription)
+
+        # Apply filters
         if status:
             base_query = base_query.where(Subscription.status == status)
             count_query = count_query.where(Subscription.status == status)
 
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
+        # Apply search filter (admin only with user join)
+        if search and not user_id:
+            search_term = f"%{search}%"
+            from sqlalchemy import or_
+            base_query = base_query.where(
+                or_(
+                    User.email.ilike(search_term),
+                    User.firstname.ilike(search_term),
+                    User.lastname.ilike(search_term),
+                )
+            )
 
-        base_query = base_query.order_by(Subscription.created_at.desc()).offset((page - 1) * limit).limit(limit)
-        result = await self.db.execute(base_query)
-        return result.scalars().all(), total
+        # Apply date filters
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                base_query = base_query.where(Subscription.created_at >= from_date)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                base_query = base_query.where(Subscription.created_at <= to_date)
+            except ValueError:
+                pass
+
+        # Apply sorting
+        sort_column = Subscription.created_at
+        if sort_by == "next_billing_date":
+            sort_column = Subscription.next_billing_date
+        elif sort_by == "status":
+            sort_column = Subscription.status
+
+        if sort_order == "asc":
+            base_query = base_query.order_by(sort_column.asc())
+        else:
+            base_query = base_query.order_by(sort_column.desc())
+
+        # Get total count
+        total = await self.db.scalar(count_query) or 0
+
+        # Execute query with pagination
+        result = await self.db.execute(base_query.offset(offset).limit(limit))
+
+        # Format results
+        if user_id:
+            subscriptions = result.scalars().all()
+            subscriptions_data = [sub.to_dict(include_products=True) for sub in subscriptions]
+        else:
+            rows = result.all()
+            subscriptions_data = []
+            for subscription, user in rows:
+                sub_dict = subscription.to_dict(include_products=True)
+                sub_dict["user"] = {
+                    "id": str(user.id),
+                    "name": f"{user.firstname} {user.lastname}",
+                    "email": user.email
+                }
+                subscriptions_data.append(sub_dict)
+
+        return {
+            "data": subscriptions_data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": max(1, (total + limit - 1) // limit) if limit else 1
+            }
+        }
 
     async def update(
         self,
@@ -605,131 +693,3 @@ class SubscriptionService:
             currency=currency,
             user_id=user_id,
         )
-
-    # ============================================================================
-    # ADMIN SUBSCRIPTION MANAGEMENT METHODS
-    # ============================================================================
-
-    async def get_all_subscriptions(
-        self,
-        page: int = 1,
-        limit: int = 10,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-        sort_by: str = "created_at",
-        sort_order: str = "desc"
-    ) -> Dict[str, Any]:
-        """Get all subscriptions for admin (can filter by status, search by user)."""
-        from sqlalchemy import func as sqlfunc
-        from models.accounts.user import User
-
-        offset = (page - 1) * limit
-
-        # Build base query with user join for search
-        base_query = (
-            select(Subscription, User)
-            .join(User, Subscription.user_id == User.id)
-            .options(selectinload(Subscription.products))
-        )
-
-        # Apply status filter
-        if status:
-            base_query = base_query.where(Subscription.status == status)
-
-        # Apply search filter (by user email or name)
-        if search:
-            search_term = f"%{search}%"
-            from sqlalchemy import or_
-            base_query = base_query.where(
-                or_(
-                    User.email.ilike(search_term),
-                    User.firstname.ilike(search_term),
-                    User.lastname.ilike(search_term),
-                )
-            )
-
-        # Apply date filters
-        if date_from:
-            try:
-                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
-                base_query = base_query.where(Subscription.created_at >= from_date)
-            except ValueError:
-                pass
-
-        if date_to:
-            try:
-                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
-                base_query = base_query.where(Subscription.created_at <= to_date)
-            except ValueError:
-                pass
-
-        # Apply sorting
-        sort_column = Subscription.created_at
-        if sort_by == "next_billing_date":
-            sort_column = Subscription.next_billing_date
-        elif sort_by == "status":
-            sort_column = Subscription.status
-
-        if sort_order == "asc":
-            base_query = base_query.order_by(sort_column.asc())
-        else:
-            base_query = base_query.order_by(sort_column.desc())
-
-        # Get total count
-        count_query = select(sqlfunc.count()).select_from(Subscription)
-        if status:
-            count_query = count_query.where(Subscription.status == status)
-
-        total = await self.db.scalar(count_query) or 0
-
-        # Execute query with pagination
-        result = await self.db.execute(base_query.offset(offset).limit(limit))
-        rows = result.all()
-
-        # Format subscriptions with user data
-        subscriptions_data = []
-        for subscription, user in rows:
-            sub_dict = subscription.to_dict(include_products=True)
-            sub_dict["user"] = {
-                "id": str(user.id),
-                "name": f"{user.firstname} {user.lastname}",
-                "email": user.email
-            }
-            subscriptions_data.append(sub_dict)
-
-        return {
-            "data": subscriptions_data,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": max(1, (total + limit - 1) // limit) if limit else 1
-            }
-        }
-
-    async def get_by_id(self, subscription_id: UUID) -> Optional[Dict[str, Any]]:
-        """Get subscription by ID with full details (admin only)."""
-        from models.accounts.user import User
-
-        result = await self.db.execute(
-            select(Subscription, User)
-            .join(User, Subscription.user_id == User.id)
-            .where(Subscription.id == subscription_id)
-            .options(selectinload(Subscription.products))
-        )
-        row = result.first()
-
-        if not row:
-            return None
-
-        subscription, user = row
-        sub_dict = subscription.to_dict(include_products=True)
-        sub_dict["user"] = {
-            "id": str(user.id),
-            "name": f"{user.firstname} {user.lastname}",
-            "email": user.email
-        }
-
-        return sub_dict

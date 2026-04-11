@@ -308,7 +308,13 @@ async def update_status(
     """Update order status (admin only)."""
     try:
         order_service = OrderService(db)
-        updated_order = await order_service.update_status(order_id, request.get("status"), request.get("notes"))
+        updated_order = await order_service.update_status(
+            order_id=order_id,
+            status=request.get("status"),
+            tracking_number=request.get("tracking_number"),
+            carrier_name=request.get("carrier"),
+            description=request.get("notes")
+        )
         return Response.success(data=updated_order, message="Order status updated")
     except APIException:
         raise

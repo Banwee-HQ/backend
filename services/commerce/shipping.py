@@ -54,7 +54,7 @@ class ShippingService:
                 return method.price
 
         # If no specific method or method not available, get cheapest available method
-        active_methods = await self.list_active()
+        active_methods = await self.list(active_only=True)
         if active_methods:
             cheapest = min(active_methods, key=lambda m: m.price)
             logger.info(f"Using cheapest available method: {cheapest.name} - ${cheapest.price}")
