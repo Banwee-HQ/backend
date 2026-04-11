@@ -279,8 +279,11 @@ async def add_products(
     """Add products to an existing subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.add_products(
-        subscription_id, request.variant_ids, current_user.id
+        subscription = await subscription_service.products(
+            action="add",
+            subscription_id=subscription_id,
+            variant_ids=request.variant_ids,
+            user_id=current_user.id
         )
         # Load the products relationship properly for the response
         await db.refresh(subscription)
@@ -311,8 +314,11 @@ async def remove_products(
     """Remove products from an existing subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.remove_products(
-        subscription_id, request.variant_ids, current_user.id
+        subscription = await subscription_service.products(
+            action="remove",
+            subscription_id=subscription_id,
+            variant_ids=request.variant_ids,
+            user_id=current_user.id
         )
         # Load the products relationship properly for the response
         await db.refresh(subscription)
@@ -656,8 +662,11 @@ async def remove_product(
     """Remove a specific product from a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.remove_products(
-            subscription_id, [product_id], current_user.id
+        subscription = await subscription_service.products(
+            action="remove",
+            subscription_id=subscription_id,
+            variant_ids=[product_id],
+            user_id=current_user.id
         )
         return Response.success(
             data=subscription.to_dict(include_products=True),
