@@ -2,7 +2,6 @@
 Payment failure handling utilities
 Provides standardized failure categorization and recovery metadata.
 """
-from enum import Enum
 from typing import Any, Dict, Optional
 from datetime import datetime
 from core.logging import get_structured_logger
@@ -10,23 +9,9 @@ from core.logging import get_structured_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from models.commerce.payments import PaymentIntent
+from models.commerce.payments import PaymentIntent, PaymentFailureReason
 
 logger = get_structured_logger(__name__)
-
-
-class PaymentFailureReason(str, Enum):
-    """Payment failure reason categories"""
-    INSUFFICIENT_FUNDS = "insufficient_funds"
-    CARD_DECLINED = "card_declined"
-    EXPIRED_CARD = "expired_card"
-    INVALID_CARD = "invalid_card"
-    AUTHENTICATION_REQUIRED = "authentication_required"
-    PROCESSING_ERROR = "processing_error"
-    NETWORK_ERROR = "network_error"
-    FRAUD_SUSPECTED = "fraud_suspected"
-    LIMIT_EXCEEDED = "limit_exceeded"
-    UNKNOWN = "unknown"
 
 
 class PaymentFailureHandler:

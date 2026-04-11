@@ -11,38 +11,16 @@ from uuid import UUID
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
+from core.dependencies import get_current_auth_user, require_admin, get_analytics_service
 from core.utils.response import Response
 from models.accounts.user import User
 from models.system import EventType
 from models.accounts import TrafficSource
 from services.analytics.analytics import AnalyticsService
 from core.exceptions import APIException
-from services.accounts.auth import AuthService
-from fastapi.security import OAuth2PasswordBearer
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
-    auth_service = AuthService(db)
-    return await auth_service.current_user(token)
-
-def require_admin(current_user: User = Depends(get_current_auth_user)):
-    """Require admin role."""
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            message="Admin access required"
-        )
-    return current_user
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
-
-
-def get_analytics_service(db: AsyncSession = Depends(get_db)) -> AnalyticsService:
-    """Dependency to get analytics service"""
-    return AnalyticsService(db)
 
 
 @router.post("/track")

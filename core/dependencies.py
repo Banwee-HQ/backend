@@ -55,5 +55,31 @@ def get_order_service(db: AsyncSession = Depends(get_db)):
     from services.commerce.orders import OrderService
     return OrderService(db)
 
+
+def get_inventory_service(db: AsyncSession = Depends(get_db)):
+    from services.catalog.inventory import InventoryService
+    return InventoryService(db)
+
+
+def get_analytics_service(db: AsyncSession = Depends(get_db)):
+    from services.analytics.analytics import AnalyticsService
+    return AnalyticsService(db)
+
+
+def get_product_service(db: AsyncSession = Depends(get_db)):
+    from services.catalog.products import ProductService
+    return ProductService(db)
+
+
+def get_user_service(db: AsyncSession = Depends(get_db)):
+    from services.accounts.user import UserService
+    return UserService(db)
+
+
+def get_auth_service(db: AsyncSession = Depends(get_db)):
+    from services.accounts.auth import AuthService
+    return AuthService(db)
+
+
 # Alias — some routers use get_current_user instead of get_current_auth_user
 get_current_user = get_current_auth_user

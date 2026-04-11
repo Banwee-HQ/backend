@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction
+from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction, PaymentFailureReason
 from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus
 from models.commerce.subscriptions import Subscription
 from models.catalog.inventories import Inventory
@@ -14,7 +14,6 @@ from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from enum import Enum
 from core.config import settings
 from core.logging import get_structured_logger
 import stripe
@@ -27,20 +26,6 @@ from models.commerce.payments import CardBrand
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', '')
 
 logger = get_structured_logger(__name__)
-
-
-class PaymentFailureReason(Enum):
-    """Payment failure reason categories"""
-    INSUFFICIENT_FUNDS = "insufficient_funds"
-    CARD_DECLINED = "card_declined"
-    EXPIRED_CARD = "expired_card"
-    INVALID_CARD = "invalid_card"
-    AUTHENTICATION_REQUIRED = "authentication_required"
-    PROCESSING_ERROR = "processing_error"
-    NETWORK_ERROR = "network_error"
-    FRAUD_SUSPECTED = "fraud_suspected"
-    LIMIT_EXCEEDED = "limit_exceeded"
-    UNKNOWN = "unknown"
 
 
 class PaymentService:
