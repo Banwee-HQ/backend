@@ -476,31 +476,146 @@ class ProductService:
             return self._convert_product_to_response(product)
         return None
 
-    async def get_variant(self, variant_id: UUID) -> Optional[ProductVariantResponse]:
-        """Get product variant by ID."""
-        query = select(ProductVariant).options(
-            selectinload(ProductVariant.images),
-            selectinload(ProductVariant.inventory)
-        ).where(ProductVariant.id == variant_id)
-
-        result = await self.db.execute(query)
-        variant = result.scalar_one_or_none()
-
-        if variant:
-            return self._convert_variant_to_response(variant)
-        return None
-
-    async def variants(self, product_id: UUID) -> List[ProductVariantResponse]:
-        """Get all variants for a product."""
-        query = select(ProductVariant).options(
-            selectinload(ProductVariant.images),
-            selectinload(ProductVariant.inventory)
-        ).where(ProductVariant.product_id == product_id)
-
-        result = await self.db.execute(query)
-        variants = result.scalars().all()
-
-        return [self._convert_variant_to_response(variant) for variant in variants]
+    async def variant(
+        self,
+        action: str,
+        variant_id: Optional[UUID] = None,
+        product_id: Optional[UUID] = None,
+        variant_data: Optional[ProductVariantCreate] = None,
+        update_data: Optional[ProductVariantUpdate] = None
+    ) -> Union[Optional[ProductVariantResponse], List[ProductVariantResponse], bool]:
+        """
+        Manage product variants: get, list, create, update, delete
+        
+        Args:
+            action: "get", "list", "create", "update", or "delete"
+            variant_id: Required for "get", "update", "delete" actions
+            product_id: Required for "list" and "create" actions
+            variant_data: Required for "create" action
+            update_data: Required for "update" action
+        """
+        if action == "get":
+            if not variant_id:
+                raise APIException(status_code=400, message="variant_id required for get action")
+            query = select(ProductVariant).options(
+                selectinload(ProductVariant.images),
+                selectinload(ProductVariant.inventory)
+            ).where(ProductVariant.id == variant_id)
+            result = await self.db.execute(query)
+            variant = result.scalar_one_or_none()
+            return self._convert_variant_to_response(variant) if variant else None
+        
+        elif action == "list":
+            if not product_id:
+                raise APIException(status_code=400, message="product_id required for list action")
+            query = select(ProductVariant).options(
+                selectinload(ProductVariant.images),
+                selectinload(ProductVariant.inventory)
+            ).where(ProductVariant.product_id == product_id)
+            result = await self.db.execute(query)
+            variants = result.scalars().all()
+            return [self._convert_variant_to_response(v) for v in variants]
+        
+        elif action == "create":
+            if not product_id or not variant_data:
+                raise APIException(status_code=400, message="product_id and variant_data required for create action")
+            
+            # Check if product exists
+            product_result = await self.db.execute(select(Product).where(Product.id == product_id))
+            product = product_result.scalar_one_or_none()
+            if not product:
+                raise APIException(status_code=404, message="Product not found")
+            
+            # Generate SKU if not provided
+            sku = variant_data.sku or f"SKU-{product_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
+            # Create variant
+            variant = ProductVariant(
+                id=uuid7(),
+                product_id=product_id,
+                sku=sku,
+                name=variant_data.name,
+                base_price=variant_data.base_price,
+                sale_price=variant_data.sale_price,
+                stock=variant_data.stock,
+                attributes=variant_data.attributes or {},
+                specifications=variant_data.specifications,
+                dietary_tags=variant_data.dietary_tags or [],
+                tags=variant_data.tags,
+                availability_status=variant_data.availability_status
+            )
+            
+            self.db.add(variant)
+            await self.db.commit()
+            await self.db.refresh(variant)
+            
+            # Add images if provided
+            if variant_data.image_urls:
+                for idx, url in enumerate(variant_data.image_urls):
+                    image = ProductImage(
+                        id=uuid7(),
+                        variant_id=variant.id,
+                        url=url,
+                        is_primary=(idx == 0),
+                        sort_order=idx
+                    )
+                    self.db.add(image)
+                await self.db.commit()
+                await self.db.refresh(variant)
+            
+            return await self.variant("get", variant_id=variant.id)
+        
+        elif action == "update":
+            if not variant_id or not update_data:
+                raise APIException(status_code=400, message="variant_id and update_data required for update action")
+            
+            result = await self.db.execute(select(ProductVariant).where(ProductVariant.id == variant_id))
+            variant = result.scalar_one_or_none()
+            if not variant:
+                raise APIException(status_code=404, message="Variant not found")
+            
+            # Update fields
+            data = update_data.model_dump(exclude_unset=True, exclude={"images", "id"})
+            for field, value in data.items():
+                if hasattr(variant, field) and value is not None:
+                    setattr(variant, field, value)
+            
+            await self.db.commit()
+            await self.db.refresh(variant)
+            
+            # Handle images update
+            if update_data.images is not None:
+                await self.db.execute(delete(ProductImage).where(ProductImage.variant_id == variant_id))
+                for idx, img_data in enumerate(update_data.images):
+                    image = ProductImage(
+                        id=uuid7(),
+                        variant_id=variant.id,
+                        url=img_data.get("url"),
+                        alt_text=img_data.get("alt_text"),
+                        is_primary=img_data.get("is_primary", idx == 0),
+                        sort_order=img_data.get("sort_order", idx)
+                    )
+                    self.db.add(image)
+                await self.db.commit()
+                await self.db.refresh(variant)
+            
+            return await self.variant("get", variant_id=variant.id)
+        
+        elif action == "delete":
+            if not variant_id:
+                raise APIException(status_code=400, message="variant_id required for delete action")
+            
+            result = await self.db.execute(select(ProductVariant).where(ProductVariant.id == variant_id))
+            variant = result.scalar_one_or_none()
+            if not variant:
+                return False
+            
+            await self.db.delete(variant)
+            await self.db.commit()
+            return True
+        
+        else:
+            raise APIException(status_code=400, message=f"Invalid action: {action}. Use 'get', 'list', 'create', 'update', or 'delete'")
 
     async def all_variants(
         self,
@@ -954,205 +1069,129 @@ class ProductService:
         await self.db.commit()
 
     # ==========================================================
-    # VARIANT CRUD
-    # ==========================================================
-    async def create_variant(self, product_id: UUID, variant_data: ProductVariantCreate) -> ProductVariantResponse:
-        """Create a new variant for a product."""
-        # Check if product exists
-        product_result = await self.db.execute(select(Product).where(Product.id == product_id))
-        product = product_result.scalar_one_or_none()
-        if not product:
-            raise APIException(status_code=404, message="Product not found")
-        
-        # Generate SKU if not provided
-        sku = variant_data.sku or f"SKU-{product_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # Create variant
-        variant = ProductVariant(
-            id=uuid7(),
-            product_id=product_id,
-            sku=sku,
-            name=variant_data.name,
-            base_price=variant_data.base_price,
-            sale_price=variant_data.sale_price,
-            stock=variant_data.stock,
-            attributes=variant_data.attributes or {},
-            specifications=variant_data.specifications,
-            dietary_tags=variant_data.dietary_tags or [],
-            tags=variant_data.tags,
-            availability_status=variant_data.availability_status
-        )
-        
-        self.db.add(variant)
-        await self.db.commit()
-        await self.db.refresh(variant)
-        
-        # Add images if provided
-        if variant_data.image_urls:
-            for idx, url in enumerate(variant_data.image_urls):
-                image = ProductImage(
-                    id=uuid7(),
-                    variant_id=variant.id,
-                    url=url,
-                    is_primary=(idx == 0),  # First image is primary
-                    sort_order=idx
-                )
-                self.db.add(image)
-            await self.db.commit()
-            await self.db.refresh(variant)
-        
-        return await self.get_variant(variant.id)
-
-    async def update_variant(self, variant_id: UUID, variant_data: ProductVariantUpdate) -> ProductVariantResponse:
-        """Update a variant."""
-        result = await self.db.execute(
-            select(ProductVariant).where(ProductVariant.id == variant_id)
-        )
-        variant = result.scalar_one_or_none()
-        if not variant:
-            raise APIException(status_code=404, message="Variant not found")
-        
-        # Update fields
-        update_data = variant_data.model_dump(exclude_unset=True, exclude={"images", "id"})
-        for field, value in update_data.items():
-            if hasattr(variant, field) and value is not None:
-                setattr(variant, field, value)
-        
-        await self.db.commit()
-        await self.db.refresh(variant)
-        
-        # Handle images update
-        if variant_data.images is not None:
-            # Delete existing images
-            await self.db.execute(
-                delete(ProductImage).where(ProductImage.variant_id == variant_id)
-            )
-            
-            # Add new images
-            for idx, img_data in enumerate(variant_data.images):
-                image = ProductImage(
-                    id=uuid7(),
-                    variant_id=variant.id,
-                    url=img_data.get("url"),
-                    alt_text=img_data.get("alt_text"),
-                    is_primary=img_data.get("is_primary", idx == 0),
-                    sort_order=img_data.get("sort_order", idx)
-                )
-                self.db.add(image)
-            
-            await self.db.commit()
-            await self.db.refresh(variant)
-        
-        return await self.get_variant(variant.id)
-
-    async def delete_variant(self, variant_id: UUID) -> bool:
-        """Delete a variant."""
-        result = await self.db.execute(
-            select(ProductVariant).where(ProductVariant.id == variant_id)
-        )
-        variant = result.scalar_one_or_none()
-        if not variant:
-            return False
-        
-        await self.db.delete(variant)
-        await self.db.commit()
-        return True
-
-    # ==========================================================
     # VARIANT IMAGE CRUD
     # ==========================================================
-    async def create_image(self, variant_id: UUID, url: str, alt_text: Optional[str] = None, 
-                          is_primary: bool = False, sort_order: int = 0) -> dict:
-        """Create a new image for a variant."""
-        # Check if variant exists
-        variant_result = await self.db.execute(
-            select(ProductVariant).where(ProductVariant.id == variant_id)
-        )
-        if not variant_result.scalar_one_or_none():
-            raise APIException(status_code=404, message="Variant not found")
+    async def image(
+        self,
+        action: str,
+        image_id: Optional[UUID] = None,
+        variant_id: Optional[UUID] = None,
+        url: Optional[str] = None,
+        alt_text: Optional[str] = None,
+        is_primary: Optional[bool] = None,
+        sort_order: Optional[int] = None
+    ) -> Union[Optional[dict], List[dict], bool]:
+        """
+        Manage variant images: create, get, list, update, delete
         
-        # If this is primary, unset other primary images
-        if is_primary:
-            await self.db.execute(
-                update(ProductImage)
+        Args:
+            action: "create", "get", "list", "update", or "delete"
+            image_id: Required for "get", "update", "delete" actions
+            variant_id: Required for "create", "list" actions
+            url: Required for "create" action, optional for "update"
+            alt_text: Optional for "create" and "update" actions
+            is_primary: Optional for "create" and "update" actions
+            sort_order: Optional for "create" and "update" actions
+        """
+        if action == "create":
+            if not variant_id or not url:
+                raise APIException(status_code=400, message="variant_id and url required for create action")
+            
+            # Check if variant exists
+            variant_result = await self.db.execute(
+                select(ProductVariant).where(ProductVariant.id == variant_id)
+            )
+            if not variant_result.scalar_one_or_none():
+                raise APIException(status_code=404, message="Variant not found")
+            
+            # If this is primary, unset other primary images
+            if is_primary:
+                await self.db.execute(
+                    update(ProductImage)
+                    .where(ProductImage.variant_id == variant_id)
+                    .values(is_primary=False)
+                )
+            
+            image = ProductImage(
+                id=uuid7(),
+                variant_id=variant_id,
+                url=url,
+                alt_text=alt_text,
+                is_primary=is_primary or False,
+                sort_order=sort_order or 0
+            )
+            
+            self.db.add(image)
+            await self.db.commit()
+            await self.db.refresh(image)
+            return image.to_dict()
+        
+        elif action == "get":
+            if not image_id:
+                raise APIException(status_code=400, message="image_id required for get action")
+            result = await self.db.execute(
+                select(ProductImage).where(ProductImage.id == image_id)
+            )
+            image = result.scalar_one_or_none()
+            return image.to_dict() if image else None
+        
+        elif action == "list":
+            if not variant_id:
+                raise APIException(status_code=400, message="variant_id required for list action")
+            result = await self.db.execute(
+                select(ProductImage)
                 .where(ProductImage.variant_id == variant_id)
-                .values(is_primary=False)
+                .order_by(ProductImage.sort_order)
             )
+            images = result.scalars().all()
+            return [img.to_dict() for img in images]
         
-        image = ProductImage(
-            id=uuid7(),
-            variant_id=variant_id,
-            url=url,
-            alt_text=alt_text,
-            is_primary=is_primary,
-            sort_order=sort_order
-        )
-        
-        self.db.add(image)
-        await self.db.commit()
-        await self.db.refresh(image)
-        
-        return image.to_dict()
-
-    async def get_image(self, image_id: UUID) -> Optional[dict]:
-        """Get an image by ID."""
-        result = await self.db.execute(
-            select(ProductImage).where(ProductImage.id == image_id)
-        )
-        image = result.scalar_one_or_none()
-        return image.to_dict() if image else None
-
-    async def list_images(self, variant_id: UUID) -> List[dict]:
-        """List all images for a variant."""
-        result = await self.db.execute(
-            select(ProductImage)
-            .where(ProductImage.variant_id == variant_id)
-            .order_by(ProductImage.sort_order)
-        )
-        images = result.scalars().all()
-        return [img.to_dict() for img in images]
-
-    async def update_image(self, image_id: UUID, url: Optional[str] = None, 
-                          alt_text: Optional[str] = None, is_primary: Optional[bool] = None,
-                          sort_order: Optional[int] = None) -> Optional[dict]:
-        """Update an image."""
-        result = await self.db.execute(
-            select(ProductImage).where(ProductImage.id == image_id)
-        )
-        image = result.scalar_one_or_none()
-        if not image:
-            return None
-        
-        # If setting as primary, unset other primary images for this variant
-        if is_primary and not image.is_primary:
-            await self.db.execute(
-                update(ProductImage)
-                .where(ProductImage.variant_id == image.variant_id)
-                .values(is_primary=False)
+        elif action == "update":
+            if not image_id:
+                raise APIException(status_code=400, message="image_id required for update action")
+            
+            result = await self.db.execute(
+                select(ProductImage).where(ProductImage.id == image_id)
             )
+            image = result.scalar_one_or_none()
+            if not image:
+                return None
+            
+            # If setting as primary, unset other primary images for this variant
+            if is_primary and not image.is_primary:
+                await self.db.execute(
+                    update(ProductImage)
+                    .where(ProductImage.variant_id == image.variant_id)
+                    .values(is_primary=False)
+                )
+            
+            if url is not None:
+                image.url = url
+            if alt_text is not None:
+                image.alt_text = alt_text
+            if is_primary is not None:
+                image.is_primary = is_primary
+            if sort_order is not None:
+                image.sort_order = sort_order
+            
+            await self.db.commit()
+            await self.db.refresh(image)
+            return image.to_dict()
         
-        if url is not None:
-            image.url = url
-        if alt_text is not None:
-            image.alt_text = alt_text
-        if is_primary is not None:
-            image.is_primary = is_primary
-        if sort_order is not None:
-            image.sort_order = sort_order
+        elif action == "delete":
+            if not image_id:
+                raise APIException(status_code=400, message="image_id required for delete action")
+            
+            result = await self.db.execute(
+                select(ProductImage).where(ProductImage.id == image_id)
+            )
+            image = result.scalar_one_or_none()
+            if not image:
+                return False
+            
+            await self.db.delete(image)
+            await self.db.commit()
+            return True
         
-        await self.db.commit()
-        await self.db.refresh(image)
-        return image.to_dict()
-
-    async def delete_image(self, image_id: UUID) -> bool:
-        """Delete an image."""
-        result = await self.db.execute(
-            select(ProductImage).where(ProductImage.id == image_id)
-        )
-        image = result.scalar_one_or_none()
-        if not image:
-            return False
-        
-        await self.db.delete(image)
-        await self.db.commit()
-        return True
+        else:
+            raise APIException(status_code=400, message=f"Invalid action: {action}. Use 'create', 'get', 'list', 'update', or 'delete'")
