@@ -47,7 +47,7 @@ async def get(
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         if is_admin:
-            order = await order_service.get_by_id(order_id)
+            order = await order_service.get(order_id)
         else:
             order = await order_service.get(order_id, current_user.id)
             

@@ -508,7 +508,7 @@ class DiscountEngine:
             logger.error(f"Error getting applicable discounts: {str(e)}")
             return []
 
-    async def list_discounts(
+    async def list(
         self,
         page: int = 1,
         limit: int = 20,

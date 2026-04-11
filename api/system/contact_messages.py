@@ -37,7 +37,7 @@ async def create(
     Create a new contact message (public endpoint)
     """
     try:
-        message = await ContactMessageService.create_message(db, message_data)
+        message = await ContactMessageService.create(db, message_data)
         return Response.success(
             data={
                 "id": str(message.id),
@@ -78,7 +78,7 @@ async def list(
     Get all contact messages with pagination and filters (admin only)
     """
     try:
-        messages, total = await ContactMessageService.get_all_messages(
+        messages, total = await ContactMessageService.list(
             db=db,
             page=page,
             page_size=page_size,
@@ -136,7 +136,7 @@ async def get(
     """
     Get a specific contact message by ID (admin only)
     """
-    message = await ContactMessageService.get_message_by_id(db, message_id)
+    message = await ContactMessageService.get(db, message_id)
     
     if not message:
         raise APIException(
@@ -174,7 +174,7 @@ async def patch(
     Update a contact message (admin only)
     """
     try:
-        message = await ContactMessageService.update_message(db, message_id, update_data)
+        message = await ContactMessageService.update(db, message_id, update_data)
         
         if not message:
             raise APIException(
@@ -219,7 +219,7 @@ async def delete(
     Delete a contact message (admin only)
     """
     try:
-        success = await ContactMessageService.delete_message(db, message_id)
+        success = await ContactMessageService.delete(db, message_id)
         
         if not success:
             raise APIException(

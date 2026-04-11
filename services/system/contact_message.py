@@ -20,7 +20,7 @@ class ContactMessageService:
     """Service for managing contact messages"""
     
     @staticmethod
-    async def create_message(db: AsyncSession, message_data: ContactMessageCreate) -> ContactMessage:
+    async def create(db: AsyncSession, message_data: ContactMessageCreate) -> ContactMessage:
         """Create a new contact message"""
         try:
             message = ContactMessage(
@@ -45,14 +45,14 @@ class ContactMessageService:
             raise
     
     @staticmethod
-    async def get_message_by_id(db: AsyncSession, message_id: UUID) -> Optional[ContactMessage]:
+    async def get(db: AsyncSession, message_id: UUID) -> Optional[ContactMessage]:
         """Get a contact message by ID"""
         stmt = select(ContactMessage).where(ContactMessage.id == message_id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
     
     @staticmethod
-    async def get_all_messages(
+    async def list(
         db: AsyncSession,
         page: int = 1,
         page_size: int = 20,
@@ -102,7 +102,7 @@ class ContactMessageService:
         return messages, total
     
     @staticmethod
-    async def update_message(
+    async def update(
         db: AsyncSession,
         message_id: UUID,
         update_data: ContactMessageUpdate
@@ -145,7 +145,7 @@ class ContactMessageService:
             raise
     
     @staticmethod
-    async def delete_message(db: AsyncSession, message_id: UUID) -> bool:
+    async def delete(db: AsyncSession, message_id: UUID) -> bool:
         """Delete a contact message"""
         try:
             stmt = select(ContactMessage).where(ContactMessage.id == message_id)
