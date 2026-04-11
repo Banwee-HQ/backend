@@ -508,10 +508,10 @@ async def sales(
 @router.get("/users")
 async def users(
     days: Optional[int] = Query(30),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get user analytics. Requires admin access."""
+    """Get user analytics (admin only)."""
     try:
         from sqlalchemy import select, func
         from models.accounts.user import User as UserModel
@@ -543,10 +543,10 @@ async def users(
 @router.get("/products")
 async def products(
     days: Optional[int] = Query(30),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get product analytics. Requires admin access."""
+    """Get product analytics (admin only)."""
     try:
         from sqlalchemy import select, func
         from models.catalog.product import Product
@@ -574,10 +574,10 @@ async def products(
 @router.get("/orders")
 async def orders(
     days: Optional[int] = Query(30),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get order analytics. Requires admin access."""
+    """Get order analytics (admin only)."""
     try:
         from sqlalchemy import select, func
         from models.commerce.orders import Order
@@ -640,7 +640,7 @@ async def revenue(
         )
 
 
-@router.get("/admin/stats")
+@router.get("/stats")
 async def admin_stats(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -668,7 +668,7 @@ async def admin_stats(
         )
 
 
-@router.get("/admin/dashboard")
+@router.get("/dashboard/admin")
 async def admin_dashboard(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -691,7 +691,7 @@ async def admin_dashboard(
         )
 
 
-@router.get("/admin/export/orders")
+@router.get("/export/orders")
 async def export_orders(
     format: str = Query("csv"),
     order_status: Optional[str] = Query(None, alias="status"),

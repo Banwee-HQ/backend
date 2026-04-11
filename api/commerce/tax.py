@@ -206,11 +206,11 @@ async def _list_tax_rates_internal(
 
 
 
-@router.get("/rates/countries")
+@router.get("/countries")
 async def countries(
     db: AsyncSession = Depends(get_db)
 ):
-    """Get list of countries that have tax rates configured"""
+    """Get list of countries that have tax rates configured."""
     try:
         result = await db.execute(
             select(

@@ -203,25 +203,3 @@ async def calc_cost(
             message=f"Failed to calculate shipping cost: {str(e)}"
         )
 
-
-@router.get("/admin/methods")
-async def list_admin(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    is_active: Optional[bool] = Query(None),
-    current_user = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all shipping methods (admin only)."""
-    try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
-        shipping_service = ShippingService(db)
-        methods = await shipping_service.get_all_methods(
-            page=page, limit=limit, is_active=is_active
-        )
-        return Response.success(data=methods)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message="Failed to fetch shipping methods")
