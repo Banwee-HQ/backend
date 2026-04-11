@@ -12,7 +12,7 @@ from uuid import UUID
 from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
-from core.dependencies import get_current_auth_user, get_current_admin_user
+from core.dependencies import get_current_auth_user, get_current_admin_user, get_shipping_tracking_service
 from models.accounts.user import User
 from models.commerce.shipping_tracking import (
     ShipmentTracking, ShippingProvider, ShippingCarrier, 
@@ -28,9 +28,6 @@ from schemas.commerce.shipping_tracking import (
 )
 
 router = APIRouter(prefix="/shipping-tracking", tags=["Shipping Tracking"])
-
-def get_shipping_tracking_service(db: AsyncSession = Depends(get_db)):
-    return ShippingTrackingService(db)
 
 @router.post("/shipments")
 async def create_shipment(

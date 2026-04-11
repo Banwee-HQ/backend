@@ -7,7 +7,7 @@ from typing import Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user, require_admin, get_refund_service
 from core.utils.response import Response
 from models.accounts.user import User
 from models.commerce.refunds import RefundStatus
@@ -16,11 +16,6 @@ from services.commerce.refunds import RefundService
 from core.exceptions import APIException
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
-
-
-def get_refund_service(db: AsyncSession = Depends(get_db)) -> RefundService:
-    """Dependency to get refund service"""
-    return RefundService(db)
 
 
 async def _create_refund(

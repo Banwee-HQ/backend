@@ -81,5 +81,15 @@ def get_auth_service(db: AsyncSession = Depends(get_db)):
     return AuthService(db)
 
 
+def get_refund_service(db: AsyncSession = Depends(get_db)):
+    from services.commerce.refunds import RefundService
+    return RefundService(db)
+
+
+def get_shipping_tracking_service(db: AsyncSession = Depends(get_db)):
+    from services.commerce.shipping_tracking import ShippingTrackingService
+    return ShippingTrackingService(db)
+
+
 # Alias — some routers use get_current_user instead of get_current_auth_user
 get_current_user = get_current_auth_user
