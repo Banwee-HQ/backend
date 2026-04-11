@@ -312,7 +312,7 @@ async def sync_all(
     """
     try:
         inventory_service = InventoryService(db)
-        result = await inventory_service.sync_all_products_availability()
+        result = await inventory_service.sync()
         
         return Response.success(
             data=result,
@@ -340,7 +340,7 @@ async def sync_product(
         
         product_id_uuid = UUIDType(product_id)
         inventory_service = InventoryService(db)
-        result = await inventory_service.sync_availability(product_id_uuid)
+        result = await inventory_service.sync(product_id_uuid)
         
         return Response.success(
             data=result,

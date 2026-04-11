@@ -529,7 +529,7 @@ class InventoryService:
             if variant and variant.product_id:
                 # Sync availability status (don't fail if this fails)
                 try:
-                    await self.sync_availability(variant.product_id)
+                    await self.sync(variant.product_id)
                 except Exception as e:
                     logger.warning(f"Failed to sync product availability after stock adjustment", exception=e)
             
@@ -1127,105 +1127,84 @@ class InventoryService:
             logger.error(f"Failed to log inventory change: {e}")
             # Don't raise exception as logging failures shouldn't break inventory operations
 
-    async def sync_availability(self, product_id: UUID) -> Dict[str, Any]:
+    async def sync(self, product_id: Optional[UUID] = None) -> Dict[str, Any]:
         """
-        Sync product availability_status based on its variants' inventory levels
-        
-        Checks all variants of a product and updates the product's availability_status:
-        - "available" if at least one variant has stock > 0
-        - "out_of_stock" if all variants have stock <= 0
-        - "pre_order" if product has pre_order flag set
+        Sync product availability_status based on inventory levels.
+        If product_id is provided, sync only that product. Otherwise sync all products.
         """
         try:
-            # Get product with variants and inventory
-            product_result = await self.db.execute(
-                select(Product)
-                .where(Product.id == product_id)
-                .options(selectinload(Product.variants).selectinload(ProductVariant.inventory))
-            )
-            product = product_result.scalar_one_or_none()
-            
-            if not product:
-                return {
-                    "success": False,
-                    "message": f"Product {product_id} not found"
-                }
-            
-            # Check if any variant has stock
-            has_stock = False
-            total_stock = 0
-            
-            for variant in product.variants or []:
-                if variant.inventory and variant.inventory.quantity_available > 0:
-                    has_stock = True
-                    total_stock += variant.inventory.quantity_available
-            
-            # Log product availability status (computed property, can't be set directly)
-            current_status = product.availability_status
-            computed_status = "available" if has_stock else "out_of_stock"
-            
-            # Note: availability_status is a computed property on Product model
-            # We don't need to set it - it's calculated dynamically from variant inventory
-            logger.info(f"Synced product {product_id} availability: {current_status} (computed: {computed_status}, total stock: {total_stock})")
-            
-            return {
-                "success": True,
-                "product_id": str(product_id),
-                "current_status": current_status,
-                "computed_status": computed_status,
-                "total_stock": total_stock,
-                "variant_count": len(product.variants or [])
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to sync product availability status: {e}")
-            return {
-                "success": False,
-                "message": f"Failed to sync availability status: {str(e)}"
-            }
-
-    async def sync_all_products_availability(self) -> Dict[str, Any]:
-        """
-        Sync availability_status for all products based on their inventory
-        Returns summary of changes made
-        """
-        try:
-            # Get all products with variants and inventory
-            products_result = await self.db.execute(
-                select(Product)
-                .options(selectinload(Product.variants).selectinload(ProductVariant.inventory))
-            )
-            products = products_result.scalars().all()
-            
-            updated_count = 0
-            still_in_stock = 0
-            went_out_of_stock = 0
-            
-            for product in products:
+            if product_id:
+                # Sync single product
+                product_result = await self.db.execute(
+                    select(Product)
+                    .where(Product.id == product_id)
+                    .options(selectinload(Product.variants).selectinload(ProductVariant.inventory))
+                )
+                product = product_result.scalar_one_or_none()
+                
+                if not product:
+                    return {
+                        "success": False,
+                        "message": f"Product {product_id} not found"
+                    }
+                
+                # Check if any variant has stock
+                has_stock = False
                 total_stock = 0
+                
                 for variant in product.variants or []:
-                    if variant.inventory:
+                    if variant.inventory and variant.inventory.quantity_available > 0:
+                        has_stock = True
                         total_stock += variant.inventory.quantity_available
                 
-                # availability_status is a computed property, we can't set it directly
-                # Just log products with zero stock for monitoring
-                if total_stock == 0:
-                    went_out_of_stock += 1
-                    logger.info(f"Product {product.id} is out of stock (computed)")
-                else:
-                    still_in_stock += 1
-            
-            return {
-                "success": True,
-                "total_products": len(products),
-                "in_stock": still_in_stock,
-                "out_of_stock": went_out_of_stock,
-                "message": f"Checked {len(products)} products ({went_out_of_stock} out of stock, {still_in_stock} in stock)"
-            }
+                # Log product availability status (computed property, can't be set directly)
+                current_status = product.availability_status
+                computed_status = "available" if has_stock else "out_of_stock"
+                
+                logger.info(f"Synced product {product_id} availability: {current_status} (computed: {computed_status}, total stock: {total_stock})")
+                
+                return {
+                    "success": True,
+                    "product_id": str(product_id),
+                    "current_status": current_status,
+                    "computed_status": computed_status,
+                    "total_stock": total_stock,
+                    "variant_count": len(product.variants or [])
+                }
+            else:
+                # Sync all products
+                products_result = await self.db.execute(
+                    select(Product)
+                    .options(selectinload(Product.variants).selectinload(ProductVariant.inventory))
+                )
+                products = products_result.scalars().all()
+                
+                still_in_stock = 0
+                went_out_of_stock = 0
+                
+                for product in products:
+                    total_stock = 0
+                    for variant in product.variants or []:
+                        if variant.inventory:
+                            total_stock += variant.inventory.quantity_available
+                    
+                    if total_stock == 0:
+                        went_out_of_stock += 1
+                        logger.info(f"Product {product.id} is out of stock (computed)")
+                    else:
+                        still_in_stock += 1
+                
+                return {
+                    "success": True,
+                    "total_products": len(products),
+                    "in_stock": still_in_stock,
+                    "out_of_stock": went_out_of_stock,
+                    "message": f"Checked {len(products)} products ({went_out_of_stock} out of stock, {still_in_stock} in stock)"
+                }
             
         except Exception as e:
-            logger.error(f"Failed to sync all products availability: {e}")
+            logger.error(f"Failed to sync availability: {e}")
             return {
                 "success": False,
-                "message": f"Failed to sync all products: {str(e)}"
+                "message": f"Failed to sync availability: {str(e)}"
             }
