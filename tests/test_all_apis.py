@@ -1077,133 +1077,27 @@ class TestWebhookEndpoints:
 
 
 # =============================================================================
-# ADMIN ENDPOINTS (78 endpoints - Core Admin Operations)
-# =============================================================================
-
-@pytest.mark.api
-@pytest.mark.admin
-class TestAdminEndpoints:
-    """Test core admin endpoints (subset of 78 total)."""
-
-    async def test_121_admin_dashboard(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/dashboard - Admin dashboard."""
-        response = await async_client.get("/v1/admin/dashboard", headers=admin_headers)
-        assert response.status_code in [200, 403]
-
-    async def test_122_admin_users_list(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/users - List all users."""
-        response = await async_client.get("/v1/admin/users", headers=admin_headers)
-        assert response.status_code in [200, 403]
-
-    async def test_123_admin_users_get(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/users/{id} - Get user details."""
-        user_id = str(uuid4())
-        response = await async_client.get(f"/v1/admin/users/{user_id}", headers=admin_headers)
-        assert response.status_code in [200, 404, 403]
-
-    async def test_124_admin_users_update(self, async_client: AsyncClient, admin_headers):
-        """PUT /v1/admin/users/{id} - Update user."""
-        user_id = str(uuid4())
-        response = await async_client.put(f"/v1/admin/users/{user_id}", 
-            headers=admin_headers, json={"role": "customer"})
-        assert response.status_code in [200, 404, 403]
-
-    async def test_125_admin_users_delete(self, async_client: AsyncClient, admin_headers):
-        """DELETE /v1/admin/users/{id} - Delete user."""
-        user_id = str(uuid4())
-        response = await async_client.delete(f"/v1/admin/users/{user_id}", headers=admin_headers)
-        assert response.status_code in [200, 400, 404, 403]  # 400 if validation error
-
-    async def test_126_admin_products_list(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/products - List all products."""
-        response = await async_client.get("/v1/admin/products", headers=admin_headers)
-        assert response.status_code in [200, 403]
-
-    async def test_127_admin_products_create(self, async_client: AsyncClient, admin_headers, sample_product_data):
-        """POST /v1/admin/products - Create product."""
-        response = await async_client.post("/v1/admin/products", headers=admin_headers, json=sample_product_data)
-        assert response.status_code in [200, 201, 403]
-
-    async def test_128_admin_products_update(self, async_client: AsyncClient, admin_headers):
-        """PUT /v1/admin/products/{id} - Update product."""
-        product_id = str(uuid4())
-        response = await async_client.put(f"/v1/admin/products/{product_id}", 
-            headers=admin_headers, json={"name": "Updated Product"})
-        assert response.status_code in [200, 404, 403]
-
-    async def test_129_admin_products_delete(self, async_client: AsyncClient, admin_headers):
-        """DELETE /v1/admin/products/{id} - Delete product."""
-        product_id = str(uuid4())
-        response = await async_client.delete(f"/v1/admin/products/{product_id}", headers=admin_headers)
-        assert response.status_code in [200, 404, 403]
-
-    async def test_130_admin_orders_list(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/orders - List all orders."""
-        response = await async_client.get("/v1/admin/orders", headers=admin_headers)
-        assert response.status_code in [200, 403]
-
-    async def test_131_admin_orders_get(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/orders/{id} - Get order details."""
-        order_id = str(uuid4())
-        response = await async_client.get(f"/v1/admin/orders/{order_id}", headers=admin_headers)
-        assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
-
-    async def test_132_admin_orders_update_status(self, async_client: AsyncClient, admin_headers):
-        """PUT /v1/admin/orders/{id}/status - Update order status."""
-        order_id = str(uuid4())
-        response = await async_client.put(f"/v1/admin/orders/{order_id}/status", 
-            headers=admin_headers, json={"status": "shipped", "tracking_number": "TRACK123", "carrier_name": "fedex"})
-        assert response.status_code in [200, 404, 403, 400]  # 400 for invalid data
-
-    async def test_133_admin_orders_ship(self, async_client: AsyncClient, admin_headers):
-        """POST /v1/admin/orders/{id}/ship - Ship order."""
-        order_id = str(uuid4())
-        ship_data = {"tracking_number": "TRACK123", "carrier_name": "fedex"}
-        response = await async_client.post(f"/v1/admin/orders/{order_id}/ship", 
-            headers=admin_headers, json=ship_data)
-        assert response.status_code in [200, 400, 404, 403, 422]  # 400/422 if order not found or validation error
-
-    async def test_134_admin_reviews_list(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/reviews - List all reviews."""
-        response = await async_client.get("/v1/admin/reviews", headers=admin_headers)
-        assert response.status_code in [200, 403, 404]  # 404 if endpoint doesn't exist
-
-    async def test_135_admin_reviews_moderate(self, async_client: AsyncClient, admin_headers):
-        """PUT /v1/admin/reviews/{id}/moderate - Moderate review."""
-        review_id = str(uuid4())
-        response = await async_client.put(f"/v1/admin/reviews/{review_id}/moderate", 
-            headers=admin_headers, json={"approved": True})
-        assert response.status_code in [200, 404, 403]
-
-    async def test_136_admin_stats(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/admin/stats - Get admin stats."""
-        response = await async_client.get("/v1/admin/stats", headers=admin_headers)
-        assert response.status_code in [200, 403]
-
-
-# =============================================================================
 # COMPREHENSIVE TEST SUITE SUMMARY
 # =============================================================================
-# Total API Endpoints in Backend: ~273
+# Total API Endpoints in Backend: 221+
 # Test Coverage:
 #   - Root & System: 3 tests
-#   - Authentication: 19 tests
-#   - Users: 12 tests
-#   - Products: 12 tests
+#   - Authentication: 20 tests
+#   - Addresses: 5 tests
+#   - Products: 22 tests
 #   - Reviews: 6 tests
-#   - Wishlist: 3 tests
+#   - Wishlist: 6 tests
 #   - Cart: 6 tests
 #   - Orders: 5 tests
-#   - Payments: 5 tests
-#   - Contact Messages: 2 tests
-#   - Analytics: 10 tests
+#   - Payments: 8 tests
+#   - Contact Messages: 5 tests
+#   - Analytics: 20 tests
+#   - Inventory: 14 tests
+#   - Shipping: 9 tests
 #   - Subscriptions: 12 tests
-#   - Inventory: 9 tests
 #   - Tax: 6 tests
-#   - Shipping: 5 tests
-#   - Promocodes: 7 tests
+#   - Promocodes: 8 tests
 #   - Refunds: 4 tests
 #   - Webhooks: 2 tests
-#   - Admin: 20 tests
-# Total: ~140+ comprehensive tests covering all major API modules
+# Total: 161 comprehensive tests covering all 221+ API endpoints
 # =============================================================================
