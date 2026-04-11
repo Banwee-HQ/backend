@@ -179,44 +179,44 @@ class PromoCodeScheduler:
                 "deactivated_count": deactivated_count
             }
     
-    async def get_active_promocodes(self) -> List[Promocode]:
-        """Get all currently active and valid promocodes"""
+    async def list(self, status: str = "active") -> List[Promocode]:
+        """Get promocodes by status: 'active', 'expired', or 'all'"""
         current_time = datetime.now(timezone.utc)
         
-        result = await self.db.execute(
-            select(Promocode).where(
-                and_(
-                    Promocode.is_active == True,
-                    or_(
-                        Promocode.valid_from == None,
-                        Promocode.valid_from <= current_time
-                    ),
-                    or_(
-                        Promocode.valid_until == None,
-                        Promocode.valid_until > current_time
-                    ),
-                    or_(
-                        Promocode.usage_limit == None,
-                        Promocode.used_count < Promocode.usage_limit
+        if status == "expired":
+            # Get expired promocodes
+            result = await self.db.execute(
+                select(Promocode).where(
+                    and_(
+                        Promocode.valid_until != None,
+                        Promocode.valid_until <= current_time
                     )
                 )
             )
-        )
-        
-        return result.scalars().all()
-    
-    async def get_expired_promocodes(self) -> List[Promocode]:
-        """Get all expired promocodes"""
-        current_time = datetime.now(timezone.utc)
-        
-        result = await self.db.execute(
-            select(Promocode).where(
-                and_(
-                    Promocode.valid_until != None,
-                    Promocode.valid_until <= current_time
+        elif status == "all":
+            # Get all promocodes
+            result = await self.db.execute(select(Promocode))
+        else:
+            # Get active promocodes (default)
+            result = await self.db.execute(
+                select(Promocode).where(
+                    and_(
+                        Promocode.is_active == True,
+                        or_(
+                            Promocode.valid_from == None,
+                            Promocode.valid_from <= current_time
+                        ),
+                        or_(
+                            Promocode.valid_until == None,
+                            Promocode.valid_until > current_time
+                        ),
+                        or_(
+                            Promocode.usage_limit == None,
+                            Promocode.used_count < Promocode.usage_limit
+                        )
+                    )
                 )
             )
-        )
         
         return result.scalars().all()
 

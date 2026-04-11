@@ -31,8 +31,7 @@ async def create(
         cart = await cart_service.add_to_cart(
             user_id=current_user.id,
             variant_id=request.variant_id,
-            quantity=request.quantity,
-            session_id=None
+            quantity=request.quantity
         )
         return Response(success=True, data=cart, message="Item added to cart")
     except HTTPException as e:
@@ -66,7 +65,6 @@ async def get(
         cart_service = CartService(db)
         cart = await cart_service.get_cart(
             user_id=current_user.id,
-            session_id=None,
             country_code=country_code,
             province_code=province_code
         )
@@ -139,8 +137,7 @@ async def count(
     try:
         cart_service = CartService(db)
         count = await cart_service.item_count(
-            user_id=current_user.id,
-            session_id=None
+            user_id=current_user.id
         )
         return Response(success=True, data=count)
     except Exception:
@@ -219,8 +216,7 @@ async def calculate(
         cart_service = CartService(db)
         result = await cart_service.calc_totals(
             user_id=current_user.id,
-            data=data,
-            session_id=None
+            data=data
         )
         return Response(success=True, data=result)
     except Exception as e:
@@ -239,8 +235,7 @@ async def clear(
     try:
         cart_service = CartService(db)
         result = await cart_service.clear_cart(
-            user_id=current_user.id,
-            session_id=None
+            user_id=current_user.id
         )
         return Response(success=True, data=result, message="Cart cleared successfully")
     except Exception as e:
@@ -259,8 +254,7 @@ async def summary(
     try:
         cart_service = CartService(db)
         result = await cart_service.checkout_summary(
-            user_id=current_user.id,
-            session_id=None
+            user_id=current_user.id
         )
         return Response(success=True, data=result)
     except Exception:

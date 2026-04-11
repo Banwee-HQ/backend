@@ -35,8 +35,7 @@ class CartService:
 
     async def get_cart(
         self, 
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None,
+        user_id: UUID,
         country_code: str = 'US',
         province_code: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -45,8 +44,7 @@ class CartService:
         All prices are calculated server-side from database
         """
         if not user_id:
-            # Return empty cart for guests - they need to login to use cart
-            return self._create_empty_cart_response(session_id, country_code, province_code)
+            raise ValueError("user_id is required")
 
         # Get or create cart for authenticated user
         cart = await self.get_or_create(user_id)
@@ -443,10 +441,9 @@ class CartService:
 
     async def add_to_cart(
         self,
-        user_id: Optional[UUID] = None,
-        variant_id: UUID = None,
-        quantity: int = 1,
-        session_id: Optional[str] = None
+        user_id: UUID,
+        variant_id: UUID,
+        quantity: int = 1
     ) -> Dict[str, Any]:
         """Add item to cart in PostgreSQL"""
         
@@ -525,10 +522,9 @@ class CartService:
 
     async def update_item(
         self,
-        user_id: Optional[UUID] = None,
-        cart_item_id: UUID = None,
-        quantity: int = 1,
-        session_id: Optional[str] = None
+        user_id: UUID,
+        cart_item_id: UUID,
+        quantity: int = 1
     ) -> Dict[str, Any]:
         """Update cart item quantity"""
         if not user_id:
@@ -573,9 +569,8 @@ class CartService:
 
     async def remove_item(
         self,
-        user_id: Optional[UUID] = None,
-        cart_item_id: UUID = None,
-        session_id: Optional[str] = None
+        user_id: UUID,
+        cart_item_id: UUID
     ) -> Dict[str, Any]:
         """Remove item from cart by item ID"""
         
@@ -605,8 +600,7 @@ class CartService:
 
     async def clear_cart(
         self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None
+        user_id: UUID
     ) -> Dict[str, Any]:
         """Clear all items from cart"""
         
@@ -630,8 +624,7 @@ class CartService:
 
     async def item_count(
         self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None
+        user_id: UUID
     ) -> int:
         """Get total number of items in cart"""
         
@@ -684,13 +677,12 @@ class CartService:
 
     async def remove_promo(
         self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None
+        user_id: UUID
     ) -> Dict[str, Any]:
         """Remove promocode from cart (placeholder implementation)"""
         # This would integrate with a promocode service
         # For now, return cart without changes
-        cart_data = await self.get_cart(user_id=user_id, session_id=session_id)
+        cart_data = await self.get_cart(user_id=user_id)
         return {
             **cart_data,
             "promocode_removed": True,
@@ -699,9 +691,8 @@ class CartService:
 
     async def shipping_options(
         self,
-        user_id: Optional[UUID] = None,
-        address: Dict[str, Any] = None,
-        session_id: Optional[str] = None
+        user_id: UUID,
+        address: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Get shipping options for cart from database"""
         from models.commerce.shipping import ShippingMethod
@@ -771,17 +762,16 @@ class CartService:
 
     async def calc_totals(
         self,
-        user_id: Optional[UUID] = None,
-        data: Dict[str, Any] = None,
-        session_id: Optional[str] = None
+        user_id: UUID,
+        data: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Calculate cart totals with shipping and tax"""
-        cart_data = await self.get_cart(user_id=user_id, session_id=session_id)
+        cart_data = await self.get_cart(user_id=user_id)
         
         # Extract shipping method from data
         shipping_cost = 0.0
         if data and "shipping_method_id" in data:
-            shipping_options = await self.shipping_options(user_id, session_id=session_id)
+            shipping_options = await self.shipping_options(user_id)
             for option in shipping_options.get("shipping_options", []):
                 if option["id"] == data["shipping_method_id"]:
                     shipping_cost = option["price"]
@@ -803,8 +793,7 @@ class CartService:
     async def save_later(
         self,
         user_id: UUID,
-        item_id: UUID,
-        session_id: Optional[str] = None
+        item_id: UUID
     ) -> Dict[str, Any]:
         """Save cart item for later (move to saved items list)"""
         try:
@@ -825,7 +814,7 @@ class CartService:
             item.is_saved_for_later = True
             await self.db.commit()
             
-            return await self.get_cart(user_id=user_id, session_id=session_id)
+            return await self.get_cart(user_id=user_id)
         except HTTPException:
             raise
         except Exception as e:
@@ -893,20 +882,3 @@ class CartService:
         except Exception as e:
             logger.error(f"Failed to get saved items: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to get saved items: {str(e)}")
-
-    async def merge(
-        self,
-        user_id: UUID,
-        guest_cart_id: Optional[str] = None,
-        guest_cart_data: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Merge guest cart with user cart after login"""
-        try:
-            # For PostgreSQL version, just return the user's existing cart
-            # Guest cart merging can be implemented later if needed
-            logger.info(f"Merging cart for user {user_id}, guest_cart_id: {guest_cart_id}")
-            return await self.get_cart(user_id=user_id, session_id=session_id)
-        except Exception as e:
-            logger.error(f"Failed to merge cart: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to merge cart: {str(e)}")
