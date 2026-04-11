@@ -26,18 +26,15 @@ from models.accounts.user import User, UserRole
 from models.catalog.product import Product, ProductVariant, ProductImage
 from models.commerce.subscriptions import Subscription
 
-router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
+router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 
 @router.post("/trigger-order-processing")
 async def trigger_order_processing(
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger subscription order processing (admin only)."""
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
         scheduler = SubscriptionScheduler(db)
         result = await scheduler.process_due_subscriptions()
@@ -52,13 +49,10 @@ async def trigger_order_processing(
 
 @router.post("/trigger-notifications")
 async def trigger_notifications(
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-    ):
+):
     """Manually trigger subscription order notifications (admin only)."""
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
         return Response.success(message="Subscription order notifications triggered successfully")
     except Exception as e:

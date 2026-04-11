@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin, get_inventory_service
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
@@ -17,20 +17,21 @@ from services.catalog.inventory import InventoryService
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
+router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
 # ==========================================================
 # LOCATIONS - 5 Standard APIs
 # ==========================================================
 @router.post("/locations")
-async def create(
+async def create_location(
     location_data: LocationCreate,
     current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Create a new warehouse location (Admin access)."""
     try:
+        inventory_service = InventoryService(db)
         location = await inventory_service.create_location(location_data)
         return Response.success(data=location, message="Warehouse location created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
@@ -40,13 +41,14 @@ async def create(
 
 
 @router.get("/locations/{location_id}")
-async def get(
+async def get_location(
     location_id: UUID,
     current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get a specific warehouse location by ID (Admin access)."""
     try:
+        inventory_service = InventoryService(db)
         location = await inventory_service.get_location(location_id)
         if not location:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Warehouse location not found")
@@ -58,12 +60,13 @@ async def get(
 
 
 @router.get("/locations")
-async def list(
+async def list_locations(
     current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """List all warehouse locations (Admin access)."""
     try:
+        inventory_service = InventoryService(db)
         locations = await inventory_service.list_locations()
         return Response.success(data=locations)
     except Exception as e:
@@ -71,14 +74,15 @@ async def list(
 
 
 @router.patch("/locations/{location_id}")
-async def patch(
+async def update_location(
     location_id: UUID,
     location_data: LocationUpdate,
     current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Partially update a warehouse location (Admin access)."""
     try:
+        inventory_service = InventoryService(db)
         location = await inventory_service.update_location(location_id, location_data)
         return Response.success(data=location, message="Warehouse location updated successfully")
     except APIException:
@@ -88,13 +92,14 @@ async def patch(
 
 
 @router.delete("/locations/{location_id}")
-async def delete(
+async def delete_location(
     location_id: UUID,
     current_user: User = Depends(require_admin),
-    inventory_service: InventoryService = Depends(get_inventory_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Delete a warehouse location (Admin access)."""
     try:
+        inventory_service = InventoryService(db)
         await inventory_service.delete_location(location_id)
         return Response.success(message="Warehouse location deleted successfully")
     except APIException:

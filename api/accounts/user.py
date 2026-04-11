@@ -8,7 +8,7 @@ from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, AdminUserUpdate, UserStatusUpdate
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user
 from models.accounts.user import User as AuthUser, UserRole
 
 logger = get_logger(__name__)
@@ -89,17 +89,22 @@ async def list(
     limit: int = Query(10, ge=1, le=100),
     role: Optional[str] = Query(None, description="Filter by user role"),
     q: Optional[str] = Query(None, description="Search query for user name or email"),
-    current_user: AuthUser = Depends(require_admin),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List users with optional filtering and pagination (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
-        users = await service.list(page=page, limit=limit, role=role, query=q)
-        if isinstance(users, dict) and "users" in users:
-            return Response.success(data=users.get("users", []), pagination=users.get("pagination", {}))
-        # Fallback
+        users = await service.get_all_users(
+            page=page, limit=limit, role=role, search=search or q, status=status
+        )
         return Response.success(data=users)
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -157,227 +162,142 @@ async def patch(
 @router.delete("/{user_id}")
 async def delete(
     user_id: UUID,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a user (admin only)."""
-    # Prevent admin from deleting themselves
-    if current_user.id == user_id:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message="You cannot delete your own account through this endpoint"
-        )
-    service = UserService(db)
-    deleted = await service.delete(user_id)
-    if not deleted:
-        raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-    return Response.success(message="User deleted successfully")
+    try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
+        # Prevent admin from deleting themselves
+        if current_user.id == user_id:
+            raise APIException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="You cannot delete your own account through this endpoint"
+            )
+        service = UserService(db)
+        deleted = await service.delete(user_id)
+        if not deleted:
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        return Response.success(message="User deleted successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to delete user: {str(e)}")
 
-
-# ============================================================================
-# ADMIN USER MANAGEMENT ROUTES
-# ============================================================================
 
 @router.put("/{user_id}/status")
-async def update_user_status(
+async def update_status(
     user_id: UUID,
     payload: UserStatusUpdate,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update user active status (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
-        user = await service.update_status(user_id, payload.is_active)
-        if not user:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        return Response.success(
-            data={"id": str(user.id), "is_active": user.is_active},
-            message="User status updated successfully"
-        )
+        result = await service.update_status(user_id, payload.is_active)
+        return Response.success(data=result, message="User status updated")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to update user status: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to update user status: {str(e)}")
 
 
 @router.post("/{user_id}/reset-password")
-async def reset_user_password(
+async def reset_password(
     user_id: UUID,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Send password reset email to user (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
-        result = await service.initiate_password_reset(user_id)
-        return Response.success(message="Password reset email sent successfully")
+        result = await service.reset_password(user_id)
+        return Response.success(data=result, message="Password reset email sent")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to send password reset email: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to reset password: {str(e)}")
 
 
 @router.post("/{user_id}/deactivate")
-async def deactivate_user(
+async def deactivate(
     user_id: UUID,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Deactivate user account (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
-        user = await service.deactivate(user_id)
-        if not user:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        return Response.success(
-            data={"id": str(user.id), "is_active": False},
-            message="User deactivated successfully"
-        )
+        result = await service.deactivate(user_id)
+        return Response.success(data=result, message="User deactivated")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to deactivate user: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to deactivate user: {str(e)}")
 
 
 @router.post("/{user_id}/activate")
-async def activate_user(
+async def activate(
     user_id: UUID,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Activate user account (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
-        user = await service.activate(user_id)
-        if not user:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        return Response.success(
-            data={"id": str(user.id), "is_active": True},
-            message="User activated successfully"
-        )
+        result = await service.activate(user_id)
+        return Response.success(data=result, message="User activated")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to activate user: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to activate user: {str(e)}")
 
 
 @router.put("/{user_id}/verify")
-async def verify_user(
+async def verify(
     user_id: UUID,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Verify user account (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
-        user = await service.verify(user_id)
-        if not user:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        return Response.success(
-            data={"id": str(user.id), "verified": user.verified},
-            message="User verified successfully"
-        )
+        result = await service.verify(user_id)
+        return Response.success(data=result, message="User verified")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to verify user: {str(e)}"
-        )
+        raise APIException(status_code=500, message=f"Failed to verify user: {str(e)}")
 
 
 @router.get("/{user_id}/activity")
-async def get_user_activity(
+async def activity(
     user_id: UUID,
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get user activity log (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         activity = await service.get_activity_log(user_id, page, limit)
         return Response.success(data=activity)
+    except APIException:
+        raise
     except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to get user activity: {str(e)}"
-        )
-
-
-# ==========================================================
-# ADMIN ENDPOINTS - Moved from admin.py
-# ==========================================================
-
-@router.get("/admin/all", dependencies=[Depends(require_admin)])
-async def get_all_users_admin(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    role: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all users with filters (admin only)."""
-    try:
-        service = UserService(db)
-        users = await service.get_all_users(
-            page=page,
-            limit=limit,
-            role=role,
-            search=search,
-            status=status
-        )
-        return Response.success(data=users)
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to fetch users: {str(e)}")
-
-
-@router.put("/{user_id}/status", dependencies=[Depends(require_admin)])
-async def update_user_status_admin(
-    user_id: str,
-    is_active: bool,
-    current_user: AuthUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update user status (admin only)."""
-    try:
-        service = UserService(db)
-        result = await service.update_status(user_id, is_active)
-        return Response.success(data=result, message="User status updated")
-    except Exception as e:
-        raise APIException(status_code=500, message="Failed to update user status")
-
-
-@router.delete("/{user_id}/admin", dependencies=[Depends(require_admin)])
-async def delete_user_admin(
-    user_id: str,
-    current_user: AuthUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete user (admin only)."""
-    try:
-        service = UserService(db)
-        await service.delete(user_id)
-        return Response.success(message="User deleted successfully")
-    except Exception as e:
-        raise APIException(status_code=500, message="Failed to delete user")
+        raise APIException(status_code=500, message=f"Failed to get user activity: {str(e)}")
