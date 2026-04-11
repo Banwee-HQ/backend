@@ -60,6 +60,26 @@ class PaymentService:
     ) -> PaymentMethod:
         """Create a new payment method supporting both modern and legacy Stripe APIs"""
         try:
+            # Helper: normalize raw brand strings to DB enum values
+            def _normalize_brand(raw_brand: str) -> str:
+                if not raw_brand:
+                    return CardBrand.UNKNOWN.value
+                s = str(raw_brand).strip().lower()
+                mapping = {
+                    "visa": "visa",
+                    "mastercard": "mastercard",
+                    "master card": "mastercard",
+                    "american express": "amex",
+                    "amex": "amex",
+                    "discover": "discover",
+                    "jcb": "jcb",
+                    "diners": "diners_club",
+                    "diners_club": "diners_club",
+                    "unionpay": "unionpay",
+                    "verve": "verve",
+                }
+                return mapping.get(s, CardBrand.OTHER.value)
+
             # Handle modern payment method API
             if stripe_payment_method_id:
                 # Get payment method details from Stripe
@@ -114,39 +134,9 @@ class PaymentService:
                     # Update them to not be default
                     for pm in existing_defaults.scalars().all():
                         pm.is_default = False
-                
-                    # Normalize brand to DB enum values (lowercase names expected)
-                    def _normalize_brand(raw_brand: str) -> str:
-                        if not raw_brand:
-                            return CardBrand.UNKNOWN.value
-                        s = raw_brand.strip().lower()
-                        mapping = {
-                            "visa": "visa",
-                            "mastercard": "mastercard",
-                            "master card": "mastercard",
-                            "american express": "amex",
-                            "amex": "amex",
-                            "discover": "discover",
-                            "jcb": "jcb",
-                            "diners": "diners_club",
-                            "diners_club": "diners_club",
-                            "unionpay": "unionpay",
-                            "verve": "verve",
-                        }
-                        return mapping.get(s, CardBrand.OTHER.value)
 
-                    brand_value = None
-                    try:
-                        brand_raw = None
-                        if hasattr(stripe_pm, 'card') and getattr(stripe_pm, 'card'):
-                            brand_raw = stripe_pm.card.brand
-                        elif payment_method_data:
-                            brand_raw = payment_method_data.get('provider')
-                        brand_value = _normalize_brand(brand_raw)
-                    except Exception:
-                        brand_value = CardBrand.UNKNOWN.value
-
-                    payment_method = PaymentMethod(
+                # Prepare payment_method instance
+                payment_method = PaymentMethod(
                     user_id=user_id,
                     type=stripe_pm.type,
                     provider="stripe",
@@ -154,13 +144,23 @@ class PaymentService:
                     is_default=is_default,
                     is_active=True
                 )
+                # Determine brand value normalized to DB enum
+                try:
+                    brand_raw = None
+                    if getattr(stripe_pm, 'card', None):
+                        brand_raw = stripe_pm.card.brand
+                    elif payment_method_data:
+                        brand_raw = payment_method_data.get('provider')
+                    brand_value = _normalize_brand(brand_raw)
+                except Exception:
+                    brand_value = CardBrand.UNKNOWN.value
                 
                 # Set card-specific details if it's a card
                 if stripe_pm.type == "card" and stripe_pm.card:
                     payment_method.last_four = stripe_pm.card.last4
                     payment_method.expiry_month = stripe_pm.card.exp_month
-                        payment_method.expiry_year = stripe_pm.card.exp_year
-                        payment_method.brand = brand_value
+                    payment_method.expiry_year = stripe_pm.card.exp_year
+                    payment_method.brand = brand_value
             
             # Handle legacy token API (deprecated but supported for backward compatibility)
             elif stripe_token:
@@ -268,40 +268,79 @@ class PaymentService:
                     detail="Either stripe_payment_method_id, stripe_token, or payment_method_data must be provided"
                 )
             
+            # Pre-check for existing payment method with same Stripe id to avoid unique constraint errors
+            existing_pm = None
+            pm_lookup_id = None
+            try:
+                pm_lookup_id = stripe_payment_method_id or (getattr(stripe_pm, 'id', None) if 'stripe_pm' in locals() else None) or getattr(payment_method, 'stripe_payment_method_id', None)
+            except Exception:
+                pm_lookup_id = getattr(payment_method, 'stripe_payment_method_id', None)
+
+            if pm_lookup_id:
+                existing = await self.db.execute(
+                    select(PaymentMethod).where(PaymentMethod.stripe_payment_method_id == pm_lookup_id)
+                )
+                existing_pm = existing.scalar_one_or_none()
+
+            if existing_pm:
+                # If existing belongs to same user, reuse and update default flag if requested
+                if existing_pm.user_id == user_id:
+                    if is_default:
+                        ed = await self.db.execute(
+                            select(PaymentMethod).where(
+                                and_(PaymentMethod.user_id == user_id, PaymentMethod.is_default == True)
+                            ).with_for_update()
+                        )
+                        for pm in ed.scalars().all():
+                            pm.is_default = False
+                        existing_pm.is_default = True
+                        await self.db.commit()
+                    return existing_pm
+                # Owned by different user — conflict
+                raise HTTPException(status_code=409, detail="Stripe payment method already associated with another account")
+
             # Try to insert; if a payment method with same stripe id exists, return it instead
             try:
                 self.db.add(payment_method)
                 await self.db.commit()
                 await self.db.refresh(payment_method)
                 return payment_method
-            except sa_exc.IntegrityError as ie:
-                # Check for duplicate stripe_payment_method_id and return existing record
-                await self.db.rollback()
-                try:
-                    existing = await self.db.execute(
-                        select(PaymentMethod).where(PaymentMethod.stripe_payment_method_id == (stripe_payment_method_id or stripe_pm.id))
-                    )
-                    existing_pm = existing.scalar_one_or_none()
-                    if existing_pm:
-                        # If requested as default and belongs to same user, ensure flags
-                        if is_default and existing_pm.user_id == user_id:
-                            # unset other defaults then set this one
-                            ed = await self.db.execute(
-                                select(PaymentMethod).where(
-                                    and_(PaymentMethod.user_id == user_id, PaymentMethod.is_default == True)
-                                ).with_for_update()
-                            )
-                            for pm in ed.scalars().all():
-                                pm.is_default = False
-                            existing_pm.is_default = True
-                            await self.db.commit()
-                        return existing_pm
-                except Exception:
-                    pass
+            except Exception as ie:
+                # Handle integrity/unique-constraint failures robustly across dialects
+                msg = str(ie).lower()
+                if 'duplicate key' in msg or 'uniqueviol' in msg or 'unique constraint' in msg:
+                    await self.db.rollback()
+                    try:
+                        existing = await self.db.execute(
+                            select(PaymentMethod).where(PaymentMethod.stripe_payment_method_id == (stripe_payment_method_id or (getattr(stripe_pm, 'id', None) if 'stripe_pm' in locals() else None)))
+                        )
+                        existing_pm = existing.scalar_one_or_none()
+                        if existing_pm:
+                            # If the existing payment method belongs to the same user, reuse it
+                            if existing_pm.user_id == user_id:
+                                if is_default:
+                                    ed = await self.db.execute(
+                                        select(PaymentMethod).where(
+                                            and_(PaymentMethod.user_id == user_id, PaymentMethod.is_default == True)
+                                        ).with_for_update()
+                                    )
+                                    for pm in ed.scalars().all():
+                                        pm.is_default = False
+                                    existing_pm.is_default = True
+                                    await self.db.commit()
+                                return existing_pm
+                            # If it belongs to a different user, do not return it — signal conflict
+                            raise HTTPException(status_code=409, detail="Stripe payment method already associated with another account")
+                    except Exception:
+                        pass
+                # If not an integrity/unique error or we couldn't handle it, re-raise
                 raise
             
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+        except HTTPException:
+            # Re-raise HTTPExceptions (like 409 conflicts) unchanged so callers receive correct status
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create payment method: {str(e)}")
 
@@ -447,8 +486,13 @@ class PaymentService:
     ) -> PaymentIntent:
         """Create a payment intent with optional transaction control"""
         try:
+            # Lookup user's Stripe customer id (if any) and include in PaymentIntent
+            user_result = await self.db.execute(select(User).where(User.id == user_id))
+            user = user_result.scalar_one_or_none()
+            customer_id = getattr(user, 'stripe_customer_id', None) if user else None
+
             # Create Stripe payment intent
-            stripe_intent = stripe.PaymentIntent.create(
+            stripe_create_kwargs = dict(
                 amount=int(amount * 100),  # Convert to cents
                 currency=currency.lower(),
                 automatic_payment_methods={
@@ -458,6 +502,11 @@ class PaymentService:
                 metadata=metadata or {},
                 idempotency_key=str(uuid7())  # Provide explicit idempotency key
             )
+
+            if customer_id:
+                stripe_create_kwargs['customer'] = customer_id
+
+            stripe_intent = stripe.PaymentIntent.create(**stripe_create_kwargs)
             
             # Create our payment intent record
             payment_intent = PaymentIntent(
@@ -551,7 +600,7 @@ class PaymentService:
             
         except stripe.error.StripeError as e:
             # Use comprehensive failure handler
-            from services.payments.payment_failure_handler import PaymentFailureHandler
+            from services.commerce.payment_failure_handler import PaymentFailureHandler
             
             failure_handler = PaymentFailureHandler(self.db)
             
@@ -806,12 +855,24 @@ class PaymentService:
             if not payment_method:
                 raise HTTPException(status_code=404, detail="Payment method not found")
             
-            # Validate payment method expiry
-            if payment_method.expires_at and payment_method.expires_at < datetime.utcnow():
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Payment method has expired. Please update your payment information."
-                )
+            # Validate payment method expiry using expiry_month/expiry_year
+            if payment_method.expiry_year and payment_method.expiry_month:
+                try:
+                    y = int(payment_method.expiry_year)
+                    m = int(payment_method.expiry_month)
+                    if m == 12:
+                        next_month = datetime(y + 1, 1, 1)
+                    else:
+                        next_month = datetime(y, m + 1, 1)
+                    # expires at end of expiry month
+                    if next_month <= datetime.utcnow():
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Payment method has expired. Please update your payment information."
+                        )
+                except Exception:
+                    # If parsing fails, continue and let stripe/API errors surface later
+                    pass
             
             # Create and confirm payment intent
             payment_intent = await self.create_intent(
@@ -1901,6 +1962,9 @@ class PaymentService:
                 "retry_count": payment_intent.failure_metadata["retry_count"]
             }
             
+        except HTTPException:
+            await self.db.rollback()
+            raise
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Error retrying payment {payment_intent_id}: {e}")
@@ -1915,55 +1979,47 @@ class PaymentService:
         user_id: UUID
     ) -> Dict[str, Any]:
         """Get detailed status of a failed payment"""
-        try:
-            # Get payment intent
-            result = await self.db.execute(
-                select(PaymentIntent).where(
-                    PaymentIntent.id == payment_intent_id,
-                    PaymentIntent.user_id == user_id
-                )
+        # Get payment intent
+        result = await self.db.execute(
+            select(PaymentIntent).where(
+                PaymentIntent.id == payment_intent_id,
+                PaymentIntent.user_id == user_id
             )
-            payment_intent = result.scalar_one_or_none()
-            
-            if not payment_intent:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Payment intent not found"
-                )
-            
-            if payment_intent.status != "failed":
-                return {
-                    "payment_intent_id": str(payment_intent_id),
-                    "status": payment_intent.status,
-                    "is_failed": False
-                }
-            
-            # Get retry strategy
-            failure_reason = PaymentFailureReason(payment_intent.failure_reason) if payment_intent.failure_reason else PaymentFailureReason.UNKNOWN
-            retry_strategy = self._determine_retry_strategy(failure_reason, payment_intent)
-            
+        )
+        payment_intent = result.scalar_one_or_none()
+        
+        if not payment_intent:
+            raise HTTPException(
+                status_code=404,
+                detail="Payment intent not found"
+            )
+        
+        if payment_intent.status != "failed":
             return {
                 "payment_intent_id": str(payment_intent_id),
                 "status": payment_intent.status,
-                "is_failed": True,
-                "failure_reason": payment_intent.failure_reason,
-                "failed_at": payment_intent.failed_at.isoformat() if payment_intent.failed_at else None,
-                "failure_metadata": payment_intent.failure_metadata or {},
-                "retry_strategy": retry_strategy,
-                "user_message": self._get_user_friendly_message(failure_reason),
-                "next_steps": self._get_next_steps(failure_reason),
-                "order_id": str(payment_intent.order_id) if payment_intent.order_id else None,
-                "subscription_id": str(payment_intent.subscription_id) if payment_intent.subscription_id else None,
-                "amount": payment_intent.amount_breakdown.get("total", 0) if payment_intent.amount_breakdown else 0,
-                "currency": payment_intent.currency
+                "is_failed": False
             }
-            
-        except Exception as e:
-            logger.error(f"Error getting payment failure status: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to get payment failure status"
-            )
+        
+        # Get retry strategy
+        failure_reason = PaymentFailureReason(payment_intent.failure_reason) if payment_intent.failure_reason else PaymentFailureReason.UNKNOWN
+        retry_strategy = self._determine_retry_strategy(failure_reason, payment_intent)
+        
+        return {
+            "payment_intent_id": str(payment_intent_id),
+            "status": payment_intent.status,
+            "is_failed": True,
+            "failure_reason": payment_intent.failure_reason,
+            "failed_at": payment_intent.failed_at.isoformat() if payment_intent.failed_at else None,
+            "failure_metadata": payment_intent.failure_metadata or {},
+            "retry_strategy": retry_strategy,
+            "user_message": self._get_user_friendly_message(failure_reason),
+            "next_steps": self._get_next_steps(failure_reason),
+            "order_id": str(payment_intent.order_id) if payment_intent.order_id else None,
+            "subscription_id": str(payment_intent.subscription_id) if payment_intent.subscription_id else None,
+            "amount": payment_intent.amount_breakdown.get("total", 0) if payment_intent.amount_breakdown else 0,
+            "currency": payment_intent.currency
+        }
 
     async def failed_payments(
         self,

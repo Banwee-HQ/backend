@@ -1183,22 +1183,19 @@ class InventoryService:
                     has_stock = True
                     total_stock += variant.inventory.quantity_available
             
-            # Update product availability status
-            old_status = product.availability_status
-            if has_stock:
-                product.availability_status = "available"
-            else:
-                product.availability_status = "out_of_stock"
+            # Log product availability status (computed property, can't be set directly)
+            current_status = product.availability_status
+            computed_status = "available" if has_stock else "out_of_stock"
             
-            await self.db.commit()
-            
-            logger.info(f"Synced product {product_id} availability: {old_status} → {product.availability_status} (total stock: {total_stock})")
+            # Note: availability_status is a computed property on Product model
+            # We don't need to set it - it's calculated dynamically from variant inventory
+            logger.info(f"Synced product {product_id} availability: {current_status} (computed: {computed_status}, total stock: {total_stock})")
             
             return {
                 "success": True,
                 "product_id": str(product_id),
-                "old_status": old_status,
-                "new_status": product.availability_status,
+                "current_status": current_status,
+                "computed_status": computed_status,
                 "total_stock": total_stock,
                 "variant_count": len(product.variants or [])
             }
@@ -1233,29 +1230,20 @@ class InventoryService:
                     if variant.inventory:
                         total_stock += variant.inventory.quantity_available
                 
-                old_status = product.availability_status
-                new_status = "available" if total_stock > 0 else "out_of_stock"
-                
-                if old_status != new_status:
-                    product.availability_status = new_status
-                    updated_count += 1
-                    
-                    if new_status == "out_of_stock":
-                        went_out_of_stock += 1
-                    else:
-                        still_in_stock += 1
-                    
-                    logger.info(f"Updated product {product.id} availability: {old_status} → {new_status}")
-            
-            await self.db.commit()
+                # availability_status is a computed property, we can't set it directly
+                # Just log products with zero stock for monitoring
+                if total_stock == 0:
+                    went_out_of_stock += 1
+                    logger.info(f"Product {product.id} is out of stock (computed)")
+                else:
+                    still_in_stock += 1
             
             return {
                 "success": True,
                 "total_products": len(products),
-                "updated_count": updated_count,
-                "went_out_of_stock": went_out_of_stock,
-                "back_in_stock": still_in_stock,
-                "message": f"Synced {updated_count} products ({went_out_of_stock} went out of stock, {still_in_stock} back in stock)"
+                "in_stock": still_in_stock,
+                "out_of_stock": went_out_of_stock,
+                "message": f"Checked {len(products)} products ({went_out_of_stock} out of stock, {still_in_stock} in stock)"
             }
             
         except Exception as e:

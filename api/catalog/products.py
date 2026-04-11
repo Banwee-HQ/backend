@@ -339,6 +339,12 @@ async def patch(
 ):
     """Update a product (admin only)."""
     try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="Only admins can update products"
+            )
         product_service = ProductService(db)
         product = await product_service.update(product_id, product_data, current_user.id)
         return Response(success=True, data=product, message="Product updated successfully")
@@ -359,6 +365,12 @@ async def delete(
 ):
     """Delete a product (admin only)."""
     try:
+        from models.accounts.user import UserRole
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="Only admins can delete products"
+            )
         product_service = ProductService(db)
         await product_service.delete(product_id, current_user.id)
         return Response(success=True, message="Product deleted successfully")

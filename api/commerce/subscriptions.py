@@ -11,7 +11,7 @@ from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
     Create, 
     Update, 
-    Response,
+    Response as SubscriptionResponse,
     CostCalculation,
     AddProducts,
     RemoveProducts,
@@ -269,15 +269,12 @@ async def list(
             "pages": max(1, (total + limit - 1) // limit)
         })
     except APIException:
-        raise APIException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message="Failed to get subscriptions"
-    )
+        raise
     except Exception as e:
         raise APIException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message=f"Failed to get subscriptions: {str(e)}"
-    )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get subscriptions: {str(e)}"
+        )
 @router.post("/{subscription_id}/products")
 async def add_products(
     subscription_id: UUID,
@@ -303,13 +300,9 @@ async def add_products(
             message="Products added to subscription successfully"
         )
     except APIException as e:
-        print(e,'====error')
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to add products to subscription: {str(e)}"
-        )
+        raise e
     except Exception as e:
-        print(e,'====error')
+        logger.error(f"Error adding products to subscription: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to add products to subscription: {str(e)}"
@@ -339,11 +332,9 @@ async def remove_products(
             message="Products removed from subscription successfully"
         )
     except APIException:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to remove products from subscription"
-        )
+        raise
     except Exception as e:
+        logger.error(f"Error removing products from subscription: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to remove products from subscription: {str(e)}"
@@ -366,11 +357,9 @@ async def update_quantity(
             message=f"Variant quantity updated to {request.quantity} successfully"
         )
     except APIException:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to update variant quantity"
-        )
+        raise
     except Exception as e:
+        logger.error(f"Error updating variant quantity: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to update variant quantity: {str(e)}"
@@ -394,11 +383,9 @@ async def change_quantity(
             message=f"Variant quantity {action} by {abs(request.change)} successfully"
         )
     except APIException:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to change variant quantity"
-        )
+        raise
     except Exception as e:
+        logger.error(f"Error changing variant quantity: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to change variant quantity: {str(e)}"
@@ -420,11 +407,9 @@ async def get_quantities(
             message="Variant quantities retrieved successfully"
         )
     except APIException:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to get variant quantities"
-        )
+        raise
     except Exception as e:
+        logger.error(f"Error getting variant quantities: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get variant quantities: {str(e)}"
@@ -459,16 +444,13 @@ async def toggle_auto_renew(
                 },
                 message=f"Auto-renew {'enabled' if auto_renew else 'disabled'}"
             )
-    except APIException as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to update auto-renew: {str(e)}"
-        )
+    except APIException:
+        raise
     except Exception as e:
         logger.error(f"Error updating auto-renew: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to update auto-renew setting"
+            message=f"Failed to update auto-renew: {str(e)}"
         )
 @router.get("/{subscription_id}")
 async def get(
@@ -521,11 +503,8 @@ async def update(
             # Add other fields here as needed
         )
         return Response.success(data=subscription.to_dict(include_products=True), message="Subscription updated successfully")
-    except APIException as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to update subscription: {str(e)}"
-        )
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -564,11 +543,8 @@ async def delete(
         subscription_service = SubscriptionService(db)
         await subscription_service.delete(subscription_id, current_user.id)
         return Response.success(message="Subscription deleted successfully")
-    except APIException as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to delete subscription: {str(e)}"
-        )
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

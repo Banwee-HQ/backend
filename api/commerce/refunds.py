@@ -23,7 +23,42 @@ def get_refund_service(db: AsyncSession = Depends(get_db)) -> RefundService:
     return RefundService(db)
 
 
-@router.post("/")
+async def _create_refund(
+    refund_data: dict,
+    current_user: User,
+    refund_service: RefundService
+):
+    """Internal helper to create a refund request."""
+    refund = await refund_service.create(user_id=current_user.id, data=refund_data)
+    return Response.success(data=refund, message="Refund created successfully")
+
+
+async def _list_refunds(
+    refund_status: Optional[RefundStatus],
+    page: int,
+    limit: int,
+    current_user: User,
+    refund_service: RefundService
+):
+    """Internal helper to get user's refund history."""
+    result = await refund_service.list(
+        user_id=current_user.id,
+        status=refund_status,
+        page=page,
+        limit=limit
+    )
+    if isinstance(result, dict) and "items" in result:
+        pagination = {
+            "page": result.get("page", page),
+            "limit": result.get("limit", limit),
+            "total": result.get("total", 0),
+            "pages": result.get("pages", 1)
+        }
+        return Response.success(data=result.get("items", []), pagination=pagination, message="Refunds retrieved successfully")
+    return Response.success(data=result, message="Refunds retrieved successfully")
+
+
+@router.post("")
 async def create(
     refund_data: dict,
     current_user: User = Depends(get_current_auth_user),
@@ -31,8 +66,7 @@ async def create(
 ):
     """Create a refund request."""
     try:
-        refund = await refund_service.create(user_id=current_user.id, data=refund_data)
-        return Response.success(data=refund, message="Refund created successfully")
+        return await _create_refund(refund_data, current_user, refund_service)
     except APIException:
         raise
     except Exception as e:
@@ -42,7 +76,25 @@ async def create(
         )
 
 
-@router.get("/")
+@router.post("/")
+async def create_trailing_slash(
+    refund_data: dict,
+    current_user: User = Depends(get_current_auth_user),
+    refund_service: RefundService = Depends(get_refund_service)
+):
+    """Create a refund request (trailing slash variant)."""
+    try:
+        return await _create_refund(refund_data, current_user, refund_service)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=f"Failed to create refund: {str(e)}"
+        )
+
+
+@router.get("")
 async def list(
     refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -52,21 +104,25 @@ async def list(
 ):
     """Get user's refund history."""
     try:
-        result = await refund_service.list(
-            user_id=current_user.id,
-            status=refund_status,
-            page=page,
-            limit=limit
+        return await _list_refunds(refund_status, page, limit, current_user, refund_service)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve refunds: {str(e)}"
         )
-        if isinstance(result, dict) and "items" in result:
-            pagination = {
-                "page": result.get("page", page),
-                "limit": result.get("limit", limit),
-                "total": result.get("total", 0),
-                "pages": result.get("pages", 1)
-            }
-            return Response.success(data=result.get("items", []), pagination=pagination, message="Refunds retrieved successfully")
-        return Response.success(data=result, message="Refunds retrieved successfully")
+
+
+@router.get("/")
+async def list_trailing_slash(
+    refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    current_user: User = Depends(get_current_auth_user),
+    refund_service: RefundService = Depends(get_refund_service)
+):
+    """Get user's refund history (trailing slash variant)."""
+    try:
+        return await _list_refunds(refund_status, page, limit, current_user, refund_service)
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -98,10 +154,10 @@ async def get(
         )
 
 
-@router.post("/orders/{order_id}")
+@router.post("/orders/{order_id}/request")
 async def request(
     order_id: UUID,
-    request: Request,
+    refund_request: Request,
     current_user: User = Depends(get_current_auth_user),
     refund_service: RefundService = Depends(get_refund_service)
 ):
@@ -110,7 +166,7 @@ async def request(
         refund = await refund_service.request(
             user_id=current_user.id,
             order_id=order_id,
-            refund_request=request
+            refund_request=refund_request
         )
         return Response.success(data=refund, message="Refund request submitted")
     except Exception as e:

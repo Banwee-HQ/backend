@@ -37,6 +37,22 @@ class CartValidationResult:
         self.cart = cart
         self.issues = issues or []
         self.summary = summary or {}
+    
+    def get(self, key: str, default: Any = None):
+        """Dictionary-like get access for backward compatibility with older callers."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str):
+        return getattr(self, key)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'valid': self.valid,
+            'can_checkout': self.can_checkout,
+            'cart': self.cart,
+            'issues': self.issues,
+            'summary': self.summary
+        }
 
 
 class CartService:

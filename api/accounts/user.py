@@ -8,8 +8,8 @@ from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
-from core.dependencies import get_current_auth_user
-from models.accounts.user import User as AuthUser
+from core.dependencies import get_current_auth_user, require_admin
+from models.accounts.user import User as AuthUser, UserRole
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -49,8 +49,18 @@ async def create(payload: UserCreate, background_tasks: BackgroundTasks, db: Asy
 
 
 @router.get("/{user_id}")
-async def get(user_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Get a user by ID."""
+async def get(
+    user_id: UUID,
+    current_user: AuthUser = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a user by ID. Admin can get any user, users can only get themselves."""
+    # Check if user is admin or requesting their own data
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER] and current_user.id != user_id:
+        raise APIException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            message="You can only access your own user data"
+        )
     service = UserService(db)
     user = await service.get(user_id)
     if not user:
@@ -79,9 +89,10 @@ async def list(
     limit: int = Query(10, ge=1, le=100),
     role: Optional[str] = Query(None, description="Filter by user role"),
     q: Optional[str] = Query(None, description="Search query for user name or email"),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """List users with optional filtering and pagination."""
+    """List users with optional filtering and pagination (admin only)."""
     try:
         service = UserService(db)
         users = await service.list(page=page, limit=limit, role=role, query=q)
@@ -97,8 +108,30 @@ async def list(
 
 
 @router.patch("/{user_id}")
-async def patch(user_id: UUID, payload: UserUpdate, db: AsyncSession = Depends(get_db)):
-    """Partially update a user."""
+async def patch(
+    user_id: UUID,
+    payload: UserUpdate,
+    current_user: AuthUser = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partially update a user. Admin can update any user, users can only update themselves."""
+    # Check if user is admin or updating their own data
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER] and current_user.id != user_id:
+        raise APIException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            message="You can only update your own user data"
+        )
+    # Regular users cannot change role or sensitive fields
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        # Prevent non-admins from changing role, account_status, etc.
+        forbidden_fields = ['role', 'account_status', 'verification_status', 'is_active', 'verified']
+        update_dict = payload.model_dump(exclude_unset=True)
+        for field in forbidden_fields:
+            if field in update_dict:
+                raise APIException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    message=f"You cannot modify the '{field}' field"
+                )
     service = UserService(db)
     updated_user = await service.update(user_id, payload)
     if not updated_user:
@@ -122,8 +155,18 @@ async def patch(user_id: UUID, payload: UserUpdate, db: AsyncSession = Depends(g
 
 
 @router.delete("/{user_id}")
-async def delete(user_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Delete a user."""
+async def delete(
+    user_id: UUID,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a user (admin only)."""
+    # Prevent admin from deleting themselves
+    if current_user.id == user_id:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="You cannot delete your own account through this endpoint"
+        )
     service = UserService(db)
     deleted = await service.delete(user_id)
     if not deleted:

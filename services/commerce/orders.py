@@ -434,10 +434,29 @@ class OrderService:
         
         try:
             # Step 3: PROCESS PAYMENT FIRST (before creating order)
-            # Generate order number for payment reference
-            order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{uuid7().hex[:8].upper()}"
+            # Generate a temp order id and deterministic order number using it
             temp_order_id = uuid7()  # Temporary ID for payment processing
-            
+            order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[:12].upper()}"
+            # Create a placeholder order record so payment_intents can FK to it
+            placeholder_order = Order(
+                id=temp_order_id,
+                order_number=order_number,
+                user_id=user_id,
+                order_status="pending",
+                payment_status="pending",
+                fulfillment_status="unfulfilled",
+                subtotal=Decimal('0.00'),
+                shipping_cost=Decimal('0.00'),
+                tax_amount=Decimal('0.00'),
+                total_amount=Decimal('0.00'),
+                currency='USD'
+            )
+            # Provide minimal address dicts to satisfy NOT NULL constraints
+            placeholder_order.billing_address = {}
+            placeholder_order.shipping_address = {}
+            self.db.add(placeholder_order)
+            await self.db.flush()
+
             # Process payment with Stripe using backend-calculated total
             payment_service = PaymentService(self.db)
             payment_idempotency_key = (
@@ -465,40 +484,28 @@ class OrderService:
                     detail=f"Payment failed: {error_message}"
                 )
             
-            logger.info(f"Payment successful for order {order_number}, creating order...")
-            
-            # Step 4: Create order (ONLY after successful payment)
-            order = Order(
-                id=temp_order_id,  # Use the same ID we used for payment
-                order_number=order_number,
-                user_id=user_id,
-                order_status="confirmed",  # Start as confirmed since payment succeeded
-                payment_status="paid",  # Payment already succeeded
-                fulfillment_status="unfulfilled",
-                subtotal=pricing['subtotal'],
-                shipping_cost=pricing['shipping']['cost'],
-                tax_amount=pricing['tax']['amount'],
-                tax_rate=pricing['tax']['rate'],
-                total_amount=pricing['total'],
-                currency=pricing['currency'],
-                shipping_method=shipping_method.name,
-                billing_address={
-                    'street': shipping_address.street,
-                    'city': shipping_address.city,
-                    'state': shipping_address.state,
-                    'country': shipping_address.country,
-                    'post_code': shipping_address.post_code
-                },
-                shipping_address={
-                    'street': shipping_address.street,
-                    'city': shipping_address.city,
-                    'state': shipping_address.state,
-                    'country': shipping_address.country,
-                    'post_code': shipping_address.post_code
-                },
-                notes=request.notes
-            )
-            self.db.add(order)
+            logger.info(f"Payment successful for order {order_number}, updating placeholder order...")
+            # Update placeholder order with final details
+            order = await self.db.get(Order, temp_order_id)
+            order.order_status = "confirmed"
+            order.payment_status = "paid"
+            order.fulfillment_status = "unfulfilled"
+            order.subtotal = pricing['subtotal']
+            order.shipping_cost = pricing['shipping']['cost']
+            order.tax_amount = pricing['tax']['amount']
+            order.tax_rate = pricing['tax']['rate']
+            order.total_amount = pricing['total']
+            order.currency = pricing['currency']
+            order.shipping_method = shipping_method.name
+            order.billing_address = {
+                'street': shipping_address.street,
+                'city': shipping_address.city,
+                'state': shipping_address.state,
+                'country': shipping_address.country,
+                'post_code': shipping_address.post_code
+            }
+            order.shipping_address = order.billing_address.copy()
+            order.notes = request.notes
             await self.db.flush()
             
             # Step 5: Create order items and update inventory
@@ -567,7 +574,7 @@ class OrderService:
                 "order_number": order_number,
                 "user_id": str(user_id),
                 "total_amount": float(order.total_amount),
-                "items_count": len(order.items),
+                "items_count": len(order_items_list),
                 "payment_status": "completed",
                 "milestone": "revenue"
             })
@@ -576,33 +583,43 @@ class OrderService:
             return OrderResponse(
                 id=order.id,
                 user_id=user_id,
-                status=order.order_status,
-                total_amount=order.total_amount,
-                subtotal=order.subtotal,
-                tax_amount=order.tax_amount,
-                shipping_amount=order.shipping_cost,
-                discount_amount=Decimal('0.00'),  # Can be updated if discount is used
+                order_status=order.order_status,
+                payment_status=order.payment_status,
+                fulfillment_status=order.fulfillment_status,
+                total_amount=float(order.total_amount),
+                subtotal=float(order.subtotal or 0),
+                tax_amount=float(order.tax_amount or 0),
+                shipping_cost=float(order.shipping_cost or 0),
+                discount_amount=float(getattr(order, 'discount_amount', 0) or 0),
                 currency=order.currency,
-                created_at=order.created_at.isoformat() if order.created_at else datetime.utcnow().isoformat(),
-                tracking_number=None,
+                tracking_number=getattr(order, 'tracking_number', None),
                 estimated_delivery=None,
+                shipping_address=order.shipping_address,
+                billing_address=order.billing_address,
                 items=[
                     OrderItemResponse(
                         id=item.id,
                         variant_id=item.variant_id,
                         quantity=item.quantity,
-                        price_per_unit=item.price_per_unit,
-                        total_price=item.total_price
+                        price_per_unit=float(item.price_per_unit),
+                        total_price=float(item.total_price),
+                        variant=None
                     ) for item in order_items_list
-                ]
+                ],
+                created_at=datetime.utcnow(),
+                updated_at=None
             )
             
         except Exception as e:
-            logger.error(f"Order creation failed for user {user_id}: {e}")
+            import traceback
+            logger.exception(f"Order creation failed for user {user_id}: {e}\nTraceback: {traceback.format_exc()}")
             # Session will auto-rollback on exception due to the context manager
             raise HTTPException(
                 status_code=500,
-                detail="Order creation failed due to system error"
+                detail={
+                    "message": "Order creation failed due to system error",
+                    "traceback": traceback.format_exc()
+                }
             )
         
         # STEP 3: Proceed with regular order placement

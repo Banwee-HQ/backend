@@ -234,7 +234,7 @@ async def enqueue_sync_product_availability(product_id: str = None):
         async with session as db:
             svc = InventoryService(db, None)
             if product_id:
-                await svc.sync_product_availability_status(UUID(product_id))
+                await svc.sync_availability(UUID(product_id))
             else:
                 await svc.sync_all_products_availability()
     except Exception as e:

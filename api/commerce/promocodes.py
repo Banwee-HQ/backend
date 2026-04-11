@@ -7,9 +7,13 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.promos import Create, Update, ValidateRequest, ValidateResponse
 from services.commerce.promocode import PromocodeService
+from services.commerce.promocode_scheduler import PromoCodeScheduler
 from models.accounts.user import User
 from core.dependencies import get_current_auth_user
 from fastapi.security import OAuth2PasswordBearer
+from core.logging import get_structured_logger
+
+logger = get_structured_logger(__name__)
 
 router = APIRouter(prefix="/promocodes", tags=["promocodes"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -272,4 +276,41 @@ async def delete(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to delete promocode: {str(e)}"
+        )
+
+
+@router.post("/trigger-cleanup")
+async def trigger_cleanup(
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Manually trigger promocode status cleanup (admin only).
+    
+    This endpoint:
+    - Activates promocodes that have reached their valid_from date
+    - Deactivates expired promocodes (past valid_until)
+    - Deactivates promocodes that reached usage limit
+    - Deactivates promocodes not yet valid
+    """
+    from models.accounts.user import UserRole
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
+    try:
+        scheduler = PromoCodeScheduler(db)
+        result = await scheduler.update_promocode_statuses()
+        if result.get("success"):
+            return Response.success(
+                data=result,
+                message=f"Promocode cleanup completed: {result.get('activated_count', 0)} activated, {result.get('deactivated_count', 0)} deactivated"
+            )
+        else:
+            raise APIException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Promocode cleanup failed: {result.get('error', 'Unknown error')}"
+            )
+    except Exception as e:
+        logger.error(f"Error triggering promocode cleanup: {e}")
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to trigger promocode cleanup: {str(e)}"
         )

@@ -324,9 +324,14 @@ async def failure_status(
     db: AsyncSession = Depends(get_db)
 ):
     """Get detailed status of a failed payment"""
-    service = PaymentService(db)
-    failure_details = await service.failure_status(payment_intent_id, current_user.id)
-    return Response.success(data=failure_details, message="Payment failure details retrieved")
+    try:
+        service = PaymentService(db)
+        failure_details = await service.failure_status(payment_intent_id, current_user.id)
+        return Response.success(data=failure_details, message="Payment failure details retrieved")
+    except HTTPException as e:
+        raise APIException(status_code=e.status_code, message=e.detail)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to get failure status: {str(e)}")
 
 
 @router.post("/failures/{payment_intent_id}/retry")
@@ -337,9 +342,14 @@ async def retry_payment(
     db: AsyncSession = Depends(get_db)
 ):
     """Retry a failed payment"""
-    service = PaymentService(db)
-    retry_result = await service.retry(payment_intent_id, new_payment_method_id)
-    return Response.success(data=retry_result, message="Payment retry initiated")
+    try:
+        service = PaymentService(db)
+        retry_result = await service.retry(payment_intent_id, new_payment_method_id)
+        return Response.success(data=retry_result, message="Payment retry initiated")
+    except HTTPException as e:
+        raise APIException(status_code=e.status_code, message=e.detail)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to retry payment: {str(e)}")
 
 
 @router.get("/failures")
