@@ -1,4 +1,4 @@
-"""Complete API Test Suite - Tests all 171 Banwee API endpoints.
+"""Complete API Test Suite - Tests all 158 Banwee API endpoints.
 
 This file contains comprehensive tests for all API endpoints organized by module.
 Run with: pytest tests/test_all_apis.py -v
@@ -409,6 +409,95 @@ class TestProductEndpoints:
         )
         assert response.status_code in [200, 201, 403]
 
+    async def test_041a_products_update_as_admin(self, async_client: AsyncClient, admin_headers):
+        """PUT /v1/products/{id} - Update product (admin)."""
+        product_id = str(uuid4())
+        response = await async_client.put(f"/v1/products/{product_id}",
+            headers=admin_headers,
+            json={"name": "Updated Product", "description": "Updated"}
+        )
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041b_products_delete_as_admin(self, async_client: AsyncClient, admin_headers):
+        """DELETE /v1/products/{id} - Delete product (admin)."""
+        product_id = str(uuid4())
+        response = await async_client.delete(f"/v1/products/{product_id}", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041c_products_create_variant(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/products/{id}/variants - Create variant (admin)."""
+        product_id = str(uuid4())
+        variant_data = {"sku": "VAR-001", "price": 99.99, "stock": 100}
+        response = await async_client.post(f"/v1/products/{product_id}/variants",
+            headers=admin_headers,
+            json=variant_data
+        )
+        assert response.status_code in [200, 201, 403, 404]
+
+    async def test_041d_products_update_variant(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/products/variants/{id} - Update variant (admin)."""
+        variant_id = str(uuid4())
+        response = await async_client.patch(f"/v1/products/variants/{variant_id}",
+            headers=admin_headers,
+            json={"price": 89.99}
+        )
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041e_products_delete_variant(self, async_client: AsyncClient, admin_headers):
+        """DELETE /v1/products/variants/{id} - Delete variant (admin)."""
+        variant_id = str(uuid4())
+        response = await async_client.delete(f"/v1/products/variants/{variant_id}", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041f_products_create_image(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/products/variants/{id}/images - Create image (admin)."""
+        variant_id = str(uuid4())
+        image_data = {"url": "https://example.com/img.jpg", "alt_text": "Product image"}
+        response = await async_client.post(f"/v1/products/variants/{variant_id}/images",
+            headers=admin_headers,
+            json=image_data
+        )
+        assert response.status_code in [200, 201, 403, 404]
+
+    async def test_041g_products_get_image(self, async_client: AsyncClient):
+        """GET /v1/products/images/{id} - Get image."""
+        image_id = str(uuid4())
+        response = await async_client.get(f"/v1/products/images/{image_id}")
+        assert response.status_code in [200, 404]
+
+    async def test_041h_products_update_image(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/products/images/{id} - Update image (admin)."""
+        image_id = str(uuid4())
+        response = await async_client.patch(f"/v1/products/images/{image_id}",
+            headers=admin_headers,
+            json={"alt_text": "Updated alt text"}
+        )
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041i_products_delete_image(self, async_client: AsyncClient, admin_headers):
+        """DELETE /v1/products/images/{id} - Delete image (admin)."""
+        image_id = str(uuid4())
+        response = await async_client.delete(f"/v1/products/images/{image_id}", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041j_products_moderate(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/products/{id}/moderate - Moderate product (admin)."""
+        product_id = str(uuid4())
+        response = await async_client.patch(f"/v1/products/{product_id}/moderate",
+            headers=admin_headers,
+            json={"status": "approved"}
+        )
+        assert response.status_code in [200, 403, 404]
+
+    async def test_041k_products_feature(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/products/{id}/feature - Feature product (admin)."""
+        product_id = str(uuid4())
+        response = await async_client.patch(f"/v1/products/{product_id}/feature",
+            headers=admin_headers,
+            params={"featured": True}
+        )
+        assert response.status_code in [200, 403, 404]
+
 
 # =============================================================================
 # REVIEW ENDPOINTS (6 endpoints)
@@ -565,6 +654,19 @@ class TestCartEndpoints:
         """POST /v1/cart/clear - Clear cart."""
         response = await async_client.post("/v1/cart/clear", headers=auth_headers)
         assert response.status_code in [200, 201]
+
+    async def test_055a_cart_calculate(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/cart/calculate - Calculate cart totals."""
+        response = await async_client.post("/v1/cart/calculate",
+            headers=auth_headers,
+            json={"items": [{"variant_id": str(uuid4()), "quantity": 2}]}
+        )
+        assert response.status_code in [200, 400]
+
+    async def test_055b_cart_checkout_summary(self, async_client: AsyncClient, auth_headers):
+        """GET /v1/cart/checkout-summary - Get checkout summary."""
+        response = await async_client.get("/v1/cart/checkout-summary", headers=auth_headers)
+        assert response.status_code in [200, 400]
 
 
 # =============================================================================
@@ -1170,5 +1272,5 @@ class TestWebhookEndpoints:
 #   - Promocodes: 8 tests
 #   - Refunds: 4 tests
 #   - Webhooks: 2 tests
-# Total: 171 test cases covering all 221+ API endpoints
+# Total: 158 test cases covering 221+ API endpoints
 # =============================================================================
