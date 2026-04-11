@@ -27,18 +27,16 @@ async def list(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all promocodes (Admin only)."""
+    """Get all promocodes. Returns only active promocodes for regular users, all for admins."""
     try:
         from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can view promocodes"
-            )
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         promocode_service = PromocodeService(db)
+        # Regular users only see active promocodes
+        filter_active = True if not is_admin else is_active
         promocodes, total = await promocode_service.list(
-            page=page, limit=limit, is_active=is_active
+            page=page, limit=limit, is_active=filter_active
         )
         promocodes_serialized = [
             {
@@ -115,17 +113,20 @@ async def get(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get promocode by ID (Admin only)."""
+    """Get promocode by ID."""
     try:
         from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can view promocodes"
-            )
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         promocode_service = PromocodeService(db)
         promocode = await promocode_service.get(promocode_id)
+        
+        # Regular users can only view active promocodes
+        if not is_admin and promocode and not promocode.is_active:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Promocode not found"
+            )
         
         if not promocode:
             raise APIException(

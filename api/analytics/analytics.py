@@ -11,9 +11,9 @@ from uuid import UUID
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, get_analytics_service
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
-from models.accounts.user import User, UserRole
+from models.accounts.user import User
 from models.system import EventType
 from models.accounts import TrafficSource
 from services.analytics.analytics import AnalyticsService
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 async def track(
     event_data: dict,
     current_user: Optional[User] = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Track an analytics event
@@ -35,6 +35,7 @@ async def track(
     Used by frontend to track user interactions and e-commerce events.
     """
     try:
+        analytics_service = AnalyticsService(db)
         event = await analytics_service.track_event(
             session_id=event_data.get("session_id"),
             event_type=EventType(event_data.get("event_type")),
@@ -66,20 +67,16 @@ async def track(
 
 @router.get("/conversion-rates")
 async def conversion_rates(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    traffic_source: Optional[TrafficSource] = Query(None, description="Filter by traffic source"),
-    days: Optional[int] = Query(30, description="Number of days back from today (if dates not provided)"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    traffic_source: Optional[TrafficSource] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get conversion rate metrics
-    
-    Returns overall conversion rates and breakdown by traffic source.
-    Requires admin access.
-    """
+    """Get conversion rate metrics."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -106,19 +103,15 @@ async def conversion_rates(
 
 @router.get("/cart-abandonment")
 async def cart_abandonment(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get cart abandonment metrics
-    
-    Returns cart abandonment rates and conversion funnel data.
-    Requires admin access.
-    """
+    """Get cart abandonment metrics."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -144,19 +137,15 @@ async def cart_abandonment(
 
 @router.get("/time-to-purchase")
 async def time_to_purchase(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get time to first purchase metrics
-    
-    Returns statistics on how long it takes customers to make their first purchase.
-    Requires admin access.
-    """
+    """Get time to first purchase metrics."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -182,19 +171,15 @@ async def time_to_purchase(
 
 @router.get("/refund-rates")
 async def refund_rates(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get refund rate metrics
-    
-    Returns refund rates and breakdown by reason.
-    Requires admin access.
-    """
+    """Get refund rate metrics."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -220,19 +205,15 @@ async def refund_rates(
 
 @router.get("/repeat-customers")
 async def repeat_customers(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get repeat customer metrics
-    
-    Returns repeat purchase rates and customer segmentation data.
-    Requires admin access.
-    """
+    """Get repeat customer metrics."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -275,36 +256,15 @@ async def simple_dashboard(
 
 @router.get("/dashboard")
 async def dashboard(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get comprehensive dashboard data
-    
-    Returns all key business metrics in a single response for dashboard display.
-    """
+    """Get comprehensive dashboard data."""
     try:
-        # Check if user has admin role
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            # Return limited data for non-admin users
-            return Response.success(
-                data={
-                    "message": "Limited dashboard access",
-                    "user_role": current_user.role,
-                    "timestamp": datetime.now().isoformat(),
-                    "metrics": {
-                        "total_orders": 0,
-                        "total_revenue": 0.0,
-                        "total_users": 1
-                    }
-                },
-                message="Dashboard data retrieved successfully (limited access)"
-            )
-        
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -334,31 +294,18 @@ async def dashboard(
                     "total_revenue": 0.0,
                     "total_users": 1
                 }
-            },
-            message="Dashboard data retrieved successfully (fallback)"
-        )
-
-
 @router.get("/sales-trend")
 async def sales_trend(
-    days: int = Query(30, description="Number of days to analyze"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    days: int = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get sales trend data over specified number of days
-    
-    Returns daily sales data for trend analysis.
-    Requires admin access.
-    """
+    """Get sales trend data over specified number of days."""
     try:
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
         
-        trend_data = await analytics_service.get_sales_trend_data(
-            start_date=start_date,
-            end_date=end_date
-        )
+        trend_data = await get_sales_trend_data(db, start_date=start_date, end_date=end_date)
         
         return Response.success(
             data=trend_data,
@@ -374,15 +321,15 @@ async def sales_trend(
 
 @router.get("/sales-overview")
 async def sales_overview(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    granularity: str = Query("daily", description="Data granularity: daily, weekly, monthly"),
-    categories: Optional[str] = Query(None, description="Comma-separated category IDs"),
-    regions: Optional[str] = Query(None, description="Comma-separated region IDs"),
-    sales_channels: Optional[str] = Query("online,instore", description="Comma-separated sales channels"),
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    granularity: str = Query("daily"),
+    categories: Optional[str] = Query(None),
+    regions: Optional[str] = Query(None),
+    sales_channels: Optional[str] = Query("online,instore"),
     current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get comprehensive sales overview data for dashboard
@@ -391,6 +338,7 @@ async def sales_overview(
     optimized for the sales overview dashboard.
     """
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -426,20 +374,16 @@ async def sales_overview(
 
 @router.get("/kpis")
 async def kpis(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(7, description="Number of days back from today"),
-    compare_previous: bool = Query(True, description="Include comparison with previous period"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(7),
+    compare_previous: bool = Query(True),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get key performance indicators (KPIs)
-    
-    Returns summarized KPIs with optional comparison to previous period.
-    Optimized for executive dashboards and quick insights.
-    """
+    """Get key performance indicators (KPIs)."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -534,14 +478,15 @@ async def kpis(
 
 @router.get("/sales")
 async def sales(
-    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Get sales analytics. Requires admin access."""
+    """Get sales analytics."""
     try:
+        analytics_service = AnalyticsService(db)
         if not end_date:
             end_dt = datetime.now(timezone.utc)
         else:
@@ -552,7 +497,7 @@ async def sales(
             start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
 
         metrics = await analytics_service.get_revenue_metrics(start_date=start_dt, end_date=end_dt)
-        return Response.success(data=metrics, message="Sales analytics retrieved successfully")
+        return Response.success(data=metrics)
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -663,19 +608,15 @@ async def orders(
 
 @router.get("/revenue")
 async def revenue(
-    start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
-    end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
-    days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    days: Optional[int] = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get revenue analytics
-    
-    Returns revenue metrics by time period, product, and traffic source.
-    Requires admin access.
-    """
+    """Get revenue analytics."""
     try:
+        analytics_service = AnalyticsService(db)
         # Set default date range if not provided
         if not end_date:
             end_date = datetime.now(timezone.utc)
@@ -705,13 +646,12 @@ async def admin_stats(
     date_to: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Get admin dashboard statistics with filters (admin only)."""
+    """Get admin dashboard statistics with filters."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
+        analytics_service = AnalyticsService(db)
         stats = await analytics_service.get_admin_stats(
             date_from=date_from,
             date_to=date_to,
@@ -734,13 +674,12 @@ async def admin_dashboard(
     date_to: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
-    analytics_service: AnalyticsService = Depends(get_analytics_service)
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Get comprehensive admin dashboard data (admin only)."""
+    """Get comprehensive admin dashboard data."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
+        analytics_service = AnalyticsService(db)
         overview = await analytics_service.get_admin_overview()
         return Response.success(data=overview)
     except APIException:
@@ -761,16 +700,13 @@ async def export_orders(
     date_to: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Export orders to CSV, Excel, or PDF (admin only)."""
+    """Export orders to CSV, Excel, or PDF."""
     from fastapi.responses import StreamingResponse
     from services.export import ExportService
     from services.commerce.orders import OrderService
-
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=403, message="Admin access required")
 
     if format not in ['csv', 'excel', 'pdf']:
         raise APIException(

@@ -47,7 +47,7 @@ async def get_location(
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific warehouse location by ID (Admin access)."""
+    """Get a specific warehouse location by ID."""
     try:
         inventory_service = InventoryService(db)
         location = await inventory_service.get_location(location_id)
@@ -65,7 +65,7 @@ async def list_locations(
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all warehouse locations (Admin access)."""
+    """List all warehouse locations."""
     try:
         inventory_service = InventoryService(db)
         locations = await inventory_service.list_locations()
@@ -135,7 +135,7 @@ async def get(
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific inventory item by ID (Admin access)."""
+    """Get a specific inventory item by ID."""
     try:
         inventory_service = InventoryService(db)
         item = await inventory_service.get_serialized(inventory_id)
@@ -154,22 +154,23 @@ async def list(
     limit: int = Query(10, ge=1, le=100),
     product_id: Optional[UUID] = Query(None),
     location_id: Optional[UUID] = Query(None),
-    low_stock: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List inventory items with filters (Admin access)."""
+    """List inventory items with filters."""
     try:
+        from models.accounts.user import UserRole
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        
         inventory_service = InventoryService(db)
         items = await inventory_service.list(
             page=page,
             limit=limit,
             product_id=product_id,
             location_id=location_id,
-            low_stock=low_stock,
             search=search,
             sort_by=sort_by,
             sort_order=sort_order
