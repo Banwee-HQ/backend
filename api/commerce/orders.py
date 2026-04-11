@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status, Background
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from core.db import get_db
-from core.dependencies import get_current_auth_user, get_order_service, require_admin
+from core.dependencies import get_current_auth_user, require_admin
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from services.commerce.orders import OrderService

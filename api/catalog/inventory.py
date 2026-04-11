@@ -138,7 +138,7 @@ async def get(
     """Get a specific inventory item by ID."""
     try:
         inventory_service = InventoryService(db)
-        item = await inventory_service.get_serialized(inventory_id)
+        item = await inventory_service.get(inventory_id, serialized=True)
         if not item:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Inventory item not found")
         return Response.success(data=item)

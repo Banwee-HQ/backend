@@ -21,74 +21,12 @@ async def get_current_auth_user(
     return await auth_service.current_user(token)
 
 
-# Alias used by some routers
-async def current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    from services.accounts.auth import AuthService
-    auth_service = AuthService(db)
-    return await auth_service.current_user(token)
-
-
 def require_admin(current_user: User = Depends(get_current_auth_user)) -> User:
     from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise APIException(status_code=403, message="Admin access required")
     return current_user
 
-
-async def get_current_admin_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    from services.accounts.auth import AuthService
-    from models.accounts.user import UserRole
-    auth_service = AuthService(db)
-    user = await auth_service.current_user(token)
-    if user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=403, message="Admin access required")
-    return user
-
-
-def get_order_service(db: AsyncSession = Depends(get_db)):
-    from services.commerce.orders import OrderService
-    return OrderService(db)
-
-
-def get_inventory_service(db: AsyncSession = Depends(get_db)):
-    from services.catalog.inventory import InventoryService
-    return InventoryService(db)
-
-
-def get_analytics_service(db: AsyncSession = Depends(get_db)):
-    from services.analytics.analytics import AnalyticsService
-    return AnalyticsService(db)
-
-
-def get_product_service(db: AsyncSession = Depends(get_db)):
-    from services.catalog.products import ProductService
-    return ProductService(db)
-
-
-def get_user_service(db: AsyncSession = Depends(get_db)):
-    from services.accounts.user import UserService
-    return UserService(db)
-
-
-def get_auth_service(db: AsyncSession = Depends(get_db)):
-    from services.accounts.auth import AuthService
-    return AuthService(db)
-
-
-def get_refund_service(db: AsyncSession = Depends(get_db)):
-    from services.commerce.refunds import RefundService
-    return RefundService(db)
-
-
-def get_shipping_tracking_service(db: AsyncSession = Depends(get_db)):
-    from services.commerce.shipping_tracking import ShippingTrackingService
-    return ShippingTrackingService(db)
 
 
 # Alias — some routers use get_current_user instead of get_current_auth_user

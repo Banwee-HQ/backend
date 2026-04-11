@@ -1,9 +1,8 @@
 from sqlalchemy.orm import sessionmaker, declarative_base, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy import text, Column, DateTime, func, TypeDecorator, CHAR, Index, String, Boolean, Integer, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import text, TypeDecorator, CHAR, Index, String, Boolean, Integer, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
-from sqlalchemy.pool import QueuePool
 import asyncio
 import time
 import uuid
@@ -13,8 +12,6 @@ from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from core.logging import get_structured_logger
-from datetime import datetime as dt
-from core.utils.uuid_utils import uuid7
 from core.exceptions import DatabaseException, APIException
 
 logger = get_structured_logger(__name__)

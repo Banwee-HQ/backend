@@ -172,18 +172,11 @@ async def update_status(
 async def patch(
     refund_id: UUID,
     payload: dict,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Partial update refund (admin only)."""
     try:
-        # Verify admin access
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Admin access required"
-            )
-        
         refund_service = RefundService(db)
         refund = await refund_service.patch(refund_id, payload)
         return Response.success(data=refund, message="Refund updated successfully")

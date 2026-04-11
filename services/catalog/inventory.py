@@ -87,16 +87,8 @@ class InventoryService:
         await self.db.commit()
 
     # --- Inventory CRUD and Adjustment ---
-    async def get(self, inventory_id: UUID) -> Optional[Inventory]:
-        result = await self.db.execute(select(Inventory).filter(Inventory.id == inventory_id).options(
-            joinedload(Inventory.variant).joinedload(ProductVariant.product),
-            joinedload(Inventory.variant).joinedload(ProductVariant.images),
-            joinedload(Inventory.location)
-        ))
-        return result.scalars().unique().first()
-
-    async def get_serialized(self, inventory_id: UUID) -> Optional[dict]:
-        """Get inventory item by ID and return serialized data"""
+    async def get(self, inventory_id: UUID, serialized: bool = False) -> Optional[Inventory | dict]:
+        """Get inventory item by ID. Set serialized=True to return dict instead of model."""
         result = await self.db.execute(select(Inventory).filter(Inventory.id == inventory_id).options(
             joinedload(Inventory.variant).joinedload(ProductVariant.product),
             joinedload(Inventory.variant).joinedload(ProductVariant.images),
@@ -106,12 +98,14 @@ class InventoryService:
         
         if not item:
             return None
+        
+        if not serialized:
+            return item
             
+        # Return serialized dict
         try:
-            # Safely serialize variant data
             variant_data = None
             if item.variant:
-                # Get primary image safely
                 primary_image = None
                 if item.variant.images:
                     primary_image = next(
@@ -119,7 +113,6 @@ class InventoryService:
                         item.variant.images[0] if len(item.variant.images) > 0 else None
                     )
                 
-                # Safely serialize product info
                 product_info = None
                 if item.variant.product:
                     product_info = {
@@ -156,7 +149,6 @@ class InventoryService:
                     ]
                 }
 
-            # Safely serialize location info
             location_info = None
             if item.location:
                 location_info = {
@@ -168,7 +160,7 @@ class InventoryService:
                     "updated_at": item.location.updated_at.isoformat() if item.location.updated_at else None
                 }
 
-            item_dict = {
+            return {
                 "id": str(item.id),
                 "variant_id": str(item.variant_id),
                 "location_id": str(item.location_id),
@@ -185,13 +177,8 @@ class InventoryService:
                 "variant": variant_data,
                 "location": location_info
             }
-            
-            return item_dict
-            
         except Exception as e:
-            logger.error(f"Error serializing inventory item", metadata={
-    "item_id": str(item.id)
-}, exception=e)
+            logger.error(f"Error serializing inventory item", metadata={"item_id": str(item.id)}, exception=e)
             return None
 
     async def get_by_variant(self, variant_id: UUID) -> Optional[Inventory]:

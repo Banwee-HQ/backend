@@ -727,10 +727,10 @@ async def export_orders(
         limit = 100
 
         while True:
-            orders_data = await order_service.list_all(
+            orders_data = await order_service.get_all_orders(
                 page=page,
                 limit=limit,
-                order_status=order_status,
+                status=order_status,
                 q=q,
                 date_from=date_from,
                 date_to=date_to,
@@ -738,7 +738,7 @@ async def export_orders(
                 max_price=max_price
             )
 
-            orders_batch = orders_data.get('data', [])
+            orders_batch = orders_data.get('orders', [])
             if not orders_batch:
                 break
 

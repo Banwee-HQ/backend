@@ -29,12 +29,12 @@ class ShippingService:
         result = await self.db.execute(select(ShippingMethod).where(ShippingMethod.id == shipping_method_id))
         return result.scalars().first()
 
-    async def list_all(self) -> List[ShippingMethod]:
-        result = await self.db.execute(select(ShippingMethod))
-        return result.scalars().all()
-
-    async def list_active(self) -> List[ShippingMethod]:
-        result = await self.db.execute(select(ShippingMethod).where(ShippingMethod.is_active == True))
+    async def list(self, active_only: bool = False) -> List[ShippingMethod]:
+        """List shipping methods. Set active_only=True to filter active methods."""
+        query = select(ShippingMethod)
+        if active_only:
+            query = query.where(ShippingMethod.is_active == True)
+        result = await self.db.execute(query)
         return result.scalars().all()
 
     async def calc_cost(

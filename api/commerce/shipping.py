@@ -12,7 +12,7 @@ from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from services.commerce.shipping import ShippingService
 from schemas.commerce.shipping import (
     MethodCreate,
@@ -38,13 +38,14 @@ async def list(
     try:
         shipping_service = ShippingService(db)
         if all_methods:
-            if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-                raise APIException(status_code=403, message="Admin access required")
+            # Admin only
+            _ = require_admin(current_user)
             methods = await shipping_service.get_all_methods(
                 page=page, limit=limit, is_active=is_active
             )
             return Response.success(data=methods)
-        methods = await shipping_service.list_active()
+        # Regular users get active methods only
+        methods = await shipping_service.list(active_only=True)
         methods_data = [MethodInDB.model_validate(method) for method in methods]
         return Response.success(data=methods_data)
     except APIException:
