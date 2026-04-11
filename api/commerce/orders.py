@@ -1,30 +1,18 @@
 from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-from core.logging import get_structured_logger as get_logger
+from typing import Optional, List
 from core.db import get_db
-from core.utils.response import Response
+from core.dependencies import get_current_auth_user, require_admin
 from core.exceptions import APIException
+from core.logging import get_structured_logger
 from services.commerce.orders import OrderService
 from models.accounts.user import User
 from schemas.commerce.orders import Create, Checkout, Note
-from core.dependencies import get_current_auth_user, get_order_service
-logger = get_logger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-
-
-def require_admin(current_user: User = Depends(get_current_auth_user)):
-    """Require admin role."""
-    if current_user.role not in ["admin", "manager", "Admin", "SuperAdmin"]:
-        raise APIException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            message="Admin access required"
-        )
-    return current_user
-
+logger = get_structured_logger(__name__)
 
 # ==========================================================
 # ORDERS - 5 Standard APIs

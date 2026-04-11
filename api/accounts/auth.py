@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from core.db import get_db
+from core.dependencies import get_current_auth_user
 from core.utils.response import Response as APIResponse
 from core.exceptions import APIException
 from core.config import settings
@@ -19,12 +20,6 @@ import time
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
-
-async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
-    auth_service = AuthService(db)
-    return await auth_service.current_user(token)
 
 
 @router.post("/register")

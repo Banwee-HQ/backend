@@ -3,25 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
 from core.db import get_db
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate, ProductPatch, VariantStockUpdate, ProductModeration, ProductFeatureToggle
 from services.catalog.products import ProductService
-from models.accounts.user import User
-from services.accounts.auth import AuthService
-from fastapi.security import OAuth2PasswordBearer
-from core.dependencies import require_admin
 
 logger = get_logger(__name__)
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
-    auth_service = AuthService(db)
-    return await auth_service.current_user(token)
-
 
 router = APIRouter(prefix="/products", tags=["Products"])
 # /products?sort_by=created_at&sort_order=desc&page=1&limit=12

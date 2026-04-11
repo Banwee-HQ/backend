@@ -5,7 +5,8 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import List
-from core.db import get_db,logger
+from core.db import get_db, logger
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
@@ -24,29 +25,8 @@ from services.commerce.subscriptions_scheduler import SubscriptionScheduler
 from models.accounts.user import User
 from models.catalog.product import Product, ProductVariant, ProductImage
 from models.commerce.subscriptions import Subscription
-from services.accounts.auth import AuthService
-
-
-from fastapi.security import OAuth2PasswordBearer
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
-
-async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
-    auth_service = AuthService(db)
-    return await auth_service.current_user(token)
-
-
-def require_admin(current_user: User = Depends(get_current_auth_user)):
-    """Require admin role."""
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            message="Admin access required"
-        )
-    return current_user
 
 
 @router.post("/trigger-order-processing")
