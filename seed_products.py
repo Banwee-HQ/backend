@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 from core.db import db_manager
-from sqlalchemy import select
+from sqlalchemy import select, text
 from core.utils.uuid_utils import uuid7
 from core.utils.encryption import PasswordManager
 
@@ -171,10 +171,23 @@ PRODUCTS = [
 ]
 
 
-async def seed():
+async def seed(force: bool = False):
     db_manager.initialize(settings.SQLALCHEMY_DATABASE_URI, False)
     from core.db import AsyncSessionDB
     async with AsyncSessionDB() as db:
+        if force:
+            print("--force/--drop provided: truncating seeded tables (CASCADE)")
+            # Truncate product/catalog and commerce tables used by the seeder.
+            # Use schema-qualified names to be explicit.
+            await db.execute(text(
+                "TRUNCATE TABLE catalog.stock_adjustments, catalog.inventory,"
+                " catalog.product_images, catalog.product_variants, catalog.reviews,"
+                " catalog.products CASCADE"
+            ))
+            await db.execute(text(
+                "TRUNCATE TABLE commerce.shipping_methods, commerce.tax_rates CASCADE"
+            ))
+            await db.commit()
         now = datetime.now(timezone.utc)
         pm = PasswordManager()
 
@@ -457,4 +470,11 @@ async def seed():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seed the Banwee database")
+    parser.add_argument("--force", "--drop", dest="force", action="store_true",
+                        help="Truncate seeded tables and reseed (useful for fresh test DBs)")
+    args = parser.parse_args()
+
+    asyncio.run(seed(force=args.force))
