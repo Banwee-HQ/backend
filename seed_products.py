@@ -340,11 +340,47 @@ async def seed():
         for tr in tax_rates:
             db.add(tr)
 
-        # ── Related products (by id) ───────────────────────────────
-        # Attach 2 deterministic related products per product using rotation
-        n = len(products_created)
+        # ── Related products (by similarity) ───────────────────────
+        # Compute related products using seeded data similarity:
+        # same category (+3), matching tags (+2 each), matching dietary tags (+1 each), matching attribute keys (+1 each)
+        def _features_from_seed(seed_entry):
+            tag_set = set()
+            dietary_set = set()
+            attr_keys = set()
+            for vv in seed_entry.get("variants", []):
+                if vv.get("tags"):
+                    tag_set.update([t.strip() for t in str(vv.get("tags", "")).split(",") if t.strip()])
+                if vv.get("dietary_tags"):
+                    dietary_set.update([k for k, val in vv.get("dietary_tags", {}).items() if val])
+                if vv.get("attributes"):
+                    attr_keys.update(vv.get("attributes", {}).keys())
+            return tag_set, dietary_set, attr_keys
+
+        # build feature list from PRODUCTS (seed data) in the same order as products_created
+        seed_features = [_features_from_seed(p) for p in PRODUCTS[: len(products_created)]]
+
         for i, prod in enumerate(products_created):
-            related = [str(products_created[(i + 1) % n].id), str(products_created[(i + 2) % n].id)] if n > 2 else []
+            p_tags, p_diet, p_attrs = seed_features[i]
+            scores = []
+            for j, other in enumerate(products_created):
+                if i == j:
+                    continue
+                o_tags, o_diet, o_attrs = seed_features[j]
+                score = 0
+                # category match
+                if PRODUCTS[i].get("category") == PRODUCTS[j].get("category"):
+                    score += 3
+                # tag overlap
+                score += 2 * len(p_tags & o_tags)
+                # dietary overlap
+                score += 1 * len(p_diet & o_diet)
+                # attribute key overlap
+                score += 1 * len(p_attrs & o_attrs)
+                scores.append((score, other.id))
+
+            # pick top 2 with positive score, stable sort
+            scores.sort(key=lambda x: (-x[0], str(x[1])))
+            related = [str(s[1]) for s in scores[:2] if s[0] > 0]
             meta = prod.product_metadata or {}
             meta["related_product_ids"] = related
             prod.product_metadata = meta
