@@ -53,7 +53,7 @@ async def _list_refunds(
     return Response.success(data=result, message="Refunds retrieved successfully")
 
 
-@router.post("")
+@router.post("/")
 async def create(
     refund_data: dict,
     current_user: User = Depends(get_current_auth_user),
@@ -71,25 +71,7 @@ async def create(
         )
 
 
-@router.post("/")
-async def create_trailing_slash(
-    refund_data: dict,
-    current_user: User = Depends(get_current_auth_user),
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """Create a refund request (trailing slash variant)."""
-    try:
-        return await _create_refund(refund_data, current_user, refund_service)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to create refund: {str(e)}"
-        )
-
-
-@router.get("")
+@router.get("/")
 async def list(
     refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -98,24 +80,6 @@ async def list(
     refund_service: RefundService = Depends(get_refund_service)
 ):
     """Get user's refund history."""
-    try:
-        return await _list_refunds(refund_status, page, limit, current_user, refund_service)
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve refunds: {str(e)}"
-        )
-
-
-@router.get("/")
-async def list_trailing_slash(
-    refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    current_user: User = Depends(get_current_auth_user),
-    refund_service: RefundService = Depends(get_refund_service)
-):
-    """Get user's refund history (trailing slash variant)."""
     try:
         return await _list_refunds(refund_status, page, limit, current_user, refund_service)
     except Exception as e:
@@ -175,8 +139,8 @@ async def request(
 # ADMIN REFUND MANAGEMENT ROUTES
 # ============================================================================
 
-@router.get("/admin/all", dependencies=[Depends(require_admin)])
-async def get_all_refunds_admin(
+@router.get("/admin", dependencies=[Depends(require_admin)])
+async def list_admin(
     refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -204,7 +168,7 @@ async def get_all_refunds_admin(
 
 
 @router.get("/admin/{refund_id}", dependencies=[Depends(require_admin)])
-async def get_refund_details_admin(
+async def get_admin(
     refund_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -229,7 +193,7 @@ async def get_refund_details_admin(
 
 
 @router.put("/admin/{refund_id}/status", dependencies=[Depends(require_admin)])
-async def update_refund_status_admin(
+async def update_status_admin(
     refund_id: UUID,
     payload: UpdateRefundStatus,
     current_user: User = Depends(require_admin),
@@ -254,7 +218,7 @@ async def update_refund_status_admin(
 
 
 @router.patch("/admin/{refund_id}", dependencies=[Depends(require_admin)])
-async def patch_refund_admin(
+async def patch_admin(
     refund_id: UUID,
     payload: dict,
     current_user: User = Depends(require_admin),

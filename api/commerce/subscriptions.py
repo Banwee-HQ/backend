@@ -336,13 +336,13 @@ async def update_quantity(
     request: UpdateQuantity,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-    ):
+):
     """Update the quantity of a specific variant in a subscription."""
     try:
         subscription_service = SubscriptionService(db)
         subscription = await subscription_service.set_quantity(
             subscription_id, request.variant_id, request.quantity, current_user.id
-            )
+        )
         return Response.success(
             data=subscription.to_dict(include_products=True), 
             message=f"Variant quantity updated to {request.quantity} successfully"
@@ -355,13 +355,15 @@ async def update_quantity(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to update variant quantity: {str(e)}"
         )
-@router.patch("/{subscription_id}/products/quantity")
-async def change_quantity(
+
+
+@router.patch("/{subscription_id}/products/adjust-quantity")
+async def adjust_quantity(
     subscription_id: UUID,
     request: QuantityChange,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-    ):
+):
     """Increment or decrement the quantity of a specific variant in a subscription."""
     try:
         subscription_service = SubscriptionService(db)
@@ -376,10 +378,10 @@ async def change_quantity(
     except APIException:
         raise
     except Exception as e:
-        logger.error(f"Error changing variant quantity: {e}")
+        logger.error(f"Error adjusting variant quantity: {e}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to change variant quantity: {str(e)}"
+            message=f"Failed to adjust variant quantity: {str(e)}"
         )
 @router.get("/{subscription_id}/products/quantities")
 async def get_quantities(
@@ -822,8 +824,8 @@ async def orders(
 # ADMIN SUBSCRIPTION MANAGEMENT ROUTES
 # ============================================================================
 
-@router.get("/admin/all", dependencies=[Depends(require_admin)])
-async def get_all_subscriptions_admin(
+@router.get("/admin", dependencies=[Depends(require_admin)])
+async def list_admin(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -858,7 +860,7 @@ async def get_all_subscriptions_admin(
 
 
 @router.get("/admin/{subscription_id}", dependencies=[Depends(require_admin)])
-async def get_subscription_by_id_admin(
+async def get_admin(
     subscription_id: UUID,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
