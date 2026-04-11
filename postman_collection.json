@@ -1,6 +1,7 @@
 {
   "info": {
     "name": "Backend API",
+    "description": "Postman collection snapshot of backend API (auto-updated 2026-04-10). Use '{{base_url}}' variable.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "banwee-api-collection"
   },
