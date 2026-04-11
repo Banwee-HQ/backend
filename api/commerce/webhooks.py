@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
-@router.post("/stripe")
+@router.post("/stripe/")
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db)
@@ -51,7 +51,7 @@ async def stripe_webhook(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/health")
+@router.get("/health/")
 async def webhook_health():
     """Health check endpoint for webhook service"""
     return Response.success(data={"status": "healthy", "service": "webhooks"})

@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("/me")
+@router.get("/me/")
 async def me(current_user: AuthUser = Depends(get_current_auth_user)):
     """Get current authenticated user (compat alias)."""
     try:
@@ -34,7 +34,7 @@ async def me(current_user: AuthUser = Depends(get_current_auth_user)):
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=str(e))
 
 
-@router.get("/profile")
+@router.get("/profile/")
 async def profile(current_user: AuthUser = Depends(get_current_auth_user)):
     """Alias for profile under /users for legacy clients."""
     return await me(current_user)
@@ -43,44 +43,62 @@ async def profile(current_user: AuthUser = Depends(get_current_auth_user)):
 @router.post("/")
 async def create(payload: UserCreate, background_tasks: BackgroundTasks = None, db: AsyncSession = Depends(get_db)):
     """Create a new user."""
-    service = UserService(db)
-    user = await service.create(payload, background_tasks)
-    return Response.success(data=user, code=status.HTTP_201_CREATED)
+    try:
+        service = UserService(db)
+        user = await service.create(payload, background_tasks)
+        return Response.success(data=user, message="User created successfully", status_code=status.HTTP_201_CREATED)
+    except APIException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to create user: {str(e)}"
+        )
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}/")
 async def get(
     user_id: UUID,
     current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a user by ID. Admin can get any user, users can only get themselves."""
-    # Check if user is admin or requesting their own data
-    if current_user.id != user_id:
+    try:
+        # Check if user is admin or requesting their own data
+        if current_user.id != user_id:
+            raise APIException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="You can only access your own user data"
+            )
+        service = UserService(db)
+        user = await service.get(user_id)
+        if not user:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        user_data = {
+            "id": str(user.id),
+            "email": user.email,
+            "firstname": user.firstname,
+            "lastname": user.lastname,
+            "phone": user.phone,
+            "role": user.role.value if hasattr(user.role, "value") else user.role,
+            "account_status": user.account_status,
+            "verification_status": user.verification_status,
+            "verified": user.verified,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+        }
+        return Response.success(data=user_data, message="User retrieved successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching user: {e}")
         raise APIException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            message="You can only access your own user data"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch user: {str(e)}"
         )
-    service = UserService(db)
-    user = await service.get(user_id)
-    if not user:
-        raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-    user_data = {
-        "id": str(user.id),
-        "email": user.email,
-        "firstname": user.firstname,
-        "lastname": user.lastname,
-        "phone": user.phone,
-        "role": user.role.value if hasattr(user.role, "value") else user.role,
-        "account_status": user.account_status,
-        "verification_status": user.verification_status,
-        "verified": user.verified,
-        "is_active": user.is_active,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
-        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-    }
-    return Response.success(data=user_data)
 
 
 @router.get("/")
@@ -97,10 +115,12 @@ async def list(
     """List users with optional filtering and pagination (admin only)."""
     try:
         service = UserService(db)
-        users = await service.get_all_users(
-            page=page, limit=limit, role=role, search=search or q, status=status
+        result = await service.list(
+            page=page, limit=limit, role=role, query=search or q
         )
-        return Response.success(data=users)
+        if isinstance(result, dict) and "users" in result and "pagination" in result:
+            return Response.success(data=result.get("users", []), pagination=result.get("pagination"))
+        return Response.success(data=result)
     except APIException:
         raise
     except Exception as e:
@@ -110,7 +130,7 @@ async def list(
         )
 
 
-@router.patch("/{user_id}")
+@router.patch("/{user_id}/")
 async def patch(
     user_id: UUID,
     payload: UserUpdate,
@@ -118,46 +138,55 @@ async def patch(
     db: AsyncSession = Depends(get_db)
 ):
     """Partially update a user. Admin can update any user, users can only update themselves."""
-    # Check if user is admin or updating their own data
-    if current_user.id != user_id:
+    try:
+        # Check if user is admin or updating their own data
+        if current_user.id != user_id:
+            raise APIException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                message="You can only update your own user data"
+            )
+        # Regular users cannot change role or sensitive fields
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            # Prevent non-admins from changing role, account_status, etc.
+            forbidden_fields = ['role', 'account_status', 'verification_status', 'is_active', 'verified']
+            update_dict = payload.model_dump(exclude_unset=True)
+            for field in forbidden_fields:
+                if field in update_dict:
+                    raise APIException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        message=f"You cannot modify the '{field}' field"
+                    )
+        service = UserService(db)
+        updated_user = await service.update(user_id, payload)
+        if not updated_user:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        user_data = {
+            "id": str(updated_user.id),
+            "email": updated_user.email,
+            "firstname": updated_user.firstname,
+            "lastname": updated_user.lastname,
+            "phone": updated_user.phone,
+            "role": updated_user.role.value if hasattr(updated_user.role, "value") else updated_user.role,
+            "account_status": updated_user.account_status,
+            "verification_status": updated_user.verification_status,
+            "verified": updated_user.verified,
+            "is_active": updated_user.is_active,
+            "created_at": updated_user.created_at.isoformat() if updated_user.created_at else None,
+            "updated_at": updated_user.updated_at.isoformat() if updated_user.updated_at else None,
+        }
+        return Response.success(data=user_data, message="User updated successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user: {e}")
         raise APIException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            message="You can only update your own user data"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update user: {str(e)}"
         )
-    # Regular users cannot change role or sensitive fields
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        # Prevent non-admins from changing role, account_status, etc.
-        forbidden_fields = ['role', 'account_status', 'verification_status', 'is_active', 'verified']
-        update_dict = payload.model_dump(exclude_unset=True)
-        for field in forbidden_fields:
-            if field in update_dict:
-                raise APIException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    message=f"You cannot modify the '{field}' field"
-                )
-    service = UserService(db)
-    updated_user = await service.update(user_id, payload)
-    if not updated_user:
-        raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-    user_data = {
-        "id": str(updated_user.id),
-        "email": updated_user.email,
-        "firstname": updated_user.firstname,
-        "lastname": updated_user.lastname,
-        "phone": updated_user.phone,
-        "role": updated_user.role.value if hasattr(updated_user.role, "value") else updated_user.role,
-        "account_status": updated_user.account_status,
-        "verification_status": updated_user.verification_status,
-        "verified": updated_user.verified,
-        "is_active": updated_user.is_active,
-        "created_at": updated_user.created_at.isoformat() if updated_user.created_at else None,
-        "updated_at": updated_user.updated_at.isoformat() if updated_user.updated_at else None,
-    }
-    return Response.success(data=user_data)
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}/")
 async def delete(
     user_id: UUID,
     current_user: AuthUser = Depends(require_admin),
@@ -179,10 +208,10 @@ async def delete(
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to delete user: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to delete user: {str(e)}")
 
 
-@router.put("/{user_id}/status")
+@router.put("/{user_id}/status/")
 async def update_status(
     user_id: UUID,
     payload: UserStatusUpdate,
@@ -197,10 +226,10 @@ async def update_status(
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to update user status: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to update user status: {str(e)}")
 
 
-@router.post("/{user_id}/reset-password")
+@router.post("/{user_id}/reset-password/")
 async def reset_password(
     user_id: UUID,
     current_user: AuthUser = Depends(require_admin),
@@ -214,10 +243,10 @@ async def reset_password(
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to reset password: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to reset password: {str(e)}")
 
 
-@router.post("/{user_id}/deactivate")
+@router.post("/{user_id}/deactivate/")
 async def deactivate(
     user_id: UUID,
     current_user: AuthUser = Depends(require_admin),
@@ -231,10 +260,10 @@ async def deactivate(
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to deactivate user: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to deactivate user: {str(e)}")
 
 
-@router.post("/{user_id}/activate")
+@router.post("/{user_id}/activate/")
 async def activate(
     user_id: UUID,
     current_user: AuthUser = Depends(require_admin),
@@ -248,10 +277,10 @@ async def activate(
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to activate user: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to activate user: {str(e)}")
 
 
-@router.put("/{user_id}/verify")
+@router.put("/{user_id}/verify/")
 async def verify(
     user_id: UUID,
     current_user: AuthUser = Depends(require_admin),
@@ -260,15 +289,15 @@ async def verify(
     """Verify user account (admin only)."""
     try:
         service = UserService(db)
-        result = await service.verify(user_id)
+        result = await service.verify_user_account(user_id)
         return Response.success(data=result, message="User verified")
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to verify user: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to verify user: {str(e)}")
 
 
-@router.get("/{user_id}/activity")
+@router.get("/{user_id}/activity/")
 async def activity(
     user_id: UUID,
     page: int = Query(1, ge=1),
@@ -284,4 +313,4 @@ async def activity(
     except APIException:
         raise
     except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to get user activity: {str(e)}")
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get user activity: {str(e)}")

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from typing import List
 from core.db import get_db
 from core.dependencies import get_current_auth_user
-from core.utils.response import Response as APIResponse
+from core.utils.response import Response
 from core.exceptions import APIException
 from core.config import settings
 from core.logging import get_structured_logger as get_logger
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register")
+@router.post("/register/")
 async def register(
     user_data: UserCreate,
     background_tasks: BackgroundTasks,
@@ -33,7 +33,7 @@ async def register(
     try:
         auth_service = AuthService(db)
         user = await auth_service.create(user_data, background_tasks)
-        return APIResponse(success=True, data=user, message="User registered successfully")
+        return Response.success(data=user, message="User registered successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -41,7 +41,7 @@ async def register(
         )
 
 
-@router.post("/login")
+@router.post("/login/")
 async def login(
     background_tasks: BackgroundTasks,
     user_login: Login,
@@ -52,7 +52,7 @@ async def login(
         auth_service = AuthService(db)
         token = await auth_service.authenticate(user_login.email, user_login.password, background_tasks)
         logger.info(f"User login successful: {user_login.email}")
-        return APIResponse(success=True, data=token, message="Login successful")
+        return Response.success(data=token, message="Login successful")
     except HTTPException as e:
         # Re-raise HTTP exceptions (authentication failures) as-is
         raise e
@@ -65,7 +65,7 @@ async def login(
         )
 
 
-@router.post("/refresh")
+@router.post("/refresh/")
 async def refresh(
     request: Refresh,
     db: AsyncSession = Depends(get_db)
@@ -74,7 +74,7 @@ async def refresh(
     try:
         auth_service = AuthService(db)
         token_data = await auth_service.refresh_token(request.refresh_token)
-        return APIResponse.success(data=token_data, message="Token refreshed successfully")
+        return Response.success(data=token_data, message="Token refreshed successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -82,7 +82,7 @@ async def refresh(
         )
 
 
-@router.post("/revoke")
+@router.post("/revoke/")
 async def revoke(
     refresh_token: str,
     db: AsyncSession = Depends(get_db)
@@ -92,7 +92,7 @@ async def revoke(
         auth_service = AuthService(db)
         success = await auth_service.revoke_token(refresh_token)
         if success:
-            return APIResponse.success(message="Refresh token revoked successfully")
+            return Response.success(message="Refresh token revoked successfully")
         else:
             raise APIException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -105,15 +105,15 @@ async def revoke(
         )
 
 
-@router.post("/logout")
+@router.post("/logout/")
 async def logout(
     current_user: User = Depends(get_current_auth_user)
 ):
     """Logout user."""
-    return APIResponse(success=True, message="Logged out successfully")
+    return Response.success(message="Logged out successfully")
 
 
-@router.get("/me")
+@router.get("/me/")
 async def me(
     current_user: User = Depends(get_current_auth_user)
 ):
@@ -146,7 +146,7 @@ async def me(
             "created_at": current_user.created_at.isoformat(),
             "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
         }
-        return APIResponse.success(data=user_data)
+        return Response.success(data=user_data)
     except Exception as e:
         logger.exception("Failed to get user profile")
         raise APIException(
@@ -154,7 +154,7 @@ async def me(
             message=f"Failed to get profile: {str(e)}"
         )
 
-@router.get("/verify-email")  # Changed to GET as it's typically a link click
+@router.get("/verify-email/")  # Changed to GET as it's typically a link click
 async def verify(
     token: str = Query(..., description="Verification token"),
     background_tasks: BackgroundTasks = None,
@@ -185,10 +185,10 @@ async def verify(
         logger.info(f"Email verification attempt with token: {token[:20]}...")
         
         user_service = UserService(db)
-        await user_service.verify(token, background_tasks)
+        await user_service.verify(token, background_tasks=background_tasks)
         
         logger.info(f"Email verification successful for token: {token[:20]}...")
-        return APIResponse(success=True, message="Email verified successfully")
+        return Response.success(message="Email verified successfully")
     except APIException:
         raise
 
@@ -197,7 +197,7 @@ _resend_requests = {}
 RATE_LIMIT_WINDOW = 300  # 5 minutes
 RATE_LIMIT_COUNT = 3    # Max 3 requests per window
 
-@router.post("/resend-verification")
+@router.post("/resend-verification/")
 async def resend(
     request: ResendVerification,
     x_resend_token: str = Header(None, description="Resend verification token for security"),
@@ -227,7 +227,7 @@ async def resend(
         user = result.scalar_one_or_none()
 
         if not user:
-            return APIResponse(success=True, message="If an account exists with this email, a verification email has been sent.")
+            return Response.success(message="If an account exists with this email, a verification email has been sent.")
 
         if user.verified:
             raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="Email is already verified")
@@ -240,18 +240,19 @@ async def resend(
         await db.commit()
 
         from services.accounts.email import EmailService
-        EmailService.send_verification(background_tasks, request.email, user.firstname, token)
+        email_service = EmailService(db)
+        email_service.send_verification(background_tasks, request.email, user.firstname, token)
 
-        return APIResponse(success=True, message="Verification email sent successfully. Please check your inbox.")
+        return Response.success(message="Verification email sent successfully. Please check your inbox.")
 
     except APIException:
         raise
     except Exception as e:
         logger.error(f"Error resending verification email: {e}")
-        return APIResponse(success=True, message="If an account exists with this email, a verification email has been sent.")
+        return Response.success(message="If an account exists with this email, a verification email has been sent.")
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password/")
 async def forgot_password(
     request: ForgotPassword,
     background_tasks: BackgroundTasks,
@@ -261,13 +262,13 @@ async def forgot_password(
     try:
         auth_service = AuthService(db)
         await auth_service.send_reset(request.email, background_tasks)
-        return APIResponse(success=True, message="Password reset email sent")
+        return Response.success(message="Password reset email sent")
     except Exception as e:
         # Always return success for security
-        return APIResponse(success=True, message="If the email exists, a reset link has been sent")
+        return Response.success(message="If the email exists, a reset link has been sent")
 
 
-@router.post("/reset-password")
+@router.post("/reset-password/")
 async def reset(
     request: ResetPassword,
     db: AsyncSession = Depends(get_db)
@@ -276,7 +277,7 @@ async def reset(
     try:
         auth_service = AuthService(db)
         await auth_service.reset_pwd(request.token, request.new_password)
-        return APIResponse(success=True, message="Password reset successfully")
+        return Response.success(message="Password reset successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -284,7 +285,7 @@ async def reset(
         )
 
 
-@router.patch("/me")
+@router.patch("/me/")
 async def update(
     user_data: dict,
     current_user: User = Depends(get_current_auth_user),
@@ -337,7 +338,7 @@ async def update(
             "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
         }
         
-        return APIResponse(success=True, data=user_response, message="Profile updated successfully")
+        return APIResponse.success(data=user_response, message="Profile updated successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -349,7 +350,7 @@ async def update(
 
 
 
-@router.patch("/me/password")
+@router.patch("/me/password/")
 async def password(
     req: Request,
     current_password: str = Query(None),
@@ -391,7 +392,7 @@ async def password(
         hashed_password = auth_service.get_password_hash(new_pwd)
         await user_service.update(current_user.id, {"hashed_password": hashed_password})
 
-        return APIResponse(success=True, message="Password changed successfully")
+        return APIResponse.success(message="Password changed successfully")
     except APIException:
         raise
     except Exception as e:
@@ -401,7 +402,7 @@ async def password(
         )
 
 
-@router.delete("/me")
+@router.delete("/me/")
 async def delete(
     password: str,
     current_user: User = Depends(get_current_auth_user),

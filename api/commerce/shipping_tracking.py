@@ -28,7 +28,7 @@ from models.commerce.shipping_tracking import ShippingCarrier
 
 router = APIRouter(prefix="/shipping-tracking", tags=["shipping-tracking"])
 
-@router.post("/shipments")
+@router.post("/shipments/")
 async def create_shipment(
     shipment_data: Create,
     background_tasks: BackgroundTasks,
@@ -66,7 +66,7 @@ async def create_shipment(
             message=f"Failed to create shipment: {str(e)}"
         )
 
-@router.get("/shipments/{shipment_id}")
+@router.get("/shipments/{shipment_id}/")
 async def get_shipment(
     shipment_id: str,
     current_user = Depends(get_current_auth_user),
@@ -90,7 +90,7 @@ async def get_shipment(
             message=f"Failed to get shipment tracking: {str(e)}"
         )
 
-@router.post("/track")
+@router.post("/track/")
 async def track(
     tracking_request: Track,
     current_user = Depends(get_current_auth_user),
@@ -117,7 +117,7 @@ async def track(
             message=f"Failed to track shipment: {str(e)}"
         )
 
-@router.patch("/shipments/{shipment_id}/status")
+@router.patch("/shipments/{shipment_id}/status/")
 async def update_shipment_status(
     shipment_id: str,
     update_data: Update,
@@ -146,7 +146,7 @@ async def update_shipment_status(
             message=f"Failed to update shipment status: {str(e)}"
         )
 
-@router.get("/carriers")
+@router.get("/carriers/")
 async def list_carriers(
     db: AsyncSession = Depends(get_db)
 ):
@@ -175,7 +175,7 @@ async def list_carriers(
         )
 
 
-@router.get("/shipments")
+@router.get("/shipments/")
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -217,7 +217,7 @@ async def list(
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to list shipments: {str(e)}")
 
-@router.post("/providers")
+@router.post("/providers/")
 async def create_provider(
     provider_data: dict,
     current_user: User = Depends(require_admin),
@@ -253,7 +253,7 @@ async def create_provider(
             message=f"Failed to create shipping provider: {str(e)}"
         )
 
-@router.get("/providers")
+@router.get("/providers/")
 async def list_providers(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -273,7 +273,7 @@ async def list_providers(
             message=f"Failed to get shipping providers: {str(e)}"
         )
 
-@router.patch("/providers/{provider_id}")
+@router.patch("/providers/{provider_id}/")
 async def patch_provider(
     provider_id: str,
     provider_data: dict,
@@ -311,7 +311,7 @@ async def patch_provider(
             message=f"Failed to update shipping provider: {str(e)}"
         )
 
-@router.delete("/providers/{provider_id}")
+@router.delete("/providers/{provider_id}/")
 async def delete_provider(
     provider_id: str,
     current_user: User = Depends(require_admin),
@@ -360,7 +360,7 @@ async def track_shipment_background(tracking_number: str, carrier: ShippingCarri
             print(f"Background tracking failed for {tracking_number}: {e}")
 
 # Webhook endpoints for carrier notifications
-@router.post("/webhooks/{carrier}")
+@router.post("/webhooks/{carrier}/")
 async def handle_carrier_webhook(
     carrier: ShippingCarrier,
     webhook_data: dict,

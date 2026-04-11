@@ -58,13 +58,13 @@ class TestAuthEndpoints:
             "last_name": "User",
             "phone": "+1234567890"
         }
-        response = await async_client.post("/v1/auth/register", json=user_data)
+        response = await async_client.post("/v1/auth/register/", json=user_data)
         assert response.status_code in [200, 201]
 
     async def test_005_auth_login(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/login - User login."""
         login_data = {"email": test_user.email, "password": "TestPassword123!"}
-        response = await async_client.post("/v1/auth/login", json=login_data)
+        response = await async_client.post("/v1/auth/login/", json=login_data)
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data["data"]
@@ -73,37 +73,37 @@ class TestAuthEndpoints:
     async def test_006_auth_login_invalid(self, async_client: AsyncClient):
         """POST /v1/auth/login - Invalid credentials."""
         login_data = {"email": "invalid@test.com", "password": "wrong"}
-        response = await async_client.post("/v1/auth/login", json=login_data)
+        response = await async_client.post("/v1/auth/login/", json=login_data)
         assert response.status_code == 401
 
     async def test_007_auth_refresh_token(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/refresh - Refresh access token."""
         # First login to get refresh token
         login_data = {"email": test_user.email, "password": "TestPassword123!"}
-        login_resp = await async_client.post("/v1/auth/login", json=login_data)
+        login_resp = await async_client.post("/v1/auth/login/", json=login_data)
         refresh_token = login_resp.json()["data"]["refresh_token"]
         
-        response = await async_client.post("/v1/auth/refresh", json={"refresh_token": refresh_token})
+        response = await async_client.post("/v1/auth/refresh/", json={"refresh_token": refresh_token})
         assert response.status_code == 200
         assert "access_token" in response.json()["data"]
 
     async def test_008_auth_revoke_token(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/revoke - Revoke refresh token."""
         login_data = {"email": test_user.email, "password": "TestPassword123!"}
-        login_resp = await async_client.post("/v1/auth/login", json=login_data)
+        login_resp = await async_client.post("/v1/auth/login/", json=login_data)
         refresh_token = login_resp.json()["data"]["refresh_token"]
         
-        response = await async_client.post("/v1/auth/revoke", params={"refresh_token": refresh_token})
+        response = await async_client.post("/v1/auth/revoke/", params={"refresh_token": refresh_token})
         assert response.status_code == 200
 
     async def test_009_auth_logout(self, async_client: AsyncClient, auth_headers):
         """POST /v1/auth/logout - Logout user."""
-        response = await async_client.post("/v1/auth/logout", headers=auth_headers)
+        response = await async_client.post("/v1/auth/logout/", headers=auth_headers)
         assert response.status_code == 200
 
     async def test_010_auth_get_profile(self, async_client: AsyncClient, auth_headers, test_user):
         """GET /v1/auth/me - Get user profile."""
-        response = await async_client.get("/v1/auth/me", headers=auth_headers)
+        response = await async_client.get("/v1/auth/me/", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["data"]["email"] == test_user.email
@@ -120,17 +120,17 @@ class TestAuthEndpoints:
 
     async def test_013_auth_verify_email_invalid(self, async_client: AsyncClient):
         """GET /v1/auth/verify-email - Verify email with invalid token."""
-        response = await async_client.get("/v1/auth/verify-email", params={"token": "invalid"})
+        response = await async_client.get("/v1/auth/verify-email/", params={"token": "invalid"})
         assert response.status_code in [400, 401, 404]
 
     async def test_014_auth_forgot_password(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/forgot-password - Request password reset."""
-        response = await async_client.post("/v1/auth/forgot-password", json={"email": test_user.email})
+        response = await async_client.post("/v1/auth/forgot-password/", json={"email": test_user.email})
         assert response.status_code == 200
 
     async def test_015_auth_resend_verification(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/resend-verification - Resend verification email."""
-        response = await async_client.post("/v1/auth/resend-verification", 
+        response = await async_client.post("/v1/auth/resend-verification/", 
             json={"email": test_user.email},
             headers={"X-Resend-Token": "test-token-1234567890123456"}
         )
@@ -138,14 +138,14 @@ class TestAuthEndpoints:
 
     async def test_016_auth_reset_password_invalid(self, async_client: AsyncClient):
         """POST /v1/auth/reset-password - Reset with invalid token."""
-        response = await async_client.post("/v1/auth/reset-password", 
+        response = await async_client.post("/v1/auth/reset-password/", 
             json={"token": "invalid", "new_password": "NewPass123!"}
         )
         assert response.status_code == 400
 
     async def test_017_auth_update_profile(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/auth/me - Update profile."""
-        response = await async_client.patch("/v1/auth/me", 
+        response = await async_client.patch("/v1/auth/me/", 
             headers=auth_headers,
             json={"first_name": "Updated", "last_name": "Name"}
         )
@@ -153,7 +153,7 @@ class TestAuthEndpoints:
 
     async def test_018_auth_change_password(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/auth/me/password - Change password."""
-        response = await async_client.patch("/v1/auth/me/password",
+        response = await async_client.patch("/v1/auth/me/password/",
             headers=auth_headers,
             json={"current_password": "TestPassword123!", "new_password": "NewPass123!"}
         )
@@ -161,13 +161,13 @@ class TestAuthEndpoints:
 
     async def test_019_oauth_google_login(self, async_client: AsyncClient):
         """GET /v1/auth/social/google/login - Google OAuth."""
-        response = await async_client.get("/v1/auth/social/google/login")
+        response = await async_client.get("/v1/auth/social/google/login/")
         assert response.status_code == 200
         assert "auth_url" in response.json().get("data", {})
 
     async def test_020_oauth_facebook_login(self, async_client: AsyncClient):
         """GET /v1/auth/social/facebook/login - Facebook OAuth."""
-        response = await async_client.get("/v1/auth/social/facebook/login")
+        response = await async_client.get("/v1/auth/social/facebook/login/")
         assert response.status_code == 200
         assert "auth_url" in response.json().get("data", {})
 
@@ -182,18 +182,18 @@ class TestUserEndpoints:
 
     async def test_021_users_get_me(self, async_client: AsyncClient, auth_headers, test_user):
         """GET /v1/users/me - Get current user."""
-        response = await async_client.get("/v1/users/me", headers=auth_headers)
+        response = await async_client.get("/v1/users/me/", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["data"]["email"] == test_user.email
 
     async def test_022_users_get_profile(self, async_client: AsyncClient, auth_headers):
         """GET /v1/auth/me - Get user profile via auth."""
-        response = await async_client.get("/v1/auth/me", headers=auth_headers)
+        response = await async_client.get("/v1/auth/me/", headers=auth_headers)
         assert response.status_code == 200
 
     async def test_023_users_update_profile(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/auth/me - Update user profile via auth."""
-        response = await async_client.patch("/v1/auth/me",
+        response = await async_client.patch("/v1/auth/me/",
             headers=auth_headers,
             json={"first_name": "Updated", "last_name": "Profile"}
         )
@@ -213,7 +213,7 @@ class TestUserEndpoints:
 
     async def test_026_users_get_by_id(self, async_client: AsyncClient, auth_headers, test_user):
         """GET /v1/users/{id} - Get user by ID."""
-        response = await async_client.get(f"/v1/users/{test_user.id}", headers=auth_headers)
+        response = await async_client.get(f"/v1/users/{test_user.id}/", headers=auth_headers)
         assert response.status_code in [200, 403]
 
     async def test_027_users_me_addresses(self, async_client: AsyncClient, auth_headers):
@@ -238,7 +238,7 @@ class TestUserEndpoints:
         )
         if create_resp.status_code in [200, 201]:
             address_id = create_resp.json()["data"]["id"]
-            response = await async_client.patch(f"/v1/addresses/{address_id}",
+            response = await async_client.patch(f"/v1/addresses/{address_id}/",
                 headers=auth_headers,
                 json={"city": "Updated City"}
             )
@@ -251,7 +251,7 @@ class TestUserEndpoints:
         )
         if create_resp.status_code in [200, 201]:
             address_id = create_resp.json()["data"]["id"]
-            response = await async_client.delete(f"/v1/addresses/{address_id}", headers=auth_headers)
+            response = await async_client.delete(f"/v1/addresses/{address_id}/", headers=auth_headers)
             assert response.status_code == 200
 
     async def test_030a_users_get_address(self, async_client: AsyncClient, auth_headers, sample_address_data):
@@ -261,17 +261,17 @@ class TestUserEndpoints:
         )
         if create_resp.status_code in [200, 201]:
             address_id = create_resp.json()["data"]["id"]
-            response = await async_client.get(f"/v1/addresses/{address_id}", headers=auth_headers)
+            response = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
             assert response.status_code in [200, 404]
 
     async def test_031_users_unauthorized(self, async_client: AsyncClient):
         """GET /v1/users/me without auth - Should fail."""
-        response = await async_client.get("/v1/users/me")
+        response = await async_client.get("/v1/users/me/")
         assert response.status_code == 401
 
     async def test_031a_users_profile(self, async_client: AsyncClient, auth_headers):
         """GET /v1/users/profile - Get user profile (legacy alias)."""
-        response = await async_client.get("/v1/users/profile", headers=auth_headers)
+        response = await async_client.get("/v1/users/profile/", headers=auth_headers)
         assert response.status_code == 200
 
     async def test_031b_users_create(self, async_client: AsyncClient, admin_headers):
@@ -288,7 +288,7 @@ class TestUserEndpoints:
     async def test_031c_users_patch(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/users/{id} - Update user."""
         # This will test with current user's own ID
-        response = await async_client.patch("/v1/users/me",
+        response = await async_client.patch("/v1/users/me/",
             headers=auth_headers,
             json={"first_name": "Updated"}
         )
@@ -297,13 +297,13 @@ class TestUserEndpoints:
     async def test_031d_users_delete(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/users/{id} - Delete user (admin)."""
         user_id = str(uuid4())
-        response = await async_client.delete(f"/v1/users/{user_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/users/{user_id}/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_031e_users_update_status(self, async_client: AsyncClient, admin_headers):
         """PUT /v1/users/{id}/status - Update user status (admin)."""
         user_id = str(uuid4())
-        response = await async_client.put(f"/v1/users/{user_id}/status",
+        response = await async_client.put(f"/v1/users/{user_id}/status/",
             headers=admin_headers,
             json={"is_active": False}
         )
@@ -311,32 +311,32 @@ class TestUserEndpoints:
 
     async def test_031f_users_reset_password(self, async_client: AsyncClient, admin_headers):
         """POST /v1/users/{id}/reset-password - Reset password (admin)."""
-        user_id = str(uuid4())
-        response = await async_client.post(f"/v1/users/{user_id}/reset-password", headers=admin_headers)
+        user_id = uuid4()
+        response = await async_client.post(f"/v1/users/{user_id}/reset-password/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_031g_users_deactivate(self, async_client: AsyncClient, admin_headers):
         """POST /v1/users/{id}/deactivate - Deactivate user (admin)."""
-        user_id = str(uuid4())
-        response = await async_client.post(f"/v1/users/{user_id}/deactivate", headers=admin_headers)
+        user_id = uuid4()
+        response = await async_client.post(f"/v1/users/{user_id}/deactivate/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_031h_users_activate(self, async_client: AsyncClient, admin_headers):
         """POST /v1/users/{id}/activate - Activate user (admin)."""
-        user_id = str(uuid4())
-        response = await async_client.post(f"/v1/users/{user_id}/activate", headers=admin_headers)
+        user_id = uuid4()
+        response = await async_client.post(f"/v1/users/{user_id}/activate/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_031i_users_verify(self, async_client: AsyncClient, admin_headers):
         """PUT /v1/users/{id}/verify - Verify user (admin)."""
-        user_id = str(uuid4())
-        response = await async_client.put(f"/v1/users/{user_id}/verify", headers=admin_headers)
+        user_id = uuid4()
+        response = await async_client.put(f"/v1/users/{user_id}/verify/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_031j_users_activity(self, async_client: AsyncClient, admin_headers):
         """GET /v1/users/{id}/activity - Get user activity (admin)."""
         user_id = str(uuid4())
-        response = await async_client.get(f"/v1/users/{user_id}/activity", headers=admin_headers)
+        response = await async_client.get(f"/v1/users/{user_id}/activity/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
 
@@ -350,7 +350,7 @@ class TestProductEndpoints:
 
     async def test_032_products_home(self, async_client: AsyncClient):
         """GET /v1/products/home - Get home data."""
-        response = await async_client.get("/v1/products/home")
+        response = await async_client.get("/v1/products/home/")
         assert response.status_code == 200
         data = response.json()
         assert "categories" in data["data"]
@@ -380,25 +380,25 @@ class TestProductEndpoints:
     async def test_037_products_get_by_id(self, async_client: AsyncClient):
         """GET /v1/products/{id} - Get product by ID."""
         product_id = str(uuid4())
-        response = await async_client.get(f"/v1/products/{product_id}")
+        response = await async_client.get(f"/v1/products/{product_id}/")
         assert response.status_code in [200, 404]
 
     async def test_038_products_recommendations(self, async_client: AsyncClient):
         """GET /v1/products/{id}/recommendations - Get recommendations."""
         product_id = str(uuid4())
-        response = await async_client.get(f"/v1/products/{product_id}/recommendations")
+        response = await async_client.get(f"/v1/products/{product_id}/recommendations/")
         assert response.status_code in [200, 404]
 
     async def test_039_products_variants(self, async_client: AsyncClient):
         """GET /v1/products/{id}/variants - Get product variants."""
         product_id = str(uuid4())
-        response = await async_client.get(f"/v1/products/{product_id}/variants")
+        response = await async_client.get(f"/v1/products/{product_id}/variants/")
         assert response.status_code in [200, 404]
 
     async def test_040_products_get_variant(self, async_client: AsyncClient):
         """GET /v1/products/variants/{id} - Get specific variant."""
         variant_id = str(uuid4())
-        response = await async_client.get(f"/v1/products/variants/{variant_id}")
+        response = await async_client.get(f"/v1/products/variants/{variant_id}/")
         assert response.status_code in [200, 404]
 
     async def test_041_products_create_as_admin(self, async_client: AsyncClient, admin_headers, sample_product_data):
@@ -412,7 +412,7 @@ class TestProductEndpoints:
     async def test_041a_products_update_as_admin(self, async_client: AsyncClient, admin_headers):
         """PUT /v1/products/{id} - Update product (admin)."""
         product_id = str(uuid4())
-        response = await async_client.put(f"/v1/products/{product_id}",
+        response = await async_client.put(f"/v1/products/{product_id}/",
             headers=admin_headers,
             json={"name": "Updated Product", "description": "Updated"}
         )
@@ -421,14 +421,14 @@ class TestProductEndpoints:
     async def test_041b_products_delete_as_admin(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/products/{id} - Delete product (admin)."""
         product_id = str(uuid4())
-        response = await async_client.delete(f"/v1/products/{product_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/products/{product_id}/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_041c_products_create_variant(self, async_client: AsyncClient, admin_headers):
         """POST /v1/products/{id}/variants - Create variant (admin)."""
         product_id = str(uuid4())
         variant_data = {"sku": "VAR-001", "price": 99.99, "stock": 100}
-        response = await async_client.post(f"/v1/products/{product_id}/variants",
+        response = await async_client.post(f"/v1/products/{product_id}/variants/",
             headers=admin_headers,
             json=variant_data
         )
@@ -437,7 +437,7 @@ class TestProductEndpoints:
     async def test_041d_products_update_variant(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/products/variants/{id} - Update variant (admin)."""
         variant_id = str(uuid4())
-        response = await async_client.patch(f"/v1/products/variants/{variant_id}",
+        response = await async_client.patch(f"/v1/products/variants/{variant_id}/",
             headers=admin_headers,
             json={"price": 89.99}
         )
@@ -446,14 +446,14 @@ class TestProductEndpoints:
     async def test_041e_products_delete_variant(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/products/variants/{id} - Delete variant (admin)."""
         variant_id = str(uuid4())
-        response = await async_client.delete(f"/v1/products/variants/{variant_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/products/variants/{variant_id}/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_041f_products_create_image(self, async_client: AsyncClient, admin_headers):
         """POST /v1/products/variants/{id}/images - Create image (admin)."""
         variant_id = str(uuid4())
         image_data = {"url": "https://example.com/img.jpg", "alt_text": "Product image"}
-        response = await async_client.post(f"/v1/products/variants/{variant_id}/images",
+        response = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
             headers=admin_headers,
             json=image_data
         )
@@ -462,13 +462,13 @@ class TestProductEndpoints:
     async def test_041g_products_get_image(self, async_client: AsyncClient):
         """GET /v1/products/images/{id} - Get image."""
         image_id = str(uuid4())
-        response = await async_client.get(f"/v1/products/images/{image_id}")
+        response = await async_client.get(f"/v1/products/images/{image_id}/")
         assert response.status_code in [200, 404]
 
     async def test_041h_products_update_image(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/products/images/{id} - Update image (admin)."""
         image_id = str(uuid4())
-        response = await async_client.patch(f"/v1/products/images/{image_id}",
+        response = await async_client.patch(f"/v1/products/images/{image_id}/",
             headers=admin_headers,
             json={"alt_text": "Updated alt text"}
         )
@@ -477,13 +477,13 @@ class TestProductEndpoints:
     async def test_041i_products_delete_image(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/products/images/{id} - Delete image (admin)."""
         image_id = str(uuid4())
-        response = await async_client.delete(f"/v1/products/images/{image_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/products/images/{image_id}/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_041j_products_moderate(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/products/{id}/moderate - Moderate product (admin)."""
         product_id = str(uuid4())
-        response = await async_client.patch(f"/v1/products/{product_id}/moderate",
+        response = await async_client.patch(f"/v1/products/{product_id}/moderate/",
             headers=admin_headers,
             json={"status": "approved"}
         )
@@ -492,7 +492,7 @@ class TestProductEndpoints:
     async def test_041k_products_feature(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/products/{id}/feature - Feature product (admin)."""
         product_id = str(uuid4())
-        response = await async_client.patch(f"/v1/products/{product_id}/feature",
+        response = await async_client.patch(f"/v1/products/{product_id}/feature/",
             headers=admin_headers,
             params={"featured": True}
         )
@@ -521,13 +521,13 @@ class TestReviewEndpoints:
     async def test_044_reviews_get_by_id(self, async_client: AsyncClient):
         """GET /v1/reviews/{id} - Get review by ID."""
         review_id = str(uuid4())
-        response = await async_client.get(f"/v1/reviews/{review_id}")
+        response = await async_client.get(f"/v1/reviews/{review_id}/")
         assert response.status_code in [200, 404]
 
     async def test_045_reviews_for_product(self, async_client: AsyncClient):
         """GET /v1/reviews/product/{id} - Get product reviews."""
         product_id = str(uuid4())
-        response = await async_client.get(f"/v1/reviews/product/{product_id}")
+        response = await async_client.get(f"/v1/reviews/product/{product_id}/")
         assert response.status_code in [200, 404]
 
     async def test_046_reviews_create(self, async_client: AsyncClient, auth_headers):
@@ -544,7 +544,7 @@ class TestReviewEndpoints:
     async def test_047_reviews_update(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/reviews/{id} - Update review."""
         review_id = str(uuid4())
-        response = await async_client.patch(f"/v1/reviews/{review_id}",
+        response = await async_client.patch(f"/v1/reviews/{review_id}/",
             headers=auth_headers,
             json={"rating": 4, "title": "Updated", "content": "Updated review"})
         assert response.status_code in [200, 404, 405]  # 405 if endpoint doesn't support PATCH
@@ -576,7 +576,7 @@ class TestWishlistEndpoints:
         create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
         if create_resp.status_code in [200, 201]:
             wid = create_resp.json()["data"]["id"]
-            response = await async_client.delete(f"/v1/wishlists/{wid}", headers=auth_headers)
+            response = await async_client.delete(f"/v1/wishlists/{wid}/", headers=auth_headers)
             assert response.status_code in [200, 404]
 
     async def test_050a_wishlist_update(self, async_client: AsyncClient, auth_headers):
@@ -586,7 +586,7 @@ class TestWishlistEndpoints:
         create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
         if create_resp.status_code in [200, 201]:
             wid = create_resp.json()["data"]["id"]
-            response = await async_client.patch(f"/v1/wishlists/{wid}", 
+            response = await async_client.patch(f"/v1/wishlists/{wid}/", 
                 headers=auth_headers, json={"name": "Updated Name"})
             assert response.status_code in [200, 404]
 
@@ -597,7 +597,7 @@ class TestWishlistEndpoints:
         create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
         if create_resp.status_code in [200, 201]:
             wid = create_resp.json()["data"]["id"]
-            response = await async_client.post(f"/v1/wishlists/{wid}/items", 
+            response = await async_client.post(f"/v1/wishlists/{wid}/items/", 
                 headers=auth_headers, json={"variant_id": str(uuid4()), "quantity": 1})
             assert response.status_code in [200, 201, 404]
 
@@ -609,7 +609,7 @@ class TestWishlistEndpoints:
         if create_resp.status_code in [200, 201]:
             wid = create_resp.json()["data"]["id"]
             variant_id = str(uuid4())
-            response = await async_client.delete(f"/v1/wishlists/{wid}/items/{variant_id}", 
+            response = await async_client.delete(f"/v1/wishlists/{wid}/items/{variant_id}/", 
                 headers=auth_headers)
             assert response.status_code in [200, 404]
 
@@ -629,7 +629,7 @@ class TestCartEndpoints:
 
     async def test_052_cart_add_item(self, async_client: AsyncClient, auth_headers):
         """POST /v1/cart/add - Add item to cart."""
-        response = await async_client.post("/v1/cart/add",
+        response = await async_client.post("/v1/cart/add/",
             headers=auth_headers,
             json={"variant_id": str(uuid4()), "quantity": 2}
         )
@@ -638,7 +638,7 @@ class TestCartEndpoints:
     async def test_053_cart_update_item(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/cart/items/{id} - Update cart item."""
         item_id = str(uuid4())
-        response = await async_client.patch(f"/v1/cart/items/{item_id}",
+        response = await async_client.patch(f"/v1/cart/items/{item_id}/",
             headers=auth_headers,
             json={"quantity": 5}
         )
@@ -647,17 +647,17 @@ class TestCartEndpoints:
     async def test_054_cart_remove_item(self, async_client: AsyncClient, auth_headers):
         """DELETE /v1/cart/items/{id} - Remove cart item."""
         item_id = str(uuid4())
-        response = await async_client.delete(f"/v1/cart/items/{item_id}", headers=auth_headers)
+        response = await async_client.delete(f"/v1/cart/items/{item_id}/", headers=auth_headers)
         assert response.status_code in [200, 404]
 
     async def test_055_cart_clear(self, async_client: AsyncClient, auth_headers):
         """POST /v1/cart/clear - Clear cart."""
-        response = await async_client.post("/v1/cart/clear", headers=auth_headers)
+        response = await async_client.post("/v1/cart/clear/", headers=auth_headers)
         assert response.status_code in [200, 201]
 
     async def test_055a_cart_calculate(self, async_client: AsyncClient, auth_headers):
         """POST /v1/cart/calculate - Calculate cart totals."""
-        response = await async_client.post("/v1/cart/calculate",
+        response = await async_client.post("/v1/cart/calculate/",
             headers=auth_headers,
             json={"items": [{"variant_id": str(uuid4()), "quantity": 2}]}
         )
@@ -665,7 +665,7 @@ class TestCartEndpoints:
 
     async def test_055b_cart_checkout_summary(self, async_client: AsyncClient, auth_headers):
         """GET /v1/cart/checkout-summary - Get checkout summary."""
-        response = await async_client.get("/v1/cart/checkout-summary", headers=auth_headers)
+        response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
         assert response.status_code in [200, 400]
 
 
@@ -685,13 +685,13 @@ class TestOrderEndpoints:
     async def test_057_orders_get_by_id(self, async_client: AsyncClient, auth_headers):
         """GET /v1/orders/{id} - Get order by ID."""
         order_id = str(uuid4())
-        response = await async_client.get(f"/v1/orders/{order_id}", headers=auth_headers)
+        response = await async_client.get(f"/v1/orders/{order_id}/", headers=auth_headers)
         assert response.status_code in [200, 404]
 
     async def test_058_orders_cancel(self, async_client: AsyncClient, auth_headers):
         """POST /v1/orders/{id}/cancel - Cancel order."""
         order_id = str(uuid4())
-        response = await async_client.post(f"/v1/orders/{order_id}/cancel",
+        response = await async_client.post(f"/v1/orders/{order_id}/cancel/",
             headers=auth_headers,
             json={"reason": "Changed my mind"}
         )
@@ -700,7 +700,7 @@ class TestOrderEndpoints:
     async def test_059_orders_get_tracking(self, async_client: AsyncClient, auth_headers):
         """GET /v1/orders/{id}/tracking - Get order tracking."""
         order_id = str(uuid4())
-        response = await async_client.get(f"/v1/orders/{order_id}/tracking", headers=auth_headers)
+        response = await async_client.get(f"/v1/orders/{order_id}/tracking/", headers=auth_headers)
         assert response.status_code in [200, 404]
 
 
@@ -719,12 +719,12 @@ class TestPaymentEndpoints:
 
     async def test_061_payments_methods_list(self, async_client: AsyncClient, auth_headers):
         """GET /v1/payments/methods - List payment methods."""
-        response = await async_client.get("/v1/payments/methods", headers=auth_headers)
+        response = await async_client.get("/v1/payments/methods/", headers=auth_headers)
         assert response.status_code == 200
 
     async def test_062_payments_methods_create(self, async_client: AsyncClient, auth_headers):
         """POST /v1/payments/methods - Create payment method."""
-        response = await async_client.post("/v1/payments/methods",
+        response = await async_client.post("/v1/payments/methods/",
             headers=auth_headers,
             json={
                 "type": "card",
@@ -738,24 +738,24 @@ class TestPaymentEndpoints:
     async def test_063_payments_methods_delete(self, async_client: AsyncClient, auth_headers):
         """DELETE /v1/payments/methods/{id} - Delete payment method."""
         method_id = str(uuid4())
-        response = await async_client.delete(f"/v1/payments/methods/{method_id}", headers=auth_headers)
+        response = await async_client.delete(f"/v1/payments/methods/{method_id}/", headers=auth_headers)
         assert response.status_code in [200, 404]
 
     async def test_063a_payments_failures_list(self, async_client: AsyncClient, auth_headers):
         """GET /v1/payments/failures - List failed payments."""
-        response = await async_client.get("/v1/payments/failures", headers=auth_headers)
+        response = await async_client.get("/v1/payments/failures/", headers=auth_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_063b_payments_failure_status(self, async_client: AsyncClient, auth_headers):
         """GET /v1/payments/failures/{id}/status - Get failure status."""
         payment_intent_id = str(uuid4())
-        response = await async_client.get(f"/v1/payments/failures/{payment_intent_id}/status", headers=auth_headers)
+        response = await async_client.get(f"/v1/payments/failures/{payment_intent_id}/status/", headers=auth_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_063c_payments_failure_retry(self, async_client: AsyncClient, auth_headers):
         """POST /v1/payments/failures/{id}/retry - Retry failed payment."""
         payment_intent_id = str(uuid4())
-        response = await async_client.post(f"/v1/payments/failures/{payment_intent_id}/retry",
+        response = await async_client.post(f"/v1/payments/failures/{payment_intent_id}/retry/",
             headers=auth_headers,
             json={"new_payment_method_id": str(uuid4())}
         )
@@ -783,20 +783,20 @@ class TestContactMessageEndpoints:
     async def test_065a_contact_messages_get(self, async_client: AsyncClient, admin_headers):
         """GET /v1/contact-messages/{id} - Get single message (admin)."""
         message_id = str(uuid4())
-        response = await async_client.get(f"/v1/contact-messages/{message_id}", headers=admin_headers)
+        response = await async_client.get(f"/v1/contact-messages/{message_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_065b_contact_messages_update(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/contact-messages/{id} - Update message (admin)."""
         message_id = str(uuid4())
-        response = await async_client.patch(f"/v1/contact-messages/{message_id}", 
+        response = await async_client.patch(f"/v1/contact-messages/{message_id}/", 
             headers=admin_headers, json={"status": "resolved", "admin_notes": "Test notes"})
         assert response.status_code in [200, 404, 403]
 
     async def test_065c_contact_messages_delete(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/contact-messages/{id} - Delete message (admin)."""
         message_id = str(uuid4())
-        response = await async_client.delete(f"/v1/contact-messages/{message_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/contact-messages/{message_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
 
@@ -817,52 +817,52 @@ class TestAnalyticsEndpoints:
             "page": "/test",
             "metadata": {"test": True}
         }
-        response = await async_client.post("/v1/analytics/track", json=event_data)
+        response = await async_client.post("/v1/analytics/track/", json=event_data)
         assert response.status_code in [200, 201, 400, 401]  # 401 if auth required
 
     async def test_067_analytics_dashboard(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/dashboard - Get analytics dashboard."""
-        response = await async_client.get("/v1/analytics/dashboard", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/dashboard/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_068_analytics_revenue(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/revenue - Get revenue analytics."""
-        response = await async_client.get("/v1/analytics/revenue", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/revenue/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_069_analytics_orders(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/orders - Get order analytics."""
-        response = await async_client.get("/v1/analytics/orders", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/orders/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_070_analytics_products(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/products - Get product analytics."""
-        response = await async_client.get("/v1/analytics/products", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/products/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_071_analytics_conversion_rates(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/conversion-rates - Get conversion analytics."""
-        response = await async_client.get("/v1/analytics/conversion-rates", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/conversion-rates/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_072_analytics_cart_abandonment(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/cart-abandonment - Get cart abandonment stats."""
-        response = await async_client.get("/v1/analytics/cart-abandonment", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/cart-abandonment/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_072a_analytics_time_to_purchase(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/time-to-purchase - Get time to purchase stats."""
-        response = await async_client.get("/v1/analytics/time-to-purchase", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/time-to-purchase/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_072b_analytics_refund_rates(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/refund-rates - Get refund rates."""
-        response = await async_client.get("/v1/analytics/refund-rates", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/refund-rates/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
     async def test_072c_analytics_repeat_customers(self, async_client: AsyncClient, admin_headers):
         """GET /v1/analytics/repeat-customers - Get repeat customer stats."""
-        response = await async_client.get("/v1/analytics/repeat-customers", headers=admin_headers)
+        response = await async_client.get("/v1/analytics/repeat-customers/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
 
@@ -893,38 +893,38 @@ class TestSubscriptionEndpoints:
     async def test_078_subscriptions_get_by_id(self, async_client: AsyncClient, auth_headers):
         """GET /v1/subscriptions/{id} - Get subscription."""
         sub_id = str(uuid4())
-        response = await async_client.get(f"/v1/subscriptions/{sub_id}", headers=auth_headers)
+        response = await async_client.get(f"/v1/subscriptions/{sub_id}/", headers=auth_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_079_subscriptions_update(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/subscriptions/{id} - Update subscription."""
         sub_id = str(uuid4())
-        response = await async_client.patch(f"/v1/subscriptions/{sub_id}", 
+        response = await async_client.patch(f"/v1/subscriptions/{sub_id}/", 
             headers=auth_headers, json={"status": "active"})
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
     async def test_080_subscriptions_cancel(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/{id}/cancel - Cancel subscription."""
         sub_id = str(uuid4())
-        response = await async_client.post(f"/v1/subscriptions/{sub_id}/cancel", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{sub_id}/cancel/", headers=auth_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_081_subscriptions_pause(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/{id}/pause - Pause subscription."""
         sub_id = str(uuid4())
-        response = await async_client.post(f"/v1/subscriptions/{sub_id}/pause", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{sub_id}/pause/", headers=auth_headers)
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
     async def test_082_subscriptions_resume(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/{id}/resume - Resume subscription."""
         sub_id = str(uuid4())
-        response = await async_client.post(f"/v1/subscriptions/{sub_id}/resume", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{sub_id}/resume/", headers=auth_headers)
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
     async def test_083_subscriptions_add_products(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/{id}/products - Add products."""
         sub_id = str(uuid4())
-        response = await async_client.post(f"/v1/subscriptions/{sub_id}/products", 
+        response = await async_client.post(f"/v1/subscriptions/{sub_id}/products/", 
             headers=auth_headers, json={"products": [{"variant_id": str(uuid4()), "quantity": 1}]})
         assert response.status_code in [200, 404, 403, 422]  # 422 if validation error
 
@@ -932,44 +932,44 @@ class TestSubscriptionEndpoints:
         """DELETE /v1/subscriptions/{id}/products/{product_id} - Remove product from subscription."""
         sub_id = str(uuid4())
         product_id = str(uuid4())
-        response = await async_client.delete(f"/v1/subscriptions/{sub_id}/products/{product_id}",
+        response = await async_client.delete(f"/v1/subscriptions/{sub_id}/products/{product_id}/",
             headers=auth_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_085_subscriptions_calculate_cost(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/calculate-cost - Calculate cost."""
-        response = await async_client.post("/v1/subscriptions/calculate-cost", 
+        response = await async_client.post("/v1/subscriptions/calculate-cost/", 
             headers=auth_headers, json={"products": [{"variant_id": str(uuid4()), "quantity": 1}], "frequency": "monthly"})
         assert response.status_code in [200, 400, 403, 422]  # 422 if validation error
 
     async def test_086_subscriptions_trigger_processing(self, async_client: AsyncClient, admin_headers):
         """POST /v1/subscriptions/trigger-order-processing - Trigger processing."""
-        response = await async_client.post("/v1/subscriptions/trigger-order-processing", headers=admin_headers)
+        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
         assert response.status_code in [200, 403, 500]  # 500 if DB error
 
     async def test_087_subscriptions_list_due(self, async_client: AsyncClient, admin_headers):
         """GET /v1/subscriptions/due - List due subscriptions."""
-        response = await async_client.get("/v1/subscriptions/due", headers=admin_headers)
+        response = await async_client.get("/v1/subscriptions/due/", headers=admin_headers)
         assert response.status_code in [200, 403, 422]  # 422 if DB error
 
     async def test_087a_subscriptions_change_frequency(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/subscriptions/{id}/frequency - Change subscription frequency."""
         sub_id = str(uuid4())
-        response = await async_client.patch(f"/v1/subscriptions/{sub_id}/frequency", 
+        response = await async_client.patch(f"/v1/subscriptions/{sub_id}/frequency/", 
             headers=auth_headers, json={"frequency": "weekly"})
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
     async def test_087b_subscriptions_skip(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/{id}/skip - Skip upcoming shipment."""
         sub_id = str(uuid4())
-        response = await async_client.post(f"/v1/subscriptions/{sub_id}/skip", 
+        response = await async_client.post(f"/v1/subscriptions/{sub_id}/skip/", 
             headers=auth_headers, json={"next_shipment_date": "2025-12-31"})
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
     async def test_087c_subscriptions_unskip(self, async_client: AsyncClient, auth_headers):
         """POST /v1/subscriptions/{id}/unskip - Unskip shipment."""
         sub_id = str(uuid4())
-        response = await async_client.post(f"/v1/subscriptions/{sub_id}/unskip", 
+        response = await async_client.post(f"/v1/subscriptions/{sub_id}/unskip/", 
             headers=auth_headers, json={})
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
@@ -985,61 +985,61 @@ class TestInventoryEndpoints:
 
     async def test_088_inventory_locations_list(self, async_client: AsyncClient, admin_headers):
         """GET /v1/inventory/locations - List locations."""
-        response = await async_client.get("/v1/inventory/locations", headers=admin_headers)
+        response = await async_client.get("/v1/inventory/locations/", headers=admin_headers)
         assert response.status_code in [200, 403, 500]  # 500 if DB error
 
     async def test_089_inventory_locations_create(self, async_client: AsyncClient, admin_headers):
         """POST /v1/inventory/locations - Create location."""
         location_data = {"name": "Warehouse A", "address": "123 Main St", "city": "NYC", "country": "US"}
-        response = await async_client.post("/v1/inventory/locations", headers=admin_headers, json=location_data)
+        response = await async_client.post("/v1/inventory/locations/", headers=admin_headers, json=location_data)
         assert response.status_code in [200, 201, 403, 500]  # 500 if DB error
 
     async def test_090_inventory_locations_get(self, async_client: AsyncClient, admin_headers):
         """GET /v1/inventory/locations/{id} - Get location."""
         loc_id = str(uuid4())
-        response = await async_client.get(f"/v1/inventory/locations/{loc_id}", headers=admin_headers)
+        response = await async_client.get(f"/v1/inventory/locations/{loc_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_091_inventory_stock_get(self, async_client: AsyncClient, admin_headers):
         """GET /v1/inventory/stock/{variant_id} - Get stock level."""
         variant_id = str(uuid4())
-        response = await async_client.get(f"/v1/inventory/stock/{variant_id}", headers=admin_headers)
+        response = await async_client.get(f"/v1/inventory/stock/{variant_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_092_inventory_stock_update(self, async_client: AsyncClient, admin_headers):
         """PUT /v1/inventory/stock/{variant_id} - Update stock."""
         variant_id = str(uuid4())
-        response = await async_client.put(f"/v1/inventory/stock/{variant_id}", 
+        response = await async_client.put(f"/v1/inventory/stock/{variant_id}/", 
             headers=admin_headers, json={"quantity": 100})
         assert response.status_code in [200, 404, 403]
 
     async def test_092a_inventory_locations_update(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/inventory/locations/{id} - Update location."""
         loc_id = str(uuid4())
-        response = await async_client.patch(f"/v1/inventory/locations/{loc_id}", 
+        response = await async_client.patch(f"/v1/inventory/locations/{loc_id}/", 
             headers=admin_headers, json={"name": "Updated Warehouse"})
         assert response.status_code in [200, 404, 403]
 
     async def test_092b_inventory_locations_delete(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/inventory/locations/{id} - Delete location."""
         loc_id = str(uuid4())
-        response = await async_client.delete(f"/v1/inventory/locations/{loc_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/inventory/locations/{loc_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_093_inventory_adjustments_list(self, async_client: AsyncClient, admin_headers):
         """GET /v1/inventory/adjustments - List adjustments."""
-        response = await async_client.get("/v1/inventory/adjustments", headers=admin_headers)
+        response = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
         assert response.status_code in [200, 403, 422]  # 422 if DB error
 
     async def test_094_inventory_adjustments_create(self, async_client: AsyncClient, admin_headers):
         """POST /v1/inventory/adjustments - Create adjustment."""
         adj_data = {"variant_id": str(uuid4()), "quantity_change": 10, "reason": "Restock"}
-        response = await async_client.post("/v1/inventory/adjustments", headers=admin_headers, json=adj_data)
+        response = await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json=adj_data)
         assert response.status_code in [200, 201, 400, 403, 500]  # 500 if DB error
 
     async def test_095_inventory_low_stock(self, async_client: AsyncClient, admin_headers):
         """GET /v1/inventory/low-stock - Get low stock items."""
-        response = await async_client.get("/v1/inventory/low-stock", headers=admin_headers)
+        response = await async_client.get("/v1/inventory/low-stock/", headers=admin_headers)
         assert response.status_code in [200, 403, 422]  # 422 if DB error
 
     async def test_096_inventory_transfer(self, async_client: AsyncClient, admin_headers):
@@ -1050,7 +1050,7 @@ class TestInventoryEndpoints:
             "from_location_id": str(uuid4()),
             "to_location_id": str(uuid4())
         }
-        response = await async_client.post("/v1/inventory/transfers", headers=admin_headers, json=transfer_data)
+        response = await async_client.post("/v1/inventory/transfers/", headers=admin_headers, json=transfer_data)
         assert response.status_code in [200, 400, 403, 404, 405]  # 404/405 if endpoint doesn't exist
 
 # =============================================================================
@@ -1065,37 +1065,37 @@ class TestTaxEndpoints:
     async def test_097_tax_calculate(self, async_client: AsyncClient):
         """POST /v1/tax/calculate - Calculate tax."""
         calc_data = {"subtotal": 100.0, "shipping": 10.0, "country_code": "US", "state_code": "CA"}
-        response = await async_client.post("/v1/tax/calculate", json=calc_data)
+        response = await async_client.post("/v1/tax/calculate/", json=calc_data)
         assert response.status_code == 200
 
     async def test_098_tax_rates_list(self, async_client: AsyncClient, admin_headers):
         """GET /v1/tax/rates - List tax rates."""
-        response = await async_client.get("/v1/tax/rates", headers=admin_headers)
+        response = await async_client.get("/v1/tax/rates/", headers=admin_headers)
         assert response.status_code in [200, 403]
 
     async def test_099_tax_rates_create(self, async_client: AsyncClient, admin_headers):
         """POST /v1/tax/admin/tax-rates - Create tax rate."""
         rate_data = {"country_code": "US", "country_name": "United States", "province_code": "CA", "tax_rate": 0.0875, "tax_name": "CA Tax"}
-        response = await async_client.post("/v1/tax/admin/tax-rates", headers=admin_headers, json=rate_data)
+        response = await async_client.post("/v1/tax/admin/tax-rates/", headers=admin_headers, json=rate_data)
         assert response.status_code in [200, 201, 400, 403]  # 400 if tax rate already exists
 
     async def test_100_tax_rates_get(self, async_client: AsyncClient, admin_headers):
         """GET /v1/tax/rates/{id} - Get tax rate."""
         rate_id = str(uuid4())
-        response = await async_client.get(f"/v1/tax/rates/{rate_id}", headers=admin_headers)
+        response = await async_client.get(f"/v1/tax/rates/{rate_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_101_tax_rates_update(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/tax/rates/{id} - Update tax rate."""
         rate_id = str(uuid4())
-        response = await async_client.patch(f"/v1/tax/rates/{rate_id}", 
+        response = await async_client.patch(f"/v1/tax/rates/{rate_id}/", 
             headers=admin_headers, json={"rate": 0.09})
         assert response.status_code in [200, 404, 403]
 
     async def test_102_tax_rates_delete(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/tax/rates/{id} - Delete tax rate."""
         rate_id = str(uuid4())
-        response = await async_client.delete(f"/v1/tax/rates/{rate_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/tax/rates/{rate_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
 
@@ -1110,31 +1110,31 @@ class TestShippingEndpoints:
 
     async def test_103_shipping_methods_list(self, async_client: AsyncClient):
         """GET /v1/shipping/methods - List shipping methods."""
-        response = await async_client.get("/v1/shipping/methods")
+        response = await async_client.get("/v1/shipping/methods/")
         assert response.status_code == 200
 
     async def test_104_shipping_methods_create(self, async_client: AsyncClient, admin_headers):
         """POST /v1/shipping/methods - Create shipping method."""
         method_data = {"name": "Express", "price": 15.0, "estimated_days": 2}
-        response = await async_client.post("/v1/shipping/methods", headers=admin_headers, json=method_data)
+        response = await async_client.post("/v1/shipping/methods/", headers=admin_headers, json=method_data)
         assert response.status_code in [200, 201, 403]
 
     async def test_105_shipping_calculate(self, async_client: AsyncClient):
         """POST /v1/shipping/calculate - Calculate shipping."""
         calc_data = {"address": {"country": "US", "state": "CA", "zip": "90210"}, "items": [{"weight": 1.0, "quantity": 2}]}
-        response = await async_client.post("/v1/shipping/calculate", json=calc_data)
+        response = await async_client.post("/v1/shipping/calculate/", json=calc_data)
         assert response.status_code in [200, 400]
 
     async def test_106_shipping_tracking(self, async_client: AsyncClient):
         """GET /v1/shipping/tracking/{tracking_number} - Track shipment."""
         tracking_num = "TEST123456"
-        response = await async_client.get(f"/v1/shipping/tracking/{tracking_num}")
+        response = await async_client.get(f"/v1/shipping/tracking/{tracking_num}/")
         assert response.status_code in [200, 404]
 
     async def test_107_shipping_tracking_update(self, async_client: AsyncClient, admin_headers):
         """POST /v1/shipping/tracking/update - Update tracking."""
         tracking_data = {"tracking_number": "TEST123456", "status": "shipped", "location": "NYC"}
-        response = await async_client.post("/v1/shipping/tracking/update", headers=admin_headers, json=tracking_data)
+        response = await async_client.post("/v1/shipping/tracking/update/", headers=admin_headers, json=tracking_data)
         assert response.status_code in [200, 403, 404]  # 404 if endpoint doesn't exist
 
 
@@ -1163,31 +1163,31 @@ class TestPromocodeEndpoints:
     async def test_110_promocodes_get(self, async_client: AsyncClient, admin_headers):
         """GET /v1/promocodes/{id} - Get promocode."""
         promo_id = str(uuid4())
-        response = await async_client.get(f"/v1/promocodes/{promo_id}", headers=admin_headers)
+        response = await async_client.get(f"/v1/promocodes/{promo_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_111_promocodes_update(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/promocodes/{id} - Update promocode."""
         promo_id = str(uuid4())
-        response = await async_client.patch(f"/v1/promocodes/{promo_id}", 
+        response = await async_client.patch(f"/v1/promocodes/{promo_id}/", 
             headers=admin_headers, json={"discount_type": "percentage", "value": 25})
         assert response.status_code in [200, 404, 403]
 
     async def test_112_promocodes_delete(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/promocodes/{id} - Delete promocode."""
         promo_id = str(uuid4())
-        response = await async_client.delete(f"/v1/promocodes/{promo_id}", headers=admin_headers)
+        response = await async_client.delete(f"/v1/promocodes/{promo_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
     async def test_113_promocodes_validate(self, async_client: AsyncClient, auth_headers):
         """POST /v1/promocodes/validate - Validate promocode."""
-        response = await async_client.post("/v1/promocodes/validate", 
+        response = await async_client.post("/v1/promocodes/validate/", 
             headers=auth_headers, json={"code": "TEST20", "cart_total": 100.0})
         assert response.status_code in [200, 400, 403]
 
     async def test_114a_promocodes_trigger_cleanup(self, async_client: AsyncClient, admin_headers):
         """POST /v1/promocodes/trigger-cleanup - Trigger promocode cleanup."""
-        response = await async_client.post("/v1/promocodes/trigger-cleanup", headers=admin_headers)
+        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
         assert response.status_code in [200, 403, 500]  # 500 if DB error
 
 
@@ -1214,13 +1214,13 @@ class TestRefundEndpoints:
     async def test_117_refunds_get(self, async_client: AsyncClient, auth_headers):
         """GET /v1/refunds/{id} - Get refund."""
         refund_id = str(uuid4())
-        response = await async_client.get(f"/v1/refunds/{refund_id}", headers=auth_headers)
+        response = await async_client.get(f"/v1/refunds/{refund_id}/", headers=auth_headers)
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
     async def test_118_refunds_update_status(self, async_client: AsyncClient, admin_headers):
         """PUT /v1/refunds/{id}/status - Update refund status."""
         refund_id = str(uuid4())
-        response = await async_client.put(f"/v1/refunds/{refund_id}/status", 
+        response = await async_client.put(f"/v1/refunds/{refund_id}/status/", 
             headers=admin_headers, json={"status": "approved"})
         assert response.status_code in [200, 404, 403]
 
@@ -1237,14 +1237,14 @@ class TestWebhookEndpoints:
     async def test_119_webhooks_stripe(self, async_client: AsyncClient):
         """POST /v1/webhooks/stripe - Stripe webhook."""
         payload = {"type": "payment_intent.succeeded", "data": {"object": {"id": "pi_test"}}}
-        response = await async_client.post("/v1/webhooks/stripe", 
+        response = await async_client.post("/v1/webhooks/stripe/", 
             json=payload, headers={"stripe-signature": "test_sig"})
         # Will fail due to invalid signature, but tests endpoint exists
         assert response.status_code in [200, 400, 401]
 
     async def test_120_webhooks_health(self, async_client: AsyncClient):
         """GET /v1/webhooks/health - Webhook health check."""
-        response = await async_client.get("/v1/webhooks/health")
+        response = await async_client.get("/v1/webhooks/health/")
         assert response.status_code == 200
 
 

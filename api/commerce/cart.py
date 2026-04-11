@@ -33,14 +33,14 @@ async def create(
             variant_id=request.variant_id,
             quantity=request.quantity
         )
-        return Response(success=True, data=cart, message="Item added to cart")
+        return Response.success(data=cart, message="Item added to cart")
     except HTTPException as e:
         raise APIException(status_code=e.status_code, message=e.detail)
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to add item to cart: {str(e)}")
 
 
-@router.post("/add")
+@router.post("/add/")
 async def add_alias(
     payload: Add,
     current_user: User = Depends(get_current_auth_user),
@@ -68,12 +68,12 @@ async def get(
             country_code=country_code,
             province_code=province_code
         )
-        return Response(success=True, data=cart)
+        return Response.success(data=cart)
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to retrieve cart: {e}")
 
 
-@router.patch("/{item_id}")
+@router.patch("/{item_id}/")
 async def patch(
     item_id: UUID,
     request: UpdateItem,
@@ -89,20 +89,20 @@ async def patch(
             quantity=request.quantity
         )
         cart = await cart_service.get_cart(user_id=current_user.id)
-        return Response(success=True, data=cart, message="Cart item updated")
+        return Response.success(data=cart, message="Cart item updated")
     except HTTPException as e:
         raise APIException(status_code=e.status_code, message=e.detail)
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to update cart item: {e}")
 
 
-@router.patch("/items/{item_id}")
+@router.patch("/items/{item_id}/")
 async def patch_item(item_id: UUID, request: UpdateItem, current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
     """Compatibility: support PATCH /cart/items/{id}"""
     return await patch(item_id=item_id, request=request, current_user=current_user, db=db)
 
 
-@router.delete("/{item_id}")
+@router.delete("/{item_id}/")
 async def delete(
     item_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -115,20 +115,20 @@ async def delete(
             user_id=current_user.id,
             cart_item_id=item_id
         )
-        return Response(success=True, data=cart, message="Item removed from cart")
+        return Response.success(data=cart, message="Item removed from cart")
     except HTTPException as e:
         raise APIException(status_code=e.status_code, message=e.detail)
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to remove item: {e}")
 
 
-@router.delete("/items/{item_id}")
+@router.delete("/items/{item_id}/")
 async def delete_item(item_id: UUID, current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
     """Compatibility: DELETE /cart/items/{id}"""
     return await delete(item_id=item_id, current_user=current_user, db=db)
 
 
-@router.get("/count")
+@router.get("/count/")
 async def count(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -139,18 +139,18 @@ async def count(
         count = await cart_service.item_count(
             user_id=current_user.id
         )
-        return Response(success=True, data=count)
+        return Response.success(data=count)
     except Exception:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to get cart count")
 
 
-@router.post("/validate")
+@router.post("/validate/")
 async def validate(
     request: Request,
     country: Optional[str] = None,
     province: Optional[str] = None,
-    current_user: Optional[User] = Depends(get_current_auth_user),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -185,18 +185,20 @@ async def validate(
         }
 
         if result.valid and result.can_checkout:
-            return Response(success=True, data=result_dict, message="Cart validation successful - ready for checkout")
+            return Response.success(data=result_dict, message="Cart validation successful - ready for checkout")
         elif result.issues:
             error_count = len([i for i in result.issues if i.get("severity") == "error"])
             warning_count = len([i for i in result.issues if i.get("severity") == "warning"])
             if error_count > 0:
-                return Response(success=False, data=result_dict, message=f"Cart validation failed with {error_count} error(s) and {warning_count} warning(s).")
+                # Extract errors for the errors field
+                errors = [i for i in result.issues if i.get("severity") == "error"]
+                return Response.error(data=result_dict, message=f"Cart validation failed with {error_count} error(s) and {warning_count} warning(s).", errors=errors)
             else:
-                return Response(success=True, data=result_dict,
+                return Response.success(data=result_dict,
                     message=f"Cart validation completed with {warning_count} warning(s). You can proceed to checkout."
                 )
         else:
-            return Response(success=False, data=result_dict, message="Cart validation failed")
+            return Response.error(data=result_dict, message="Cart validation failed")
             
     except Exception as e:
         raise APIException(
@@ -205,7 +207,7 @@ async def validate(
         )
 
 
-@router.post("/calculate")
+@router.post("/calculate/")
 async def calculate(
     data: dict,
     request: Request,
@@ -218,14 +220,14 @@ async def calculate(
             user_id=current_user.id,
             data=data
         )
-        return Response(success=True, data=result)
+        return Response.success(data=result)
     except Exception as e:
         logger.error(f"Failed to calculate totals: {str(e)}", exc_info=True)
         raise APIException(status_code=status.HTTP_400_BAD_REQUEST,
                            message=f"Failed to calculate totals: {str(e)}")
 
 
-@router.post("/clear")
+@router.post("/clear/")
 async def clear(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -237,7 +239,7 @@ async def clear(
         result = await cart_service.clear_cart(
             user_id=current_user.id
         )
-        return Response(success=True, data=result, message="Cart cleared successfully")
+        return Response.success(data=result, message="Cart cleared successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -245,7 +247,7 @@ async def clear(
         )
 
 
-@router.get("/checkout-summary")
+@router.get("/checkout-summary/")
 async def summary(
     request: Request,
     current_user: User = Depends(get_current_auth_user),
@@ -256,7 +258,7 @@ async def summary(
         result = await cart_service.checkout_summary(
             user_id=current_user.id
         )
-        return Response(success=True, data=result)
+        return Response.success(data=result)
     except Exception:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                            message="Failed to get checkout summary")

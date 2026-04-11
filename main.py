@@ -2,14 +2,17 @@ import os
 import logging
 import warnings
 from contextlib import asynccontextmanager
+
+# Suppress all warnings before imports
+warnings.filterwarnings('ignore')
+os.environ['WEASYPRINT_DO_NOT_INSTALL_EXTRA_LIBS'] = '1'
+
+# Configure logging to suppress WeasyPrint warnings
+logging.getLogger('weasyprint').setLevel(logging.CRITICAL)
+logging.getLogger('weasyprint').addHandler(logging.NullHandler())
+
 from core.logging import get_structured_logger
 from fastapi import FastAPI, HTTPException, APIRouter
-
-# Suppress urllib3 OpenSSL warning
-warnings.filterwarnings('ignore', category=UserWarning, module='urllib3')
-# Suppress WeasyPrint warnings
-logging.getLogger('weasyprint').setLevel(logging.ERROR)
-os.environ['WEASYPRINT_DO_NOT_INSTALL_EXTRA_LIBS'] = '1'
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -42,6 +45,7 @@ logger = get_structured_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
+    logger.info("Application warnings suppressed (urllib3, WeasyPrint)")
     logger.info("Validating environment configuration...")
     validation_result = settings.validate()
 

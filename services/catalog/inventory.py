@@ -44,11 +44,30 @@ class InventoryService:
         await self.db.refresh(new_location)
         return WarehouseLocationResponse.model_validate(new_location)
 
-    async def list_locations(self) -> List[WarehouseLocationResponse]:
-        """List all warehouse locations"""
-        result = await self.db.execute(select(WarehouseLocation).order_by(WarehouseLocation.name))
+    async def list_locations(self, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """List all warehouse locations with pagination"""
+        offset = (page - 1) * limit
+        
+        # Get total count
+        count_query = select(func.count()).select_from(WarehouseLocation)
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Get paginated results
+        result = await self.db.execute(
+            select(WarehouseLocation).order_by(WarehouseLocation.name).offset(offset).limit(limit)
+        )
         locations = result.scalars().all()
-        return [WarehouseLocationResponse.model_validate(location) for location in locations]
+        
+        return {
+            "data": [WarehouseLocationResponse.model_validate(location) for location in locations],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if limit else 1
+            }
+        }
 
     async def get_location(self, location_id: UUID, raw: bool = False) -> Optional[Union[WarehouseLocationResponse, WarehouseLocation]]:
         """Get location by ID. Set raw=True to return SQLAlchemy model instead of response schema."""
@@ -554,17 +573,36 @@ class InventoryService:
                 message=f"Failed to adjust stock: {str(e)}"
             )
 
-    async def adjustments(self, inventory_id: Optional[UUID] = None) -> List[StockAdjustmentResponse]:
-        """Get stock adjustments. If inventory_id provided, filters by inventory item."""
+    async def adjustments(self, inventory_id: Optional[UUID] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get stock adjustments with pagination. If inventory_id provided, filters by inventory item."""
+        offset = (page - 1) * limit
+        
+        # Build base query
         query = select(StockAdjustment).options(joinedload(StockAdjustment.adjusted_by))
+        count_query = select(func.count()).select_from(StockAdjustment)
         
         if inventory_id:
             query = query.filter(StockAdjustment.inventory_id == inventory_id)
+            count_query = count_query.filter(StockAdjustment.inventory_id == inventory_id)
         
-        query = query.order_by(StockAdjustment.created_at.desc())
+        # Get total count
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Get paginated results
+        query = query.order_by(StockAdjustment.created_at.desc()).offset(offset).limit(limit)
         result = await self.db.execute(query)
         adjustments = result.scalars().all()
-        return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
+        
+        return {
+            "data": [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if limit else 1
+            }
+        }
 
     async def get_adjustment(self, adjustment_id: UUID) -> Optional[StockAdjustmentResponse]:
         """Get a specific stock adjustment by ID"""

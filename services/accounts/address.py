@@ -67,15 +67,35 @@ class AddressService:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def list(self, user_id: UUID) -> List[Address]:
-        """Fetch all addresses for a given user."""
+    async def list(self, user_id: UUID, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Fetch addresses for a given user with pagination."""
+        offset = (page - 1) * limit
+        
+        # Get total count
+        count_query = select(func.count()).select_from(Address).where(Address.user_id == user_id)
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Get paginated results
         query = (
             select(Address)
             .where(Address.user_id == user_id)
             .order_by(Address.created_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
         result = await self.db.execute(query)
-        return result.scalars().all()
+        addresses = result.scalars().all()
+        
+        return {
+            "data": addresses,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if limit else 1
+            }
+        }
 
     async def update(self, address_id: UUID, user_id: UUID, **kwargs) -> Optional[Address]:
         """Update address fields dynamically."""

@@ -39,7 +39,7 @@ async def create(
         raise APIException(status_code=500, message=f"Failed to create wishlist: {str(e)}")
 
 
-@router.get("/{wishlist_id}")
+@router.get("/{wishlist_id}/")
 async def get(
     wishlist_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -55,7 +55,7 @@ async def get(
             data = WishlistSchemaResponse.model_validate(wishlist).model_dump()
         except Exception:
             data = {"id": str(wishlist.id), "user_id": str(wishlist.user_id), "name": wishlist.name}
-        return Response.success(data=data)
+        return Response.success(data=data, message="Wishlist retrieved successfully")
     except APIException:
         raise
     except Exception as e:
@@ -109,7 +109,7 @@ async def list(
         raise APIException(status_code=500, message=f"Failed to list wishlists: {str(e)}")
 
 
-@router.patch("/{wishlist_id}")
+@router.patch("/{wishlist_id}/")
 async def patch(
     wishlist_id: UUID,
     payload: Update,
@@ -134,7 +134,7 @@ async def patch(
         raise APIException(status_code=500, message=f"Failed to update wishlist: {str(e)}")
 
 
-@router.delete("/{wishlist_id}")
+@router.delete("/{wishlist_id}/")
 async def delete(
     wishlist_id: UUID,
     current_user: User = Depends(get_current_auth_user),

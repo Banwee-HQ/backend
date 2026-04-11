@@ -1435,8 +1435,6 @@ class OrderService:
         
         # Send shipping update email for shipped/delivered orders
         if status in ['shipped', 'delivered'] and background_tasks:
-            from services.accounts.email import send_shipping_update_email, send_order_delivered_email
-            
             # Get user details for email
             user_result = await self.db.execute(
                 select(User).where(User.id == order.user_id)
@@ -1444,9 +1442,10 @@ class OrderService:
             user = user_result.scalar_one_or_none()
             
             if user and user.email:
+                email_service = EmailService(self.db)
                 if status == 'shipped':
                     # Send shipping update email
-                    send_shipping_update_email(
+                    email_service.send_shipping_update(
                         background_tasks=background_tasks,
                         to_email=user.email,
                         customer_name=user.firstname or "Customer",
@@ -1465,7 +1464,7 @@ class OrderService:
                     else:
                         address_str = "Your delivery address"
                     
-                    send_order_delivered_email(
+                    email_service.send_order_delivered(
                         background_tasks=background_tasks,
                         to_email=user.email,
                         customer_name=user.firstname or "Customer",

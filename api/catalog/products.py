@@ -35,7 +35,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 # /products?sort_by=created_at&sort_order=desc&page=1&limit=12
 
 
-@router.get("/home")
+@router.get("/home/")
 async def get_home_data(
     db: AsyncSession = Depends(get_db)
 ):
@@ -159,7 +159,7 @@ async def list(
         )
 
 
-@router.get("/featured")
+@router.get("/featured/")
 async def get_featured(
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db)
@@ -176,7 +176,7 @@ async def get_featured(
         )
 
 
-@router.get("/deals")
+@router.get("/deals/")
 async def get_deals(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
@@ -206,7 +206,7 @@ async def get_deals(
         )
 
 
-@router.get("/{product_id}/recommendations")
+@router.get("/{product_id}/recommendations/")
 async def recommended(
     product_id: UUID,
     limit: int = Query(4, ge=1, le=20),
@@ -224,7 +224,7 @@ async def recommended(
         )
 
 
-@router.get("/{product_id}/variants")
+@router.get("/{product_id}/variants/")
 async def variants(
     product_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -241,7 +241,7 @@ async def variants(
         )
 
 
-@router.get("/variants/{variant_id}")
+@router.get("/variants/{variant_id}/")
 async def get_variant(
     variant_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -264,7 +264,7 @@ async def get_variant(
             message=f"Failed to fetch product variant - {str(e)}"
         )
 
-@router.get("/{product_id}")
+@router.get("/{product_id}/")
 async def get_product(
     product_id: str,
     db: AsyncSession = Depends(get_db)
@@ -288,7 +288,7 @@ async def get_product(
                 message="Product not found"
             )
         logger.debug(f"Successfully fetched product")
-        return Response(success=True, data=product)
+        return Response.success(data=product)
     except APIException:
         raise
     except Exception as e:
@@ -309,7 +309,7 @@ async def create(
     try:
         product_service = ProductService(db)
         product = await product_service.create(product_data, current_user.id)
-        return Response(success=True, data=product, message="Product created successfully")
+        return Response.success(data=product, message="Product created successfully")
     except APIException:
         raise
     except Exception as e:
@@ -319,7 +319,7 @@ async def create(
         )
 
 
-@router.put("/{product_id}")
+@router.put("/{product_id}/")
 async def update(
     product_id: UUID,
     product_data: Update,
@@ -330,7 +330,7 @@ async def update(
     try:
         product_service = ProductService(db)
         product = await product_service.update(product_id, product_data, current_user.id)
-        return Response(success=True, data=product, message="Product updated successfully")
+        return Response.success(data=product, message="Product updated successfully")
     except APIException:
         raise
     except Exception as e:
@@ -340,7 +340,7 @@ async def update(
         )
 
 
-@router.delete("/{product_id}")
+@router.delete("/{product_id}/")
 async def delete(
     product_id: UUID,
     current_user: User = Depends(require_admin),
@@ -350,7 +350,7 @@ async def delete(
     try:
         product_service = ProductService(db)
         await product_service.delete(product_id, current_user.id)
-        return Response(success=True, message="Product deleted successfully")
+        return Response.success(message="Product deleted successfully")
     except APIException:
         raise
     except Exception as e:
@@ -363,7 +363,7 @@ async def delete(
 # ==========================================================
 # VARIANTS - 5 Standard APIs
 # ==========================================================
-@router.post("/{product_id}/variants")
+@router.post("/{product_id}/variants/")
 async def create_variant(
     product_id: UUID,
     variant_data: ProductVariantCreate,
@@ -381,7 +381,7 @@ async def create_variant(
         raise APIException(status_code=500, message=f"Failed to create variant: {str(e)}")
 
 
-@router.get("/variants/{variant_id}")
+@router.get("/variants/{variant_id}/")
 async def get_variant(
     variant_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -399,7 +399,7 @@ async def get_variant(
         raise APIException(status_code=500, message=f"Failed to fetch variant: {str(e)}")
 
 
-@router.get("/{product_id}/variants")
+@router.get("/{product_id}/variants/")
 async def list_variants(
     product_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -413,7 +413,7 @@ async def list_variants(
         raise APIException(status_code=500, message=f"Failed to fetch variants: {str(e)}")
 
 
-@router.patch("/variants/{variant_id}")
+@router.patch("/variants/{variant_id}/")
 async def patch_variant(
     variant_id: UUID,
     variant_data: ProductVariantUpdate,
@@ -431,7 +431,7 @@ async def patch_variant(
         raise APIException(status_code=500, message=f"Failed to update variant: {str(e)}")
 
 
-@router.delete("/variants/{variant_id}")
+@router.delete("/variants/{variant_id}/")
 async def delete_variant(
     variant_id: UUID,
     current_user: User = Depends(require_admin),
@@ -453,7 +453,7 @@ async def delete_variant(
 # ==========================================================
 # VARIANT IMAGES - 5 Standard APIs
 # ==========================================================
-@router.post("/variants/{variant_id}/images")
+@router.post("/variants/{variant_id}/images/")
 async def create_image(
     variant_id: UUID,
     image_data: ImageCreate,
@@ -477,7 +477,7 @@ async def create_image(
         raise APIException(status_code=500, message=f"Failed to create image: {str(e)}")
 
 
-@router.get("/images/{image_id}")
+@router.get("/images/{image_id}/")
 async def get_image(
     image_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -495,7 +495,7 @@ async def get_image(
         raise APIException(status_code=500, message=f"Failed to fetch image: {str(e)}")
 
 
-@router.get("/variants/{variant_id}/images")
+@router.get("/variants/{variant_id}/images/")
 async def list_images(
     variant_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -509,7 +509,7 @@ async def list_images(
         raise APIException(status_code=500, message=f"Failed to fetch images: {str(e)}")
 
 
-@router.patch("/images/{image_id}")
+@router.patch("/images/{image_id}/")
 async def patch_image(
     image_id: UUID,
     image_data: ImageUpdate,
@@ -535,7 +535,7 @@ async def patch_image(
         raise APIException(status_code=500, message=f"Failed to update image: {str(e)}")
 
 
-@router.delete("/images/{image_id}")
+@router.delete("/images/{image_id}/")
 async def delete_image(
     image_id: UUID,
     current_user: User = Depends(require_admin),
@@ -554,7 +554,7 @@ async def delete_image(
         raise APIException(status_code=500, message=f"Failed to delete image: {str(e)}")
 
 
-@router.patch("/{product_id}/moderate")
+@router.patch("/{product_id}/moderate/")
 async def moderate(
     product_id: UUID,
     request: dict,
@@ -572,7 +572,7 @@ async def moderate(
         raise APIException(status_code=500, message=f"Failed to moderate product: {str(e)}")
 
 
-@router.patch("/{product_id}/feature")
+@router.patch("/{product_id}/feature/")
 async def feature(
     product_id: UUID,
     featured: bool = True,

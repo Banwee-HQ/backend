@@ -384,9 +384,8 @@ class EmailService:
             print(f"❌ Failed to render email template {template_name}: {e}")
             raise
 
-    @classmethod
     async def _send_direct(
-        cls,
+        self,
         mail_type: str,
         to_email: str,
         **kwargs
@@ -455,7 +454,7 @@ class EmailService:
         # Render template
         template_name = f"account/{mail_type}.html"
         try:
-            html_content = await cls._render_email_template(template_name, context)
+            html_content = await self._render_email_template(template_name, context)
         except Exception:
             # Fallback to simple HTML if template doesn't exist
             html_content = f"<p>Hello {context['customer_name']},</p><p>This is a {mail_type} email.</p>"
@@ -468,9 +467,8 @@ class EmailService:
         )
         print(f"📧 Email sent ({mail_type}) to {to_email}")
 
-    @classmethod
     async def _render_email_template(
-        cls,
+        self,
         template_name: str,
         context: Dict[str, Any]
     ) -> str:
@@ -480,9 +478,8 @@ class EmailService:
         rendered = await template_service.render_email(template_name, context)
         return rendered.content
 
-    @classmethod
     def send_order_confirmation(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         customer_name: str,
@@ -497,7 +494,7 @@ class EmailService:
     ):
         """Queue order confirmation email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "order_confirmation",
             to_email,
             customer_name=customer_name,
@@ -511,9 +508,8 @@ class EmailService:
             estimated_delivery=estimated_delivery
         )
 
-    @classmethod
     def send_shipping_update(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         customer_name: str,
@@ -525,7 +521,7 @@ class EmailService:
     ):
         """Queue shipping update email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "shipping_update",
             to_email,
             customer_name=customer_name,
@@ -536,9 +532,8 @@ class EmailService:
             tracking_url=tracking_url
         )
 
-    @classmethod
     def send_verification(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         firstname: str,
@@ -546,16 +541,15 @@ class EmailService:
     ):
         """Queue verification email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "verification",
             to_email,
             firstname=firstname,
             verification_token=verification_token
         )
 
-    @classmethod
     def send_thank_you(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         customer_name: str,
@@ -563,16 +557,15 @@ class EmailService:
     ):
         """Queue thank you email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "thank_you",
             to_email,
             customer_name=customer_name,
             order_number=order_number
         )
 
-    @classmethod
     def send_review_request(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         customer_name: str,
@@ -580,16 +573,15 @@ class EmailService:
     ):
         """Queue review request email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "review_request",
             to_email,
             customer_name=customer_name,
             order_number=order_number
         )
 
-    @classmethod
     def send_password_reset(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         reset_token: str,
@@ -597,16 +589,15 @@ class EmailService:
     ):
         """Queue password reset email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "password_reset",
             to_email,
             reset_token=reset_token,
             reset_link=reset_link
         )
 
-    @classmethod
     def send_order_delivered(
-        cls,
+        self,
         background_tasks: BackgroundTasks,
         to_email: str,
         customer_name: str,
@@ -619,7 +610,7 @@ class EmailService:
     ):
         """Queue order delivered email"""
         background_tasks.add_task(
-            cls._send_direct,
+            self._send_direct,
             "order_delivered",
             to_email,
             customer_name=customer_name,
@@ -631,10 +622,14 @@ class EmailService:
             delivery_notes=delivery_notes
         )
 
-    @staticmethod
-    async def _send_direct(email_type: str, to_email: str, **kwargs):
+    async def _send_direct_background(
+        self,
+        email_type: str,
+        to_email: str,
+        **kwargs
+    ):
         """Send email directly (used by background tasks)"""
-        from core.utils.messages.sender import send_email
+        from core.utils.messages.email import send_email_brevo
 
         # Simple email sending without database for background tasks
         subject_map = {
@@ -651,7 +646,7 @@ class EmailService:
         body = f"Email type: {email_type}\nData: {kwargs}"
 
         try:
-            await send_email(to_email, subject, body)
+            await send_email_brevo(to_email=to_email, subject=subject, html_content=body)
             print(f"📧 {email_type} email sent to {to_email}")
         except Exception as e:
             print(f"❌ Failed to send {email_type} email: {e}")

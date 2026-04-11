@@ -4,7 +4,9 @@ Provides comprehensive e-commerce metrics including conversion rates,
 cart abandonment, time to first purchase, refund rates, and repeat customers
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
@@ -14,16 +16,21 @@ from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from models.accounts.user import User
+from models.accounts.user import User as UserModel
 from models.system import EventType
 from models.accounts import TrafficSource
+from models.catalog.product import Product
+from models.commerce.orders import Order
 from services.analytics.analytics import AnalyticsService
+from services.analytics.export import ExportService
+from services.commerce.orders import OrderService
 from core.exceptions import APIException
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-@router.post("/track")
+@router.post("/track/")
 async def track(
     event_data: dict,
     current_user: Optional[User] = Depends(get_current_auth_user),
@@ -65,7 +72,7 @@ async def track(
         )
 
 
-@router.get("/conversion-rates")
+@router.get("/conversion-rates/")
 async def conversion_rates(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -101,7 +108,7 @@ async def conversion_rates(
         )
 
 
-@router.get("/cart-abandonment")
+@router.get("/cart-abandonment/")
 async def cart_abandonment(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -135,7 +142,7 @@ async def cart_abandonment(
         )
 
 
-@router.get("/time-to-purchase")
+@router.get("/time-to-purchase/")
 async def time_to_purchase(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -169,7 +176,7 @@ async def time_to_purchase(
         )
 
 
-@router.get("/refund-rates")
+@router.get("/refund-rates/")
 async def refund_rates(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -203,7 +210,7 @@ async def refund_rates(
         )
 
 
-@router.get("/repeat-customers")
+@router.get("/repeat-customers/")
 async def repeat_customers(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -237,7 +244,7 @@ async def repeat_customers(
         )
 
 
-@router.get("/simple-dashboard")
+@router.get("/simple-dashboard/")
 async def simple_dashboard(
     current_user: User = Depends(get_current_auth_user)
 ):
@@ -254,7 +261,7 @@ async def simple_dashboard(
     })
 
 
-@router.get("/dashboard")
+@router.get("/dashboard/")
 async def dashboard(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -298,7 +305,7 @@ async def dashboard(
             message="Dashboard data retrieved successfully (fallback)"
         )
 
-@router.get("/sales-trend")
+@router.get("/sales-trend/")
 async def sales_trend(
     days: int = Query(30),
     current_user: User = Depends(require_admin),
@@ -323,7 +330,7 @@ async def sales_trend(
         )
 
 
-@router.get("/sales-overview")
+@router.get("/sales-overview/")
 async def sales_overview(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -376,7 +383,7 @@ async def sales_overview(
         )
 
 
-@router.get("/kpis")
+@router.get("/kpis/")
 async def kpis(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -480,7 +487,7 @@ async def kpis(
         )
 
 
-@router.get("/sales")
+@router.get("/sales/")
 async def sales(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
@@ -509,7 +516,7 @@ async def sales(
         )
 
 
-@router.get("/users")
+@router.get("/users/")
 async def users(
     days: Optional[int] = Query(30),
     current_user: User = Depends(require_admin),
@@ -517,10 +524,6 @@ async def users(
 ):
     """Get user analytics (admin only)."""
     try:
-        from sqlalchemy import select, func
-        from models.accounts.user import User as UserModel
-        from datetime import datetime, timezone, timedelta
-
         end_dt = datetime.now(timezone.utc)
         start_dt = end_dt - timedelta(days=days)
 
@@ -544,7 +547,7 @@ async def users(
         )
 
 
-@router.get("/products")
+@router.get("/products/")
 async def products(
     days: Optional[int] = Query(30),
     current_user: User = Depends(require_admin),
@@ -552,9 +555,6 @@ async def products(
 ):
     """Get product analytics (admin only)."""
     try:
-        from sqlalchemy import select, func
-        from models.catalog.product import Product
-
         total_result = await db.execute(select(func.count()).select_from(Product))
         total_products = total_result.scalar() or 0
 
@@ -575,7 +575,7 @@ async def products(
         )
 
 
-@router.get("/orders")
+@router.get("/orders/")
 async def orders(
     days: Optional[int] = Query(30),
     current_user: User = Depends(require_admin),
@@ -583,10 +583,6 @@ async def orders(
 ):
     """Get order analytics (admin only)."""
     try:
-        from sqlalchemy import select, func
-        from models.commerce.orders import Order
-        from datetime import datetime, timezone, timedelta
-
         end_dt = datetime.now(timezone.utc)
         start_dt = end_dt - timedelta(days=days)
 
@@ -610,7 +606,7 @@ async def orders(
         )
 
 
-@router.get("/revenue")
+@router.get("/revenue/")
 async def revenue(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
@@ -644,7 +640,7 @@ async def revenue(
         )
 
 
-@router.get("/stats")
+@router.get("/stats/")
 async def admin_stats(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -672,7 +668,7 @@ async def admin_stats(
         )
 
 
-@router.get("/dashboard/admin")
+@router.get("/dashboard/admin/")
 async def admin_dashboard(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -695,7 +691,7 @@ async def admin_dashboard(
         )
 
 
-@router.get("/export/orders")
+@router.get("/export/orders/")
 async def export_orders(
     format: str = Query("csv"),
     order_status: Optional[str] = Query(None, alias="status"),
@@ -708,9 +704,6 @@ async def export_orders(
     db: AsyncSession = Depends(get_db)
 ):
     """Export orders to CSV, Excel, or PDF."""
-    from fastapi.responses import StreamingResponse
-    from services.export import ExportService
-    from services.commerce.orders import OrderService
 
     if format not in ['csv', 'excel', 'pdf']:
         raise APIException(

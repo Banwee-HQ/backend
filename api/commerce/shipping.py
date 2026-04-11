@@ -25,20 +25,22 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/shipping", tags=["shipping"])
 
 
-@router.get("/methods")
+@router.get("/methods/")
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     is_active: Optional[bool] = Query(None),
     all_methods: bool = Query(False, description="Return all methods (admin only)"),
-    current_user = Depends(get_current_auth_user),
+    current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """List shipping methods. Users see active methods, admins can see all."""
     try:
         shipping_service = ShippingService(db)
         if all_methods:
-            # Admin only
+            # Admin only - require authentication
+            if current_user is None:
+                raise APIException(status_code=401, message="Authentication required")
             _ = require_admin(current_user)
             methods = await shipping_service.get_all_methods(
                 page=page, limit=limit, is_active=is_active
@@ -58,11 +60,11 @@ async def list(
         )
 
 
-@router.get("/methods/{method_id}")
+@router.get("/methods/{method_id}/")
 async def get(
     method_id: UUID,
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Get a specific shipping method."""
     try:
         shipping_service = ShippingService(db)
@@ -87,12 +89,12 @@ async def get(
         )
 
 
-@router.post("/methods")
+@router.post("/methods/")
 async def create(
     method_data: MethodCreate,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Create a shipping method (Admin only)."""
     try:
         shipping_service = ShippingService(db)
@@ -113,13 +115,13 @@ async def create(
         )
 
 
-@router.patch("/methods/{method_id}")
+@router.patch("/methods/{method_id}/")
 async def patch(
     method_id: UUID,
     method_data: MethodUpdate,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Update a shipping method (Admin only)."""
     try:
         shipping_service = ShippingService(db)
@@ -144,12 +146,12 @@ async def patch(
         )
 
 
-@router.delete("/methods/{method_id}")
+@router.delete("/methods/{method_id}/")
 async def delete(
     method_id: UUID,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Delete a shipping method (Admin only)."""
     try:
         shipping_service = ShippingService(db)
@@ -168,11 +170,11 @@ async def delete(
 # ==========================================================
 # CALCULATE - Kept Route
 # ==========================================================
-@router.post("/calculate")
+@router.post("/calculate/")
 async def calc_cost(
     body: Calculate,
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Calculate shipping cost."""
     try:
         shipping_service = ShippingService(db)

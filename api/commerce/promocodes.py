@@ -73,7 +73,7 @@ async def list(
         )
 
 
-@router.post("/validate")
+@router.post("/validate/")
 async def validate(
     request: ValidateRequest,
     current_user: User = Depends(get_current_auth_user),
@@ -107,7 +107,7 @@ async def validate(
         )
 
 
-@router.get("/{promocode_id}")
+@router.get("/{promocode_id}/")
 async def get(
     promocode_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -195,7 +195,7 @@ async def create(
         )
 
 
-@router.patch("/{promocode_id}")
+@router.patch("/{promocode_id}/")
 async def update(
     promocode_id: UUID,
     promocode_data: Update,
@@ -232,7 +232,7 @@ async def update(
         )
 
 
-@router.delete("/{promocode_id}")
+@router.delete("/{promocode_id}/")
 async def delete(
     promocode_id: UUID,
     current_user: User = Depends(require_admin),
@@ -259,7 +259,7 @@ async def delete(
         )
 
 
-@router.post("/trigger-cleanup")
+@router.post("/trigger-cleanup/")
 async def trigger_cleanup(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)

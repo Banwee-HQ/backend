@@ -27,11 +27,19 @@ async def list(
     try:
         review_service = ReviewService(db)
         
-        reviews = await review_service.list(
+        result = await review_service.list(
             product_id=product_id, page=page, limit=limit, min_rating=min_rating, max_rating=max_rating, sort_by=sort_by
         )
         
-        return Response.success(data=reviews)
+        if isinstance(result, dict) and "data" in result:
+            pagination = {
+                "page": result.get("page", page),
+                "limit": result.get("limit", limit),
+                "total": result.get("total", 0),
+                "pages": (result.get("total", 0) + limit - 1) // limit
+            }
+            return Response.success(data=result.get("data", []), pagination=pagination)
+        return Response.success(data=result)
     except APIException:
         raise
     except Exception as e:
@@ -76,7 +84,7 @@ async def create(
         )
 
 
-@router.get("/{review_id}")
+@router.get("/{review_id}/")
 async def get(
     review_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -90,7 +98,7 @@ async def get(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Review not found"
             )
-        return Response.success(data=review)
+        return Response.success(data=review, message="Review retrieved successfully")
     except APIException:
         raise
     except Exception as e:
@@ -100,7 +108,7 @@ async def get(
         )
 
 
-@router.get("/product/{product_id}")
+@router.get("/product/{product_id}/")
 async def for_product(
     product_id: UUID,
     page: int = Query(1, ge=1),
@@ -114,10 +122,18 @@ async def for_product(
     """Get all reviews for a specific product with optional filtering and sorting."""
     try:
         review_service = ReviewService(db)
-        reviews = await review_service.list(
+        result = await review_service.list(
             product_id=product_id, page=page, limit=limit, min_rating=min_rating, max_rating=max_rating, sort_by=sort_by
         )
-        return Response.success(data=reviews)
+        if isinstance(result, dict) and "data" in result:
+            pagination = {
+                "page": result.get("page", page),
+                "limit": result.get("limit", limit),
+                "total": result.get("total", 0),
+                "pages": (result.get("total", 0) + limit - 1) // limit
+            }
+            return Response.success(data=result.get("data", []), pagination=pagination)
+        return Response.success(data=result)
     except APIException:
         raise
     except Exception as e:

@@ -84,7 +84,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """Create an async HTTP client for testing."""
+    """Create an async HTTP client for testing (ASGI mode)."""
     async def override_get_db():
         yield db_session
 
@@ -95,6 +95,18 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def live_client() -> AsyncGenerator[AsyncClient, None]:
+    """Create an async HTTP client for live server testing.
+    
+    This fixture connects to the actual running backend server.
+    Use this when you want to test against a live server instead of the ASGI app.
+    """
+    base_url = os.getenv("LIVE_SERVER_URL", "http://localhost:8000")
+    async with AsyncClient(base_url=base_url, timeout=30.0) as client:
+        yield client
 
 
 @pytest.fixture(scope="function")

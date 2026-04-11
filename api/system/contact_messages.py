@@ -127,7 +127,7 @@ async def list(
         )
 
 
-@router.get("/{message_id}")
+@router.get("/{message_id}/")
 async def get(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -163,7 +163,7 @@ async def get(
     )
 
 
-@router.patch("/{message_id}")
+@router.patch("/{message_id}/")
 async def patch(
     message_id: UUID,
     update_data: Update,
@@ -209,7 +209,7 @@ async def patch(
         )
 
 
-@router.delete("/{message_id}")
+@router.delete("/{message_id}/")
 async def delete(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),

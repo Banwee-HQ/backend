@@ -93,7 +93,7 @@ async def list(
         )
 
 
-@router.get("/{refund_id}")
+@router.get("/{refund_id}/")
 async def get(
     refund_id: UUID,
     current_user = Depends(get_current_auth_user),
@@ -124,7 +124,7 @@ async def get(
         )
 
 
-@router.post("/orders/{order_id}/request")
+@router.post("/orders/{order_id}/request/")
 async def request(
     order_id: UUID,
     refund_request: Request,
@@ -147,7 +147,7 @@ async def request(
         )
 
 
-@router.put("/{refund_id}/status")
+@router.put("/{refund_id}/status/")
 async def update_status(
     refund_id: UUID,
     payload: UpdateRefundStatus,
@@ -172,7 +172,7 @@ async def update_status(
         )
 
 
-@router.patch("/{refund_id}")
+@router.patch("/{refund_id}/")
 async def patch(
     refund_id: UUID,
     payload: dict,

@@ -1,7 +1,7 @@
 """
 Standalone address endpoints at /v1/addresses
 """
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import List
@@ -38,7 +38,7 @@ async def create(
         )
 
 
-@router.get("/{address_id}")
+@router.get("/{address_id}/")
 async def get(
     address_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -50,7 +50,7 @@ async def get(
         address = await service.get(address_id)
         if not address or address.user_id != current_user.id:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Address not found")
-        return Response.success(data=address)
+        return Response.success(data=address, message="Address retrieved successfully")
     except APIException:
         raise
     except Exception as e:
@@ -62,14 +62,18 @@ async def get(
 
 @router.get("/")
 async def list(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all addresses for current user."""
+    """List all addresses for current user with pagination."""
     try:
         service = AddressService(db)
-        addresses = await service.list(current_user.id)
-        return Response.success(data=addresses)
+        result = await service.list(current_user.id, page=page, limit=limit)
+        if isinstance(result, dict) and "data" in result and "pagination" in result:
+            return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Addresses retrieved successfully")
+        return Response.success(data=result, message="Addresses retrieved successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -77,7 +81,7 @@ async def list(
         )
 
 
-@router.patch("/{address_id}")
+@router.patch("/{address_id}/")
 async def patch(
     address_id: UUID,
     payload: AddressUpdate,
@@ -101,7 +105,7 @@ async def patch(
         )
 
 
-@router.delete("/{address_id}")
+@router.delete("/{address_id}/")
 async def delete(
     address_id: UUID,
     current_user: User = Depends(get_current_auth_user),

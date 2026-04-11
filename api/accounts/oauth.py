@@ -35,7 +35,7 @@ OAUTH_PROVIDERS = {
     }
 }
 
-@router.get("/{provider}/login")
+@router.get("/{provider}/login/")
 async def oauth_login(provider: str):
     """Initiate OAuth flow by redirecting to provider"""
     if provider not in OAUTH_PROVIDERS:
@@ -66,7 +66,7 @@ async def oauth_login(provider: str):
     
     return Response.success(data={"auth_url": auth_url})
 
-@router.get("/callback/{provider}")
+@router.get("/callback/{provider}/")
 async def oauth_callback(
     provider: str, 
     code: str, 

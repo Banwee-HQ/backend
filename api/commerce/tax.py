@@ -4,6 +4,7 @@ Tax calculation routes - Public API and Admin endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_, or_
 from typing import Optional, List
 from uuid import UUID
 
@@ -20,7 +21,7 @@ logger = get_structured_logger(__name__)
 router = APIRouter(prefix="/tax", tags=["tax"])
 
 
-@router.post("/calculate")
+@router.post("/calculate/")
 async def calculate_tax(
     request: Calculation,
     db: AsyncSession = Depends(get_db)
@@ -74,7 +75,7 @@ async def calculate_tax(
 # ============================================================================
 
 
-@router.get("/rates")
+@router.get("/rates/")
 async def list_rates(
     country_code: Optional[str] = Query(None),
     province_code: Optional[str] = Query(None),
@@ -203,7 +204,7 @@ async def _list_tax_rates_internal(
 
 
 
-@router.get("/countries")
+@router.get("/countries/")
 async def countries(
     db: AsyncSession = Depends(get_db)
 ):
@@ -236,7 +237,7 @@ async def countries(
         )
 
 
-@router.get("/tax-types")
+@router.get("/tax-types/")
 async def tax_types(
     db: AsyncSession = Depends(get_db)
 ):
@@ -266,7 +267,7 @@ async def tax_types(
         )
 
 
-@router.get("/rates/{tax_rate_id}", response_model=RateResponse)
+@router.get("/rates/{tax_rate_id}/", response_model=RateResponse)
 async def get_rate(
     tax_rate_id: UUID,
     current_user = Depends(require_admin),
@@ -305,7 +306,7 @@ async def get_rate(
         )
 
 
-@router.post("/rates", response_model=RateResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/rates/", response_model=RateResponse, status_code=status.HTTP_201_CREATED)
 async def create_rate(
     data: RateCreate,
     current_user = Depends(require_admin),
@@ -369,7 +370,7 @@ async def create_rate(
         )
 
 
-@router.patch("/rates/{tax_rate_id}", response_model=RateResponse)
+@router.patch("/rates/{tax_rate_id}/", response_model=RateResponse)
 async def update_rate(
     tax_rate_id: UUID,
     data: RateUpdate,
@@ -425,7 +426,7 @@ async def update_rate(
         )
 
 
-@router.delete("/rates/{tax_rate_id}")
+@router.delete("/rates/{tax_rate_id}/")
 async def delete_rate(
     tax_rate_id: UUID,
     current_user = Depends(require_admin),
@@ -456,7 +457,7 @@ async def delete_rate(
         )
 
 
-@router.post("/rates/bulk-update")
+@router.post("/rates/bulk-update/")
 async def bulk_update(
     updates: List[dict],
     current_user = Depends(require_admin),

@@ -7,8 +7,9 @@ from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
 from core.exceptions import APIException
 from core.logging import get_structured_logger
+from core.utils.response import Response
 from services.commerce.orders import OrderService
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from schemas.commerce.orders import Create, Checkout, Note
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -35,7 +36,7 @@ async def create(
         raise APIException(status_code=400, message=f"Failed to create order: {str(e)}")
 
 
-@router.get("/{order_id}")
+@router.get("/{order_id}/")
 async def get(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -53,7 +54,7 @@ async def get(
             
         if not order:
             raise APIException(status_code=404, message="Order not found")
-        return Response.success(data=order)
+        return Response.success(data=order, message="Order retrieved successfully")
     except APIException:
         raise
     except Exception as e:
@@ -113,7 +114,7 @@ async def list(
 # ==========================================================
 # KEPT ROUTES
 # ==========================================================
-@router.post("/checkout/validate")
+@router.post("/checkout/validate/")
 async def validate(
     request: Checkout,
     current_user: User = Depends(get_current_auth_user),
@@ -123,12 +124,12 @@ async def validate(
     try:
         order_service = OrderService(db)
         validation_result = await order_service.validate_checkout(current_user.id, request)
-        return Response.success(data=validation_result)
+        return Response.success(data=validation_result, message="Checkout validation completed")
     except Exception as e:
         raise APIException(status_code=500, message=f"Checkout validation failed: {str(e)}")
 
 
-@router.post("/checkout")
+@router.post("/checkout/")
 async def checkout(
     request: Checkout,
     background_tasks: BackgroundTasks,
@@ -144,7 +145,7 @@ async def checkout(
         raise APIException(status_code=500, message=f"Order placement failed: {str(e)}")
 
 
-@router.patch("/{order_id}/cancel")
+@router.patch("/{order_id}/cancel/")
 async def cancel(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -159,7 +160,7 @@ async def cancel(
         raise APIException(status_code=400, message="Failed to cancel order")
 
 
-@router.post("/{order_id}/cancel")
+@router.post("/{order_id}/cancel/")
 async def cancel_post(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -170,7 +171,7 @@ async def cancel_post(
 
 
 
-@router.get("/{order_id}/invoice")
+@router.get("/{order_id}/invoice/")
 async def get_invoice(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -195,7 +196,7 @@ async def get_invoice(
 # ==========================================================
 # NOTES - Create, Get, List Only (Immutable Audit Records)
 # ==========================================================
-@router.post("/{order_id}/notes")
+@router.post("/{order_id}/notes/")
 async def create_note(
     order_id: UUID,
     request: Note,
@@ -211,7 +212,7 @@ async def create_note(
         raise APIException(status_code=400, message=f"Failed to add note: {str(e)}")
 
 
-@router.get("/{order_id}/notes/{note_index}")
+@router.get("/{order_id}/notes/{note_index}/")
 async def get_note(
     order_id: UUID,
     note_index: int,
@@ -224,14 +225,14 @@ async def get_note(
         note = await order_service.get_note(order_id, current_user.id, note_index)
         if not note:
             raise APIException(status_code=404, message="Note not found")
-        return Response.success(data=note)
+        return Response.success(data=note, message="Note retrieved successfully")
     except APIException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to get note: {str(e)}")
 
 
-@router.get("/{order_id}/notes")
+@router.get("/{order_id}/notes/")
 async def list_notes(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -241,7 +242,7 @@ async def list_notes(
     try:
         order_service = OrderService(db)
         notes = await order_service.notes(order_id, current_user.id)
-        return Response.success(data=notes)
+        return Response.success(data=notes, message="Notes retrieved successfully")
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to get notes: {str(e)}")
 
@@ -249,7 +250,7 @@ async def list_notes(
 # ==========================================================
 # ORDER TRACKING - Moved from shipping_tracking.py
 # ==========================================================
-@router.get("/{order_id}/tracking")
+@router.get("/{order_id}/tracking/")
 async def get_tracking(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -261,14 +262,14 @@ async def get_tracking(
         tracking = await order_service.tracking(order_id, current_user.id)
         if tracking is None:
             raise APIException(status_code=404, message="Order not found or tracking unavailable")
-        return Response.success(data=tracking)
+        return Response.success(data=tracking, message="Tracking information retrieved")
     except APIException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
 
 
-@router.get("/{order_id}/shipments")
+@router.get("/{order_id}/shipments/")
 async def get_order_shipments(
     order_id: str,
     current_user: User = Depends(get_current_auth_user),
@@ -279,7 +280,7 @@ async def get_order_shipments(
         from services.commerce.shipping_tracking import ShippingTrackingService
         shipping_service = ShippingTrackingService(db)
         shipments = await shipping_service.list_by_order(str(order_id))
-        return Response.success(data=shipments)
+        return Response.success(data=shipments, message="Shipments retrieved successfully")
     except Exception as e:
         raise APIException(
             status_code=500,
@@ -290,7 +291,7 @@ async def get_order_shipments(
 # ==========================================================
 # PUBLIC TRACKING - No authentication required
 # ==========================================================
-@router.get("/track/{order_id}")
+@router.get("/track/{order_id}/")
 async def get_public_tracking(
     order_id: UUID,
     db: AsyncSession = Depends(get_db)
@@ -299,12 +300,12 @@ async def get_public_tracking(
     try:
         order_service = OrderService(db)
         tracking = await order_service.tracking_public(order_id)
-        return Response.success(data=tracking)
+        return Response.success(data=tracking, message="Public tracking information retrieved")
     except Exception:
         raise APIException(status_code=404, message="Order not found or tracking unavailable")
 
 
-@router.patch("/{order_id}/status")
+@router.patch("/{order_id}/status/")
 async def update_status(
     order_id: str,
     request: dict,
@@ -328,7 +329,7 @@ async def update_status(
         raise APIException(status_code=500, message=f"Failed to update order status: {str(e)}")
 
 
-@router.put("/{order_id}/deliver")
+@router.put("/{order_id}/deliver/")
 async def deliver(
     order_id: str,
     request: dict = {},
@@ -346,7 +347,7 @@ async def deliver(
         raise APIException(status_code=500, message=f"Failed to mark order as delivered: {str(e)}")
 
 
-@router.post("/{order_id}/ship")
+@router.post("/{order_id}/ship/")
 async def ship(
     order_id: str,
     request: dict,
@@ -364,7 +365,7 @@ async def ship(
         raise APIException(status_code=500, message=f"Failed to ship order: {str(e)}")
 
 
-@router.get("/statistics")
+@router.get("/statistics/")
 async def statistics(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -375,7 +376,7 @@ async def statistics(
     try:
         order_service = OrderService(db)
         stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
-        return Response.success(data=stats)
+        return Response.success(data=stats, message="Order statistics retrieved")
     except APIException:
         raise
     except Exception as e:

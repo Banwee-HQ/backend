@@ -29,7 +29,7 @@ from models.commerce.subscriptions import Subscription
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 
-@router.post("/trigger-order-processing")
+@router.post("/trigger-order-processing/")
 async def trigger_order_processing(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -47,7 +47,7 @@ async def trigger_order_processing(
         )
 
 
-@router.post("/trigger-notifications")
+@router.post("/trigger-notifications/")
 async def trigger_notifications(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -63,7 +63,7 @@ async def trigger_notifications(
         )
 
 
-@router.get("/plans")
+@router.get("/plans/")
 async def plans(
     db: AsyncSession = Depends(get_db)
 ):
@@ -122,7 +122,7 @@ async def plans(
         )
 
 
-@router.post("/calculate-cost")
+@router.post("/calculate-cost/")
 async def calculate(
     cost_request: CostCalculation,
     current_user: User = Depends(get_current_auth_user),
@@ -256,11 +256,15 @@ async def list(
                 page=page, limit=limit, status=status_filter, search=search,
                 date_from=date_from, date_to=date_to, sort_by=sort_by, sort_order=sort_order
             )
+            if isinstance(result, dict) and "data" in result and "pagination" in result:
+                return Response.success(data=result.get("data", []), pagination=result.get("pagination"))
             return Response.success(data=result)
         else:
             result = await subscription_service.list(
                 user_id=current_user.id, page=page, limit=limit, status=status_filter
             )
+            if isinstance(result, dict) and "data" in result and "pagination" in result:
+                return Response.success(data=result.get("data", []), pagination=result.get("pagination"))
             return Response.success(data=result)
     except APIException:
         raise
@@ -269,7 +273,7 @@ async def list(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get subscriptions: {str(e)}"
         )
-@router.post("/{subscription_id}/products")
+@router.post("/{subscription_id}/products/")
 async def add_products(
     subscription_id: UUID,
     request: AddProducts,
@@ -301,7 +305,7 @@ async def add_products(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to add products to subscription: {str(e)}"
         )
-@router.delete("/{subscription_id}/products")
+@router.delete("/{subscription_id}/products/")
 async def remove_products(
     subscription_id: UUID,
     request: RemoveProducts,
@@ -333,7 +337,7 @@ async def remove_products(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to remove products from subscription: {str(e)}"
         )
-@router.patch("/{subscription_id}/products/quantity")
+@router.patch("/{subscription_id}/products/quantity/")
 async def update_quantity(
     subscription_id: UUID,
     request: UpdateQuantity,
@@ -360,7 +364,7 @@ async def update_quantity(
         )
 
 
-@router.patch("/{subscription_id}/products/adjust-quantity")
+@router.patch("/{subscription_id}/products/adjust-quantity/")
 async def adjust_quantity(
     subscription_id: UUID,
     request: QuantityChange,
@@ -386,7 +390,7 @@ async def adjust_quantity(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to adjust variant quantity: {str(e)}"
         )
-@router.get("/{subscription_id}/products/quantities")
+@router.get("/{subscription_id}/products/quantities/")
 async def get_quantities(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -410,7 +414,7 @@ async def get_quantities(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get variant quantities: {str(e)}"
         )
-@router.patch("/{subscription_id}/auto-renew")
+@router.patch("/{subscription_id}/auto-renew/")
 async def toggle_auto_renew(
     subscription_id: UUID,
     auto_renew: bool,
@@ -448,7 +452,7 @@ async def toggle_auto_renew(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to update auto-renew: {str(e)}"
         )
-@router.get("/{subscription_id}")
+@router.get("/{subscription_id}/")
 async def get(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -477,7 +481,7 @@ async def get(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch subscription: {str(e)}"
         )
-@router.patch("/{subscription_id}")
+@router.patch("/{subscription_id}/")
 async def update(
     subscription_id: UUID,
     subscription_data: Update,
@@ -512,7 +516,7 @@ async def update(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to update subscription: {str(e)}"
         )
-@router.post("/{subscription_id}/cancel")
+@router.post("/{subscription_id}/cancel/")
 async def cancel(
     subscription_id: UUID,
     reason: str = None,
@@ -534,7 +538,7 @@ async def cancel(
             status_code=status.HTTP_404_NOT_FOUND,
             message=f"Subscription not found or failed to cancel: {str(e)}"
         )
-@router.delete("/{subscription_id}")
+@router.delete("/{subscription_id}/")
 async def delete(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -552,7 +556,7 @@ async def delete(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to delete subscription: {str(e)}"
         )
-@router.post("/{subscription_id}/process-shipment")
+@router.post("/{subscription_id}/process-shipment/")
 async def process_shipment(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -596,7 +600,7 @@ async def process_shipment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to process subscription shipment: {str(e)}"
         )
-@router.post("/{subscription_id}/pause")
+@router.post("/{subscription_id}/pause/")
 async def pause(
     subscription_id: UUID,
     pause_reason: str = None,
@@ -621,7 +625,7 @@ async def pause(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to pause subscription: {str(e)}"
         )
-@router.post("/{subscription_id}/resume")
+@router.post("/{subscription_id}/resume/")
 async def resume(
     subscription_id: UUID,
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -646,7 +650,7 @@ async def resume(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to resume/activate subscription: {str(e)}"
         )
-@router.delete("/{subscription_id}/products/{product_id}")
+@router.delete("/{subscription_id}/products/{product_id}/")
 async def remove_product(
     subscription_id: UUID,
     product_id: UUID,
@@ -674,7 +678,7 @@ async def remove_product(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to remove product from subscription: {str(e)}"
         )
-@router.post("/{subscription_id}/discounts")
+@router.post("/{subscription_id}/discounts/")
 async def apply_discount(
     subscription_id: UUID,
     discount_request: DiscountApplication,
@@ -698,7 +702,7 @@ async def apply_discount(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to apply discount: {str(e)}"
         )
-@router.delete("/{subscription_id}/discounts/{discount_id}")
+@router.delete("/{subscription_id}/discounts/{discount_id}/")
 async def remove_discount(
     subscription_id: UUID,
     discount_id: UUID,
@@ -722,7 +726,7 @@ async def remove_discount(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to remove discount: {str(e)}"
         )
-@router.get("/{subscription_id}/details")
+@router.get("/{subscription_id}/details/")
 async def details(
     subscription_id: UUID,
     current_user: User = Depends(get_current_auth_user),
@@ -805,7 +809,7 @@ async def details(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get subscription details: {str(e)}"
         )
-@router.get("/{subscription_id}/orders")
+@router.get("/{subscription_id}/orders/")
 async def orders(
     subscription_id: UUID,
     page: int = Query(1, ge=1),

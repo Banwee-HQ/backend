@@ -56,7 +56,8 @@ class UserService:
 
         # Send verification email in background
         from services.accounts.email import EmailService
-        EmailService.send_verification(
+        email_service = EmailService(self.db)
+        email_service.send_verification(
             background_tasks,
             new_user.email,
             new_user.firstname,
@@ -65,7 +66,7 @@ class UserService:
 
         return new_user
 
-    async def verify(self, token: str, background_tasks: BackgroundTasks):
+    async def verify(self, token: str, background_tasks: Optional[BackgroundTasks] = None):
         """Verify user email with token and send welcome email."""
         
         result = await self.db.execute(
@@ -397,7 +398,7 @@ class UserService:
         # For now, just return success
         return True
 
-    async def verify(self, user_id: UUID) -> Optional[User]:
+    async def verify_user_account(self, user_id: UUID) -> Optional[User]:
         """Verify user account (admin only)."""
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
@@ -427,10 +428,10 @@ class UserService:
             }
         }
 
-    async def reset_password(self, user_id: str) -> Dict[str, Any]:
+    async def reset_password(self, user_id: UUID) -> Dict[str, Any]:
         """Reset user password and send reset email (admin only)."""
         try:
-            result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
+            result = await self.db.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
 
             if not user:

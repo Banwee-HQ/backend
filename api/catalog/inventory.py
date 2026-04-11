@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, UUID as UUIDType
 
 from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
@@ -10,11 +10,11 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.inventory import (
     LocationCreate, LocationUpdate, LocationResponse,
-    Create, Update, Response,
+    Create, Update, Response as InventoryResponse,
     AdjustmentCreate, AdjustmentResponse
 )
 from services.catalog.inventory import InventoryService
-from models.accounts.user import UserRole
+from models.accounts.user import UserRole, User
 
 logger = get_logger(__name__)
 
@@ -24,12 +24,12 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 # ==========================================================
 # LOCATIONS - 5 Standard APIs
 # ==========================================================
-@router.post("/locations")
+@router.post("/locations/")
 async def create_location(
     location_data: LocationCreate,
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Create a new warehouse location (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -41,46 +41,50 @@ async def create_location(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create location: {e}")
 
 
-@router.get("/locations/{location_id}")
+@router.get("/locations/{location_id}/")
 async def get_location(
     location_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Get a specific warehouse location by ID."""
     try:
         inventory_service = InventoryService(db)
         location = await inventory_service.get_location(location_id)
         if not location:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Warehouse location not found")
-        return Response.success(data=location)
+        return Response.success(data=location, message="Warehouse location retrieved successfully")
     except APIException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch location: {e}")
 
 
-@router.get("/locations")
+@router.get("/locations/")
 async def list_locations(
-    current_user = Depends(get_current_auth_user),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all warehouse locations."""
+    """List all warehouse locations with pagination."""
     try:
         inventory_service = InventoryService(db)
-        locations = await inventory_service.list_locations()
-        return Response.success(data=locations)
+        result = await inventory_service.list_locations(page=page, limit=limit)
+        if isinstance(result, dict) and "data" in result and "pagination" in result:
+            return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Warehouse locations retrieved successfully")
+        return Response.success(data=result, message="Warehouse locations retrieved successfully")
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch locations: {e}")
+        logger.error(f"Error fetching locations: {e}", exc_info=True)
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to fetch locations")
 
 
-@router.patch("/locations/{location_id}")
+@router.patch("/locations/{location_id}/")
 async def update_location(
     location_id: UUID,
     location_data: LocationUpdate,
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Partially update a warehouse location (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -92,12 +96,12 @@ async def update_location(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update location: {e}")
 
 
-@router.delete("/locations/{location_id}")
+@router.delete("/locations/{location_id}/")
 async def delete_location(
     location_id: UUID,
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Delete a warehouse location (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -117,7 +121,7 @@ async def create(
     inventory_data: Create,
     current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> InventoryResponse:
     """Create a new inventory item (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -129,19 +133,19 @@ async def create(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create inventory item: {e}")
 
 
-@router.get("/{inventory_id}")
+@router.get("/{inventory_id}/")
 async def get(
     inventory_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Get a specific inventory item by ID."""
     try:
         inventory_service = InventoryService(db)
         item = await inventory_service.get(inventory_id, serialized=True)
         if not item:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Inventory item not found")
-        return Response.success(data=item)
+        return Response.success(data=item, message="Inventory item retrieved successfully")
     except APIException:
         raise
     except Exception as e:
@@ -157,14 +161,10 @@ async def list(
     search: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
-    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List inventory items with filters."""
     try:
-        from models.accounts.user import UserRole
-        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
-        
         inventory_service = InventoryService(db)
         items = await inventory_service.list(
             page=page,
@@ -182,21 +182,20 @@ async def list(
                 "total": items.get("total", 0),
                 "pages": items.get("pages", 1)
             }
-            return Response.success(data=items.get("data", []), pagination=pagination)
-        return Response.success(data=items)
-    except APIException:
-        raise
+            return Response.success(data=items.get("data", []), pagination=pagination, message="Inventory items retrieved successfully")
+        return Response.success(data=items, message="Inventory items retrieved successfully")
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch inventory items: {e}")
+        logger.error(f"Error fetching inventory items: {e}", exc_info=True)
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to fetch inventory items")
 
 
-@router.patch("/{inventory_id}")
+@router.patch("/{inventory_id}/")
 async def patch(
     inventory_id: UUID,
     inventory_data: Update,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Partially update an inventory item (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -208,12 +207,12 @@ async def patch(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update inventory item: {e}")
 
 
-@router.delete("/{inventory_id}")
+@router.delete("/{inventory_id}/")
 async def delete(
     inventory_id: UUID,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Delete an inventory item (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -228,12 +227,12 @@ async def delete(
 # ==========================================================
 # ADJUSTMENTS - 5 Standard APIs
 # ==========================================================
-@router.post("/adjustments")
+@router.post("/adjustments/")
 async def create_adj(
     adjustment_data: AdjustmentCreate,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Create a stock adjustment (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -245,45 +244,50 @@ async def create_adj(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to adjust stock: {e}")
 
 
-@router.get("/adjustments/{adjustment_id}")
+@router.get("/adjustments/{adjustment_id}/")
 async def get_adj(
     adjustment_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Get a specific stock adjustment by ID (Admin access)."""
     try:
         inventory_service = InventoryService(db)
         adjustment = await inventory_service.get_adjustment(adjustment_id)
         if not adjustment:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
-        return Response.success(data=adjustment)
+        return Response.success(data=adjustment, message="Stock adjustment retrieved successfully")
     except APIException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustment: {e}")
 
 
-@router.get("/adjustments")
+@router.get("/adjustments/")
 async def list_adj(
-    current_user = Depends(get_current_auth_user),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    inventory_id: Optional[UUID] = Query(None),
+    current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
-    """List all stock adjustments (Admin access)."""
+) -> Response:
+    """List all stock adjustments with pagination (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        adjustments = await inventory_service.adjustments()
-        return Response.success(data=adjustments)
+        result = await inventory_service.adjustments(inventory_id=inventory_id, page=page, limit=limit)
+        if isinstance(result, dict) and "data" in result and "pagination" in result:
+            return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Stock adjustments retrieved successfully")
+        return Response.success(data=result, message="Stock adjustments retrieved successfully")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustments: {e}")
 
 
-@router.delete("/adjustments/{adjustment_id}")
+@router.delete("/adjustments/{adjustment_id}/")
 async def delete_adj(
     adjustment_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """Delete a stock adjustment (Admin access)."""
     try:
         inventory_service = InventoryService(db)
@@ -301,11 +305,11 @@ async def delete_adj(
 # INVENTORY SYNC ENDPOINTS - Moved from admin.py
 # ==========================================================
 
-@router.post("/sync-all")
+@router.post("/sync-all/")
 async def sync_all(
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """
     Sync all product availability statuses based on current inventory levels.
     Admin only - for data consistency maintenance.
@@ -325,19 +329,17 @@ async def sync_all(
         )
 
 
-@router.post("/sync/product/{product_id}")
+@router.post("/sync/product/{product_id}/")
 async def sync_product(
     product_id: str,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
-):
+) -> Response:
     """
     Sync a single product's availability status based on its variant inventory levels.
     Admin only - for data consistency maintenance.
     """
     try:
-        from uuid import UUID as UUIDType
-        
         product_id_uuid = UUIDType(product_id)
         inventory_service = InventoryService(db)
         result = await inventory_service.sync(product_id_uuid)
@@ -351,6 +353,8 @@ async def sync_product(
             status_code=status.HTTP_400_BAD_REQUEST,
             message="Invalid product ID format"
         )
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
