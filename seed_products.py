@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 from core.db import db_manager
+from sqlalchemy import select
 from core.utils.uuid_utils import uuid7
 from core.utils.encryption import PasswordManager
 
@@ -178,20 +179,25 @@ async def seed():
         pm = PasswordManager()
 
         # ── Admin user ──────────────────────────────────────────────
-        admin = User(
-            id=uuid7(),
-            email="admin@banwee.com",
-            firstname="Admin",
-            lastname="Banwee",
-            hashed_password=pm.hash_password("AdminPass123!"),
-            role="admin",
-            account_status="active",
-            verification_status="verified",
-            phone_verified=False,
-            language="en",
-            failed_login_attempts=0,
-        )
-        db.add(admin)
+        existing_admin = await db.scalar(select(User).filter_by(email="admin@banwee.com"))
+        if existing_admin:
+            admin = existing_admin
+            print("Admin user already exists, using existing user")
+        else:
+            admin = User(
+                id=uuid7(),
+                email="admin@banwee.com",
+                firstname="Admin",
+                lastname="Banwee",
+                hashed_password=pm.hash_password("AdminPass123!"),
+                role="admin",
+                account_status="active",
+                verification_status="verified",
+                phone_verified=False,
+                language="en",
+                failed_login_attempts=0,
+            )
+            db.add(admin)
 
         # ── Warehouse location ──────────────────────────────────────
         location = WarehouseLocation(
@@ -211,21 +217,26 @@ async def seed():
             {"email": "carol@example.com", "firstname": "Carol", "lastname": "Jones"},
         ]
         for c in customer_data:
-            user = User(
-                id=uuid7(),
-                email=c["email"],
-                firstname=c["firstname"],
-                lastname=c["lastname"],
-                hashed_password=pm.hash_password("Password123!"),
-                role="customer",
-                account_status="active",
-                verification_status="verified",
-                phone_verified=False,
-                language="en",
-                failed_login_attempts=0,
-            )
-            db.add(user)
-            customers.append(user)
+            existing = await db.scalar(select(User).filter_by(email=c["email"]))
+            if existing:
+                customers.append(existing)
+                print(f"Customer {c['email']} already exists, skipping")
+            else:
+                user = User(
+                    id=uuid7(),
+                    email=c["email"],
+                    firstname=c["firstname"],
+                    lastname=c["lastname"],
+                    hashed_password=pm.hash_password("Password123!"),
+                    role="customer",
+                    account_status="active",
+                    verification_status="verified",
+                    phone_verified=False,
+                    language="en",
+                    failed_login_attempts=0,
+                )
+                db.add(user)
+                customers.append(user)
         await db.flush()
 
         # ── Products, variants, inventory ──────────────────────────
