@@ -103,34 +103,25 @@ class AddressService:
     # CUSTOM LOGIC
     # -----------------------------------------------------------
 
-    async def default_shipping(self, user_id: UUID) -> Optional[Address]:
-        """Get a user's default shipping address."""
-        # First, try to find an address marked as default
+    async def default(self, user_id: UUID, kind: str = "Shipping") -> Optional[Address]:
+        """Get a user's default address by kind (Shipping or Billing)."""
+        # For shipping, first try to find an address marked as default
+        if kind == "Shipping":
+            query = select(Address).where(
+                Address.user_id == user_id,
+                Address.is_default == True,
+                Address.kind == kind
+            )
+            result = await self.db.execute(query)
+            address = result.scalars().first()
+            if address:
+                return address
+
+        # Return the most recent address of the specified kind
+        kind_enum = AddressKind.BILLING if kind == "Billing" else AddressKind.SHIPPING
         query = select(Address).where(
             Address.user_id == user_id,
-            Address.is_default == True,
-            Address.kind == "Shipping"
-        )
-        result = await self.db.execute(query)
-        address = result.scalars().first()
-
-        if address:
-            return address
-
-        # If no default is set, return the most recent shipping address
-        query = select(Address).where(
-            Address.user_id == user_id,
-            Address.kind == "Shipping"
-        ).order_by(Address.created_at.desc())
-
-        result = await self.db.execute(query)
-        return result.scalars().first()
-
-    async def default_billing(self, user_id: UUID) -> Optional[Address]:
-        """Get a user's default billing address."""
-        query = select(Address).where(
-            Address.user_id == user_id,
-            Address.kind == AddressKind.BILLING
+            Address.kind == kind_enum
         ).order_by(Address.created_at.desc())
 
         result = await self.db.execute(query)
