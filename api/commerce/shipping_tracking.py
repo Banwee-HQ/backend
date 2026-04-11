@@ -14,6 +14,7 @@ from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
 from core.dependencies import get_current_auth_user, require_admin
 from sqlalchemy.ext.asyncio import AsyncSession
+from models.accounts.user import User
 
 from services.commerce.shipping_tracking import ShippingTrackingService
 from datetime import datetime
@@ -23,6 +24,7 @@ from schemas.commerce.shipping_tracking import (
     Update,
     Track
 )
+from models.commerce.shipping_tracking import ShippingCarrier
 
 router = APIRouter(prefix="/shipping-tracking", tags=["shipping-tracking"])
 
@@ -104,7 +106,6 @@ async def track(
         
         return APIResponse.success(
             data=tracking_info,
-            data=tracking_data,
             message="Tracking information retrieved successfully"
         )
     

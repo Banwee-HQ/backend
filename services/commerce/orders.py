@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
 from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
 from models.accounts.user import User
-from services.accounts.email import send_order_confirmation_email
+from services.accounts.email import EmailService
 from models.commerce.cart import Cart, CartItem
 from models.accounts.user import User, Address
 from models.catalog.product import ProductVariant
@@ -529,9 +529,10 @@ class OrderService:
                         }
                         for cart_item in cart.items
                     ]
-                    send_order_confirmation_email(
-                        background_tasks=background_tasks,
-                        to_email=user.email,
+                    email_service = EmailService(self.db)
+                    background_tasks.add_task(
+                        email_service.send_order_confirmation_email,
+                        recipient_email=user.email,
                         customer_name=getattr(user, "full_name", "Customer"),
                         order_number=order.order_number,
                         order_date=order.created_at or datetime.utcnow(),

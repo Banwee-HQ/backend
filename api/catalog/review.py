@@ -8,6 +8,7 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.catalog.review import Create, Update
 from services.catalog.review import ReviewService
+from models.accounts.user import User
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 

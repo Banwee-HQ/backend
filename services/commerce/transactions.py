@@ -283,7 +283,7 @@ def transactional(
 
 async def execute_in_transaction(
     db: AsyncSession,
-    operation: Callable[[TransactionContext], T],
+    operation: Callable[["TransactionService.TransactionContext"], T],
     operation_id: Optional[str] = None,
     isolation_level: Optional[str] = None
 ) -> T:
@@ -304,7 +304,7 @@ async def execute_in_transaction(
 
 async def execute_batch_operations(
     db: AsyncSession,
-    operations: List[Callable[[TransactionContext], Any]],
+    operations: List[Callable[["TransactionService.TransactionContext"], Any]],
     operation_id: Optional[str] = None,
     fail_fast: bool = True
 ) -> List[Any]:
@@ -333,7 +333,7 @@ async def execute_batch_operations(
                 
             except Exception as e:
                 if fail_fast:
-                    raise TransactionError(f"Batch operation {i} failed: {e}", original_error=e)
+                    raise TransactionService.TransactionError(f"Batch operation {i} failed: {e}", original_error=e)
                 else:
                     # Rollback to savepoint and continue
                     await ctx.rollback_to_savepoint(f"op_{i}")

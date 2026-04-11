@@ -11,10 +11,12 @@ from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
 from core.exceptions import APIException
 from core.utils.response import Response
+from core.logging import get_structured_logger
 from services.commerce.tax import TaxService
-from schemas.commerce.tax import Calculation, RateCreate, RateUpdate
+from schemas.commerce.tax import Calculation, RateCreate, RateUpdate, RateResponse, CalculationResponse
 from models.commerce.tax_rates import TaxRate
 
+logger = get_structured_logger(__name__)
 router = APIRouter(prefix="/tax", tags=["tax"])
 
 

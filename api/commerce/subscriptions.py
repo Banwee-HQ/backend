@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 from core.db import get_db, logger
 from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response

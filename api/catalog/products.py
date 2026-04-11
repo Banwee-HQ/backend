@@ -10,7 +10,7 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate, ProductPatch, VariantStockUpdate, ProductModeration, ProductFeatureToggle
 from services.catalog.products import ProductService
-from models.accounts.user import UserRole
+from models.accounts.user import UserRole, User
 
 logger = get_logger(__name__)
 

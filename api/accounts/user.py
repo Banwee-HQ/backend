@@ -41,7 +41,7 @@ async def profile(current_user: AuthUser = Depends(get_current_auth_user)):
 
 
 @router.post("/")
-async def create(payload: UserCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def create(payload: UserCreate, background_tasks: BackgroundTasks = None, db: AsyncSession = Depends(get_db)):
     """Create a new user."""
     service = UserService(db)
     user = await service.create(payload, background_tasks)

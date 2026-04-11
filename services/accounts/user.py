@@ -450,7 +450,7 @@ class UserService:
             await email_service.send_password_reset_email(
                 recipient_email=user.email,
                 reset_token=reset_token,
-                reset_link=None  # EmailService will generate the link
+                reset_link=""  # EmailService will generate the link
             )
 
             return {
@@ -466,6 +466,62 @@ class UserService:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to send password reset email: {str(e)}"
+            )
+
+    async def deactivate(self, user_id: UUID) -> Dict[str, Any]:
+        """Deactivate user account (admin only)."""
+        try:
+            result = await self.db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            user.is_active = False
+            await self.db.commit()
+            await self.db.refresh(user)
+
+            return {
+                "success": True,
+                "message": f"User {user.email} has been deactivated",
+                "user_id": str(user.id),
+                "email": user.email
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to deactivate user: {str(e)}"
+            )
+
+    async def activate(self, user_id: UUID) -> Dict[str, Any]:
+        """Activate user account (admin only)."""
+        try:
+            result = await self.db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            user.is_active = True
+            await self.db.commit()
+            await self.db.refresh(user)
+
+            return {
+                "success": True,
+                "message": f"User {user.email} has been activated",
+                "user_id": str(user.id),
+                "email": user.email
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to activate user: {str(e)}"
             )
 
     async def update_role(self, user_id: UUID, new_role: str) -> Optional[User]:

@@ -385,6 +385,133 @@ class EmailService:
             raise
 
     @classmethod
+    async def _send_direct(
+        cls,
+        mail_type: str,
+        to_email: str,
+        **kwargs
+    ):
+        """Internal method to send emails via Brevo"""
+        from core.utils.messages.email import send_email_brevo
+        from core.config import settings
+        
+        # Build subject based on mail_type
+        subject_map = {
+            "order_confirmation": f"Order Confirmation - {kwargs.get('order_number', '')}",
+            "shipping_update": f"Shipping Update - {kwargs.get('order_number', '')}",
+            "verification": "Verify Your Email",
+            "thank_you": "Thank You for Your Order",
+            "review_request": "Review Your Recent Purchase",
+            "password_reset": "Reset Your Password",
+            "order_delivered": f"Order {kwargs.get('order_number', '')} Delivered",
+        }
+        
+        subject = subject_map.get(mail_type, "Notification from Banwee")
+        
+        # Build context
+        context = {
+            "customer_name": kwargs.get("customer_name", "Customer"),
+            "settings": settings,
+        }
+        
+        # Add mail-type specific context
+        if mail_type == "order_confirmation":
+            context.update({
+                "order_number": kwargs.get("order_number", ""),
+                "order_date": kwargs.get("order_date", ""),
+                "order_total": kwargs.get("order_total", 0),
+                "currency": kwargs.get("currency", "USD"),
+                "order_items": kwargs.get("items", []),
+                "shipping_address": kwargs.get("shipping_address", ""),
+            })
+        elif mail_type == "shipping_update":
+            context.update({
+                "order_number": kwargs.get("order_number", ""),
+                "tracking_number": kwargs.get("tracking_number", ""),
+                "carrier": kwargs.get("carrier", ""),
+                "estimated_delivery": kwargs.get("estimated_delivery", ""),
+                "tracking_url": kwargs.get("tracking_url", ""),
+            })
+        elif mail_type == "verification":
+            context.update({
+                "verification_token": kwargs.get("verification_token", ""),
+                "firstname": kwargs.get("firstname", ""),
+            })
+        elif mail_type == "password_reset":
+            context.update({
+                "reset_token": kwargs.get("reset_token", ""),
+                "reset_link": kwargs.get("reset_link", ""),
+            })
+        elif mail_type == "order_delivered":
+            context.update({
+                "order_id": kwargs.get("order_id", ""),
+                "order_number": kwargs.get("order_number", ""),
+                "tracking_number": kwargs.get("tracking_number", ""),
+                "delivery_date": kwargs.get("delivery_date", ""),
+                "delivery_address": kwargs.get("delivery_address", ""),
+                "delivery_notes": kwargs.get("delivery_notes", ""),
+            })
+        
+        # Render template
+        template_name = f"account/{mail_type}.html"
+        try:
+            html_content = await cls._render_email_template(template_name, context)
+        except Exception:
+            # Fallback to simple HTML if template doesn't exist
+            html_content = f"<p>Hello {context['customer_name']},</p><p>This is a {mail_type} email.</p>"
+        
+        # Send email
+        await send_email_brevo(
+            to_email=to_email,
+            subject=subject,
+            html_content=html_content
+        )
+        print(f"📧 Email sent ({mail_type}) to {to_email}")
+
+    @classmethod
+    async def _render_email_template(
+        cls,
+        template_name: str,
+        context: Dict[str, Any]
+    ) -> str:
+        """Render an email template"""
+        from services.system.templates import JinjaTemplateService
+        template_service = JinjaTemplateService(template_dir="core/utils/messages/templates")
+        rendered = await template_service.render_email(template_name, context)
+        return rendered.content
+
+    @classmethod
+    def send_order_confirmation(
+        cls,
+        background_tasks: BackgroundTasks,
+        to_email: str,
+        customer_name: str,
+        order_id: str,
+        order_number: str,
+        order_date: datetime,
+        order_total: float,
+        currency: str = "USD",
+        items: Optional[List[Dict]] = None,
+        shipping_address: Optional[str] = None,
+        estimated_delivery: Optional[datetime] = None
+    ):
+        """Queue order confirmation email"""
+        background_tasks.add_task(
+            cls._send_direct,
+            "order_confirmation",
+            to_email,
+            customer_name=customer_name,
+            order_id=order_id,
+            order_number=order_number,
+            order_date=order_date,
+            order_total=order_total,
+            currency=currency,
+            items=items,
+            shipping_address=shipping_address,
+            estimated_delivery=estimated_delivery
+        )
+
+    @classmethod
     def send_shipping_update(
         cls,
         background_tasks: BackgroundTasks,
@@ -503,3 +630,28 @@ class EmailService:
             delivery_address=delivery_address,
             delivery_notes=delivery_notes
         )
+
+    @staticmethod
+    async def _send_direct(email_type: str, to_email: str, **kwargs):
+        """Send email directly (used by background tasks)"""
+        from core.utils.messages.sender import send_email
+
+        # Simple email sending without database for background tasks
+        subject_map = {
+            "order_confirmation": "Your Order Confirmation",
+            "shipping_update": "Shipping Update",
+            "verification": "Verify Your Email",
+            "thank_you": "Thank You for Your Order",
+            "review_request": "Review Your Purchase",
+            "password_reset": "Password Reset Request",
+            "order_delivered": "Your Order Has Been Delivered"
+        }
+
+        subject = subject_map.get(email_type, "Banwee Notification")
+        body = f"Email type: {email_type}\nData: {kwargs}"
+
+        try:
+            await send_email(to_email, subject, body)
+            print(f"📧 {email_type} email sent to {to_email}")
+        except Exception as e:
+            print(f"❌ Failed to send {email_type} email: {e}")

@@ -12,7 +12,7 @@ from core.exceptions import APIException
 from core.dependencies import get_current_auth_user
 from models.accounts.user import User
 from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
-from services.accounts.user import AddressService
+from services.accounts.address import AddressService
 from core.logging import get_structured_logger as get_logger
 
 logger = get_logger(__name__)

@@ -12,7 +12,8 @@ from core.logging import get_structured_logger as get_logger
 from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword, ChangePassword
 from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
 from services.accounts.auth import AuthService
-from services.accounts.user import UserService, AddressService
+from services.accounts.user import UserService
+from services.accounts.address import AddressService
 from models.accounts.user import User
 from uuid import UUID
 import time
@@ -156,7 +157,7 @@ async def me(
 @router.get("/verify-email")  # Changed to GET as it's typically a link click
 async def verify(
     token: str = Query(..., description="Verification token"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Verify user email with token."""

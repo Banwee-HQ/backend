@@ -4,7 +4,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload, joinedload
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta, timezone
@@ -50,7 +50,7 @@ class InventoryService:
         locations = result.scalars().all()
         return [WarehouseLocationResponse.model_validate(location) for location in locations]
 
-    async def get_location(self, location_id: UUID, raw: bool = False) -> Optional[WarehouseLocationResponse | WarehouseLocation]:
+    async def get_location(self, location_id: UUID, raw: bool = False) -> Optional[Union[WarehouseLocationResponse, WarehouseLocation]]:
         """Get location by ID. Set raw=True to return SQLAlchemy model instead of response schema."""
         result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
         location = result.scalars().first()
@@ -94,7 +94,7 @@ class InventoryService:
         inventory_id: Optional[UUID] = None,
         variant_id: Optional[UUID] = None,
         serialized: bool = False
-    ) -> Optional[Inventory | dict]:
+    ) -> Optional[Union[Inventory, dict]]:
         """Get inventory item by ID or variant_id. Set serialized=True to return dict instead of model."""
         if not inventory_id and not variant_id:
             raise ValueError("Either inventory_id or variant_id must be provided")
