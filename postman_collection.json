@@ -18,261 +18,233 @@
     {
       "name": "Auth",
       "item": [
-        { "name": "Register", "request": { "method": "POST", "url": "{{base_url}}/auth/register", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\"\n}" } } },
-        { "name": "Login", "request": { "method": "POST", "url": "{{base_url}}/auth/login", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}" } } },
-        { "name": "Refresh Token", "request": { "method": "POST", "url": "{{base_url}}/auth/refresh", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" } } },
-        { "name": "Revoke Token", "request": { "method": "POST", "url": "{{base_url}}/auth/revoke", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" } } },
-        { "name": "Logout", "request": { "method": "POST", "url": "{{base_url}}/auth/logout", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}" }] } } },
-        { "name": "Get Profile", "request": { "method": "GET", "url": "{{base_url}}/auth/profile" } },
-        { "name": "Update Profile", "request": { "method": "PUT", "url": "{{base_url}}/auth/profile", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\",\n  \"phone\": \"+1234567890\"\n}" } } },
-        { "name": "Change Password", "request": { "method": "PUT", "url": "{{base_url}}/auth/change-password", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"current_password\": \"oldpass\",\n  \"new_password\": \"newpass\"\n}" } } },
-        { "name": "Get Addresses", "request": { "method": "GET", "url": "{{base_url}}/auth/addresses" } },
-        { "name": "Add Address", "request": { "method": "POST", "url": "{{base_url}}/auth/addresses", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"street\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"post_code\": \"10001\",\n  \"country\": \"US\",\n  \"is_default\": true\n}" } } },
-        { "name": "Update Address", "request": { "method": "PUT", "url": "{{base_url}}/auth/addresses/:id" } },
-        { "name": "Delete Address", "request": { "method": "DELETE", "url": "{{base_url}}/auth/addresses/:id" } },
-        { "name": "Verify Email", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/verify-email?token=TOKEN", "query": [{ "key": "token", "value": "TOKEN" }] } } },
-        { "name": "Resend Verification", "request": { "method": "POST", "url": "{{base_url}}/auth/resend-verification", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" } } },
-        { "name": "Forgot Password", "request": { "method": "POST", "url": "{{base_url}}/auth/forgot-password", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" } } },
-        { "name": "Reset Password", "request": { "method": "POST", "url": "{{base_url}}/auth/reset-password", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"token\": \"RESET_TOKEN\",\n  \"new_password\": \"newpassword\"\n}" } } }
+        { "name": "Register", "request": { "method": "POST", "url": "{{base_url}}/auth/register/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\"\n}" } } },
+        { "name": "Login", "request": { "method": "POST", "url": "{{base_url}}/auth/login/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}" } } },
+        { "name": "Refresh Token", "request": { "method": "POST", "url": "{{base_url}}/auth/refresh/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" } } },
+        { "name": "Revoke Token", "request": { "method": "POST", "url": "{{base_url}}/auth/revoke/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" } } },
+        { "name": "Logout", "request": { "method": "POST", "url": "{{base_url}}/auth/logout/", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}" }] } } },
+        { "name": "Get Profile", "request": { "method": "GET", "url": "{{base_url}}/auth/me/" } },
+        { "name": "Update Profile", "request": { "method": "PATCH", "url": "{{base_url}}/auth/me/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\",\n  \"phone\": \"+1234567890\"\n}" } } },
+        { "name": "Change Password", "request": { "method": "PUT", "url": "{{base_url}}/auth/me/password/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"current_password\": \"oldpass\",\n  \"new_password\": \"newpass\"\n}" } } },
+        { "name": "Get Addresses", "request": { "method": "GET", "url": "{{base_url}}/addresses/" } },
+        { "name": "Add Address", "request": { "method": "POST", "url": "{{base_url}}/addresses/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"street\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"post_code\": \"10001\",\n  \"country\": \"US\",\n  \"is_default\": true\n}" } } },
+        { "name": "Update Address", "request": { "method": "PATCH", "url": "{{base_url}}/addresses/:id/" } },
+        { "name": "Delete Address", "request": { "method": "DELETE", "url": "{{base_url}}/addresses/:id/" } },
+        { "name": "Verify Email", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/verify-email/?token=TOKEN", "query": [{ "key": "token", "value": "TOKEN" }] } } },
+        { "name": "Resend Verification", "request": { "method": "POST", "url": "{{base_url}}/auth/resend-verification/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" } } },
+        { "name": "Forgot Password", "request": { "method": "POST", "url": "{{base_url}}/auth/forgot-password/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" } } },
+        { "name": "Reset Password", "request": { "method": "POST", "url": "{{base_url}}/auth/reset-password/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"token\": \"RESET_TOKEN\",\n  \"new_password\": \"newpassword\"\n}" } } }
       ]
     },
     {
       "name": "Categories",
       "item": [
-        { "name": "List Categories", "request": { "method": "GET", "url": "{{base_url}}/categories" } },
-        { "name": "Get Category", "request": { "method": "GET", "url": "{{base_url}}/categories/:id" } },
-        { "name": "Create Category", "request": { "method": "POST", "url": "{{base_url}}/categories", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Cereals\",\n  \"slug\": \"cereals\",\n  \"description\": \"Cereal products\"\n}" } } },
-        { "name": "Update Category", "request": { "method": "PUT", "url": "{{base_url}}/categories/:id", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
-        { "name": "Delete Category", "request": { "method": "DELETE", "url": "{{base_url}}/categories/:id" } }
+        { "name": "List Categories", "request": { "method": "GET", "url": "{{base_url}}/categories/" } },
+        { "name": "Get Category", "request": { "method": "GET", "url": "{{base_url}}/categories/:id/" } },
+        { "name": "Create Category", "request": { "method": "POST", "url": "{{base_url}}/categories/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Cereals\",\n  \"slug\": \"cereals\",\n  \"description\": \"Cereal products\"\n}" } } },
+        { "name": "Update Category", "request": { "method": "PATCH", "url": "{{base_url}}/categories/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
+        { "name": "Delete Category", "request": { "method": "DELETE", "url": "{{base_url}}/categories/:id/" } }
       ]
     },
     {
       "name": "Products",
       "item": [
-        { "name": "Search Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/search?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
-        { "name": "Get Home Products", "request": { "method": "GET", "url": "{{base_url}}/products/home" } },
-        { "name": "List Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
-        { "name": "Get Product", "request": { "method": "GET", "url": "{{base_url}}/products/:id" } },
-        { "name": "Get Product Variants", "request": { "method": "GET", "url": "{{base_url}}/products/:id/variants" } },
-        { "name": "Get Variant", "request": { "method": "GET", "url": "{{base_url}}/products/variants/:id" } },
-        { "name": "Get Recommendations", "request": { "method": "GET", "url": "{{base_url}}/products/:id/recommendations" } },
-        { "name": "Create Product", "request": { "method": "POST", "url": "{{base_url}}/products", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Organic Coffee\",\n  \"description\": \"Premium coffee\",\n  \"category_id\": \"CATEGORY_ID\"\n}" } } },
-        { "name": "Update Product", "request": { "method": "PUT", "url": "{{base_url}}/products/:id", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
-        { "name": "Delete Product", "request": { "method": "DELETE", "url": "{{base_url}}/products/:id" } }
+        { "name": "Search Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
+        { "name": "Get Home Products", "request": { "method": "GET", "url": "{{base_url}}/products/home/" } },
+        { "name": "List Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
+        { "name": "Get Product", "request": { "method": "GET", "url": "{{base_url}}/products/:id/" } },
+        { "name": "Get Product Variants", "request": { "method": "GET", "url": "{{base_url}}/products/:id/variants/" } },
+        { "name": "Get Variant", "request": { "method": "GET", "url": "{{base_url}}/products/variants/:id/" } },
+        { "name": "Get Recommendations", "request": { "method": "GET", "url": "{{base_url}}/products/:id/recommendations/" } },
+        { "name": "Create Product", "request": { "method": "POST", "url": "{{base_url}}/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Organic Coffee\",\n  \"description\": \"Premium coffee\",\n  \"category_id\": \"CATEGORY_ID\"\n}" } } },
+        { "name": "Update Product", "request": { "method": "PUT", "url": "{{base_url}}/products/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
+        { "name": "Delete Product", "request": { "method": "DELETE", "url": "{{base_url}}/products/:id/" } }
       ]
     },
     {
       "name": "Reviews",
       "item": [
-        { "name": "List Reviews", "request": { "method": "GET", "url": "{{base_url}}/reviews" } },
-        { "name": "Create Review", "request": { "method": "POST", "url": "{{base_url}}/reviews", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"PRODUCT_ID\",\n  \"rating\": 5,\n  \"comment\": \"Great product!\"\n}" } } },
-        { "name": "Get Review", "request": { "method": "GET", "url": "{{base_url}}/reviews/:id" } },
-        { "name": "Get Product Reviews", "request": { "method": "GET", "url": "{{base_url}}/reviews/product/:id" } },
-        { "name": "Update Review", "request": { "method": "PUT", "url": "{{base_url}}/reviews/:id" } },
-        { "name": "Delete Review", "request": { "method": "DELETE", "url": "{{base_url}}/reviews/:id" } }
+        { "name": "List Reviews", "request": { "method": "GET", "url": "{{base_url}}/reviews/" } },
+        { "name": "Create Review", "request": { "method": "POST", "url": "{{base_url}}/reviews/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"PRODUCT_ID\",\n  \"rating\": 5,\n  \"comment\": \"Great product!\"\n}" } } },
+        { "name": "Get Review", "request": { "method": "GET", "url": "{{base_url}}/reviews/:id/" } },
+        { "name": "Get Product Reviews", "request": { "method": "GET", "url": "{{base_url}}/reviews/product/:id/" } },
+        { "name": "Update Review", "request": { "method": "PATCH", "url": "{{base_url}}/reviews/:id/" } },
+        { "name": "Delete Review", "request": { "method": "DELETE", "url": "{{base_url}}/reviews/:id/" } }
       ]
     },
     {
       "name": "Search",
       "item": [
-        { "name": "Search", "request": { "method": "GET", "url": { "raw": "{{base_url}}/search?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
-        { "name": "Autocomplete", "request": { "method": "GET", "url": { "raw": "{{base_url}}/search/autocomplete?q=cof", "query": [{ "key": "q", "value": "cof" }] } } }
+        { "name": "Search", "request": { "method": "GET", "url": { "raw": "{{base_url}}/search/?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
+        { "name": "Autocomplete", "request": { "method": "GET", "url": { "raw": "{{base_url}}/search/autocomplete/?q=cof", "query": [{ "key": "q", "value": "cof" }] } } }
       ]
     },
     {
       "name": "Wishlist",
       "item": [
-        { "name": "Get Wishlist", "request": { "method": "GET", "url": "{{base_url}}/wishlist" } },
-        { "name": "Add to Wishlist", "request": { "method": "POST", "url": "{{base_url}}/wishlist/add", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"PRODUCT_ID\",\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 1\n}" } } },
-        { "name": "Remove from Wishlist", "request": { "method": "DELETE", "url": "{{base_url}}/wishlist/items/:product_id" } }
+        { "name": "Get Wishlist", "request": { "method": "GET", "url": "{{base_url}}/wishlists/" } },
+        { "name": "Add to Wishlist", "request": { "method": "POST", "url": "{{base_url}}/wishlists/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"PRODUCT_ID\",\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 1\n}" } } },
+        { "name": "Remove from Wishlist", "request": { "method": "DELETE", "url": "{{base_url}}/wishlists/:product_id/" } }
       ]
     },
     {
       "name": "Cart",
       "item": [
-        { "name": "Get Cart", "request": { "method": "GET", "url": "{{base_url}}/cart" } },
-        { "name": "Add to Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/add", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 1\n}" } } },
-        { "name": "Update Cart Item", "request": { "method": "PUT", "url": "{{base_url}}/cart/items/:id", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" } } },
-        { "name": "Remove Cart Item", "request": { "method": "DELETE", "url": "{{base_url}}/cart/items/:id" } },
-        { "name": "Apply Promo Code", "request": { "method": "POST", "url": "{{base_url}}/cart/promocode", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\"\n}" } } },
-        { "name": "Remove Promo Code", "request": { "method": "DELETE", "url": "{{base_url}}/cart/promocode" } },
-        { "name": "Get Cart Count", "request": { "method": "GET", "url": "{{base_url}}/cart/count" } },
-        { "name": "Validate Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/validate" } },
-        { "name": "Get Shipping Options", "request": { "method": "POST", "url": "{{base_url}}/cart/shipping-options", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"address_id\": \"ADDRESS_ID\"\n}" } } },
-        { "name": "Calculate Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/calculate" } },
-        { "name": "Clear Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/clear" } },
-        { "name": "Checkout Summary", "request": { "method": "GET", "url": "{{base_url}}/cart/checkout-summary" } }
+        { "name": "Get Cart", "request": { "method": "GET", "url": "{{base_url}}/cart/" } },
+        { "name": "Add to Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/add/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 2\n}" } } },
+        { "name": "Update Cart Item", "request": { "method": "PUT", "url": "{{base_url}}/cart/items/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"quantity\": 3\n}" } } },
+        { "name": "Remove Cart Item", "request": { "method": "DELETE", "url": "{{base_url}}/cart/items/:id/" } },
+        { "name": "Clear Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/clear/" } },
+        { "name": "Apply Promo Code", "request": { "method": "POST", "url": "{{base_url}}/cart/promocode/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\"\n}" } } },
+        { "name": "Remove Promo Code", "request": { "method": "DELETE", "url": "{{base_url}}/cart/promocode/" } },
+        { "name": "Calculate Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/calculate/" } },
+        { "name": "Checkout Summary", "request": { "method": "GET", "url": "{{base_url}}/cart/checkout-summary/" } }
       ]
     },
     {
       "name": "Orders",
       "item": [
-        { "name": "Validate Checkout", "request": { "method": "POST", "url": "{{base_url}}/orders/checkout/validate", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shipping_address_id\": \"ADDRESS_ID\",\n  \"shipping_method_id\": \"METHOD_ID\",\n  \"payment_method_id\": \"PAYMENT_ID\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\"\n}" } } },
-        { "name": "Place Order", "request": { "method": "POST", "url": "{{base_url}}/orders/checkout", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shipping_address_id\": \"ADDRESS_ID\",\n  \"shipping_method_id\": \"METHOD_ID\",\n  \"payment_method_id\": \"PAYMENT_ID\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\"\n}" } } },
-        { "name": "List Orders", "request": { "method": "GET", "url": { "raw": "{{base_url}}/orders?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
-        { "name": "Get Order", "request": { "method": "GET", "url": "{{base_url}}/orders/:id" } },
-        { "name": "Cancel Order", "request": { "method": "PUT", "url": "{{base_url}}/orders/:id/cancel" } },
-        { "name": "Get Order Tracking", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/tracking" } },
-        { "name": "Get Invoice", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/invoice" } },
-        { "name": "Request Refund", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/refund", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Item damaged\"\n}" } } },
-        { "name": "Reorder", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/reorder" } },
-        { "name": "Add Order Note", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/notes", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"note\": \"Please leave at door\"\n}" } } },
-        { "name": "Get Order Notes", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/notes" } }
+        { "name": "Validate Checkout", "request": { "method": "POST", "url": "{{base_url}}/orders/checkout/validate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shipping_address_id\": \"ADDRESS_ID\",\n  \"shipping_method_id\": \"METHOD_ID\",\n  \"payment_method_id\": \"PAYMENT_ID\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\"\n}" } } },
+        { "name": "Place Order", "request": { "method": "POST", "url": "{{base_url}}/orders/checkout/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shipping_address_id\": \"ADDRESS_ID\",\n  \"shipping_method_id\": \"METHOD_ID\",\n  \"payment_method_id\": \"PAYMENT_ID\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\"\n}" } } },
+        { "name": "List Orders", "request": { "method": "GET", "url": { "raw": "{{base_url}}/orders/?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
+        { "name": "Get Order", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/" } },
+        { "name": "Cancel Order", "request": { "method": "PUT", "url": "{{base_url}}/orders/:id/cancel/" } },
+        { "name": "Get Order Tracking", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/tracking/" } },
+        { "name": "Get Invoice", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/invoice/" } },
+        { "name": "Request Refund", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/refund/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Item damaged\"\n}" } } },
+        { "name": "Reorder", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/reorder/" } },
+        { "name": "Add Order Note", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/notes/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"note\": \"Please leave at door\"\n}" } } },
+        { "name": "Get Order Notes", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/notes/" } }
       ]
     },
     {
       "name": "Payments",
       "item": [
-        { "name": "List Transactions", "request": { "method": "GET", "url": "{{base_url}}/payments" } },
-        { "name": "List Payment Methods", "request": { "method": "GET", "url": "{{base_url}}/payments/methods" } },
-        { "name": "Add Payment Method", "request": { "method": "POST", "url": "{{base_url}}/payments/methods", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stripe_payment_method_id\": \"pm_xxx\",\n  \"type\": \"card\",\n  \"provider\": \"visa\",\n  \"last_four\": \"4242\",\n  \"expiry_month\": 12,\n  \"expiry_year\": 2027,\n  \"is_default\": false\n}" } } },
-        { "name": "Delete Payment Method", "request": { "method": "DELETE", "url": "{{base_url}}/payments/methods/:id" } },
-        { "name": "Set Default Payment Method", "request": { "method": "PUT", "url": "{{base_url}}/payments/methods/:id/default" } },
-        { "name": "Get Failed Payments", "request": { "method": "GET", "url": "{{base_url}}/payments/failures/user/failed-payments" } },
-        { "name": "Retry Failed Payment", "request": { "method": "POST", "url": "{{base_url}}/payments/failures/:id/retry" } }
+        { "name": "List Transactions", "request": { "method": "GET", "url": "{{base_url}}/payments/" } },
+        { "name": "List Payment Methods", "request": { "method": "GET", "url": "{{base_url}}/payments/methods/" } },
+        { "name": "Add Payment Method", "request": { "method": "POST", "url": "{{base_url}}/payments/methods/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stripe_payment_method_id\": \"pm_xxx\",\n  \"type\": \"card\",\n  \"provider\": \"visa\",\n  \"last_four\": \"4242\",\n  \"expiry_month\": 12,\n  \"expiry_year\": 2027,\n  \"is_default\": false\n}" } } },
+        { "name": "Delete Payment Method", "request": { "method": "DELETE", "url": "{{base_url}}/payments/methods/:id/" } },
+        { "name": "Set Default Payment Method", "request": { "method": "PATCH", "url": "{{base_url}}/payments/methods/:id/default/" } },
+        { "name": "Get Failed Payments", "request": { "method": "GET", "url": "{{base_url}}/payments/failures/" } },
+        { "name": "Retry Failed Payment", "request": { "method": "POST", "url": "{{base_url}}/payments/failures/:payment_intent_id/retry/" } }
       ]
     },
     {
       "name": "Subscriptions",
       "item": [
-        { "name": "Calculate Cost", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/calculate-cost", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"],\n  \"billing_cycle\": \"monthly\"\n}" } } },
-        { "name": "Create Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Monthly Box\",\n  \"variant_ids\": [\"VARIANT_ID\"],\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"USD\"\n}" } } },
-        { "name": "List Subscriptions", "request": { "method": "GET", "url": "{{base_url}}/subscriptions" } },
-        { "name": "Get Subscription", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/:id" } },
-        { "name": "Update Subscription", "request": { "method": "PUT", "url": "{{base_url}}/subscriptions/:id", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"auto_renew\": true\n}" } } },
-        { "name": "Cancel Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/cancel", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Too expensive\"\n}" } } },
-        { "name": "Pause Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/pause", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"pause_reason\": \"Going on vacation\"\n}" } } },
-        { "name": "Resume Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/resume" } },
-        { "name": "Delete Subscription", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id" } },
-        { "name": "Add Products", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/products", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"]\n}" } } },
-        { "name": "Remove Products", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id/products", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"]\n}" } } },
-        { "name": "Set Variant Quantity", "request": { "method": "PUT", "url": "{{base_url}}/subscriptions/:id/products/quantity", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 2\n}" } } },
-        { "name": "Apply Discount", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/discounts", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"discount_code\": \"SAVE10\"\n}" } } },
-        { "name": "Remove Discount", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id/discounts/:discount_id" } }
+        { "name": "Calculate Cost", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/calculate-cost/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"],\n  \"billing_cycle\": \"monthly\"\n}" } } },
+        { "name": "Create Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Monthly Box\",\n  \"variant_ids\": [\"VARIANT_ID\"],\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"USD\"\n}" } } },
+        { "name": "List Subscriptions", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/" } },
+        { "name": "Get Subscription", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/:id/" } },
+        { "name": "Update Subscription", "request": { "method": "PUT", "url": "{{base_url}}/subscriptions/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"auto_renew\": true\n}" } } },
+        { "name": "Cancel Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/cancel/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"No longer needed\"\n}" } } },
+        { "name": "Pause Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/pause/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"pause_reason\": \"Temporary pause\"\n}" } } },
+        { "name": "Resume Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/resume/" } },
+        { "name": "Add Products", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"products\": [{\"variant_id\": \"VARIANT_ID\", \"quantity\": 1}]\n}" } } },
+        { "name": "Remove Products", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"]\n}" } } },
+        { "name": "Remove Single Product", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id/products/:product_id/" } },
+        { "name": "Trigger Order Processing", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/trigger-order-processing/" } },
+        { "name": "Get Subscription Plans", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/plans/" } }
       ]
     },
     {
       "name": "Shipping",
       "item": [
-        { "name": "List Shipping Methods", "request": { "method": "GET", "url": "{{base_url}}/shipping/methods" } },
-        { "name": "Get Shipping Method", "request": { "method": "GET", "url": "{{base_url}}/shipping/methods/:id" } },
-        { "name": "Create Shipping Method", "request": { "method": "POST", "url": "{{base_url}}/shipping/methods", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Standard Shipping\",\n  \"price\": 5.99,\n  \"estimated_days\": 5\n}" } } },
-        { "name": "Calculate Shipping", "request": { "method": "POST", "url": "{{base_url}}/shipping/calculate", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"address_id\": \"ADDRESS_ID\",\n  \"method_id\": \"METHOD_ID\",\n  \"items\": []\n}" } } }
+        { "name": "List Shipping Methods", "request": { "method": "GET", "url": "{{base_url}}/shipping/methods/" } },
+        { "name": "Get Shipping Method", "request": { "method": "GET", "url": "{{base_url}}/shipping/methods/:id/" } },
+        { "name": "Create Shipping Method", "request": { "method": "POST", "url": "{{base_url}}/shipping/methods/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Standard Shipping\",\n  \"price\": 5.99,\n  \"estimated_days\": 5\n}" } } },
+        { "name": "Calculate Shipping", "request": { "method": "POST", "url": "{{base_url}}/shipping/calculate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"address_id\": \"ADDRESS_ID\",\n  \"method_id\": \"METHOD_ID\",\n  \"items\": []\n}" } } },
+        { "name": "Track Shipment", "request": { "method": "POST", "url": "{{base_url}}/shipping/track/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tracking_number\": \"TRACKING_NUM\",\n  \"carrier\": \"ups\"\n}" } } }
       ]
     },
     {
       "name": "Promocodes",
       "item": [
-        { "name": "List Promocodes", "request": { "method": "GET", "url": "{{base_url}}/promocodes" } },
-        { "name": "Get Promocode", "request": { "method": "GET", "url": "{{base_url}}/promocodes/:id" } },
-        { "name": "Create Promocode", "request": { "method": "POST", "url": "{{base_url}}/promocodes", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\",\n  \"discount_type\": \"percentage\",\n  \"discount_value\": 10,\n  \"is_active\": true\n}" } } },
-        { "name": "Update Promocode", "request": { "method": "PUT", "url": "{{base_url}}/promocodes/:id" } },
-        { "name": "Delete Promocode", "request": { "method": "DELETE", "url": "{{base_url}}/promocodes/:id" } }
+        { "name": "List Promocodes", "request": { "method": "GET", "url": "{{base_url}}/promocodes/" } },
+        { "name": "Get Promocode", "request": { "method": "GET", "url": "{{base_url}}/promocodes/:id/" } },
+        { "name": "Create Promocode", "request": { "method": "POST", "url": "{{base_url}}/promocodes/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\",\n  \"discount_type\": \"percentage\",\n  \"discount_value\": 10,\n  \"is_active\": true\n}" } } },
+        { "name": "Update Promocode", "request": { "method": "PATCH", "url": "{{base_url}}/promocodes/:id/" } },
+        { "name": "Delete Promocode", "request": { "method": "DELETE", "url": "{{base_url}}/promocodes/:id/" } },
+        { "name": "Validate Promocode", "request": { "method": "POST", "url": "{{base_url}}/promocodes/validate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\"\n}" } } }
       ]
     },
     {
       "name": "Refunds",
       "item": [
-        { "name": "Request Refund", "request": { "method": "POST", "url": "{{base_url}}/refunds/orders/:id/request", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Item damaged\"\n}" } } },
-        { "name": "Check Refund Eligibility", "request": { "method": "GET", "url": "{{base_url}}/refunds/orders/:id/eligibility" } },
-        { "name": "List Refunds", "request": { "method": "GET", "url": "{{base_url}}/refunds" } },
-        { "name": "Get Refund", "request": { "method": "GET", "url": "{{base_url}}/refunds/:id" } },
-        { "name": "Cancel Refund", "request": { "method": "PUT", "url": "{{base_url}}/refunds/:id/cancel" } },
-        { "name": "Refund Stats", "request": { "method": "GET", "url": "{{base_url}}/refunds/stats/summary" } }
+        { "name": "List Refunds", "request": { "method": "GET", "url": "{{base_url}}/refunds/" } },
+        { "name": "Get Refund", "request": { "method": "GET", "url": "{{base_url}}/refunds/:id/" } },
+        { "name": "Create Refund", "request": { "method": "POST", "url": "{{base_url}}/refunds/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"ORDER_ID\",\n  \"reason\": \"Not satisfied\"\n}" } } },
+        { "name": "Update Refund", "request": { "method": "PATCH", "url": "{{base_url}}/refunds/:id/" } },
+        { "name": "Update Refund Status", "request": { "method": "PUT", "url": "{{base_url}}/refunds/:id/status/" } }
       ]
     },
     {
       "name": "Tax",
       "item": [
-        { "name": "Calculate Tax", "request": { "method": "POST", "url": "{{base_url}}/tax/calculate", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"amount\": 100.00\n}" } } },
-        { "name": "List Tax Rates", "request": { "method": "GET", "url": "{{base_url}}/tax/admin/tax-rates" } },
-        { "name": "Create Tax Rate", "request": { "method": "POST", "url": "{{base_url}}/tax/admin/tax-rates", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"rate\": 0.08,\n  \"tax_type\": \"sales\"\n}" } } }
-      ]
-    },
-    {
-      "name": "Admin",
-      "item": [
-        { "name": "Dashboard", "request": { "method": "GET", "url": "{{base_url}}/admin/dashboard" } },
-        { "name": "Stats", "request": { "method": "GET", "url": "{{base_url}}/admin/stats" } },
-        { "name": "List Orders", "request": { "method": "GET", "url": "{{base_url}}/admin/orders" } },
-        { "name": "Get Order", "request": { "method": "GET", "url": "{{base_url}}/admin/orders/:id" } },
-        { "name": "Ship Order", "request": { "method": "PUT", "url": "{{base_url}}/admin/orders/:id/ship" } },
-        { "name": "Update Order Status", "request": { "method": "PUT", "url": "{{base_url}}/admin/orders/:id/status", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"delivered\"\n}" } } },
-        { "name": "List Refunds", "request": { "method": "GET", "url": "{{base_url}}/admin/refunds" } },
-        { "name": "Update Refund Status", "request": { "method": "PUT", "url": "{{base_url}}/admin/refunds/:id/status" } },
-        { "name": "List Users", "request": { "method": "GET", "url": "{{base_url}}/admin/users" } },
-        { "name": "Get User", "request": { "method": "GET", "url": "{{base_url}}/admin/users/:id" } },
-        { "name": "Update User Status", "request": { "method": "PUT", "url": "{{base_url}}/admin/users/:id/status" } },
-        { "name": "Delete User", "request": { "method": "DELETE", "url": "{{base_url}}/admin/users/:id" } },
-        { "name": "List Subscriptions", "request": { "method": "GET", "url": "{{base_url}}/admin/subscriptions" } }
+        { "name": "Calculate Tax", "request": { "method": "POST", "url": "{{base_url}}/tax/calculate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"amount\": 100.00\n}" } } },
+        { "name": "List Tax Rates", "request": { "method": "GET", "url": "{{base_url}}/tax/rates/" } },
+        { "name": "Get Tax Rate", "request": { "method": "GET", "url": "{{base_url}}/tax/rates/:tax_rate_id/" } },
+        { "name": "Create Tax Rate", "request": { "method": "POST", "url": "{{base_url}}/tax/rates/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"rate\": 0.08,\n  \"tax_type\": \"sales\"\n}" } } },
+        { "name": "Update Tax Rate", "request": { "method": "PATCH", "url": "{{base_url}}/tax/rates/:tax_rate_id/" } },
+        { "name": "Delete Tax Rate", "request": { "method": "DELETE", "url": "{{base_url}}/tax/rates/:tax_rate_id/" } }
       ]
     },
     {
       "name": "Analytics",
       "item": [
-        { "name": "Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/dashboard" } },
-        { "name": "Simple Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/simple-dashboard" } },
-        { "name": "KPIs", "request": { "method": "GET", "url": "{{base_url}}/analytics/kpis" } },
-        { "name": "Revenue", "request": { "method": "GET", "url": "{{base_url}}/analytics/revenue" } },
-        { "name": "Sales Trend", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales-trend" } },
-        { "name": "Sales Overview", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales-overview" } },
-        { "name": "Conversion Rates", "request": { "method": "GET", "url": "{{base_url}}/analytics/conversion-rates" } },
-        { "name": "Cart Abandonment", "request": { "method": "GET", "url": "{{base_url}}/analytics/cart-abandonment" } },
-        { "name": "Refund Rates", "request": { "method": "GET", "url": "{{base_url}}/analytics/refund-rates" } },
-        { "name": "Track Event", "request": { "method": "POST", "url": "{{base_url}}/analytics/track", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"event\": \"page_view\",\n  \"properties\": {}\n}" } } }
+        { "name": "Track Event", "request": { "method": "POST", "url": "{{base_url}}/analytics/track/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"event\": \"page_view\",\n  \"properties\": {}\n}" } } },
+        { "name": "Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/dashboard/" } },
+        { "name": "Simple Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/simple-dashboard/" } },
+        { "name": "KPIs", "request": { "method": "GET", "url": "{{base_url}}/analytics/kpis/" } },
+        { "name": "Revenue", "request": { "method": "GET", "url": "{{base_url}}/analytics/revenue/" } },
+        { "name": "Sales Trend", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales-trend/" } },
+        { "name": "Sales Overview", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales-overview/" } },
+        { "name": "Conversion Rates", "request": { "method": "GET", "url": "{{base_url}}/analytics/conversion-rates/" } },
+        { "name": "Cart Abandonment", "request": { "method": "GET", "url": "{{base_url}}/analytics/cart-abandonment/" } },
+        { "name": "Refund Rates", "request": { "method": "GET", "url": "{{base_url}}/analytics/refund-rates/" } },
+        { "name": "Sales", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales/" } },
+        { "name": "Users", "request": { "method": "GET", "url": "{{base_url}}/analytics/users/" } },
+        { "name": "Products", "request": { "method": "GET", "url": "{{base_url}}/analytics/products/" } },
+        { "name": "Orders", "request": { "method": "GET", "url": "{{base_url}}/analytics/orders/" } },
+        { "name": "Stats", "request": { "method": "GET", "url": "{{base_url}}/analytics/stats/" } },
+        { "name": "Admin Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/dashboard/admin/" } },
+        { "name": "Export Orders", "request": { "method": "GET", "url": "{{base_url}}/analytics/export/orders/" } },
+        { "name": "Export Subscriptions", "request": { "method": "GET", "url": "{{base_url}}/analytics/export/subscriptions/" } }
       ]
     },
     {
       "name": "Webhooks",
       "item": [
-        { "name": "Stripe Webhook (post)", "request": { "method": "POST", "url": "{{base_url}}/commerce/webhooks/stripe", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {}\n}" } } },
-        { "name": "Webhooks Health", "request": { "method": "GET", "url": "{{base_url}}/commerce/webhooks/health" } }
-      ]
-    },
-    {
-      "name": "Shipping Tracking",
-      "item": [
-        { "name": "Create Shipment", "request": { "method": "POST", "url": "{{base_url}}/shipping_tracking/shipments", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"ORDER_ID\",\n  \"carrier\": \"DHL\",\n  \"tracking_number\": \"TRACK123\"\n}" } } },
-        { "name": "Get Shipment", "request": { "method": "GET", "url": "{{base_url}}/shipping_tracking/shipments/:shipment_id" } },
-        { "name": "Get Order Shipments", "request": { "method": "GET", "url": "{{base_url}}/shipping_tracking/orders/:order_id/shipments" } },
-        { "name": "Track Shipment", "request": { "method": "POST", "url": "{{base_url}}/shipping_tracking/track", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tracking_number\": \"TRACK123\"\n}" } } },
-        { "name": "Carrier Webhook", "request": { "method": "POST", "url": "{{base_url}}/shipping_tracking/webhooks/:carrier", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"delivered\"\n}" } } }
+        { "name": "Stripe Webhook", "request": { "method": "POST", "url": "{{base_url}}/webhooks/stripe/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {}\n}" } } },
+        { "name": "Webhooks Health", "request": { "method": "GET", "url": "{{base_url}}/webhooks/health/" } }
       ]
     },
     {
       "name": "Inventory",
       "item": [
-        { "name": "Check Stock (variant)", "request": { "method": "GET", "url": "{{base_url}}/inventory/check-stock/:variant_id" } },
-        { "name": "Bulk Check Stock", "request": { "method": "POST", "url": "{{base_url}}/inventory/check-stock/bulk", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID1\", \"VARIANT_ID2\"]\n}" } } },
-        { "name": "Create Inventory Location", "request": { "method": "POST", "url": "{{base_url}}/inventory/locations", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Warehouse\",\n  \"address\": \"123 Warehouse Rd\"\n}" } } },
-        { "name": "Create Inventory Adjustment", "request": { "method": "POST", "url": "{{base_url}}/inventory/adjustments", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"inventory_id\": \"INVENTORY_ID\",\n  \"quantity_change\": -1,\n  \"reason\": \"order_purchase\"\n}" } } }
-      ]
-    },
-    {
-      "name": "Tax",
-      "item": [
-        { "name": "Calculate Tax", "request": { "method": "POST", "url": "{{base_url}}/tax/calculate", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"amount\": 100.00\n}" } } },
-        { "name": "List Tax Rates (admin)", "request": { "method": "GET", "url": "{{base_url}}/admin/tax-rates" } },
-        { "name": "Create Tax Rate (admin)", "request": { "method": "POST", "url": "{{base_url}}/admin/tax-rates", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"rate\": 0.08\n}" } } }
+        { "name": "Create Inventory Location", "request": { "method": "POST", "url": "{{base_url}}/inventory/locations/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Warehouse\",\n  \"address\": \"123 Warehouse Rd\"\n}" } } },
+        { "name": "List Inventory Locations", "request": { "method": "GET", "url": "{{base_url}}/inventory/locations/" } },
+        { "name": "Get Inventory Location", "request": { "method": "GET", "url": "{{base_url}}/inventory/locations/:location_id/" } },
+        { "name": "Update Inventory Location", "request": { "method": "PATCH", "url": "{{base_url}}/inventory/locations/:location_id/" } },
+        { "name": "Delete Inventory Location", "request": { "method": "DELETE", "url": "{{base_url}}/inventory/locations/:location_id/" } },
+        { "name": "Create Inventory Record", "request": { "method": "POST", "url": "{{base_url}}/inventory/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"VARIANT_ID\",\n  \"location_id\": \"LOCATION_ID\",\n  \"quantity\": 100\n}" } } },
+        { "name": "List Inventory", "request": { "method": "GET", "url": "{{base_url}}/inventory/" } },
+        { "name": "Get Inventory", "request": { "method": "GET", "url": "{{base_url}}/inventory/:inventory_id/" } },
+        { "name": "Update Inventory", "request": { "method": "PATCH", "url": "{{base_url}}/inventory/:inventory_id/" } },
+        { "name": "Delete Inventory", "request": { "method": "DELETE", "url": "{{base_url}}/inventory/:inventory_id/" } },
+        { "name": "Create Inventory Adjustment", "request": { "method": "POST", "url": "{{base_url}}/inventory/adjustments/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"inventory_id\": \"INVENTORY_ID\",\n  \"quantity_change\": -1,\n  \"reason\": \"order_purchase\"\n}" } } },
+        { "name": "List Inventory Adjustments", "request": { "method": "GET", "url": "{{base_url}}/inventory/adjustments/" } },
+        { "name": "Get Inventory Adjustment", "request": { "method": "GET", "url": "{{base_url}}/inventory/adjustments/:adjustment_id/" } }
       ]
     },
     {
       "name": "Contact Messages",
       "item": [
-        { "name": "Submit Message", "request": { "method": "POST", "url": "{{base_url}}/contact-messages", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"subject\": \"Product Inquiry\",\n  \"message\": \"I have a question about your products.\"\n}" } } },
-        { "name": "List Messages", "request": { "method": "GET", "url": "{{base_url}}/contact-messages" } },
-        { "name": "Get Message", "request": { "method": "GET", "url": "{{base_url}}/contact-messages/:id" } },
-        { "name": "Update Message", "request": { "method": "PATCH", "url": "{{base_url}}/contact-messages/:id" } },
-        { "name": "Delete Message", "request": { "method": "DELETE", "url": "{{base_url}}/contact-messages/:id" } }
-      ]
-    },
-    {
-      "name": "Health",
-      "item": [
-        { "name": "Liveness", "request": { "method": "GET", "url": "{{base_url}}/health/live" } },
-        { "name": "Readiness", "request": { "method": "GET", "url": "{{base_url}}/health/ready" } },
-        { "name": "Detailed", "request": { "method": "GET", "url": "{{base_url}}/health/detailed" } },
-        { "name": "Metrics", "request": { "method": "GET", "url": "{{base_url}}/health/metrics" } }
+        { "name": "Submit Message", "request": { "method": "POST", "url": "{{base_url}}/contact-messages/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"subject\": \"Product Inquiry\",\n  \"message\": \"I have a question about your products.\"\n}" } } },
+        { "name": "List Messages", "request": { "method": "GET", "url": "{{base_url}}/contact-messages/" } },
+        { "name": "Get Message", "request": { "method": "GET", "url": "{{base_url}}/contact-messages/:id/" } },
+        { "name": "Update Message", "request": { "method": "PATCH", "url": "{{base_url}}/contact-messages/:id/" } },
+        { "name": "Delete Message", "request": { "method": "DELETE", "url": "{{base_url}}/contact-messages/:id/" } }
       ]
     }
   ]
