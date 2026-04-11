@@ -64,20 +64,22 @@ class JinjaTemplateService:
             return value.strftime('%B %d, %Y at %I:%M %p')
         return str(value)
     
-    async def render_email_template(
+    async def render(
         self,
         template_name: str,
-        context: Dict[str, Any]
-    ) -> RenderedTemplate:
+        context: Dict[str, Any],
+        template_type: str = "email"
+    ) -> Union[RenderedTemplate, RenderedExport]:
         """
-        Render an email template with the provided context
+        Render a template with the provided context
         
         Args:
             template_name: Name of the template file (e.g., 'welcome_email.html')
             context: Dictionary containing template variables
+            template_type: Type of template - "email" or "export"
             
         Returns:
-            RenderedTemplate with the rendered content
+            RenderedTemplate or RenderedExport with the rendered content
             
         Raises:
             TemplateError: If template rendering fails
@@ -85,24 +87,43 @@ class JinjaTemplateService:
         try:
             template = self.env.get_template(template_name)
             
-            # Add common email context variables
-            email_context = {
-                **context,
-                'company_name': context.get('company_name', 'Banwee'),
-                'support_email': context.get('support_email', 'support@banwee.com'),
-                'current_year': context.get('current_year', '2024'),
-                'frontend_url': context.get('frontend_url', settings.FRONTEND_URL)
-            }
-            
-            rendered_content = template.render(**email_context)
-            
-            from datetime import datetime
-            return RenderedTemplate(
-                content=rendered_content,
-                template_name=template_name,
-                context_used=email_context,
-                rendered_at=datetime.now().isoformat()
-            )
+            if template_type == "export":
+                format_type = context.get('format_type', 'html')
+                # Add common export context variables
+                export_context = {
+                    **context,
+                    'format_type': format_type,
+                    'generated_at': context.get('generated_at'),
+                    'company_name': context.get('company_name', 'Banwee')
+                }
+                rendered_content = template.render(**export_context)
+                
+                from datetime import datetime
+                return RenderedExport(
+                    content=rendered_content,
+                    format_type=format_type,
+                    template_name=template_name,
+                    data_used=export_context,
+                    rendered_at=datetime.now().isoformat()
+                )
+            else:  # email
+                # Add common email context variables
+                email_context = {
+                    **context,
+                    'company_name': context.get('company_name', 'Banwee'),
+                    'support_email': context.get('support_email', 'support@banwee.com'),
+                    'current_year': context.get('current_year', '2024'),
+                    'frontend_url': context.get('frontend_url', settings.FRONTEND_URL)
+                }
+                rendered_content = template.render(**email_context)
+                
+                from datetime import datetime
+                return RenderedTemplate(
+                    content=rendered_content,
+                    template_name=template_name,
+                    context_used=email_context,
+                    rendered_at=datetime.now().isoformat()
+                )
             
         except TemplateError as e:
             logger.error(f"Template rendering failed for {template_name}: {e}")
@@ -110,55 +131,6 @@ class JinjaTemplateService:
         except Exception as e:
             logger.error(f"Unexpected error rendering template {template_name}: {e}")
             raise TemplateError(f"Failed to render template {template_name}: {e}")
-    
-    async def render_export_template(
-        self,
-        template_name: str,
-        data: Dict[str, Any],
-        format_type: str  # "html", "csv", "json"
-    ) -> RenderedExport:
-        """
-        Render an export template with the provided data
-        
-        Args:
-            template_name: Name of the template file
-            data: Dictionary containing export data
-            format_type: Output format type
-            
-        Returns:
-            RenderedExport with the rendered content
-            
-        Raises:
-            TemplateError: If template rendering fails
-        """
-        try:
-            template = self.env.get_template(template_name)
-            
-            # Add common export context variables
-            export_context = {
-                **data,
-                'format_type': format_type,
-                'generated_at': data.get('generated_at'),
-                'company_name': data.get('company_name', 'Banwee')
-            }
-            
-            rendered_content = template.render(**export_context)
-            
-            from datetime import datetime
-            return RenderedExport(
-                content=rendered_content,
-                format_type=format_type,
-                template_name=template_name,
-                data_used=export_context,
-                rendered_at=datetime.now().isoformat()
-            )
-            
-        except TemplateError as e:
-            logger.error(f"Export template rendering failed for {template_name}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error rendering export template {template_name}: {e}")
-            raise TemplateError(f"Failed to render export template {template_name}: {e}")
     
     async def validate_template(
         self,
