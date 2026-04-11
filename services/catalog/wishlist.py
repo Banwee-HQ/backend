@@ -4,7 +4,7 @@ from sqlalchemy import select, update, delete, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from core.logging import get_structured_logger
 
 from models.catalog.wishlist import Wishlist, WishlistItem
@@ -141,121 +141,129 @@ class WishlistService:
         await self.db.commit()
         return True
 
-    async def add_item(self, wishlist_id: UUID, payload: WishlistItemCreate) -> WishlistItem:
-        try:
-            logger.info(f"Adding item to wishlist {wishlist_id}: product_id={payload.product_id}, variant_id={payload.variant_id}")
-
-            # Validate product exists
-            product_exists = await self.db.execute(
-                select(Product).filter(Product.id == payload.product_id)
-            )
-            if not product_exists.scalar_one_or_none():
-                logger.warning(f"Attempted to add non-existent product {payload.product_id} to wishlist {wishlist_id}")
-                raise HTTPException(status_code=404, detail="Product not found")
-
-            # Validate variant exists
-            variant_exists = await self.db.execute(
-                select(ProductVariant).filter(ProductVariant.id == payload.variant_id)
-            )
-            if not variant_exists.scalar_one_or_none():
-                logger.warning(f"Attempted to add non-existent variant {payload.variant_id} to wishlist {wishlist_id}")
-                raise HTTPException(status_code=404, detail="Variant not found")
-
-            new_item = WishlistItem(
-                id=uuid7(),
-                wishlist_id=wishlist_id,
-                product_id=payload.product_id,
-                variant_id=payload.variant_id,
-                quantity=payload.quantity
-            )
-            self.db.add(new_item)
-            await self.db.commit()
-            await self.db.refresh(new_item)
-
-            # Re-fetch the wishlist item with product and variant eagerly loaded
-            query = select(WishlistItem).where(WishlistItem.id == new_item.id).options(
-                selectinload(WishlistItem.product),
-                selectinload(WishlistItem.variant).selectinload(ProductVariant.images)
-            )
-            refetched_item = await self.db.execute(query)
-            refetched_item = refetched_item.scalar_one_or_none()
-
-            if not refetched_item:
-                logger.error(f"Failed to retrieve newly created wishlist item {new_item.id}")
-                raise Exception("Failed to retrieve newly created wishlist item with relationships.")
-
-            logger.info(f"Successfully added item {refetched_item.id} to wishlist {wishlist_id}")
-            return refetched_item
-        except HTTPException as http_exc:
-            # Re-raise HTTPException to be handled by the framework
-            raise http_exc
-        except Exception as e:
-            logger.error(f"Error in add_item_to_wishlist for wishlist_id {wishlist_id}: {str(e)}", exc_info=True)
-            await self.db.rollback()
-            # Wrap other exceptions in a generic 500 error
-            raise HTTPException(status_code=500, detail="An unexpected error occurred while adding the item.")
-
-    async def items(
+    async def item(
         self,
+        action: str,
         wishlist_id: UUID,
         user_id: UUID,
-        page: int = 1,
-        limit: int = 20
-    ) -> Dict[str, Any]:
-        """Get paginated wishlist items"""
-        try:
-            logger.info(f"Fetching items for wishlist {wishlist_id}, user_id: {user_id}, page={page}, limit={limit}")
-            offset = (page - 1) * limit
-            
-            # Build queries
-            base_query = select(WishlistItem).where(WishlistItem.wishlist_id == wishlist_id)
-            count_query = select(func.count()).select_from(WishlistItem).where(WishlistItem.wishlist_id == wishlist_id)
-            
-            # Get total count
-            total_result = await self.db.execute(count_query)
-            total = total_result.scalar() or 0
-            
-            # Get paginated items with eager loading
-            query = base_query.options(
-                selectinload(WishlistItem.product),
-                selectinload(WishlistItem.variant).selectinload(ProductVariant.images)
-            ).offset(offset).limit(limit)
-            
-            result = await self.db.execute(query)
-            items = result.scalars().all()
-            
-            logger.info(f"Successfully fetched {len(items)} items for wishlist {wishlist_id}")
-            return {
-                "items": list(items),
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "pages": (total + limit - 1) // limit if limit > 0 else 0
-            }
-        except Exception as e:
-            logger.error(f"Error in get_wishlist_items for wishlist_id {wishlist_id}: {str(e)}", exc_info=True)
-            raise
+        item_id: Optional[UUID] = None,
+        payload: Optional[WishlistItemCreate] = None
+    ) -> Union[WishlistItem, bool, List[WishlistItem]]:
+        """
+        Manage wishlist items: add, remove, or list
+        
+        Args:
+            action: "add", "remove", or "list"
+            wishlist_id: The wishlist ID
+            user_id: The user ID (for verification)
+            item_id: Required for "remove" action
+            payload: Required for "add" action
+        """
+        if action == "list":
+            try:
+                logger.info(f"Fetching items for wishlist {wishlist_id}, user_id: {user_id}")
 
-    async def remove_item(self, wishlist_id: UUID, item_id: UUID) -> bool:
-        try:
-            logger.info(f"Removing item {item_id} from wishlist {wishlist_id}")
-            query = select(WishlistItem).where(WishlistItem.id ==
-                                               item_id, WishlistItem.wishlist_id == wishlist_id)
-            result = await self.db.execute(query)
-            item = result.scalar_one_or_none()
+                # First verify the wishlist belongs to the user
+                wishlist = await self.get(wishlist_id, user_id)
+                if not wishlist:
+                    logger.warning(f"Wishlist {wishlist_id} not found for user {user_id}")
+                    raise HTTPException(status_code=404, detail="Wishlist not found")
 
-            if not item:
-                logger.warning(f"Item {item_id} not found in wishlist {wishlist_id}")
-                return False
+                query = select(WishlistItem).where(WishlistItem.wishlist_id == wishlist_id).options(
+                    selectinload(WishlistItem.product),
+                    selectinload(WishlistItem.variant).selectinload(ProductVariant.images)
+                )
+                result = await self.db.execute(query)
+                items = result.scalars().all()
 
-            await self.db.delete(item)
-            await self.db.commit()
-            logger.info(f"Successfully removed item {item_id} from wishlist {wishlist_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Error in remove_item_from_wishlist for wishlist_id {wishlist_id}, item_id {item_id}: {str(e)}", exc_info=True)
-            await self.db.rollback()
-            raise
+                logger.info(f"Found {len(items)} items in wishlist {wishlist_id}")
+                return items
+            except HTTPException as http_exc:
+                raise http_exc
+            except Exception as e:
+                logger.error(f"Error listing items for wishlist_id {wishlist_id}: {str(e)}", exc_info=True)
+                raise
+        
+        elif action == "add":
+            if not payload:
+                raise HTTPException(status_code=400, detail="Payload required for add action")
+            
+            try:
+                logger.info(f"Adding item to wishlist {wishlist_id}: product_id={payload.product_id}, variant_id={payload.variant_id}")
+
+                # Validate product exists
+                product_exists = await self.db.execute(
+                    select(Product).filter(Product.id == payload.product_id)
+                )
+                if not product_exists.scalar_one_or_none():
+                    logger.warning(f"Attempted to add non-existent product {payload.product_id} to wishlist {wishlist_id}")
+                    raise HTTPException(status_code=404, detail="Product not found")
+
+                # Validate variant exists
+                variant_exists = await self.db.execute(
+                    select(ProductVariant).filter(ProductVariant.id == payload.variant_id)
+                )
+                if not variant_exists.scalar_one_or_none():
+                    logger.warning(f"Attempted to add non-existent variant {payload.variant_id} to wishlist {wishlist_id}")
+                    raise HTTPException(status_code=404, detail="Variant not found")
+
+                new_item = WishlistItem(
+                    id=uuid7(),
+                    wishlist_id=wishlist_id,
+                    product_id=payload.product_id,
+                    variant_id=payload.variant_id,
+                    quantity=payload.quantity
+                )
+                self.db.add(new_item)
+                await self.db.commit()
+                await self.db.refresh(new_item)
+
+                # Re-fetch the wishlist item with product and variant eagerly loaded
+                query = select(WishlistItem).where(WishlistItem.id == new_item.id).options(
+                    selectinload(WishlistItem.product),
+                    selectinload(WishlistItem.variant).selectinload(ProductVariant.images)
+                )
+                refetched_item = await self.db.execute(query)
+                refetched_item = refetched_item.scalar_one_or_none()
+
+                if not refetched_item:
+                    logger.error(f"Failed to retrieve newly created wishlist item {new_item.id}")
+                    raise Exception("Failed to retrieve newly created wishlist item with relationships.")
+
+                logger.info(f"Successfully added item {refetched_item.id} to wishlist {wishlist_id}")
+                return refetched_item
+            except HTTPException as http_exc:
+                raise http_exc
+            except Exception as e:
+                logger.error(f"Error adding item to wishlist_id {wishlist_id}: {str(e)}", exc_info=True)
+                await self.db.rollback()
+                raise
+        
+        elif action == "remove":
+            if not item_id:
+                raise HTTPException(status_code=400, detail="item_id required for remove action")
+            
+            try:
+                logger.info(f"Removing item {item_id} from wishlist {wishlist_id}")
+                query = select(WishlistItem).where(WishlistItem.id == item_id, WishlistItem.wishlist_id == wishlist_id)
+                result = await self.db.execute(query)
+                item = result.scalar_one_or_none()
+
+                if not item:
+                    logger.warning(f"Item {item_id} not found in wishlist {wishlist_id}")
+                    return False
+
+                await self.db.delete(item)
+                await self.db.commit()
+                logger.info(f"Successfully removed item {item_id} from wishlist {wishlist_id}")
+                return True
+            except Exception as e:
+                logger.error(f"Error removing item from wishlist_id {wishlist_id}, item_id {item_id}: {str(e)}", exc_info=True)
+                await self.db.rollback()
+                raise
+        
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid action: {action}. Use 'add', 'remove', or 'list'")
 
     async def set_default(self, user_id: UUID, wishlist_id: UUID) -> Optional[Wishlist]:
         await self._clear_default_wishlist(user_id)
