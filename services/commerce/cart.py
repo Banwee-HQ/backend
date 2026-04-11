@@ -639,12 +639,11 @@ class CartService:
 
     async def checkout_summary(
         self,
-        user_id: Optional[UUID] = None,
-        session_id: Optional[str] = None
+        user_id: UUID
     ) -> Dict[str, Any]:
         """Get cart summary for checkout"""
         
-        cart_data = await self.get_cart(user_id=user_id, session_id=session_id)
+        cart_data = await self.get_cart(user_id=user_id)
         
         # Add checkout-specific information
         checkout_summary = {
@@ -656,35 +655,29 @@ class CartService:
         
         return checkout_summary
 
-    async def apply_promo(
+    async def promo(
         self,
-        user_id: Optional[UUID] = None,
-        code: str = None,
-        session_id: Optional[str] = None
+        user_id: UUID,
+        action: str = "apply",
+        code: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Apply promocode to cart (placeholder implementation)"""
-        # This would integrate with a promocode service
-        # For now, return cart without changes
-        cart_data = await self.get_cart(user_id=user_id, session_id=session_id)
-        return {
-            **cart_data,
-            "promocode_applied": False,
-            "message": "Promocode functionality not yet implemented"
-        }
-
-    async def remove_promo(
-        self,
-        user_id: UUID
-    ) -> Dict[str, Any]:
-        """Remove promocode from cart (placeholder implementation)"""
+        """Apply or remove promocode from cart (placeholder implementation)"""
         # This would integrate with a promocode service
         # For now, return cart without changes
         cart_data = await self.get_cart(user_id=user_id)
-        return {
-            **cart_data,
-            "promocode_removed": True,
-            "message": "Promocode removed"
-        }
+        
+        if action == "remove":
+            return {
+                **cart_data,
+                "promocode_removed": True,
+                "message": "Promocode removed"
+            }
+        else:  # apply
+            return {
+                **cart_data,
+                "promocode_applied": False,
+                "message": "Promocode functionality not yet implemented"
+            }
 
     async def shipping_options(
         self,
