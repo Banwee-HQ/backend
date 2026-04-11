@@ -410,14 +410,6 @@ class UserService:
         # For now, just return success
         return True
 
-    async def deactivate(self, user_id: UUID) -> Optional[User]:
-        """Deactivate user account (admin only)."""
-        return await self.update_status(user_id, False)
-
-    async def activate(self, user_id: UUID) -> Optional[User]:
-        """Activate user account (admin only)."""
-        return await self.update_status(user_id, True)
-
     async def verify(self, user_id: UUID) -> Optional[User]:
         """Verify user account (admin only)."""
         query = select(User).where(User.id == user_id)
