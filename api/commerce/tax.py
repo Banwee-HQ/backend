@@ -8,12 +8,13 @@ from typing import Optional, List
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user
 from core.exceptions import APIException
 from core.utils.response import Response
 from services.commerce.tax import TaxService
 from schemas.commerce.tax import Calculation, RateCreate, RateUpdate
 from models.commerce.tax_rates import TaxRate
+from models.accounts.user import UserRole
 
 router = APIRouter(prefix="/tax", tags=["tax"])
 
@@ -528,12 +529,26 @@ async def bulk_update(
         )
 
 
-# ==========================================================
-# ADMIN ENDPOINTS - Tax Rate Management
-# ==========================================================
-
-@router.get("/admin/rates", dependencies=[Depends(require_admin)])
-async def list_tax_rates(
+@router.get("/admin/rates")
+async def list_rates(
+    country_code: Optional[str] = Query(None),
+    province_code: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    current_user = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all tax rates (admin only)."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise APIException(status_code=403, message="Admin access required")
+    
+    from sqlalchemy import select as sa_select, and_, or_, func
+    
+    try:
+        query = sa_select(TaxRate)
+        count_query = sa_select(func.count(TaxRate.id))
     country_code: Optional[str] = Query(None),
     province_code: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
@@ -607,8 +622,8 @@ async def list_tax_rates(
         raise HTTPException(status_code=500, detail=f"Failed to fetch tax rates: {str(e)}")
 
 
-@router.post("/admin/rates", dependencies=[Depends(require_admin)], status_code=status.HTTP_201_CREATED)
-async def create_tax_rate(
+@router.post("/admin/rates", status_code=status.HTTP_201_CREATED)
+async def create_rate(
     data: RateCreate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -663,8 +678,8 @@ async def create_tax_rate(
         raise HTTPException(status_code=500, detail=f"Failed to create tax rate: {str(e)}")
 
 
-@router.patch("/admin/rates/{tax_rate_id}", dependencies=[Depends(require_admin)])
-async def update_tax_rate(
+@router.patch("/admin/rates/{tax_rate_id}")
+async def update_rate(
     tax_rate_id: UUID,
     data: RateUpdate,
     db: AsyncSession = Depends(get_db)
@@ -714,8 +729,8 @@ async def update_tax_rate(
         raise HTTPException(status_code=500, detail=f"Failed to update tax rate: {str(e)}")
 
 
-@router.delete("/admin/rates/{tax_rate_id}", dependencies=[Depends(require_admin)])
-async def delete_tax_rate(
+@router.delete("/admin/rates/{tax_rate_id}")
+async def delete_rate(
     tax_rate_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):

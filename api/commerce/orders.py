@@ -206,14 +206,15 @@ async def create_note(
 
 
 @router.get("/{order_id}/notes/{note_index}")
-async def get(
+async def get_note(
     order_id: UUID,
     note_index: int,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get a specific note by index."""
     try:
+        order_service = OrderService(db)
         note = await order_service.get_note(order_id, current_user.id, note_index)
         if not note:
             raise APIException(status_code=404, message="Note not found")
@@ -225,7 +226,7 @@ async def get(
 
 
 @router.get("/{order_id}/notes")
-async def list(
+async def list_notes(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
@@ -243,13 +244,14 @@ async def list(
 # ORDER TRACKING - Moved from shipping_tracking.py
 # ==========================================================
 @router.get("/{order_id}/tracking")
-async def get_order_tracking(
+async def get_tracking(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order tracking information (authenticated)."""
     try:
+        order_service = OrderService(db)
         tracking = await order_service.tracking(order_id, current_user.id)
         if tracking is None:
             raise APIException(status_code=404, message="Order not found or tracking unavailable")
@@ -289,6 +291,7 @@ async def get_public_tracking(
 ):
     """Get order tracking (public - no auth required)."""
     try:
+        order_service = OrderService(db)
         tracking = await order_service.tracking_public(order_id)
         return Response.success(data=tracking)
     except Exception:
@@ -299,16 +302,14 @@ async def get_public_tracking(
 async def update_status(
     order_id: str,
     request: dict,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update order status (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
-        result = await order_service.update_status(order_id, request.get("status"), request.get("notes"))
-        return Response.success(data=result, message="Order status updated")
+        updated_order = await order_service.update_status(order_id, request.get("status"), request.get("notes"))
+        return Response.success(data=updated_order, message="Order status updated")
     except APIException:
         raise
     except Exception as e:
@@ -319,13 +320,11 @@ async def update_status(
 async def deliver(
     order_id: str,
     request: dict = {},
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Mark order as delivered (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.deliver(order_id, request.get("notes"))
         return Response.success(data=result, message="Order marked as delivered")
@@ -339,13 +338,11 @@ async def deliver(
 async def ship(
     order_id: str,
     request: dict,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Ship order (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.ship(order_id, request.get("carrier"), request.get("tracking_number"))
         return Response.success(data=result, message="Order shipped")
@@ -359,13 +356,11 @@ async def ship(
 async def statistics(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order statistics (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
         return Response.success(data=stats)
