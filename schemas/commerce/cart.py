@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field, ConfigDict, computed_field
+from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
-from schemas.catalog.product import VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse
+from schemas.catalog.product import VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse, normalize_dietary_tags
 
 
 class Add(BaseModel):
@@ -25,13 +25,18 @@ class EnhancedProductVariantResponse(ProductVariantResponse):
     product_rating_count: Optional[int] = None
     product_is_featured: Optional[bool] = None
     product_specifications: Optional[Dict[str, Any]] = None
-    product_dietary_tags: Optional[List[str]] = None
+    product_dietary_tags: Optional[Dict[str, Any]] = None
     product_tags: Optional[List[str]] = None
     product_origin: Optional[str] = None
     image_count: int = 0
     inventory_quantity_available: Optional[int] = None
     inventory_reorder_level: Optional[int] = None
     inventory_last_updated: Optional[str] = None
+
+    @field_validator('product_dietary_tags', mode='before')
+    @classmethod
+    def validate_product_dietary_tags(cls, v):
+        return normalize_dietary_tags(v)
 
     model_config = ConfigDict(from_attributes=True, json_encoders={
         datetime: lambda v: v.isoformat() if v else None

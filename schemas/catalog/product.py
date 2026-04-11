@@ -1,9 +1,20 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from uuid import UUID
 
 from models.catalog.product import ProductStatus, AvailabilityStatus
+
+def normalize_dietary_tags(value):
+    """Normalize dietary_tags to always be a dict, handling both list and dict inputs."""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        # Convert list to dict with True values
+        return {tag: True for tag in value}
+    return {}
 
 
 class ImageResponse(BaseModel):
@@ -29,10 +40,15 @@ class VariantCreate(BaseModel):
     stock: int = 0
     attributes: Optional[Dict[str, Any]] = {}
     specifications: Optional[Dict[str, Any]] = None
-    dietary_tags: Optional[List[str]] = []
+    dietary_tags: Optional[Dict[str, Any]] = {}
     tags: Optional[str] = None
     availability_status: str = "available"
     image_urls: Optional[List[str]] = []  # jsDelivr CDN URLs
+
+    @field_validator('dietary_tags', mode='before')
+    @classmethod
+    def validate_dietary_tags(cls, v):
+        return normalize_dietary_tags(v)
 
 
 class Create(BaseModel):
@@ -66,11 +82,16 @@ class VariantUpdate(BaseModel):
     stock: Optional[int] = None
     attributes: Optional[Dict[str, Any]] = None
     specifications: Optional[Dict[str, Any]] = None
-    dietary_tags: Optional[List[str]] = None
+    dietary_tags: Optional[Dict[str, Any]] = None
     tags: Optional[str] = None
     is_active: Optional[bool] = None
     availability_status: Optional[AvailabilityStatus] = None
     images: Optional[List[Dict[str, Any]]] = None  # List of image objects with id, url, alt_text, is_primary, sort_order
+
+    @field_validator('dietary_tags', mode='before')
+    @classmethod
+    def validate_dietary_tags(cls, v):
+        return normalize_dietary_tags(v)
 
 
 class Update(BaseModel):
@@ -107,7 +128,7 @@ class VariantResponse(BaseModel):
     stock: int
     attributes: Optional[Dict[str, Any]]
     specifications: Optional[Dict[str, Any]] = None
-    dietary_tags: Optional[List[str]] = []
+    dietary_tags: Optional[Dict[str, Any]] = {}
     tags: List[str] = []
     availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE
     view_count: int = 0
@@ -120,6 +141,11 @@ class VariantResponse(BaseModel):
     updated_at: Optional[datetime] = None
     product_name: Optional[str] = None
     product_description: Optional[str] = None
+
+    @field_validator('dietary_tags', mode='before')
+    @classmethod
+    def validate_dietary_tags(cls, v):
+        return normalize_dietary_tags(v)
 
     model_config = ConfigDict(
         from_attributes=True,

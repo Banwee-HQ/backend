@@ -50,11 +50,11 @@ async def get_home_data(
         # Fetch featured products (4 items)
         featured = await product_service.featured(limit=4)
         
-        # Fetch popular/recent products (20 items for filtering by category)
+        # Fetch popular/recent products (8 items)
         try:
             popular_result = await product_service.list(
                 page=1,
-                limit=20,
+                limit=8,
                 filters={},
                 sort_by="created_at",
                 sort_order="desc"
@@ -64,11 +64,11 @@ async def get_home_data(
             logger.warning(f"Failed to fetch popular products: {e}")
             popular_products = []
         
-        # Fetch products on sale for deals section (10 items)
+        # Fetch products on sale for deals section (4 items)
         try:
             deals_result = await product_service.list(
                 page=1,
-                limit=10,
+                limit=4,
                 filters={"sale": True},
                 sort_by="created_at",
                 sort_order="desc"
@@ -84,7 +84,7 @@ async def get_home_data(
 
         if not deals_products:
             # Use recent products as deals fallback
-            deals_products = popular_products[:10] if popular_products else featured[:10]
+            deals_products = popular_products[:4] if popular_products else featured[:4]
         
         return Response.success(
             data={
