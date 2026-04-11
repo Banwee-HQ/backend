@@ -78,13 +78,19 @@ async def list(
         order_service = OrderService(db)
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
-        if is_admin:
-            orders = await order_service.get_all_orders(
-                page=page, limit=limit, customer_id=customer_id, status=status_filter,
-                date_from=date_from, date_to=date_to, sort_by=sort_by, sort_order=sort_order
-            )
-        else:
-            orders = await order_service.list(current_user.id, page, limit, status_filter)
+        # Use consolidated list method: user_id=None for admin (all orders), user_id=current_user.id for users
+        target_user_id = None if is_admin else current_user.id
+        
+        orders = await order_service.list(
+            user_id=target_user_id,
+            page=page,
+            limit=limit,
+            status=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
             
         if isinstance(orders, dict):
             if "orders" in orders and "pagination" in orders:

@@ -159,22 +159,39 @@ class RefundService:
     
     async def list(
         self,
-        user_id: UUID,
+        user_id: Optional[UUID] = None,
         status: Optional[RefundStatus] = None,
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc"
     ) -> Dict[str, Any]:
-        """Get user's refund history with pagination"""
+        """Get refund history with pagination. If user_id is None, returns all refunds (admin)."""
         try:
             offset = (page - 1) * limit
             
             # Build base query
-            base_query = select(Refund).where(Refund.user_id == user_id)
-            count_query = select(func.count()).select_from(Refund).where(Refund.user_id == user_id)
+            if user_id:
+                base_query = select(Refund).where(Refund.user_id == user_id)
+                count_query = select(func.count()).select_from(Refund).where(Refund.user_id == user_id)
+            else:
+                # Admin query - all refunds with user info
+                base_query = select(Refund).options(selectinload(Refund.user))
+                count_query = select(func.count()).select_from(Refund)
             
             if status:
                 base_query = base_query.where(Refund.status == status)
                 count_query = count_query.where(Refund.status == status)
+            
+            # Apply sorting
+            sort_column = Refund.created_at
+            if sort_by == "amount":
+                sort_column = Refund.requested_amount
+            
+            if sort_order == "asc":
+                base_query = base_query.order_by(sort_column.asc())
+            else:
+                base_query = base_query.order_by(sort_column.desc())
             
             # Get total count
             total_result = await self.db.execute(count_query)
@@ -184,13 +201,21 @@ class RefundService:
             query = base_query.options(
                 selectinload(Refund.order),
                 selectinload(Refund.refund_items).selectinload(RefundItem.order_item)
-            ).order_by(desc(Refund.created_at)).limit(limit).offset(offset)
+            ).limit(limit).offset(offset)
             
             result = await self.db.execute(query)
             refunds = result.scalars().all()
             
+            # Format response
+            items = []
+            for refund in refunds:
+                refund_data = await self._format_refund_response(refund)
+                if not user_id and refund.user:
+                    refund_data["customer_name"] = refund.user.full_name
+                items.append(refund_data)
+            
             return {
-                "items": [await self._format_refund_response(refund) for refund in refunds],
+                "items": items,
                 "total": total,
                 "page": page,
                 "limit": limit,
@@ -198,26 +223,39 @@ class RefundService:
             }
             
         except Exception as e:
-            logger.error(f"Failed to get user refunds: {e}")
+            logger.error(f"Failed to get refunds: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve refunds")
     
-    async def get(self, user_id: UUID, refund_id: UUID) -> RefundResponse:
-        """Get detailed refund information"""
+    async def get(self, refund_id: UUID, user_id: Optional[UUID] = None) -> RefundResponse:
+        """Get detailed refund information. If user_id is None, admin access (no user filter)."""
         try:
-            refund = await self.db.execute(
-                select(Refund)
-                .where(and_(Refund.id == refund_id, Refund.user_id == user_id))
-                .options(
-                    selectinload(Refund.order),
-                    selectinload(Refund.refund_items).selectinload(RefundItem.order_item)
-                )
+            query = select(Refund).where(Refund.id == refund_id).options(
+                selectinload(Refund.order),
+                selectinload(Refund.refund_items).selectinload(RefundItem.order_item),
+                selectinload(Refund.user)
             )
-            refund = refund.scalar_one_or_none()
+            
+            # Apply user filter if provided (user access)
+            if user_id:
+                query = query.where(Refund.user_id == user_id)
+            
+            result = await self.db.execute(query)
+            refund = result.scalar_one_or_none()
             
             if not refund:
                 raise HTTPException(status_code=404, detail="Refund not found")
             
-            return await self._format_refund_response(refund)
+            refund_data = await self._format_refund_response(refund)
+            
+            # Include user info for admin access
+            if not user_id and refund.user:
+                refund_data["customer"] = {
+                    "id": str(refund.user.id),
+                    "name": refund.user.full_name,
+                    "email": refund.user.email
+                }
+            
+            return refund_data
             
         except HTTPException:
             raise
