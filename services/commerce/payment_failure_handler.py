@@ -26,6 +26,7 @@ class PaymentFailureHandler:
         stripe_error: Optional[Dict[str, Any]] = None,
         failure_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        """Handle payment failure and return user guidance"""
         try:
             result = await self.db.execute(
                 select(PaymentIntent).where(PaymentIntent.id == payment_intent_id)
@@ -69,6 +70,7 @@ class PaymentFailureHandler:
             }
 
     def _map_failure_reason(self, stripe_error: Optional[Dict[str, Any]]) -> PaymentFailureReason:
+        """Map Stripe error to payment failure reason"""
         if not stripe_error:
             return PaymentFailureReason.UNKNOWN
 
@@ -98,6 +100,7 @@ class PaymentFailureHandler:
         return PaymentFailureReason.UNKNOWN
 
     def _user_guidance(self, reason: PaymentFailureReason) -> tuple[str, str]:
+        """Get user-friendly message and next steps for failure reason"""
         mapping = {
             PaymentFailureReason.INSUFFICIENT_FUNDS: (
                 "Payment failed due to insufficient funds.",

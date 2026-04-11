@@ -13,6 +13,7 @@ class PromocodeService:
         self.db = db
 
     async def create(self, promocode_data: PromocodeCreate) -> Promocode:
+        """Create a new promocode"""
         new_promocode = Promocode(
             id=uuid7(),
             **promocode_data.dict(exclude_unset=True)
@@ -48,6 +49,7 @@ class PromocodeService:
         limit: int = 10,
         is_active: Optional[bool] = None
     ) -> Tuple[List[Promocode], int]:
+        """List all promocodes with pagination"""
         query = select(Promocode)
         count_query = select(func.count()).select_from(Promocode)
 
@@ -63,6 +65,7 @@ class PromocodeService:
         return result.scalars().all(), total
 
     async def update(self, promocode_id: UUID, promocode_data: PromocodeUpdate) -> Optional[Promocode]:
+        """Update a promocode"""
         promocode = await self.get(promocode_id)
         if not promocode:
             raise APIException(status_code=404, message="Promocode not found")
@@ -75,6 +78,7 @@ class PromocodeService:
         return promocode
 
     async def delete(self, promocode_id: UUID) -> bool:
+        """Delete a promocode"""
         promocode = await self.get(promocode_id)
         if not promocode:
             return False
