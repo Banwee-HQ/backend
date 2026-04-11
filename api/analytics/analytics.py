@@ -11,9 +11,9 @@ from uuid import UUID
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin, get_analytics_service
+from core.dependencies import get_current_auth_user, get_analytics_service
 from core.utils.response import Response
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from models.system import EventType
 from models.accounts import TrafficSource
 from services.analytics.analytics import AnalyticsService
@@ -70,7 +70,7 @@ async def conversion_rates(
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     traffic_source: Optional[TrafficSource] = Query(None, description="Filter by traffic source"),
     days: Optional[int] = Query(30, description="Number of days back from today (if dates not provided)"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -109,7 +109,7 @@ async def cart_abandonment(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -147,7 +147,7 @@ async def time_to_purchase(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -185,7 +185,7 @@ async def refund_rates(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -223,7 +223,7 @@ async def repeat_customers(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -342,7 +342,7 @@ async def dashboard(
 @router.get("/sales-trend")
 async def sales_trend(
     days: int = Query(30, description="Number of days to analyze"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -381,7 +381,7 @@ async def sales_overview(
     categories: Optional[str] = Query(None, description="Comma-separated category IDs"),
     regions: Optional[str] = Query(None, description="Comma-separated region IDs"),
     sales_channels: Optional[str] = Query("online,instore", description="Comma-separated sales channels"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -430,7 +430,7 @@ async def kpis(
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(7, description="Number of days back from today"),
     compare_previous: bool = Query(True, description="Include comparison with previous period"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -537,7 +537,7 @@ async def sales(
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """Get sales analytics. Requires admin access."""
@@ -563,7 +563,7 @@ async def sales(
 @router.get("/users")
 async def users(
     days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get user analytics. Requires admin access."""
@@ -598,7 +598,7 @@ async def users(
 @router.get("/products")
 async def products(
     days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get product analytics. Requires admin access."""
@@ -629,7 +629,7 @@ async def products(
 @router.get("/orders")
 async def orders(
     days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order analytics. Requires admin access."""
@@ -666,7 +666,7 @@ async def revenue(
     start_date: Optional[datetime] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date (ISO format)"),
     days: Optional[int] = Query(30, description="Number of days back from today"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
@@ -699,21 +699,19 @@ async def revenue(
         )
 
 
-# ==========================================================
-# ADMIN ANALYTICS ENDPOINTS - Moved from admin.py
-# ==========================================================
-
-@router.get("/admin/stats", dependencies=[Depends(require_admin)])
-async def get_admin_stats(
+@router.get("/admin/stats")
+async def admin_stats(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """Get admin dashboard statistics with filters."""
+    """Get admin dashboard statistics with filters (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         stats = await analytics_service.get_admin_stats(
             date_from=date_from,
             date_to=date_to,
@@ -721,6 +719,8 @@ async def get_admin_stats(
             category=category
         )
         return Response.success(data=stats)
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -728,19 +728,23 @@ async def get_admin_stats(
         )
 
 
-@router.get("/admin/dashboard", dependencies=[Depends(require_admin)])
-async def get_admin_dashboard(
+@router.get("/admin/dashboard")
+async def admin_dashboard(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """Get comprehensive admin dashboard data."""
+    """Get comprehensive admin dashboard data (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         overview = await analytics_service.get_admin_overview()
         return Response.success(data=overview)
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -748,8 +752,8 @@ async def get_admin_dashboard(
         )
 
 
-@router.get("/admin/export/orders", dependencies=[Depends(require_admin)])
-async def export_orders_admin(
+@router.get("/admin/export/orders")
+async def export_orders(
     format: str = Query("csv"),
     order_status: Optional[str] = Query(None, alias="status"),
     q: Optional[str] = Query(None),
@@ -757,13 +761,16 @@ async def export_orders_admin(
     date_to: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Export orders to CSV, Excel, or PDF (admin only)."""
     from fastapi.responses import StreamingResponse
     from services.export import ExportService
     from services.commerce.orders import OrderService
+
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise APIException(status_code=403, message="Admin access required")
 
     if format not in ['csv', 'excel', 'pdf']:
         raise APIException(
