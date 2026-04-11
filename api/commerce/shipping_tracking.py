@@ -12,10 +12,11 @@ from uuid import UUID
 from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.commerce.shipping_tracking import ShippingTrackingService
+from models.accounts.user import UserRole
 from datetime import datetime
 
 from schemas.commerce.shipping_tracking import (
@@ -219,11 +220,13 @@ async def list(
 @router.post("/providers")
 async def create_provider(
     provider_data: dict,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new shipping provider (Admin only)"""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         provider = ShippingProvider(
             name=provider_data['name'],
             carrier=provider_data['carrier'],
@@ -254,11 +257,13 @@ async def create_provider(
 
 @router.get("/providers")
 async def list_providers(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all shipping providers (Admin only)"""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         result = await db.execute(select(ShippingProvider))
         providers = result.scalars().all()
         
@@ -276,11 +281,13 @@ async def list_providers(
 async def patch_provider(
     provider_id: str,
     provider_data: dict,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a shipping provider (Admin only)"""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         result = await db.execute(
             select(ShippingProvider).where(ShippingProvider.id == UUID(provider_id))
         )
@@ -313,11 +320,13 @@ async def patch_provider(
 @router.delete("/providers/{provider_id}")
 async def delete_provider(
     provider_id: str,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a shipping provider (Admin only)"""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         result = await db.execute(
             select(ShippingProvider).where(ShippingProvider.id == UUID(provider_id))
         )
