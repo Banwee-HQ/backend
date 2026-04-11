@@ -294,6 +294,10 @@ async def dashboard(
                     "total_revenue": 0.0,
                     "total_users": 1
                 }
+            },
+            message="Dashboard data retrieved successfully (fallback)"
+        )
+
 @router.get("/sales-trend")
 async def sales_trend(
     days: int = Query(30),

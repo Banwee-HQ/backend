@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status, Background
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from core.db import get_db
-from core.dependencies import get_current_auth_user, get_order_service
+from core.dependencies import get_current_auth_user, get_order_service, require_admin
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from services.commerce.orders import OrderService
-from models.accounts.user import User, UserRole
+from models.accounts.user import User
 from schemas.commerce.orders import Create, Checkout, Note
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -302,13 +302,11 @@ async def get_public_tracking(
 async def update_status(
     order_id: str,
     request: dict,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update order status (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         updated_order = await order_service.update_status(order_id, request.get("status"), request.get("notes"))
         return Response.success(data=updated_order, message="Order status updated")
@@ -322,13 +320,11 @@ async def update_status(
 async def deliver(
     order_id: str,
     request: dict = {},
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Mark order as delivered (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.deliver(order_id, request.get("notes"))
         return Response.success(data=result, message="Order marked as delivered")
@@ -342,13 +338,11 @@ async def deliver(
 async def ship(
     order_id: str,
     request: dict,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Ship order (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.ship(order_id, request.get("carrier"), request.get("tracking_number"))
         return Response.success(data=result, message="Order shipped")
@@ -362,13 +356,11 @@ async def ship(
 async def statistics(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order statistics (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
         return Response.success(data=stats)

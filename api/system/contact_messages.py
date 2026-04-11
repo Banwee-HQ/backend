@@ -10,7 +10,7 @@ from uuid import UUID
 import math
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from schemas.system.contact_message import (
     Create,
     Update,
@@ -23,7 +23,6 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from services.system.contact_message import ContactMessageService
 from core.logging import get_structured_logger as get_logger
-from models.accounts.user import UserRole
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/contact-messages", tags=["Contact Messages"], redirect_slashes=False)
@@ -73,14 +72,12 @@ async def list(
     priority: Optional[MessagePriority] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_auth_user)
+    current_user = Depends(require_admin)
 ):
     """
     Get all contact messages with pagination and filters (admin only)
     """
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         messages, total = await ContactMessageService.get_all_messages(
             db=db,
             page=page,
@@ -134,13 +131,11 @@ async def list(
 async def get(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_auth_user)
+    current_user = Depends(require_admin)
 ):
     """
     Get a specific contact message by ID (admin only)
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=403, message="Admin access required")
     message = await ContactMessageService.get_message_by_id(db, message_id)
     
     if not message:
@@ -173,14 +168,12 @@ async def patch(
     message_id: UUID,
     update_data: Update,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_auth_user)
+    current_user = Depends(require_admin)
 ):
     """
     Update a contact message (admin only)
     """
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         message = await ContactMessageService.update_message(db, message_id, update_data)
         
         if not message:
@@ -220,14 +213,12 @@ async def patch(
 async def delete(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_auth_user)
+    current_user = Depends(require_admin)
 ):
     """
     Delete a contact message (admin only)
     """
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         success = await ContactMessageService.delete_message(db, message_id)
         
         if not success:

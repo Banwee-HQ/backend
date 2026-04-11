@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
@@ -302,18 +302,11 @@ async def get_product(
 @router.post("/")
 async def create(
     product_data: Create,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new product (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can create products"
-            )
-
         product_service = ProductService(db)
         product = await product_service.create(product_data, current_user.id)
         return Response(success=True, data=product, message="Product created successfully")
@@ -326,21 +319,15 @@ async def create(
         )
 
 
-@router.patch("/{product_id}")
-async def patch(
+@router.put("/{product_id}")
+async def update(
     product_id: UUID,
     product_data: Update,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a product (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can update products"
-            )
         product_service = ProductService(db)
         product = await product_service.update(product_id, product_data, current_user.id)
         return Response(success=True, data=product, message="Product updated successfully")
@@ -356,17 +343,11 @@ async def patch(
 @router.delete("/{product_id}")
 async def delete(
     product_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a product (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can delete products"
-            )
         product_service = ProductService(db)
         await product_service.delete(product_id, current_user.id)
         return Response(success=True, message="Product deleted successfully")
@@ -386,15 +367,11 @@ async def delete(
 async def create_variant(
     product_id: UUID,
     variant_data: ProductVariantCreate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new variant for a product (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Only admins can create variants")
-        
         product_service = ProductService(db)
         variant = await product_service.create_variant(product_id, variant_data)
         return Response.success(data=variant, message="Variant created successfully", code=status.HTTP_201_CREATED)
@@ -440,15 +417,11 @@ async def list_variants(
 async def patch_variant(
     variant_id: UUID,
     variant_data: ProductVariantUpdate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a variant (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Only admins can update variants")
-        
         product_service = ProductService(db)
         variant = await product_service.update_variant(variant_id, variant_data)
         return Response.success(data=variant, message="Variant updated successfully")
@@ -461,15 +434,11 @@ async def patch_variant(
 @router.delete("/variants/{variant_id}")
 async def delete_variant(
     variant_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a variant (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Only admins can delete variants")
-        
         product_service = ProductService(db)
         deleted = await product_service.delete_variant(variant_id)
         if not deleted:
@@ -488,15 +457,11 @@ async def delete_variant(
 async def create_image(
     variant_id: UUID,
     image_data: ImageCreate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new image for a variant (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Only admins can create images")
-        
         product_service = ProductService(db)
         image = await product_service.create_image(
             variant_id=variant_id,
@@ -548,15 +513,11 @@ async def list_images(
 async def patch_image(
     image_id: UUID,
     image_data: ImageUpdate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update an image (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Only admins can update images")
-        
         product_service = ProductService(db)
         image = await product_service.update_image(
             image_id=image_id,
@@ -577,15 +538,11 @@ async def patch_image(
 @router.delete("/images/{image_id}")
 async def delete_image(
     image_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an image (admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Only admins can delete images")
-        
         product_service = ProductService(db)
         deleted = await product_service.delete_image(image_id)
         if not deleted:
@@ -601,13 +558,11 @@ async def delete_image(
 async def moderate(
     product_id: UUID,
     request: dict,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Moderate product (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         product_service = ProductService(db)
         result = await product_service.moderate(product_id, request.get("status"), request.get("notes"))
         return Response.success(data=result, message="Product moderated successfully")
@@ -621,13 +576,11 @@ async def moderate(
 async def feature(
     product_id: UUID,
     featured: bool = True,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Feature/unfeature product (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         product_service = ProductService(db)
         result = await product_service.set_featured(product_id, featured)
         return Response.success(data=result, message="Product featured status updated")

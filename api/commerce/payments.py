@@ -216,14 +216,10 @@ async def list_transactions(
 @router.post("/refunds")
 async def create_refund(
     request: Refund,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a refund"""
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=403, message="Only admins can create refunds")
-    
+    """Create a refund"""    
     service = PaymentService(db)
     transaction = await service.refund(
         payment_intent_id=request.payment_intent_id,

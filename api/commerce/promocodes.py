@@ -9,7 +9,7 @@ from schemas.commerce.promos import Create, Update, ValidateRequest, ValidateRes
 from services.commerce.promocode import PromocodeService
 from services.commerce.promocode_scheduler import PromoCodeScheduler
 from models.accounts.user import User
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from fastapi.security import OAuth2PasswordBearer
 from core.logging import get_structured_logger
 
@@ -162,18 +162,11 @@ async def get(
 @router.post("/")
 async def create(
     promocode_data: Create,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create new promocode (Admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can create promocodes"
-            )
-        
         promocode_service = PromocodeService(db)
         promocode = await promocode_service.create(promocode_data)
         
@@ -206,18 +199,11 @@ async def create(
 async def update(
     promocode_id: UUID,
     promocode_data: Update,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update promocode (Admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can update promocodes"
-            )
-        
         promocode_service = PromocodeService(db)
         promocode = await promocode_service.update(promocode_id, promocode_data)
         
@@ -249,18 +235,11 @@ async def update(
 @router.delete("/{promocode_id}")
 async def delete(
     promocode_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete promocode (Admin only)."""
     try:
-        from models.accounts.user import UserRole
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Only admins can delete promocodes"
-            )
-        
         promocode_service = PromocodeService(db)
         success = await promocode_service.delete(promocode_id)
         
@@ -282,7 +261,7 @@ async def delete(
 
 @router.post("/trigger-cleanup")
 async def trigger_cleanup(
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger promocode status cleanup (admin only).
@@ -293,9 +272,6 @@ async def trigger_cleanup(
     - Deactivates promocodes that reached usage limit
     - Deactivates promocodes not yet valid
     """
-    from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Admin access required")
     try:
         scheduler = PromoCodeScheduler(db)
         result = await scheduler.update_promocode_statuses()

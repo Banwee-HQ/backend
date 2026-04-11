@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
@@ -194,13 +194,11 @@ async def list(
 async def patch(
     inventory_id: UUID,
     inventory_data: Update,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Partially update an inventory item (Admin access)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         item = await inventory_service.update(inventory_id, inventory_data)
         return Response.success(data=item, message="Inventory item updated successfully")
@@ -213,13 +211,11 @@ async def patch(
 @router.delete("/{inventory_id}")
 async def delete(
     inventory_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an inventory item (Admin access)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         await inventory_service.delete(inventory_id)
         return Response.success(message="Inventory item deleted successfully")
@@ -235,13 +231,11 @@ async def delete(
 @router.post("/adjustments")
 async def create_adj(
     adjustment_data: AdjustmentCreate,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a stock adjustment (Admin access)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         updated_inventory = await inventory_service.adjust_stock(adjustment_data, adjusted_by_user_id=current_user.id)
         return Response.success(data=updated_inventory, message="Stock adjusted successfully")
@@ -309,7 +303,7 @@ async def delete_adj(
 
 @router.post("/sync-all")
 async def sync_all(
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -317,8 +311,6 @@ async def sync_all(
     Admin only - for data consistency maintenance.
     """
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         result = await inventory_service.sync_all_products_availability()
         
@@ -336,7 +328,7 @@ async def sync_all(
 @router.post("/sync/product/{product_id}")
 async def sync_product(
     product_id: str,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -344,8 +336,6 @@ async def sync_product(
     Admin only - for data consistency maintenance.
     """
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         from uuid import UUID as UUIDType
         
         product_id_uuid = UUIDType(product_id)

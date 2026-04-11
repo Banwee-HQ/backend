@@ -7,7 +7,7 @@ from typing import Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from models.commerce.refunds import RefundStatus
 from models.accounts.user import UserRole
@@ -147,18 +147,11 @@ async def request(
 async def update_status(
     refund_id: UUID,
     payload: UpdateRefundStatus,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update refund status (admin only)."""
     try:
-        # Verify admin access
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="Admin access required"
-            )
-        
         refund_service = RefundService(db)
         refund = await refund_service.update_status(
             refund_id=refund_id,

@@ -8,7 +8,7 @@ from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, AdminUserUpdate, UserStatusUpdate
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from models.accounts.user import User as AuthUser, UserRole
 
 logger = get_logger(__name__)
@@ -51,12 +51,12 @@ async def create(payload: UserCreate, background_tasks: BackgroundTasks, db: Asy
 @router.get("/{user_id}")
 async def get(
     user_id: UUID,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a user by ID. Admin can get any user, users can only get themselves."""
     # Check if user is admin or requesting their own data
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER] and current_user.id != user_id:
+    if current_user.id != user_id:
         raise APIException(
             status_code=status.HTTP_403_FORBIDDEN,
             message="You can only access your own user data"
@@ -91,13 +91,11 @@ async def list(
     q: Optional[str] = Query(None, description="Search query for user name or email"),
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """List users with optional filtering and pagination (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         users = await service.get_all_users(
             page=page, limit=limit, role=role, search=search or q, status=status
@@ -116,12 +114,12 @@ async def list(
 async def patch(
     user_id: UUID,
     payload: UserUpdate,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Partially update a user. Admin can update any user, users can only update themselves."""
     # Check if user is admin or updating their own data
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER] and current_user.id != user_id:
+    if current_user.id != user_id:
         raise APIException(
             status_code=status.HTTP_403_FORBIDDEN,
             message="You can only update your own user data"
@@ -162,13 +160,11 @@ async def patch(
 @router.delete("/{user_id}")
 async def delete(
     user_id: UUID,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a user (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         # Prevent admin from deleting themselves
         if current_user.id == user_id:
             raise APIException(
@@ -190,13 +186,11 @@ async def delete(
 async def update_status(
     user_id: UUID,
     payload: UserStatusUpdate,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update user active status (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         result = await service.update_status(user_id, payload.is_active)
         return Response.success(data=result, message="User status updated")
@@ -209,13 +203,11 @@ async def update_status(
 @router.post("/{user_id}/reset-password")
 async def reset_password(
     user_id: UUID,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Send password reset email to user (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         result = await service.reset_password(user_id)
         return Response.success(data=result, message="Password reset email sent")
@@ -228,13 +220,11 @@ async def reset_password(
 @router.post("/{user_id}/deactivate")
 async def deactivate(
     user_id: UUID,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Deactivate user account (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         result = await service.deactivate(user_id)
         return Response.success(data=result, message="User deactivated")
@@ -247,13 +237,11 @@ async def deactivate(
 @router.post("/{user_id}/activate")
 async def activate(
     user_id: UUID,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Activate user account (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         result = await service.activate(user_id)
         return Response.success(data=result, message="User activated")
@@ -266,13 +254,11 @@ async def activate(
 @router.put("/{user_id}/verify")
 async def verify(
     user_id: UUID,
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Verify user account (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         result = await service.verify(user_id)
         return Response.success(data=result, message="User verified")
@@ -287,13 +273,11 @@ async def activity(
     user_id: UUID,
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    current_user: AuthUser = Depends(get_current_auth_user),
+    current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get user activity log (admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         service = UserService(db)
         activity = await service.get_activity_log(user_id, page, limit)
         return Response.success(data=activity)

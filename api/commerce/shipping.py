@@ -9,10 +9,10 @@ from uuid import UUID
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
-from models.accounts.user import User, UserRole
+from models.accounts.user import User
 from services.commerce.shipping import ShippingService
 from schemas.commerce.shipping import (
     MethodCreate,
@@ -89,13 +89,11 @@ async def get(
 @router.post("/methods")
 async def create(
     method_data: MethodCreate,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a shipping method (Admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         shipping_service = ShippingService(db)
         method = await shipping_service.create(method_data)
         method_data = MethodInDB.model_validate(method)
@@ -118,13 +116,11 @@ async def create(
 async def patch(
     method_id: UUID,
     method_data: MethodUpdate,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a shipping method (Admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         shipping_service = ShippingService(db)
         method = await shipping_service.update(method_id, method_data)
         if not method:
@@ -150,13 +146,11 @@ async def patch(
 @router.delete("/methods/{method_id}")
 async def delete(
     method_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a shipping method (Admin only)."""
     try:
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            raise APIException(status_code=403, message="Admin access required")
         shipping_service = ShippingService(db)
         await shipping_service.delete(method_id)
         return Response.success(message="Shipping method deleted successfully")
