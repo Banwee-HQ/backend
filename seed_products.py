@@ -297,7 +297,8 @@ async def seed():
                     total_variants += 1
 
                 # inventory: create if not exists for this variant+location
-                existing_inventory = await db.scalar(select(Inventory).filter_by(variant_id=variant.id, location_id=location.id))
+                # inventory table has a uniqueness constraint on variant_id; check by variant_id
+                existing_inventory = await db.scalar(select(Inventory).filter_by(variant_id=variant.id))
                 if existing_inventory:
                     inventory = existing_inventory
                 else:
