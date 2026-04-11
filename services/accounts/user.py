@@ -448,31 +448,39 @@ class UserService:
             }
         }
 
-    async def reset_password(self, user_id: str) -> dict:
+    async def reset_password(self, user_id: str) -> Dict[str, Any]:
         """Reset user password and send reset email (admin only)."""
         try:
             result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
             user = result.scalar_one_or_none()
-            
+
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
-            
+
             # Generate reset token
-            from services.accounts.email import EmailService
             reset_token = secrets.token_urlsafe(32)
             user.password_reset_token = reset_token
             user.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=24)
-            
+
             await self.db.commit()
             await self.db.refresh(user)
-            
+
             # TODO: Send password reset email
-            # For now, just return success
-            return {"success": True, "message": "Password reset email sent"}
+
+            return {
+                "success": True,
+                "message": f"Password reset email sent to {user.email}",
+                "user_id": str(user.id),
+                "email": user.email
+            }
+
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to reset password: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to send password reset email: {str(e)}"
+            )
 
     async def update_role(self, user_id: UUID, new_role: str) -> Optional[User]:
         """Update user role (admin only)."""
@@ -487,27 +495,3 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
         return user
-
-    async def admin_reset_password(self, user_id: str) -> Dict[str, Any]:
-        """Send password reset email to user (admin only)."""
-        try:
-            result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
-            user = result.scalar_one_or_none()
-
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-
-            # Generate reset token and send email
-            reset_token = "temp_reset_token"  # Generate actual token
-
-            return {
-                "message": f"Password reset email sent to {user.email}",
-                "user_id": str(user.id),
-                "email": user.email
-            }
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to send password reset email: {str(e)}"
-            )
