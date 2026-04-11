@@ -63,6 +63,7 @@ class WishlistService:
             raise
 
     async def get(self, wishlist_id: UUID, user_id: UUID) -> Optional[Wishlist]:
+        """Get a wishlist by ID for a user"""
         try:
             logger.info(f"Fetching wishlist {wishlist_id} for user_id: {user_id}")
             query = select(Wishlist).where(Wishlist.id == wishlist_id, Wishlist.user_id == user_id).options(
@@ -83,6 +84,7 @@ class WishlistService:
             raise
 
     async def create(self, user_id: UUID, payload: WishlistCreate) -> Wishlist:
+        """Create a new wishlist for a user"""
         # Ensure only one default wishlist per user
         if payload.is_default:
             await self._clear_default_wishlist(user_id)
@@ -107,6 +109,7 @@ class WishlistService:
         return refetched_wishlist
 
     async def update(self, wishlist_id: UUID, user_id: UUID, payload: WishlistUpdate) -> Optional[Wishlist]:
+        """Update a wishlist"""
         query = select(Wishlist).where(
             Wishlist.id == wishlist_id, Wishlist.user_id == user_id)
         result = await self.db.execute(query)
@@ -129,6 +132,7 @@ class WishlistService:
         return wishlist
 
     async def delete(self, wishlist_id: UUID, user_id: UUID) -> bool:
+        """Delete a wishlist"""
         query = select(Wishlist).where(
             Wishlist.id == wishlist_id, Wishlist.user_id == user_id)
         result = await self.db.execute(query)
@@ -242,6 +246,7 @@ class WishlistService:
             raise
 
     async def set_default(self, user_id: UUID, wishlist_id: UUID) -> Optional[Wishlist]:
+        """Set a wishlist as default for a user"""
         await self._clear_default_wishlist(user_id)
 
         query = update(Wishlist).where(Wishlist.id == wishlist_id,
@@ -254,6 +259,7 @@ class WishlistService:
         return result.scalar_one_or_none()
 
     async def _clear_default_wishlist(self, user_id: UUID, exclude_wishlist_id: Optional[UUID] = None):
+        """Clear default flag from all wishlists for a user"""
         query = update(Wishlist).where(
             Wishlist.user_id == user_id,
             Wishlist.is_default == True

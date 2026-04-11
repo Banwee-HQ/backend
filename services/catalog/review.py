@@ -18,6 +18,7 @@ class ReviewService:
         self.db = db
 
     async def create(self, review_data: ReviewCreate, user_id: UUID):
+        """Create a new product review"""
         # Check if product exists
         product = await self.db.get(Product, review_data.product_id)
         if not product:
@@ -130,10 +131,12 @@ class ReviewService:
         }
 
     async def get(self, review_id: UUID) -> Optional[Review]:
+        """Get a review by ID"""
         result = await self.db.execute(select(Review).where(Review.id == review_id))
         return result.scalars().first()
 
     async def update(self, review_id: UUID, review_data: ReviewUpdate, user_id: UUID) -> Review:
+        """Update a review"""
         review = await self.get(review_id)
         if not review:
             raise APIException(status_code=404, message="Review not found")
@@ -154,6 +157,7 @@ class ReviewService:
         return ReviewResponse.from_orm(review)
 
     async def delete(self, review_id: UUID, user_id: UUID):
+        """Delete a review"""
         review = await self.get(review_id)
         if not review:
             raise APIException(status_code=404, message="Review not found")
@@ -169,6 +173,7 @@ class ReviewService:
         await self._update_product_rating(review.product_id)
 
     async def _update_product_rating(self, product_id: UUID):
+        """Update product rating after review changes"""
         # Calculate new average rating and count
         try:
             print(f"DEBUG: _update_product_rating called with product_id={product_id}")

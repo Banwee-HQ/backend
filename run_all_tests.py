@@ -2,7 +2,7 @@
 """
 Complete API Test Runner for Banwee Backend
 
-This script runs all 140+ tests covering 273+ API endpoints.
+This script runs all 161 tests covering 221+ API endpoints.
 
 Usage:
     python run_all_tests.py              # Run all tests
@@ -18,14 +18,14 @@ import argparse
 from typing import List, Tuple
 
 
-# Test inventory - all 140+ test cases
+# Test inventory - all 151 test cases (matching actual API endpoints)
 TEST_INVENTORY = {
     "Root & System": [
         ("001", "GET / - Root endpoint"),
         ("002", "GET /v1/health/ - Health check"),
         ("003", "GET /docs - API documentation"),
     ],
-    "Authentication (19)": [
+    "Authentication (20)": [
         ("004", "POST /v1/auth/register - Register new user"),
         ("005", "POST /v1/auth/login - User login"),
         ("006", "POST /v1/auth/login - Invalid credentials"),
@@ -43,144 +43,181 @@ TEST_INVENTORY = {
         ("018", "PUT /v1/auth/change-password - Change password"),
         ("019", "GET /v1/auth/social/google/login - Google OAuth"),
         ("020", "GET /v1/auth/social/facebook/login - Facebook OAuth"),
-    ],
-    "Users (11)": [
         ("021", "GET /v1/users/me - Get current user"),
-        ("022", "GET /v1/users/me - Get current user via auth"),
-        ("023", "GET /v1/users/ - List users"),
-        ("024", "GET /v1/users/{id} - Get user by ID"),
-        ("025", "GET /v1/addresses/ - Get my addresses via addresses router"),
-        ("026", "POST /v1/addresses/ - Create address via addresses router"),
-        ("027", "PATCH /v1/addresses/{id} - Update address via addresses router"),
-        ("028", "DELETE /v1/addresses/{id} - Delete address via addresses router"),
-        ("029", "GET /v1/auth/me without auth - Should fail"),
+        ("022", "GET /v1/users/ - List users (admin)"),
+        ("023", "GET /v1/users/{id} - Get user by ID (admin)"),
     ],
-    "Products (10)": [
-        ("032", "GET /v1/products/home - Get home data"),
-        ("033", "GET /v1/products/ - List products"),
-        ("034", "GET /v1/products/ - List with filters"),
-        ("035", "GET /v1/products/ - List with sorting"),
-        ("036", "GET /v1/products/ - Search products"),
-        ("037", "GET /v1/products/{id} - Get product by ID"),
-        ("038", "GET /v1/products/{id}/recommendations - Get recommendations"),
-        ("039", "GET /v1/products/{id}/variants - Get product variants"),
-        ("040", "GET /v1/products/variants/{id} - Get specific variant"),
-        ("041", "POST /v1/products/ - Create product (admin)"),
+    "Addresses (5)": [
+        ("024", "GET /v1/addresses/ - Get my addresses"),
+        ("025", "POST /v1/addresses/ - Create address"),
+        ("026", "GET /v1/addresses/{id} - Get single address"),
+        ("027", "PATCH /v1/addresses/{id} - Update address"),
+        ("028", "DELETE /v1/addresses/{id} - Delete address"),
+    ],
+    "Products (12)": [
+        ("029", "GET /v1/products/home - Get home data"),
+        ("030", "GET /v1/products/ - List products"),
+        ("031", "GET /v1/products/ - List with filters"),
+        ("032", "GET /v1/products/ - List with sorting"),
+        ("033", "GET /v1/products/ - Search products"),
+        ("034", "GET /v1/products/{id} - Get product by ID"),
+        ("035", "GET /v1/products/{id}/recommendations - Get recommendations"),
+        ("036", "GET /v1/products/{id}/variants - Get product variants"),
+        ("037", "GET /v1/products/variants/{id} - Get specific variant"),
+        ("038", "POST /v1/products/ - Create product (admin)"),
+        ("039", "GET /v1/products/featured - Get featured products"),
+        ("040", "GET /v1/products/deals - Get deals"),
+    ],
+    "Product Variants & Images (10)": [
+        ("041", "POST /v1/products/{id}/variants - Create variant"),
+        ("042", "PATCH /v1/products/variants/{id} - Update variant"),
+        ("043", "DELETE /v1/products/variants/{id} - Delete variant"),
+        ("044", "POST /v1/products/variants/{id}/images - Create image"),
+        ("045", "GET /v1/products/images/{id} - Get image"),
+        ("046", "GET /v1/products/variants/{id}/images - List images"),
+        ("047", "PATCH /v1/products/images/{id} - Update image"),
+        ("048", "DELETE /v1/products/images/{id} - Delete image"),
+        ("049", "GET /v1/products/all-variants - List all variants (admin)"),
+        ("050", "PATCH /v1/products/{id}/moderate - Moderate product"),
     ],
     "Reviews (6)": [
-        ("042", "GET /v1/reviews/ - List reviews"),
-        ("043", "GET /v1/reviews/?product_id={id} - Filter by product"),
-        ("044", "GET /v1/reviews/{id} - Get review by ID"),
-        ("045", "GET /v1/reviews/product/{id} - Get product reviews"),
-        ("046", "POST /v1/reviews/ - Create review"),
-        ("047", "PUT /v1/reviews/{id} - Update review"),
+        ("051", "GET /v1/reviews/ - List reviews"),
+        ("052", "GET /v1/reviews/?product_id={id} - Filter by product"),
+        ("053", "GET /v1/reviews/{id} - Get review by ID"),
+        ("054", "GET /v1/reviews/product/{id} - Get product reviews"),
+        ("055", "POST /v1/reviews/ - Create review"),
+        ("056", "PUT /v1/reviews/{id} - Update review"),
     ],
-    "Wishlist (3)": [
-        ("048", "GET /v1/wishlists/ - List wishlists"),
-        ("049", "POST /v1/wishlists/ - Create wishlist"),
-        ("050", "DELETE /v1/wishlists/{id} - Delete wishlist"),
+    "Wishlist (6)": [
+        ("057", "GET /v1/wishlists/ - List wishlists"),
+        ("058", "POST /v1/wishlists/ - Create wishlist"),
+        ("059", "GET /v1/wishlists/{id} - Get wishlist"),
+        ("060", "PATCH /v1/wishlists/{id} - Update wishlist"),
+        ("061", "DELETE /v1/wishlists/{id} - Delete wishlist"),
+        ("062", "POST /v1/wishlists/{id}/items - Add item to wishlist"),
     ],
-    "Cart (5)": [
-        ("051", "GET /v1/cart/ - Get cart"),
-        ("052", "POST /v1/cart/add - Add item to cart"),
-        ("053", "PUT /v1/cart/items/{id} - Update cart item"),
-        ("054", "DELETE /v1/cart/items/{id} - Remove cart item"),
-        ("055", "DELETE /v1/cart/clear - Clear cart"),
+    "Cart (6)": [
+        ("063", "GET /v1/cart/ - Get cart"),
+        ("064", "POST /v1/cart/add - Add item to cart"),
+        ("065", "PUT /v1/cart/items/{id} - Update cart item"),
+        ("066", "DELETE /v1/cart/items/{id} - Remove cart item"),
+        ("067", "DELETE /v1/cart/clear - Clear cart"),
+        ("068", "GET /v1/cart/checkout - Checkout summary"),
     ],
-    "Orders (4)": [
-        ("056", "GET /v1/orders/ - List orders"),
-        ("057", "GET /v1/orders/{id} - Get order by ID"),
-        ("058", "PUT /v1/orders/{id}/cancel - Cancel order"),
-        ("059", "GET /v1/shipping/orders/{id} - Get order tracking"),
+    "Orders (5)": [
+        ("069", "GET /v1/orders/ - List orders"),
+        ("070", "GET /v1/orders/{id} - Get order by ID"),
+        ("071", "PUT /v1/orders/{id}/cancel - Cancel order"),
+        ("072", "GET /v1/orders/{id}/shipments - Get order shipments"),
+        ("073", "POST /v1/orders/checkout - Checkout"),
     ],
-    "Payments (4)": [
-        ("060", "GET /v1/payments/ - Get payments overview"),
-        ("061", "GET /v1/payments/methods - List payment methods"),
-        ("062", "POST /v1/payments/methods - Create payment method"),
-        ("063", "DELETE /v1/payments/methods/{id} - Delete payment method"),
+    "Payments (8)": [
+        ("074", "GET /v1/payments/ - Get payments overview"),
+        ("075", "GET /v1/payments/methods - List payment methods"),
+        ("076", "POST /v1/payments/methods - Create payment method"),
+        ("077", "GET /v1/payments/methods/{id} - Get payment method"),
+        ("078", "PATCH /v1/payments/methods/{id} - Update payment method"),
+        ("079", "DELETE /v1/payments/methods/{id} - Delete payment method"),
+        ("080", "PATCH /v1/payments/methods/{id}/default - Set default payment method"),
+        ("081", "POST /v1/payments/process-order - Process order payment"),
     ],
-    "Contact Messages (2)": [
-        ("064", "POST /v1/contact-messages/ - Create contact message"),
-        ("065", "GET /v1/contact-messages/ - List messages (admin)"),
+    "Contact Messages (5)": [
+        ("082", "POST /v1/contact-messages/ - Create contact message"),
+        ("083", "GET /v1/contact-messages/ - List messages (admin)"),
+        ("084", "GET /v1/contact-messages/{id} - Get message (admin)"),
+        ("085", "PATCH /v1/contact-messages/{id} - Update message (admin)"),
+        ("086", "DELETE /v1/contact-messages/{id} - Delete message (admin)"),
     ],
-    "Admin Dashboard (6)": [
-        ("066", "GET /v1/admin/dashboard - Admin dashboard"),
-        ("067", "GET /v1/admin/users - List all users (admin)"),
-        ("068", "GET /v1/admin/users/{id} - Get user by ID (admin)"),
-        ("069", "PUT /v1/admin/users/{id} - Update user (admin)"),
-        ("070", "DELETE /v1/admin/users/{id} - Delete user (admin)"),
-        ("071", "GET /v1/admin/users as regular user - Should fail"),
+    "Analytics (20)": [
+        ("087", "POST /v1/analytics/track - Track event"),
+        ("088", "GET /v1/analytics/conversion-rates - Conversion rates"),
+        ("089", "GET /v1/analytics/cart-abandonment - Cart abandonment"),
+        ("090", "GET /v1/analytics/time-to-purchase - Time to purchase"),
+        ("091", "GET /v1/analytics/refund-rates - Refund rates"),
+        ("092", "GET /v1/analytics/repeat-customers - Repeat customers"),
+        ("093", "GET /v1/analytics/simple-dashboard - Simple dashboard"),
+        ("094", "GET /v1/analytics/dashboard - Dashboard"),
+        ("095", "GET /v1/analytics/sales-trend - Sales trend"),
+        ("096", "GET /v1/analytics/sales-overview - Sales overview"),
+        ("097", "GET /v1/analytics/sales - Sales analytics"),
+        ("098", "GET /v1/analytics/users - User analytics"),
+        ("099", "GET /v1/analytics/products - Product analytics"),
+        ("100", "GET /v1/analytics/orders - Order analytics"),
+        ("101", "GET /v1/analytics/revenue - Revenue analytics"),
+        ("102", "GET /v1/analytics/kpis - KPIs"),
+        ("103", "GET /v1/analytics/stats - Stats"),
+        ("104", "GET /v1/analytics/dashboard/admin - Admin dashboard"),
+        ("105", "GET /v1/analytics/export/orders - Export orders"),
+        ("106", "GET /v1/analytics/export/subscriptions - Export subscriptions"),
     ],
-    "Admin Products (4)": [
-        ("072", "GET /v1/admin/products - List all products (admin)"),
-        ("073", "POST /v1/admin/products - Create product (admin)"),
-        ("074", "PUT /v1/admin/products/{id} - Update product (admin)"),
-        ("075", "DELETE /v1/admin/products/{id} - Delete product (admin)"),
+    "Inventory (14)": [
+        ("107", "POST /v1/inventory/locations - Create location"),
+        ("108", "GET /v1/inventory/locations - List locations"),
+        ("109", "GET /v1/inventory/locations/{id} - Get location"),
+        ("110", "PATCH /v1/inventory/locations/{id} - Update location"),
+        ("111", "DELETE /v1/inventory/locations/{id} - Delete location"),
+        ("112", "POST /v1/inventory/ - Create inventory"),
+        ("113", "GET /v1/inventory/ - List inventory"),
+        ("114", "GET /v1/inventory/{id} - Get inventory"),
+        ("115", "PATCH /v1/inventory/{id} - Update inventory"),
+        ("116", "DELETE /v1/inventory/{id} - Delete inventory"),
+        ("117", "POST /v1/inventory/adjust - Adjust stock"),
+        ("118", "GET /v1/inventory/adjustments - List adjustments"),
+        ("119", "GET /v1/inventory/adjustments/{id} - Get adjustment"),
+        ("120", "DELETE /v1/inventory/adjustments/{id} - Delete adjustment"),
     ],
-    "Admin Orders (4)": [
-        ("076", "GET /v1/admin/orders - List all orders (admin)"),
-        ("077", "GET /v1/admin/orders/{id} - Get order by ID (admin)"),
-        ("078", "PATCH /v1/admin/orders/{id}/status - Update order status (admin)"),
-        ("079", "POST /v1/admin/orders/{id}/ship - Ship order (admin)"),
+    "Shipping (9)": [
+        ("121", "GET /v1/shipping/methods - List shipping methods"),
+        ("122", "GET /v1/shipping/methods/{id} - Get shipping method"),
+        ("123", "POST /v1/shipping/methods - Create shipping method (admin)"),
+        ("124", "PATCH /v1/shipping/methods/{id} - Update shipping method (admin)"),
+        ("125", "DELETE /v1/shipping/methods/{id} - Delete shipping method (admin)"),
+        ("126", "POST /v1/shipping/calculate - Calculate shipping cost"),
+        ("127", "POST /v1/shipping/track - Track shipment"),
+        ("128", "POST /v1/shipping-tracking/shipments - Create shipment"),
+        ("129", "GET /v1/shipping-tracking/shipments/{id} - Get shipment"),
     ],
-    "Admin Subscriptions (4)": [
-        ("080", "GET /v1/admin/subscriptions - List all subscriptions (admin)"),
-        ("081", "GET /v1/admin/subscriptions/{id} - Get subscription by ID (admin)"),
-        ("082", "PATCH /v1/admin/subscriptions/{id} - Update subscription (admin)"),
-        ("083", "POST /v1/admin/subscriptions/{id}/cancel - Cancel subscription (admin)"),
+    "Subscriptions (12)": [
+        ("130", "POST /v1/subscriptions/trigger-order-processing - Trigger processing (admin)"),
+        ("131", "GET /v1/subscriptions/plans - List subscription plans"),
+        ("132", "GET /v1/subscriptions/ - List user subscriptions"),
+        ("133", "POST /v1/subscriptions/ - Create subscription"),
+        ("134", "GET /v1/subscriptions/{id} - Get subscription by ID"),
+        ("135", "PATCH /v1/subscriptions/{id} - Update subscription"),
+        ("136", "POST /v1/subscriptions/{id}/cancel - Cancel subscription"),
+        ("137", "POST /v1/subscriptions/{id}/pause - Pause subscription"),
+        ("138", "POST /v1/subscriptions/{id}/resume - Resume subscription"),
+        ("139", "POST /v1/subscriptions/{id}/products - Add products"),
+        ("140", "DELETE /v1/subscriptions/{id}/products - Remove products"),
+        ("141", "DELETE /v1/subscriptions/{id}/products/{pid} - Remove single product"),
     ],
-    "Admin Refunds (4)": [
-        ("084", "GET /v1/admin/refunds - List all refunds (admin)"),
-        ("085", "POST /v1/admin/refunds - Create refund (admin)"),
-        ("086", "GET /v1/admin/refunds/{id} - Get refund by ID (admin)"),
-        ("087", "PATCH /v1/admin/refunds/{id} - Update refund status (admin)"),
+    "Tax (6)": [
+        ("142", "POST /v1/tax/calculate - Calculate tax"),
+        ("143", "GET /v1/tax/rates - List tax rates"),
+        ("144", "POST /v1/tax/admin/tax-rates - Create tax rate (admin)"),
+        ("145", "GET /v1/tax/rates/{id} - Get tax rate"),
+        ("146", "PATCH /v1/tax/rates/{id} - Update tax rate (admin)"),
+        ("147", "DELETE /v1/tax/rates/{id} - Delete tax rate (admin)"),
     ],
-    "Admin Inventory (2)": [
-        ("088", "GET /v1/admin/inventory - List inventory (admin)"),
-        ("089", "POST /v1/admin/inventory/adjust - Adjust inventory (admin)"),
+    "Promocodes (8)": [
+        ("148", "GET /v1/promocodes/ - List promocodes"),
+        ("149", "GET /v1/promocodes/{id} - Get promocode"),
+        ("150", "POST /v1/promocodes/ - Create promocode (admin)"),
+        ("151", "PATCH /v1/promocodes/{id} - Update promocode (admin)"),
+        ("152", "DELETE /v1/promocodes/{id} - Delete promocode (admin)"),
+        ("153", "POST /v1/promocodes/validate - Validate promocode"),
+        ("154", "POST /v1/promocodes/trigger-cleanup - Trigger cleanup (admin)"),
+        ("155", "POST /v1/cart/promocode - Apply promocode to cart"),
     ],
-    "Admin Shipping (4)": [
-        ("090", "GET /v1/admin/shipping/methods - List shipping methods (admin)"),
-        ("091", "POST /v1/admin/shipping/methods - Create shipping method (admin)"),
-        ("092", "PUT /v1/admin/shipping/methods/{id} - Update shipping method (admin)"),
-        ("093", "DELETE /v1/admin/shipping/methods/{id} - Delete shipping method (admin)"),
-    ],
-    "Analytics (7)": [
-        ("094", "GET /v1/analytics/sales - Sales analytics"),
-        ("095", "GET /v1/analytics/sales?date_range - Sales analytics with date range"),
-        ("096", "GET /v1/analytics/users - User analytics"),
-        ("097", "GET /v1/analytics/products - Product analytics"),
-        ("098", "GET /v1/analytics/orders - Order analytics"),
-        ("099", "GET /v1/analytics/revenue - Revenue analytics"),
-        ("100", "GET /v1/analytics/dashboard - Dashboard analytics"),
-    ],
-    "User Subscriptions (5)": [
-        ("101", "GET /v1/subscriptions/plans - List subscription plans"),
-        ("102", "GET /v1/subscriptions/ - List user subscriptions"),
-        ("103", "POST /v1/subscriptions/ - Create subscription"),
-        ("104", "GET /v1/subscriptions/{id} - Get subscription by ID"),
-        ("105", "POST /v1/subscriptions/{id}/cancel - Cancel subscription"),
-    ],
-    "Promocodes (4)": [
-        ("106", "GET /v1/promocodes/ - List active promocodes"),
-        ("107", "POST /v1/promocodes/validate - Validate promocode"),
-        ("108", "POST /v1/promocodes/ - Create promocode (admin)"),
-        ("109", "DELETE /v1/promocodes/{id} - Delete promocode (admin)"),
-    ],
-    "Shipping (3)": [
-        ("110", "GET /v1/shipping/methods - List shipping methods"),
-        ("111", "POST /v1/shipping/calculate - Calculate shipping cost"),
-        ("112", "POST /v1/shipping/track - Track shipment by number"),
-        ("113", "GET /v1/shipping/shipments/{id} - Get shipment details"),
-    ],
-    "Tax (2)": [
-        ("114", "POST /v1/tax/calculate - Calculate tax"),
-        ("115", "GET /v1/tax/rates - List tax rates"),
-        ("116", "GET /v1/tax/admin/tax-rates - Admin tax rates list"),
+    "Refunds (4)": [
+        ("156", "GET /v1/refunds/ - List refunds"),
+        ("157", "POST /v1/refunds/ - Create refund"),
+        ("158", "GET /v1/refunds/{id} - Get refund by ID"),
+        ("159", "PATCH /v1/refunds/{id} - Update refund status"),
     ],
     "Webhooks (2)": [
-        ("117", "POST /v1/webhooks/stripe - Stripe webhook"),
-        ("118", "GET /v1/webhooks/health - Webhook health check"),
+        ("160", "POST /v1/webhooks/stripe - Stripe webhook"),
+        ("161", "GET /v1/webhooks/health - Webhook health check"),
     ],
 }
 
@@ -188,7 +225,7 @@ TEST_INVENTORY = {
 def print_inventory():
     """Print all test cases."""
     print("\n" + "="*70)
-    print("BANWEE API TEST INVENTORY - 116 TEST CASES")
+    print("BANWEE API TEST INVENTORY - 161 TEST CASES")
     print("="*70)
     
     total = 0
@@ -199,7 +236,7 @@ def print_inventory():
             total += 1
     
     print(f"\n{'='*70}")
-    print(f"TOTAL: {total} test cases covering 273+ API endpoints")
+    print(f"TOTAL: {total} test cases covering 221+ API endpoints")
     print("="*70 + "\n")
 
 
