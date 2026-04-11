@@ -278,7 +278,7 @@ async def get_order_shipments(
     try:
         from services.commerce.shipping_tracking import ShippingTrackingService
         shipping_service = ShippingTrackingService(db)
-        shipments = await shipping_service.get(order_id=str(order_id))
+        shipments = await shipping_service.list_by_order(str(order_id))
         return Response.success(data=shipments)
     except Exception as e:
         raise APIException(

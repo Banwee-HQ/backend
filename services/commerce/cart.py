@@ -655,29 +655,27 @@ class CartService:
         
         return checkout_summary
 
-    async def promo(
-        self,
-        user_id: UUID,
-        action: str = "apply",
-        code: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Apply or remove promocode from cart (placeholder implementation)"""
+    async def apply_promo(self, user_id: UUID, code: Optional[str] = None) -> Dict[str, Any]:
+        """Apply promocode to cart (placeholder implementation)"""
         # This would integrate with a promocode service
         # For now, return cart without changes
         cart_data = await self.get_cart(user_id=user_id)
         
-        if action == "remove":
-            return {
-                **cart_data,
-                "promocode_removed": True,
-                "message": "Promocode removed"
-            }
-        else:  # apply
-            return {
-                **cart_data,
-                "promocode_applied": False,
-                "message": "Promocode functionality not yet implemented"
-            }
+        return {
+            **cart_data,
+            "promocode_applied": False,
+            "message": "Promocode functionality not yet implemented"
+        }
+
+    async def remove_promo(self, user_id: UUID) -> Dict[str, Any]:
+        """Remove promocode from cart (placeholder implementation)"""
+        cart_data = await self.get_cart(user_id=user_id)
+        
+        return {
+            **cart_data,
+            "promocode_removed": True,
+            "message": "Promocode removed"
+        }
 
     async def shipping_options(
         self,

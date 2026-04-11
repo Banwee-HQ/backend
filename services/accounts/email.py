@@ -378,7 +378,7 @@ class EmailService:
     ) -> str:
         """Render an email using Jinja template"""
         try:
-            rendered = await self.template_service.render(template_name, context, template_type="email")
+            rendered = await self.template_service.render_email(template_name, context)
             return rendered.content
         except Exception as e:
             print(f"❌ Failed to render email template {template_name}: {e}")

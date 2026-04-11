@@ -580,57 +580,50 @@ class SubscriptionService:
         await self.db.commit()
         return True
 
-    async def products(
-        self,
-        action: str,
-        subscription_id: UUID,
-        variant_ids: List[UUID],
-        user_id: UUID
-    ) -> Subscription:
-        """
-        Add or remove products from a subscription
-        
-        Args:
-            action: "add" or "remove"
-            subscription_id: The subscription ID
-            variant_ids: List of variant IDs to add/remove
-            user_id: The user ID
-        """
+    async def add_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
+        """Add products to a subscription"""
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
         
         from models.commerce.subscriptions import subscription_product_association
         
-        if action == "add":
-            existing_ids = {str(v.id) for v in subscription.products}
-            for vid in variant_ids:
-                if str(vid) not in existing_ids:
-                    await self.db.execute(
-                        subscription_product_association.insert().values(
-                            subscription_id=subscription.id, product_variant_id=vid
-                        )
-                    )
-                    if subscription.variant_ids is None:
-                        subscription.variant_ids = []
-                    if str(vid) not in subscription.variant_ids:
-                        subscription.variant_ids = subscription.variant_ids + [str(vid)]
-        
-        elif action == "remove":
-            for vid in variant_ids:
+        existing_ids = {str(v.id) for v in subscription.products}
+        for vid in variant_ids:
+            if str(vid) not in existing_ids:
                 await self.db.execute(
-                    subscription_product_association.delete().where(
-                        and_(
-                            subscription_product_association.c.subscription_id == subscription.id,
-                            subscription_product_association.c.product_variant_id == vid
-                        )
+                    subscription_product_association.insert().values(
+                        subscription_id=subscription.id, product_variant_id=vid
                     )
                 )
-            if subscription.variant_ids:
-                subscription.variant_ids = [v for v in subscription.variant_ids if v not in [str(vid) for vid in variant_ids]]
+                if subscription.variant_ids is None:
+                    subscription.variant_ids = []
+                if str(vid) not in subscription.variant_ids:
+                    subscription.variant_ids = subscription.variant_ids + [str(vid)]
         
-        else:
-            raise HTTPException(status_code=400, detail=f"Invalid action: {action}. Use 'add' or 'remove'")
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+
+    async def remove_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
+        """Remove products from a subscription"""
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        
+        from models.commerce.subscriptions import subscription_product_association
+        
+        for vid in variant_ids:
+            await self.db.execute(
+                subscription_product_association.delete().where(
+                    and_(
+                        subscription_product_association.c.subscription_id == subscription.id,
+                        subscription_product_association.c.product_variant_id == vid
+                    )
+                )
+            )
+        if subscription.variant_ids:
+            subscription.variant_ids = [v for v in subscription.variant_ids if v not in [str(vid) for vid in variant_ids]]
         
         await self.db.commit()
         await self.db.refresh(subscription)

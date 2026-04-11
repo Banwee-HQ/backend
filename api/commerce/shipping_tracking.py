@@ -73,7 +73,7 @@ async def get_shipment(
     """Get detailed tracking information for a shipment"""
     try:
         shipping_service = ShippingTrackingService(db)
-        shipment = await shipping_service.get_shipment(shipment_id)
+        shipment = await shipping_service.get(str(shipment_id))
         
         if not shipment:
             raise HTTPException(status_code=404, detail="Shipment not found")
