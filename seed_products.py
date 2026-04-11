@@ -243,90 +243,112 @@ async def seed():
         total_variants = 0
         products_created = []
         for p_data in PRODUCTS:
-            product = Product(
-                id=uuid7(),
-                name=p_data["name"],
-                slug=p_data["slug"],
-                description=p_data["description"],
-                short_description=p_data.get("short_description"),
-                category=p_data["category"],
-                product_status="active",
-                rating_average=0.0,
-                rating_count=0,
-                review_count=0,
-                is_featured=True,
-                is_bestseller=False,
-                published_at=now,
-                product_metadata=p_data.get("product_metadata"),
-            )
-            db.add(product)
-            await db.flush()
+            # check existing product by slug to make seeding idempotent
+            existing_prod = await db.scalar(select(Product).filter_by(slug=p_data["slug"]))
+            if existing_prod:
+                product = existing_prod
+                print(f"Product {p_data['slug']} already exists, using existing record")
+            else:
+                product = Product(
+                    id=uuid7(),
+                    name=p_data["name"],
+                    slug=p_data["slug"],
+                    description=p_data["description"],
+                    short_description=p_data.get("short_description"),
+                    category=p_data["category"],
+                    product_status="active",
+                    rating_average=0.0,
+                    rating_count=0,
+                    review_count=0,
+                    is_featured=True,
+                    is_bestseller=False,
+                    published_at=now,
+                    product_metadata=p_data.get("product_metadata"),
+                )
+                db.add(product)
+                await db.flush()
             products_created.append(product)
 
             for idx, v in enumerate(p_data["variants"]):
-                variant = ProductVariant(
-                    id=uuid7(),
-                    product_id=product.id,
-                    sku=v["sku"],
-                    name=v["name"],
-                    base_price=v["base_price"],
-                    sale_price=None,
-                    availability_status="available",
-                    is_active=True,
-                    attributes=v.get("attributes", {}),
-                    specifications=v.get("specifications", {}),
-                    dietary_tags=v.get("dietary_tags", {}),
-                    tags=v.get("tags"),
-                    view_count=0,
-                    purchase_count=0,
-                )
-                db.add(variant)
-                await db.flush()
-                total_variants += 1
+                # check existing variant by SKU
+                existing_variant = await db.scalar(select(ProductVariant).filter_by(sku=v["sku"]))
+                if existing_variant:
+                    variant = existing_variant
+                    print(f"Variant {v['sku']} exists, skipping creation")
+                else:
+                    variant = ProductVariant(
+                        id=uuid7(),
+                        product_id=product.id,
+                        sku=v["sku"],
+                        name=v["name"],
+                        base_price=v["base_price"],
+                        sale_price=None,
+                        availability_status="available",
+                        is_active=True,
+                        attributes=v.get("attributes", {}),
+                        specifications=v.get("specifications", {}),
+                        dietary_tags=v.get("dietary_tags", {}),
+                        tags=v.get("tags"),
+                        view_count=0,
+                        purchase_count=0,
+                    )
+                    db.add(variant)
+                    await db.flush()
+                    total_variants += 1
 
-                inventory = Inventory(
-                    id=uuid7(),
-                    variant_id=variant.id,
-                    location_id=location.id,
-                    quantity_available=v["quantity"],
-                    quantity=v["quantity"],
-                    low_stock_threshold=10,
-                    reorder_point=5,
-                    inventory_status="active",
-                    last_restocked_at=now,
-                    version=0,
-                )
-                db.add(inventory)
-                await db.flush()
+                # inventory: create if not exists for this variant+location
+                existing_inventory = await db.scalar(select(Inventory).filter_by(variant_id=variant.id, location_id=location.id))
+                if existing_inventory:
+                    inventory = existing_inventory
+                else:
+                    inventory = Inventory(
+                        id=uuid7(),
+                        variant_id=variant.id,
+                        location_id=location.id,
+                        quantity_available=v["quantity"],
+                        quantity=v["quantity"],
+                        low_stock_threshold=10,
+                        reorder_point=5,
+                        inventory_status="active",
+                        last_restocked_at=now,
+                        version=0,
+                    )
+                    db.add(inventory)
+                    await db.flush()
+                    db.add(StockAdjustment(
+                        id=uuid7(),
+                        inventory_id=inventory.id,
+                        quantity_change=v["quantity"],
+                        reason="initial_stock",
+                        notes=f"Seed: {v['sku']}",
+                    ))
 
-                db.add(StockAdjustment(
-                    id=uuid7(),
-                    inventory_id=inventory.id,
-                    quantity_change=v["quantity"],
-                    reason="initial_stock",
-                    notes=f"Seed: {v['sku']}",
-                ))
-
-                # Primary image
-                db.add(ProductImage(
-                    id=uuid7(),
-                    variant_id=variant.id,
-                    url=f"https://cdn.banwee.com/products/{p_data['slug']}-{idx+1}.jpg",
-                    alt_text=f"{p_data['name']} — {v['name']}",
-                    is_primary=(idx == 0),
-                    sort_order=idx,
-                    format="jpg",
-                ))
-                # Secondary image (ensures variants have at least two images)
-                db.add(ProductImage(
-                    id=uuid7(),
-                    variant_id=variant.id,
-                    url=f"https://cdn.banwee.com/products/{p_data['slug']}-{idx+1}-2.jpg",
-                    alt_text=f"{p_data['name']} — {v['name']} (alt)",
-                    is_primary=False,
-                    sort_order=idx+1,
-                    format="jpg",
-                ))
+                # ensure at least two images exist for this variant
+                existing_images = await db.execute(select(ProductImage).filter_by(variant_id=variant.id))
+                imgs = existing_images.scalars().all()
+                if len(imgs) >= 2:
+                    pass
+                else:
+                    # Primary image
+                    db.add(ProductImage(
+                        id=uuid7(),
+                        variant_id=variant.id,
+                        url=f"https://cdn.banwee.com/products/{p_data['slug']}-{idx+1}.jpg",
+                        alt_text=f"{p_data['name']} — {v['name']}",
+                        is_primary=(idx == 0),
+                        sort_order=idx,
+                        format="jpg",
+                    ))
+                    # Secondary image
+                    db.add(ProductImage(
+                        id=uuid7(),
+                        variant_id=variant.id,
+                        url=f"https://cdn.banwee.com/products/{p_data['slug']}-{idx+1}-2.jpg",
+                        alt_text=f"{p_data['name']} — {v['name']} (alt)",
+                        is_primary=False,
+                        sort_order=idx+1,
+                        format="jpg",
+                    ))
 
         # ── Shipping methods ────────────────────────────────────────
         shipping_methods = [
