@@ -690,3 +690,177 @@ class RefundService:
             })
         
         return timeline
+
+    # ============================================================================
+    # ADMIN REFUND MANAGEMENT METHODS
+    # ============================================================================
+
+    async def get_all_refunds(
+        self,
+        status: Optional[RefundStatus] = None,
+        page: int = 1,
+        limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc"
+    ) -> dict:
+        """Get all refunds for admin (can filter by status)."""
+        offset = (page - 1) * limit
+
+        # Build base query
+        base_query = select(Refund).options(
+            selectinload(Refund.user),
+            selectinload(Refund.order)
+        )
+
+        # Apply status filter if provided
+        if status:
+            base_query = base_query.where(Refund.status == status)
+
+        # Apply sorting
+        sort_column = Refund.created_at
+        if sort_by == "amount":
+            sort_column = Refund.requested_amount
+
+        if sort_order == "asc":
+            base_query = base_query.order_by(sort_column.asc())
+        else:
+            base_query = base_query.order_by(sort_column.desc())
+
+        # Get total count
+        count_query = select(func.count()).select_from(Refund)
+        if status:
+            count_query = count_query.where(Refund.status == status)
+
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Execute query with pagination
+        result = await self.db.execute(base_query.offset(offset).limit(limit))
+        refunds = result.scalars().all()
+
+        # Format response
+        refunds_data = []
+        for refund in refunds:
+            customer_name = refund.user.full_name if refund.user else ""
+            refunds_data.append({
+                "id": str(refund.id),
+                "payment_id": None,
+                "order_id": str(refund.order_id),
+                "amount": float(refund.requested_amount),
+                "currency": refund.currency,
+                "status": refund.status.value if refund.status else None,
+                "reason": refund.reason.value if refund.reason else None,
+                "created_at": refund.created_at.isoformat() if refund.created_at else None,
+                "customer_name": customer_name
+            })
+
+        return {
+            "data": refunds_data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": max(1, (total + limit - 1) // limit) if limit else 1
+            }
+        }
+
+    async def get_refund_details(self, refund_id: UUID) -> Optional[dict]:
+        """Get detailed refund information including items (admin only)."""
+        result = await self.db.execute(
+            select(Refund)
+            .where(Refund.id == refund_id)
+            .options(
+                selectinload(Refund.user),
+                selectinload(Refund.order),
+                selectinload(Refund.refund_items).selectinload(RefundItem.order_item)
+            )
+        )
+        refund = result.scalars().first()
+
+        if not refund:
+            return None
+
+        refund_data = refund.to_dict()
+        refund_data["customer_name"] = refund.user.full_name if refund.user else ""
+        refund_data["refund_items"] = [
+            {
+                "id": str(item.id),
+                "order_item_id": str(item.order_item_id),
+                "quantity_to_refund": item.quantity_to_refund,
+                "unit_price": item.unit_price,
+                "total_refund_amount": item.total_refund_amount,
+                "condition_notes": item.condition_notes,
+            }
+            for item in refund.refund_items
+        ]
+
+        return refund_data
+
+    async def update_status(
+        self,
+        refund_id: UUID,
+        status: str,
+        admin_notes: Optional[str] = None
+    ) -> dict:
+        """Update refund status (admin only)."""
+        result = await self.db.execute(select(Refund).where(Refund.id == refund_id))
+        refund = result.scalars().first()
+
+        if not refund:
+            raise HTTPException(status_code=404, detail="Refund not found")
+
+        # Update status
+        try:
+            refund.status = RefundStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+        # Update timestamps based on status
+        if status == "approved" and not refund.approved_at:
+            refund.approved_at = datetime.now(timezone.utc)
+        elif status == "processed" and not refund.processed_at:
+            refund.processed_at = datetime.now(timezone.utc)
+        elif status == "completed" and not refund.completed_at:
+            refund.completed_at = datetime.now(timezone.utc)
+
+        # Add admin notes if provided
+        if admin_notes:
+            current_metadata = refund.refund_metadata or {}
+            admin_history = current_metadata.get("admin_history", [])
+            admin_history.append({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "action": f"status_updated_to_{status}",
+                "notes": admin_notes
+            })
+            current_metadata["admin_history"] = admin_history
+            refund.refund_metadata = current_metadata
+
+        await self.db.commit()
+        await self.db.refresh(refund)
+
+        return refund.to_dict()
+
+    async def patch(self, refund_id: UUID, data: dict) -> dict:
+        """Partial update refund (admin only)."""
+        result = await self.db.execute(select(Refund).where(Refund.id == refund_id))
+        refund = result.scalars().first()
+
+        if not refund:
+            raise HTTPException(status_code=404, detail="Refund not found")
+
+        # Update allowed fields
+        allowed_fields = ["status", "admin_notes", "approved_amount", "processed_amount"]
+        for field, value in data.items():
+            if field in allowed_fields and hasattr(refund, field):
+                if field == "status":
+                    try:
+                        setattr(refund, field, RefundStatus(value))
+                    except ValueError:
+                        raise HTTPException(status_code=400, detail=f"Invalid status: {value}")
+                else:
+                    setattr(refund, field, value)
+
+        await self.db.commit()
+        await self.db.refresh(refund)
+
+        return refund.to_dict()

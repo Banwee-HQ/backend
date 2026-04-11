@@ -124,3 +124,35 @@ class TestUserAddressEndpoints:
         assert response.status_code in [200, 404]
         data = response.json()
         assert data["success"] is True
+
+
+@pytest.mark.api
+@pytest.mark.unit
+class TestAdminUserEndpoints:
+    """Test admin user management endpoints."""
+
+    async def test_get_admin_users(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting all users as admin."""
+        response = await async_client.get("/v1/admin/users", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "data" in data
+
+    async def test_get_admin_user_by_id(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting specific user as admin."""
+        from uuid import uuid4
+        user_id = str(uuid4())
+        response = await async_client.get(f"/v1/admin/users/{user_id}", headers=admin_headers)
+        assert response.status_code in [200, 404]
+
+    async def test_update_user_as_admin(self, async_client: AsyncClient, admin_headers: dict):
+        """Test updating user as admin."""
+        from uuid import uuid4
+        user_id = str(uuid4())
+        update_data = {
+            "role": "admin",
+            "is_active": True
+        }
+        response = await async_client.patch(f"/v1/admin/users/{user_id}", headers=admin_headers, json=update_data)
+        assert response.status_code in [200, 404]

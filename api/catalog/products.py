@@ -6,11 +6,12 @@ from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
+from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate, ProductPatch, VariantStockUpdate, ProductModeration, ProductFeatureToggle
 from services.catalog.products import ProductService
 from models.accounts.user import User
 from services.accounts.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
+from core.dependencies import require_admin
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 async def get_current_auth_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     auth_service = AuthService(db)
     return await auth_service.current_user(token)
+
+
+router = APIRouter(prefix="/products", tags=["Products"])
+# /products?sort_by=created_at&sort_order=desc&page=1&limit=12
 
 # Hardcoded categories since we moved to string-based system
 CATEGORIES = [
@@ -599,3 +604,63 @@ async def delete_image(
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to delete image: {str(e)}")
+
+
+# ==========================================================
+# ADMIN ENDPOINTS - Moved from admin.py
+# ==========================================================
+
+@router.get("/admin/all", dependencies=[Depends(require_admin)])
+async def get_all_products_admin(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    category: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all products with filters (admin only)."""
+    try:
+        product_service = ProductService(db)
+        products = await product_service.get_all_products(
+            page=page,
+            limit=limit,
+            category=category,
+            status=status,
+            search=search
+        )
+        return Response.success(data=products)
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to fetch products")
+
+
+@router.patch("/{product_id}/moderate", dependencies=[Depends(require_admin)])
+async def moderate_product(
+    product_id: UUID,
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Moderate product (admin only)."""
+    try:
+        product_service = ProductService(db)
+        result = await product_service.moderate(product_id, request.get("status"), request.get("notes"))
+        return Response.success(data=result, message="Product moderated successfully")
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to moderate product: {str(e)}")
+
+
+@router.patch("/{product_id}/feature", dependencies=[Depends(require_admin)])
+async def feature_product(
+    product_id: UUID,
+    featured: bool = True,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Feature/unfeature product (admin only)."""
+    try:
+        product_service = ProductService(db)
+        result = await product_service.set_featured(product_id, featured)
+        return Response.success(data=result, message="Product featured status updated")
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to update featured status: {str(e)}")

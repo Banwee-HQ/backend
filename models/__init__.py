@@ -1,6 +1,6 @@
 from core.db import Base
 
-from .accounts import User, Address
+from .accounts import User, Address, UserSession, CustomerLifecycleMetrics, TrafficSource
 from .catalog import (
     Product, ProductVariant, ProductImage,
     Review, Inventory, WarehouseLocation, StockAdjustment,
@@ -10,18 +10,16 @@ from .catalog import (
 from .commerce import (
     Cart, CartItem,
     Order, OrderItem, TrackingEvent,
-    PaymentMethod, PaymentIntent, Transaction,
+    PaymentMethod, PaymentIntent, Transaction, PaymentAnalytics,
     Refund, RefundItem,
     ShippingMethod, ShipmentTracking, ShippingCarrier, ShipmentTrackingEvent,
     TaxRate, Promocode,
     Discount, SubscriptionDiscount, ProductRemovalAudit,
-    Subscription, SubscriptionProduct,
+    Subscription, SubscriptionProduct, SubscriptionCostHistory, SubscriptionAnalytics,
     TaxValidationRule, ShippingValidationRule,
-)
-from .admin import (
-    PricingConfig, SubscriptionCostHistory, SubscriptionAnalytics, PaymentAnalytics,
-    UserSession, AnalyticsEvent, ConversionFunnel, CustomerLifecycleMetrics,
+    PricingConfig,
 )
 from .system import (
     ContactMessage, MessageStatus, MessagePriority,
+    AnalyticsEvent, ConversionFunnel, EventType,
 )

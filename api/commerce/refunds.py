@@ -7,11 +7,11 @@ from typing import Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from models.accounts.user import User
 from models.commerce.refunds import RefundStatus
-from schemas.commerce.refunds import Request
+from schemas.commerce.refunds import Request, UpdateRefundStatus
 from services.commerce.refunds import RefundService
 from core.exceptions import APIException
 
@@ -173,5 +173,108 @@ async def request(
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to request refund: {str(e)}"
+        )
+
+
+# ============================================================================
+# ADMIN REFUND MANAGEMENT ROUTES
+# ============================================================================
+
+@router.get("/admin/all", dependencies=[Depends(require_admin)])
+async def get_all_refunds_admin(
+    refund_status: Optional[RefundStatus] = Query(None, description="Filter by refund status"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all refunds (admin only)."""
+    try:
+        refund_service = RefundService(db)
+        result = await refund_service.get_all_refunds(
+            status=refund_status,
+            page=page,
+            limit=limit,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        return Response.success(data=result)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch refunds: {str(e)}"
+        )
+
+
+@router.get("/admin/{refund_id}", dependencies=[Depends(require_admin)])
+async def get_refund_details_admin(
+    refund_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get refund details (admin only)."""
+    try:
+        refund_service = RefundService(db)
+        refund = await refund_service.get_refund_details(refund_id)
+        if not refund:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Refund not found"
+            )
+        return Response.success(data=refund)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch refund details: {str(e)}"
+        )
+
+
+@router.put("/admin/{refund_id}/status", dependencies=[Depends(require_admin)])
+async def update_refund_status_admin(
+    refund_id: UUID,
+    payload: UpdateRefundStatus,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update refund status (admin only)."""
+    try:
+        refund_service = RefundService(db)
+        refund = await refund_service.update_status(
+            refund_id=refund_id,
+            status=payload.status,
+            admin_notes=payload.admin_notes
+        )
+        return Response.success(data=refund, message="Refund status updated successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update refund status: {str(e)}"
+        )
+
+
+@router.patch("/admin/{refund_id}", dependencies=[Depends(require_admin)])
+async def patch_refund_admin(
+    refund_id: UUID,
+    payload: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Partial update refund (admin only)."""
+    try:
+        refund_service = RefundService(db)
+        refund = await refund_service.patch(refund_id, payload)
+        return Response.success(data=refund, message="Refund updated successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update refund: {str(e)}"
         )
 

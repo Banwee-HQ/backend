@@ -3,7 +3,7 @@ Consolidated subscription models
 Includes: Subscription and related subscription models
 Optimized for PostgreSQL with partial indexes for active subscriptions and products
 """
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Float, Table, JSON, Text, Integer, func, Index, Column
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Float, Table, JSON, Text, Integer, Date, func, Index, Column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -269,3 +269,132 @@ class Subscription(Base):
             data["products"] = list(products_dict.values())
 
         return data
+
+
+class SubscriptionCostHistory(Base):
+    """Historical record of subscription cost changes"""
+    __tablename__ = "subscription_cost_history"
+    __table_args__ = (
+        # Indexes for search and performance
+        Index('idx_subscription_cost_history_subscription_id', 'subscription_id'),
+        Index('idx_subscription_cost_history_change_reason', 'change_reason'),
+        Index('idx_subscription_cost_history_effective_date', 'effective_date'),
+        Index('idx_subscription_cost_history_changed_by', 'changed_by'),
+        Index('idx_subscription_cost_history_created_at', 'created_at'),
+        # Composite indexes for common queries
+        Index('idx_subscription_cost_history_sub_effective', 'subscription_id', 'effective_date'),
+        {'schema': 'commerce'}
+    )
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID())
+
+    # Old cost breakdown (JSON)
+    old_cost_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # New cost breakdown (JSON)
+    new_cost_breakdown: Mapped[dict] = mapped_column(JSON)
+
+    # Reason for cost change
+    change_reason: Mapped[str] = mapped_column(String(100))  # "admin_percentage_change", "variant_price_change", etc.
+
+    # When the change becomes effective
+    effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    # Admin user who triggered the change (if applicable)
+    changed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
+
+    # Additional metadata
+    pricing_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert cost history to dictionary"""
+        return {
+            "id": str(self.id),
+            "subscription_id": str(self.subscription_id),
+            "old_cost_breakdown": self.old_cost_breakdown,
+            "new_cost_breakdown": self.new_cost_breakdown,
+            "change_reason": self.change_reason,
+            "effective_date": self.effective_date.isoformat() if self.effective_date else None,
+            "changed_by": str(self.changed_by) if self.changed_by else None,
+            "metadata": self.pricing_metadata,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SubscriptionAnalytics(Base):
+    """Daily subscription analytics and metrics"""
+    __tablename__ = "subscription_analytics"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    # Date for this analytics record
+    date: Mapped[Date] = mapped_column(Date)
+
+    # Subscription metrics
+    total_active_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    new_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    canceled_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    paused_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+    resumed_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Revenue metrics
+    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    average_subscription_value: Mapped[float] = mapped_column(Float, default=0.0)
+    monthly_recurring_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Performance metrics
+    churn_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    conversion_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    retention_rate: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Currency
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Breakdown by subscription type/plan (JSON)
+    plan_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Breakdown by delivery type (JSON)
+    delivery_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Geographic breakdown (JSON)
+    geographic_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Additional metrics (JSON)
+    additional_metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        {'schema': 'commerce'},
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert subscription analytics to dictionary"""
+        return {
+            "id": str(self.id),
+            "date": self.date.isoformat() if self.date else None,
+            "total_active_subscriptions": self.total_active_subscriptions,
+            "new_subscriptions": self.new_subscriptions,
+            "canceled_subscriptions": self.canceled_subscriptions,
+            "paused_subscriptions": self.paused_subscriptions,
+            "resumed_subscriptions": self.resumed_subscriptions,
+            "total_revenue": self.total_revenue,
+            "average_subscription_value": self.average_subscription_value,
+            "monthly_recurring_revenue": self.monthly_recurring_revenue,
+            "churn_rate": self.churn_rate,
+            "conversion_rate": self.conversion_rate,
+            "retention_rate": self.retention_rate,
+            "currency": self.currency,
+            "plan_breakdown": self.plan_breakdown,
+            "delivery_breakdown": self.delivery_breakdown,
+            "geographic_breakdown": self.geographic_breakdown,
+            "additional_metrics": self.additional_metrics,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

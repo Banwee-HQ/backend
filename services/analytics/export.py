@@ -21,23 +21,7 @@ except OSError:
     _WEASYPRINT_AVAILABLE = False
 
 
-class ExportFilters(BaseModel):
-    """Filters for export data"""
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    customer_id: Optional[str] = None
-    subscription_status: Optional[str] = None
-    payment_status: Optional[str] = None
-    variant_ids: Optional[List[str]] = None
-
-
-class ExportResult(BaseModel):
-    """Result of export operation"""
-    content: bytes
-    content_type: str
-    filename: str
-    format_type: str
-    generated_at: datetime
+from schemas.common.service_types import ExportFilters, ExportResult
 
 
 class ExportService:

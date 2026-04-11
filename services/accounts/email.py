@@ -384,51 +384,6 @@ class EmailService:
             print(f"❌ Failed to render email template {template_name}: {e}")
             raise
 
-
-# ============================================================================
-# EMAIL QUEUE - Class-based wrapper to queue emails via ARQ
-# ============================================================================
-
-class EmailQueue:
-    """
-    Handles sending emails via FastAPI BackgroundTasks (ARQ/Redis removed).
-    """
-
-    @staticmethod
-    async def _send_direct(email_type: str, recipient: str, **kwargs):
-        """Send email directly without a queue."""
-        try:
-            from core.worker import send_email_task
-            await send_email_task(email_type, recipient, **kwargs)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Background email task failed ({email_type} to {recipient}): {e}")
-
-    @classmethod
-    def send_order_confirmation(
-        cls,
-        background_tasks: BackgroundTasks,
-        to_email: str,
-        customer_name: str,
-        order_number: str,
-        order_date: datetime,
-        total_amount: float,
-        items: List[Dict[str, Any]] = None,
-        shipping_address: Dict[str, Any] = None
-    ):
-        """Queue order confirmation email"""
-        background_tasks.add_task(
-            cls._send_direct,
-            "order_confirmation",
-            to_email,
-            customer_name=customer_name,
-            order_number=order_number,
-            order_date=order_date,
-            total_amount=total_amount,
-            items=items or [],
-            shipping_address=shipping_address or {}
-        )
-
     @classmethod
     def send_shipping_update(
         cls,
@@ -548,30 +503,3 @@ class EmailQueue:
             delivery_address=delivery_address,
             delivery_notes=delivery_notes
         )
-
-
-# ============================================================================
-# LEGACY FUNCTION WRAPPERS - For backward compatibility
-# ============================================================================
-
-def send_order_confirmation_email(background_tasks: BackgroundTasks, to_email: str, **kwargs):
-    """Legacy wrapper - use EmailQueue.send_order_confirmation instead"""
-    EmailQueue.send_order_confirmation(background_tasks, to_email, **kwargs)
-
-
-def send_shipping_update_email(background_tasks: BackgroundTasks, to_email: str, **kwargs):
-    """Legacy wrapper - use EmailQueue.send_shipping_update instead"""
-    EmailQueue.send_shipping_update(background_tasks, to_email, **kwargs)
-
-
-
-
-def send_password_reset_email(background_tasks: BackgroundTasks, to_email: str, **kwargs):
-    """Legacy wrapper - use EmailQueue.send_password_reset instead"""
-    EmailQueue.send_password_reset(background_tasks, to_email, **kwargs)
-
-
-def send_order_delivered_email(background_tasks: BackgroundTasks, to_email: str, **kwargs):
-    """Legacy wrapper - use EmailQueue.send_order_delivered instead"""
-    EmailQueue.send_order_delivered(background_tasks, to_email, **kwargs)
-

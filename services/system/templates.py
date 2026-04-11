@@ -13,28 +13,7 @@ from core.config import settings
 logger = get_structured_logger(__name__)
 
 
-class RenderedTemplate(BaseModel):
-    """Result of template rendering"""
-    content: str
-    template_name: str
-    context_used: Dict[str, Any]
-    rendered_at: str
-
-
-class RenderedExport(BaseModel):
-    """Result of export template rendering"""
-    content: str
-    format_type: str
-    template_name: str
-    data_used: Dict[str, Any]
-    rendered_at: str
-
-
-class TemplateValidationResult(BaseModel):
-    """Result of template validation"""
-    is_valid: bool
-    errors: list[str]
-    warnings: list[str]
+from schemas.common.service_types import RenderedTemplate, RenderedExport, TemplateValidationResult
 
 
 class JinjaTemplateService:

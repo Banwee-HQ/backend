@@ -16,27 +16,8 @@ from core.logging import get_structured_logger
 logger = get_structured_logger(__name__)
 
 
-class DiscountType(Enum):
-    """Discount types supported by the engine"""
-    PERCENTAGE = "percentage"
-    FIXED_AMOUNT = "fixed_amount"
-    FREE_SHIPPING = "free_shipping"
-
-
-class DiscountValidationResult:
-    """Result of discount validation"""
-    def __init__(self, is_valid: bool, error_message: str = None, discount: Discount = None):
-        self.is_valid = is_valid
-        self.error_message = error_message
-        self.discount = discount
-
-
-class DiscountCalculationResult:
-    """Result of discount calculation"""
-    def __init__(self, discount_amount: Decimal, final_total: Decimal, discount_type: str):
-        self.discount_amount = discount_amount
-        self.final_total = final_total
-        self.discount_type = discount_type
+from schemas.common.service_types import DiscountValidationResult, DiscountCalculationResult
+from models.commerce.discounts import DiscountType
 
 
 class DiscountEngine:

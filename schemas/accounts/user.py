@@ -102,6 +102,25 @@ class Update(BaseModel):
     is_active: Optional[bool] = None
 
 
+# Admin user management schemas
+class AdminUserUpdate(BaseModel):
+    """Admin update schema - allows updating more fields than regular users"""
+    firstname: Optional[str] = None
+    lastname: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+    account_status: Optional[str] = None
+    verification_status: Optional[str] = None
+    verified: Optional[bool] = None
+
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+    reason: Optional[str] = None
+
+
 class Response(BaseModel):
     id: UUID
     email: EmailStr

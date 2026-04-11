@@ -243,8 +243,8 @@ async def resend(
         user.token_expiration = datetime.now(timezone.utc) + timedelta(hours=24)
         await db.commit()
 
-        from services.accounts.email import EmailQueue
-        EmailQueue.send_verification(background_tasks, request.email, user.firstname, token)
+        from services.accounts.email import EmailService
+        EmailService.send_verification(background_tasks, request.email, user.firstname, token)
 
         return APIResponse(success=True, message="Verification email sent successfully. Please check your inbox.")
 

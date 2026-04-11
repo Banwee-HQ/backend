@@ -1,32 +1,20 @@
 """
-Tax calculation routes
+Tax calculation routes - Public API and Admin endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
 from typing import Optional, List
 from uuid import UUID
-from decimal import Decimal
-from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
-from core.dependencies import get_current_user, require_admin
+from core.dependencies import get_current_auth_user, require_admin
 from core.exceptions import APIException
 from core.utils.response import Response
-from models.accounts.user import User
-from models.commerce.tax_rates import TaxRate
 from services.commerce.tax import TaxService
-from schemas.commerce.tax import (
-    Currency,
-    Calculation,
-    CalculationResponse,
-    RateCreate,
-    RateUpdate,
-    RateResponse,
-)
+from schemas.commerce.tax import Calculation, RateCreate, RateUpdate
+from models.commerce.tax_rates import TaxRate
 
-logger = get_logger(__name__)
 router = APIRouter(prefix="/tax", tags=["tax"])
 
 
@@ -538,3 +526,216 @@ async def bulk_update(
             status_code=500,
             detail=f"Failed to bulk update tax rates: {str(e)}"
         )
+
+
+# ==========================================================
+# ADMIN ENDPOINTS - Tax Rate Management
+# ==========================================================
+
+@router.get("/admin/rates", dependencies=[Depends(require_admin)])
+async def list_tax_rates(
+    country_code: Optional[str] = Query(None),
+    province_code: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all tax rates (admin only)."""
+    from sqlalchemy import select as sa_select, and_, or_, func
+    
+    try:
+        query = sa_select(TaxRate)
+        count_query = sa_select(func.count(TaxRate.id))
+        
+        conditions = []
+        if country_code:
+            conditions.append(TaxRate.country_code == country_code.upper())
+        if province_code:
+            conditions.append(TaxRate.province_code == province_code.upper())
+        if is_active is not None:
+            conditions.append(TaxRate.is_active == is_active)
+        if search:
+            search_term = f"%{search}%"
+            conditions.append(
+                or_(
+                    TaxRate.country_name.ilike(search_term),
+                    TaxRate.province_name.ilike(search_term),
+                    TaxRate.tax_name.ilike(search_term)
+                )
+            )
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+            count_query = count_query.where(and_(*conditions))
+        
+        query = query.order_by(TaxRate.country_name, TaxRate.province_name)
+        offset = (page - 1) * per_page
+        query = query.offset(offset).limit(per_page)
+        
+        result = await db.execute(query)
+        tax_rates = result.scalars().all()
+        
+        total = await db.scalar(count_query) or 0
+        pages = (total + per_page - 1) // per_page
+        
+        response_data = []
+        for rate in tax_rates:
+            response_data.append({
+                "id": rate.id,
+                "country_code": rate.country_code,
+                "country_name": rate.country_name,
+                "province_code": rate.province_code,
+                "province_name": rate.province_name,
+                "tax_rate": rate.tax_rate,
+                "tax_percentage": rate.tax_rate * 100,
+                "tax_name": rate.tax_name,
+                "is_active": rate.is_active,
+                "created_at": rate.created_at.isoformat(),
+                "updated_at": rate.updated_at.isoformat() if rate.updated_at else None
+            })
+        
+        return Response.success(data=response_data, pagination={
+            "page": page,
+            "limit": per_page,
+            "total": total,
+            "pages": pages
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch tax rates: {str(e)}")
+
+
+@router.post("/admin/rates", dependencies=[Depends(require_admin)], status_code=status.HTTP_201_CREATED)
+async def create_tax_rate(
+    data: RateCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new tax rate (admin only)."""
+    from sqlalchemy import select as sa_select, and_
+    
+    try:
+        existing_query = sa_select(TaxRate).where(
+            and_(
+                TaxRate.country_code == data.country_code.upper(),
+                TaxRate.province_code == (data.province_code.upper() if data.province_code else None)
+            )
+        )
+        result = await db.execute(existing_query)
+        existing = result.scalar_one_or_none()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Tax rate already exists for {data.country_code}")
+        
+        tax_rate = TaxRate(
+            country_code=data.country_code.upper(),
+            country_name=data.country_name,
+            province_code=data.province_code.upper() if data.province_code else None,
+            province_name=data.province_name,
+            tax_rate=data.tax_rate,
+            tax_name=data.tax_name,
+            is_active=data.is_active
+        )
+        
+        db.add(tax_rate)
+        await db.commit()
+        await db.refresh(tax_rate)
+        
+        return Response.success(data={
+            "id": tax_rate.id,
+            "country_code": tax_rate.country_code,
+            "country_name": tax_rate.country_name,
+            "province_code": tax_rate.province_code,
+            "province_name": tax_rate.province_name,
+            "tax_rate": tax_rate.tax_rate,
+            "tax_percentage": tax_rate.tax_rate * 100,
+            "tax_name": tax_rate.tax_name,
+            "is_active": tax_rate.is_active,
+            "created_at": tax_rate.created_at.isoformat(),
+            "updated_at": tax_rate.updated_at.isoformat() if tax_rate.updated_at else None
+        }, code=status.HTTP_201_CREATED)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create tax rate: {str(e)}")
+
+
+@router.patch("/admin/rates/{tax_rate_id}", dependencies=[Depends(require_admin)])
+async def update_tax_rate(
+    tax_rate_id: UUID,
+    data: RateUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an existing tax rate (admin only)."""
+    from sqlalchemy import select as sa_select
+    
+    try:
+        result = await db.execute(sa_select(TaxRate).where(TaxRate.id == tax_rate_id))
+        tax_rate = result.scalar_one_or_none()
+        
+        if not tax_rate:
+            raise HTTPException(status_code=404, detail="Tax rate not found")
+        
+        if data.country_name is not None:
+            tax_rate.country_name = data.country_name
+        if data.province_name is not None:
+            tax_rate.province_name = data.province_name
+        if data.tax_rate is not None:
+            tax_rate.tax_rate = data.tax_rate
+        if data.tax_name is not None:
+            tax_rate.tax_name = data.tax_name
+        if data.is_active is not None:
+            tax_rate.is_active = data.is_active
+        
+        await db.commit()
+        await db.refresh(tax_rate)
+        
+        return Response.success(data={
+            "id": tax_rate.id,
+            "country_code": tax_rate.country_code,
+            "country_name": tax_rate.country_name,
+            "province_code": tax_rate.province_code,
+            "province_name": tax_rate.province_name,
+            "tax_rate": tax_rate.tax_rate,
+            "tax_percentage": tax_rate.tax_rate * 100,
+            "tax_name": tax_rate.tax_name,
+            "is_active": tax_rate.is_active,
+            "created_at": tax_rate.created_at.isoformat(),
+            "updated_at": tax_rate.updated_at.isoformat() if tax_rate.updated_at else None
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update tax rate: {str(e)}")
+
+
+@router.delete("/admin/rates/{tax_rate_id}", dependencies=[Depends(require_admin)])
+async def delete_tax_rate(
+    tax_rate_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a tax rate (admin only)."""
+    from sqlalchemy import select as sa_select
+    
+    try:
+        result = await db.execute(sa_select(TaxRate).where(TaxRate.id == tax_rate_id))
+        tax_rate = result.scalar_one_or_none()
+        
+        if not tax_rate:
+            raise HTTPException(status_code=404, detail="Tax rate not found")
+        
+        await db.delete(tax_rate)
+        await db.commit()
+        
+        return Response.success(message="Tax rate deleted successfully")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete tax rate: {str(e)}")

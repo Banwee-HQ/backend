@@ -165,3 +165,67 @@ class TestOAuthEndpoints:
         """Test Google OAuth callback with invalid code."""
         response = await async_client.get("/v1/oauth/callback/google", params={"code": "invalid"})
         assert response.status_code in [400, 401]
+
+
+@pytest.mark.api
+@pytest.mark.unit
+class TestAnalyticsEndpoints:
+    """Test analytics endpoints."""
+
+    async def test_get_sales_analytics(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting sales analytics."""
+        response = await async_client.get("/v1/analytics/sales", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "data" in data
+
+    async def test_get_sales_analytics_with_date_range(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting sales analytics with date range."""
+        response = await async_client.get(
+            "/v1/analytics/sales?start_date=2024-01-01&end_date=2024-12-31",
+            headers=admin_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_get_sales_analytics_unauthorized(self, async_client: AsyncClient, auth_headers: dict):
+        """Test getting analytics as regular user."""
+        response = await async_client.get("/v1/analytics/sales", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_get_user_analytics(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting user analytics."""
+        response = await async_client.get("/v1/analytics/users", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_get_product_analytics(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting product analytics."""
+        response = await async_client.get("/v1/analytics/products", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_get_order_analytics(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting order analytics."""
+        response = await async_client.get("/v1/analytics/orders", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_get_revenue_analytics(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting revenue analytics."""
+        response = await async_client.get("/v1/analytics/revenue", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_get_dashboard_summary(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting dashboard summary."""
+        response = await async_client.get("/v1/analytics/dashboard", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True

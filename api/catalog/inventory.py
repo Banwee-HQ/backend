@@ -296,3 +296,65 @@ async def delete_adj(
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete stock adjustment: {e}")
+
+
+# ==========================================================
+# INVENTORY SYNC ENDPOINTS - Moved from admin.py
+# ==========================================================
+
+@router.post("/sync-all", dependencies=[Depends(require_admin)])
+async def sync_all_inventory(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sync all product availability statuses based on current inventory levels.
+    This ensures products showing as out of stock actually have no inventory.
+    Admin only - for data consistency maintenance.
+    """
+    try:
+        inventory_service = InventoryService(db)
+        result = await inventory_service.sync_all_products_availability()
+        
+        return Response.success(
+            data=result,
+            message=result.get("message", "Inventory sync completed")
+        )
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to sync inventory: {str(e)}"
+        )
+
+
+@router.post("/sync/product/{product_id}", dependencies=[Depends(require_admin)])
+async def sync_product_inventory(
+    product_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sync a single product's availability status based on its variant inventory levels.
+    Admin only - for data consistency maintenance.
+    """
+    try:
+        from uuid import UUID as UUIDType
+        
+        product_id_uuid = UUIDType(product_id)
+        inventory_service = InventoryService(db)
+        result = await inventory_service.sync_availability(product_id_uuid)
+        
+        return Response.success(
+            data=result,
+            message="Product inventory synced successfully"
+        )
+    except ValueError:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Invalid product ID format"
+        )
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to sync product inventory: {str(e)}"
+        )

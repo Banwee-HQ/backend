@@ -102,3 +102,16 @@ class StatsResponse(BaseModel):
     pending_count: int
     completed_count: int
     average_processing_time_hours: Optional[float]
+
+
+# Admin refund management schemas
+class UpdateRefundStatus(BaseModel):
+    status: str
+    admin_notes: Optional[str] = None
+
+
+class RefundPatch(BaseModel):
+    """Request model for partial refund updates via PATCH."""
+    status: Optional[str] = None
+    admin_notes: Optional[str] = None
+    approved_amount: Optional[float] = None

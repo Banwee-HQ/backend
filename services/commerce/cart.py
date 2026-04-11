@@ -18,41 +18,9 @@ from models.catalog.product import ProductVariant, Product
 from models.accounts.user import User
 from services.commerce.tax import TaxService
 from core.config import settings
+from schemas.common.service_types import CartValidationResult
 
 logger = get_structured_logger(__name__)
-
-
-class CartValidationResult:
-    """Result of cart validation with detailed information"""
-    def __init__(
-        self,
-        valid: bool,
-        can_checkout: bool,
-        cart: Optional[Cart] = None,
-        issues: List[Dict[str, Any]] = None,
-        summary: Dict[str, Any] = None
-    ):
-        self.valid = valid
-        self.can_checkout = can_checkout
-        self.cart = cart
-        self.issues = issues or []
-        self.summary = summary or {}
-    
-    def get(self, key: str, default: Any = None):
-        """Dictionary-like get access for backward compatibility with older callers."""
-        return getattr(self, key, default)
-
-    def __getitem__(self, key: str):
-        return getattr(self, key)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'valid': self.valid,
-            'can_checkout': self.can_checkout,
-            'cart': self.cart,
-            'issues': self.issues,
-            'summary': self.summary
-        }
 
 
 class CartService:

@@ -197,7 +197,6 @@ class SubscriptionScheduler:
                     
                     # Send email notification about paused subscription
                     try:
-                        from services.accounts.email import EmailQueue
                         # Note: This needs BackgroundTasks, but scheduler runs in background
                         # For now, send directly via EmailService (already handled)
                         from services.accounts.email import EmailService

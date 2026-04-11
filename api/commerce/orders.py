@@ -16,6 +16,16 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
+def require_admin(current_user: User = Depends(get_current_auth_user)):
+    """Require admin role."""
+    if current_user.role not in ["admin", "manager", "Admin", "SuperAdmin"]:
+        raise APIException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            message="Admin access required"
+        )
+    return current_user
+
+
 # ==========================================================
 # ORDERS - 5 Standard APIs
 # ==========================================================
@@ -212,3 +222,156 @@ async def list(
         return Response.success(data=notes)
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to get notes: {str(e)}")
+
+
+# ==========================================================
+# ORDER TRACKING - Moved from shipping_tracking.py
+# ==========================================================
+@router.get("/{order_id}/tracking")
+async def get_order_tracking(
+    order_id: UUID,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order tracking information (authenticated)."""
+    try:
+        tracking = await order_service.tracking(order_id, current_user.id)
+        if tracking is None:
+            raise APIException(status_code=404, message="Order not found or tracking unavailable")
+        return Response.success(data=tracking)
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
+
+
+@router.get("/{order_id}/shipments")
+async def get_order_shipments(
+    order_id: str,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all shipments for an order."""
+    try:
+        from services.commerce.shipping_tracking import ShippingTrackingService
+        shipping_service = ShippingTrackingService(db)
+        shipments = await shipping_service.get_order_shipments(order_id)
+        return Response.success(data=shipments)
+    except Exception as e:
+        raise APIException(
+            status_code=500,
+            message=f"Failed to get order shipments: {str(e)}"
+        )
+
+
+# ==========================================================
+# PUBLIC TRACKING - No authentication required
+# ==========================================================
+@router.get("/track/{order_id}")
+async def get_public_tracking(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order tracking (public - no auth required)."""
+    try:
+        tracking = await order_service.tracking_public(order_id)
+        return Response.success(data=tracking)
+    except Exception:
+        raise APIException(status_code=404, message="Order not found or tracking unavailable")
+
+
+# ==========================================================
+# ADMIN ENDPOINTS - Moved from admin.py
+# ==========================================================
+
+@router.get("/admin/all", dependencies=[Depends(require_admin)])
+async def get_all_orders_admin(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    customer_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all orders (admin only)."""
+    try:
+        order_service = OrderService(db)
+        orders = await order_service.get_all_orders(
+            page=page,
+            limit=limit,
+            customer_id=customer_id,
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        return Response.success(data=orders)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch orders: {str(e)}")
+
+
+@router.patch("/{order_id}/status", dependencies=[Depends(require_admin)])
+async def update_order_status_admin(
+    order_id: str,
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update order status (admin only)."""
+    try:
+        order_service = OrderService(db)
+        result = await order_service.update_status(order_id, request.get("status"), request.get("notes"))
+        return Response.success(data=result, message="Order status updated")
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to update order status: {str(e)}")
+
+
+@router.put("/{order_id}/deliver", dependencies=[Depends(require_admin)])
+async def mark_order_as_delivered(
+    order_id: str,
+    request: dict = {},
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark order as delivered (admin only)."""
+    try:
+        order_service = OrderService(db)
+        result = await order_service.deliver(order_id, request.get("notes"))
+        return Response.success(data=result, message="Order marked as delivered")
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to mark order as delivered: {str(e)}")
+
+
+@router.post("/{order_id}/ship", dependencies=[Depends(require_admin)])
+async def ship_order(
+    order_id: str,
+    request: dict,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Ship order (admin only)."""
+    try:
+        order_service = OrderService(db)
+        result = await order_service.ship(order_id, request.get("carrier"), request.get("tracking_number"))
+        return Response.success(data=result, message="Order shipped")
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to ship order: {str(e)}")
+
+
+@router.get("/admin/statistics", dependencies=[Depends(require_admin)])
+async def get_order_statistics(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order statistics (admin only)."""
+    try:
+        order_service = OrderService(db)
+        stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
+        return Response.success(data=stats)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch statistics: {str(e)}")

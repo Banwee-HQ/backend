@@ -33,30 +33,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from core.config import settings
 from core.logging import get_structured_logger
 
+from schemas.common.service_types import PricingCalculationResult
+
 logger = get_structured_logger(__name__)
-
-
-class PricingCalculationResult:
-    """Result of comprehensive pricing calculation"""
-    def __init__(
-        self,
-        subtotal: Decimal,
-        shipping_cost: Decimal,
-        tax_amount: Decimal,
-        tax_rate: float,
-        discount_amount: Decimal,
-        total_amount: Decimal,
-        currency: str = "USD",
-        breakdown: Dict[str, Any] = None
-    ):
-        self.subtotal = subtotal
-        self.shipping_cost = shipping_cost
-        self.tax_amount = tax_amount
-        self.tax_rate = tax_rate
-        self.discount_amount = discount_amount
-        self.total_amount = total_amount
-        self.currency = currency
-        self.breakdown = breakdown or {}
 
 
 class OrderService:
@@ -2527,3 +2506,261 @@ class OrderService:
         except Exception as e:
             logger.error(f"Failed to calculate estimated delivery for order {order.id}: {e}")
             return None
+
+    # ============================================================================
+    # ADMIN ORDER MANAGEMENT METHODS
+    # ============================================================================
+
+    async def get_all_orders(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        customer_id: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
+    ) -> dict:
+        """Get all orders for admin (can filter by customer, status, date range)."""
+        from sqlalchemy import func
+
+        offset = (page - 1) * limit
+
+        # Build base query
+        base_query = select(Order).options(
+            selectinload(Order.items),
+            selectinload(Order.user)
+        )
+
+        # Apply filters
+        if customer_id:
+            base_query = base_query.where(Order.user_id == UUID(customer_id))
+
+        if status:
+            base_query = base_query.where(Order.order_status == status)
+
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                base_query = base_query.where(Order.created_at >= from_date)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                base_query = base_query.where(Order.created_at <= to_date)
+            except ValueError:
+                pass
+
+        # Apply sorting
+        sort_column = Order.created_at
+        if sort_by == "total":
+            sort_column = Order.total_amount
+        elif sort_by == "status":
+            sort_column = Order.order_status
+
+        if sort_order == "asc":
+            base_query = base_query.order_by(sort_column.asc())
+        else:
+            base_query = base_query.order_by(sort_column.desc())
+
+        # Get total count
+        count_query = select(func.count()).select_from(Order)
+        if customer_id:
+            count_query = count_query.where(Order.user_id == UUID(customer_id))
+        if status:
+            count_query = count_query.where(Order.order_status == status)
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                count_query = count_query.where(Order.created_at >= from_date)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                count_query = count_query.where(Order.created_at <= to_date)
+            except ValueError:
+                pass
+
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Execute query with pagination
+        result = await self.db.execute(base_query.offset(offset).limit(limit))
+        orders = result.scalars().all()
+
+        # Format response
+        orders_data = []
+        for order in orders:
+            order_dict = await self._format_order_response(order)
+            if order.user:
+                order_dict["customer"] = {
+                    "id": str(order.user.id),
+                    "email": order.user.email,
+                    "name": f"{order.user.firstname} {order.user.lastname}"
+                }
+            orders_data.append(order_dict)
+
+        return {
+            "orders": orders_data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit if limit > 0 else 1
+            }
+        }
+
+    async def update_status(self, order_id: str, status: Optional[str], notes: Optional[str] = None) -> dict:
+        """Update order status (admin only)."""
+        query = select(Order).where(Order.id == UUID(order_id))
+        result = await self.db.execute(query)
+        order = result.scalar_one_or_none()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if status:
+            order.order_status = status
+
+        if notes:
+            current_notes = order.admin_notes or ""
+            order.admin_notes = current_notes + f"\n[{datetime.utcnow().isoformat()}] {notes}"
+
+        await self.db.commit()
+        await self.db.refresh(order)
+
+        return await self._format_order_response(order)
+
+    async def deliver(self, order_id: str, notes: Optional[str] = None) -> dict:
+        """Mark order as delivered (admin only)."""
+        query = select(Order).where(Order.id == UUID(order_id))
+        result = await self.db.execute(query)
+        order = result.scalar_one_or_none()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order.order_status = "delivered"
+        order.delivered_at = datetime.utcnow()
+        order.fulfillment_status = FulfillmentStatus.DELIVERED
+
+        if notes:
+            current_notes = order.admin_notes or ""
+            order.admin_notes = current_notes + f"\n[{datetime.utcnow().isoformat()}] Delivered: {notes}"
+
+        await self.db.commit()
+        await self.db.refresh(order)
+
+        return await self._format_order_response(order)
+
+    async def ship(self, order_id: str, carrier: Optional[str], tracking_number: Optional[str]) -> dict:
+        """Ship order (admin only)."""
+        query = select(Order).where(Order.id == UUID(order_id))
+        result = await self.db.execute(query)
+        order = result.scalar_one_or_none()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order.order_status = "shipped"
+        order.shipped_at = datetime.utcnow()
+        order.fulfillment_status = FulfillmentStatus.SHIPPED
+
+        if carrier:
+            order.shipping_method = carrier
+        if tracking_number:
+            order.tracking_number = tracking_number
+
+        await self.db.commit()
+        await self.db.refresh(order)
+
+        return await self._format_order_response(order)
+
+    async def get_statistics(self, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
+        """Get order statistics (admin only)."""
+        from sqlalchemy import func
+
+        # Build base query
+        query = select(Order)
+
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                query = query.where(Order.created_at >= from_date)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                query = query.where(Order.created_at <= to_date)
+            except ValueError:
+                pass
+
+        # Get counts by status
+        status_query = select(Order.order_status, func.count(Order.id)).group_by(Order.order_status)
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                status_query = status_query.where(Order.created_at >= from_date)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                status_query = status_query.where(Order.created_at <= to_date)
+            except ValueError:
+                pass
+
+        status_result = await self.db.execute(status_query)
+        status_counts = {status: count for status, count in status_result.all()}
+
+        # Get total revenue
+        revenue_query = select(func.sum(Order.total_amount)).where(Order.order_status.notin_(["cancelled", "refunded"]))
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                revenue_query = revenue_query.where(Order.created_at >= from_date)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                revenue_query = revenue_query.where(Order.created_at <= to_date)
+            except ValueError:
+                pass
+
+        revenue_result = await self.db.execute(revenue_query)
+        total_revenue = revenue_result.scalar() or 0
+
+        # Get total orders count
+        count_query = select(func.count(Order.id))
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                count_query = count_query.where(Order.created_at >= from_date)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                count_query = count_query.where(Order.created_at <= to_date)
+            except ValueError:
+                pass
+
+        count_result = await self.db.execute(count_query)
+        total_orders = count_result.scalar() or 0
+
+        return {
+            "total_orders": total_orders,
+            "total_revenue": float(total_revenue),
+            "status_breakdown": status_counts,
+            "date_range": {
+                "from": date_from,
+                "to": date_to
+            }
+        }

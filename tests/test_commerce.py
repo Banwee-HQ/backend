@@ -283,3 +283,23 @@ class TestRefundEndpoints:
         """Test getting refunds as regular user (should fail)."""
         response = await async_client.get("/v1/refunds/", headers=auth_headers)
         assert response.status_code == 403
+
+
+@pytest.mark.api
+@pytest.mark.unit
+class TestAdminOrderEndpoints:
+    """Test admin order management endpoints."""
+
+    async def test_get_admin_orders(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting all orders as admin."""
+        response = await async_client.get("/v1/admin/orders", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_update_order_status_as_admin(self, async_client: AsyncClient, admin_headers: dict):
+        """Test updating order status as admin."""
+        order_id = str(uuid4())
+        status_data = {"status": "shipped", "tracking_number": "TRACK123"}
+        response = await async_client.patch(f"/v1/admin/orders/{order_id}/status", headers=admin_headers, json=status_data)
+        assert response.status_code in [200, 404]

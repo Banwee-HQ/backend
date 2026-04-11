@@ -16,61 +16,60 @@ logger = get_structured_logger(__name__)
 
 T = TypeVar('T')
 
-class TransactionError(Exception):
-    """Custom exception for transaction-related errors"""
-    def __init__(self, message: str, original_error: Optional[Exception] = None, rollback_data: Optional[Dict[str, Any]] = None):
-        super().__init__(message)
-        self.original_error = original_error
-        self.rollback_data = rollback_data
-
-
-class TransactionContext:
-    """Context for tracking transaction state and rollback data"""
-    
-    def __init__(self, operation_id: str, db_session: AsyncSession):
-        self.operation_id = operation_id
-        self.db_session = db_session
-        self.rollback_data: Dict[str, Any] = {}
-        self.savepoints: Dict[str, Any] = {}
-        self.started_at = datetime.utcnow()
-        self.committed = False
-        self.rolled_back = False
-    
-    def add_rollback_data(self, key: str, data: Any) -> None:
-        """Add data that can be used for rollback operations"""
-        self.rollback_data[key] = data
-    
-    def get_rollback_data(self, key: str) -> Any:
-        """Get rollback data by key"""
-        return self.rollback_data.get(key)
-    
-    async def create_savepoint(self, name: str) -> None:
-        """Create a savepoint within the transaction"""
-        try:
-            savepoint = await self.db_session.begin_nested()
-            self.savepoints[name] = savepoint
-            logger.info(f"Created savepoint '{name}' for transaction {self.operation_id}")
-        except SQLAlchemyError as e:
-            logger.error(f"Failed to create savepoint '{name}': {e}")
-            raise TransactionError(f"Failed to create savepoint: {e}", original_error=e)
-    
-    async def rollback_to_savepoint(self, name: str) -> None:
-        """Rollback to a specific savepoint"""
-        savepoint = self.savepoints.get(name)
-        if not savepoint:
-            raise TransactionError(f"Savepoint '{name}' not found")
-        
-        try:
-            await savepoint.rollback()
-            logger.info(f"Rolled back to savepoint '{name}' for transaction {self.operation_id}")
-        except SQLAlchemyError as e:
-            logger.error(f"Failed to rollback to savepoint '{name}': {e}")
-            raise TransactionError(f"Failed to rollback to savepoint: {e}", original_error=e)
-
 
 class TransactionService:
     """Service for managing atomic operations with rollback capabilities"""
-    
+
+    class TransactionError(Exception):
+        """Custom exception for transaction-related errors"""
+        def __init__(self, message: str, original_error: Optional[Exception] = None, rollback_data: Optional[Dict[str, Any]] = None):
+            super().__init__(message)
+            self.original_error = original_error
+            self.rollback_data = rollback_data
+
+    class TransactionContext:
+        """Context for tracking transaction state and rollback data"""
+
+        def __init__(self, operation_id: str, db_session: AsyncSession):
+            self.operation_id = operation_id
+            self.db_session = db_session
+            self.rollback_data: Dict[str, Any] = {}
+            self.savepoints: Dict[str, Any] = {}
+            self.started_at = datetime.utcnow()
+            self.committed = False
+            self.rolled_back = False
+
+        def add_rollback_data(self, key: str, data: Any) -> None:
+            """Add data that can be used for rollback operations"""
+            self.rollback_data[key] = data
+
+        def get_rollback_data(self, key: str) -> Any:
+            """Get rollback data by key"""
+            return self.rollback_data.get(key)
+
+        async def create_savepoint(self, name: str) -> None:
+            """Create a savepoint within the transaction"""
+            try:
+                savepoint = await self.db_session.begin_nested()
+                self.savepoints[name] = savepoint
+                logger.info(f"Created savepoint '{name}' for transaction {self.operation_id}")
+            except SQLAlchemyError as e:
+                logger.error(f"Failed to create savepoint '{name}': {e}")
+                raise TransactionService.TransactionError(f"Failed to create savepoint: {e}", original_error=e)
+
+        async def rollback_to_savepoint(self, name: str) -> None:
+            """Rollback to a specific savepoint"""
+            savepoint = self.savepoints.get(name)
+            if not savepoint:
+                raise TransactionService.TransactionError(f"Savepoint '{name}' not found")
+
+            try:
+                await savepoint.rollback()
+                logger.info(f"Rolled back to savepoint '{name}' for transaction {self.operation_id}")
+            except SQLAlchemyError as e:
+                logger.error(f"Failed to rollback to savepoint '{name}': {e}")
+                raise TransactionService.TransactionError(f"Failed to rollback to savepoint: {e}", original_error=e)
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self._active_transactions: Dict[str, TransactionContext] = {}

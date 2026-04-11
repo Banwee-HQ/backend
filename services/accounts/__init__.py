@@ -1,3 +1,4 @@
 from .auth import AuthService
-from .user import UserService, AddressService
-from .email import EmailService, EmailQueue
+from .user import UserService
+from .address import AddressService
+from .email import EmailService

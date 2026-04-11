@@ -12,10 +12,8 @@ from sqlalchemy import select, func, and_, or_, desc, asc, text, Integer
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
-from models.admin.analytics import (
-    UserSession, AnalyticsEvent, ConversionFunnel, CustomerLifecycleMetrics,
-    EventType, TrafficSource 
-)
+from models.accounts import UserSession, CustomerLifecycleMetrics, TrafficSource
+from models.system import AnalyticsEvent, ConversionFunnel, EventType
 from models.commerce.orders import Order
 from models.accounts.user import User
 from models.commerce.refunds import Refund, RefundStatus
@@ -818,3 +816,252 @@ class AnalyticsService:
         except Exception as e:
             logger.error(f"Failed to get revenue metrics: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve revenue metrics")
+
+    async def get_admin_stats(
+        self,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        status: Optional[str] = None,
+        category: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get admin dashboard statistics with optional filters"""
+        try:
+            from models.catalog.product import Product
+            from models.commerce.subscriptions import Subscription
+            from datetime import date
+
+            logger.info(f"📊 Dashboard stats request: date_from={date_from}, date_to={date_to}, status={status}, category={category}")
+
+            # Parse date filters
+            today = datetime.utcnow().date()
+            last_month = today - timedelta(days=30)
+
+            # Parse date_from and date_to
+            if date_from:
+                try:
+                    start_date = datetime.fromisoformat(date_from).date()
+                except:
+                    start_date = last_month
+            else:
+                start_date = last_month
+
+            if date_to:
+                try:
+                    end_date = datetime.fromisoformat(date_to).date()
+                except:
+                    end_date = today
+            else:
+                end_date = today
+
+            # Get total users (excluding admin users, filtered by date range)
+            total_users = await self.db.scalar(
+                select(func.count(User.id)).where(
+                    and_(
+                        User.role != 'admin',
+                        User.created_at >= start_date,
+                        User.created_at <= end_date
+                    )
+                )
+            )
+            logger.info(f"👥 Total users (customers) in date range: {total_users}")
+
+            active_users = await self.db.scalar(
+                select(func.count(User.id)).where(
+                    and_(
+                        User.is_active == True,
+                        User.role != 'admin',
+                        User.created_at >= start_date,
+                        User.created_at <= end_date
+                    )
+                )
+            )
+
+            # Get total orders with optional status filter (filtered by date range)
+            order_conditions = [
+                Order.created_at >= start_date,
+                Order.created_at <= end_date
+            ]
+            if status:
+                order_conditions.append(Order.order_status == status)
+
+            total_orders = await self.db.scalar(
+                select(func.count(Order.id)).where(and_(*order_conditions)) if order_conditions else select(func.count(Order.id))
+            )
+            logger.info(f"📦 Total orders (filtered by {status}): {total_orders}")
+
+            orders_today = await self.db.scalar(
+                select(func.count(Order.id)).where(
+                    func.date(Order.created_at) == today
+                )
+            )
+            logger.info(f"📅 Orders today: {orders_today}")
+
+            # Get total products with optional category filter
+            product_conditions = []
+            if category:
+                product_conditions.append(Product.category == category)
+
+            total_products = await self.db.scalar(
+                select(func.count(Product.id)).where(and_(*product_conditions)) if product_conditions else select(func.count(Product.id))
+            )
+            active_products = await self.db.scalar(
+                select(func.count(Product.id)).where(Product.is_active == True)
+            )
+
+            # Get revenue data (include confirmed, processing, shipped, and delivered orders)
+            revenue_conditions = [Order.order_status.in_(['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'])]
+            if status:
+                revenue_conditions.append(Order.order_status == status)
+
+            total_revenue = await self.db.scalar(
+                select(func.coalesce(func.sum(Order.total_amount), 0)).where(and_(*revenue_conditions))
+            ) or 0
+
+            revenue_today = await self.db.scalar(
+                select(func.coalesce(func.sum(Order.total_amount), 0)).where(
+                    and_(
+                        Order.order_status.in_(['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED']),
+                        func.date(Order.created_at) == today
+                    )
+                )
+            ) or 0
+
+            # Calculate average order value
+            aov = float(total_revenue) / total_orders if total_orders > 0 else 0
+
+            # Get subscription counts
+            total_subscriptions = await self.db.scalar(select(func.count(Subscription.id))) or 0
+            active_subscriptions = await self.db.scalar(
+                select(func.count(Subscription.id)).where(Subscription.status == 'active')
+            ) or 0
+
+            # Build response
+            return {
+                "users": {
+                    "total": total_users or 0,
+                    "active": active_users or 0,
+                    "new_today": await self.db.scalar(
+                        select(func.count(User.id)).where(func.date(User.created_at) == today)
+                    ) or 0
+                },
+                "orders": {
+                    "total": total_orders or 0,
+                    "today": orders_today or 0,
+                    "pending": await self.db.scalar(
+                        select(func.count(Order.id)).where(Order.order_status == 'PENDING')
+                    ) or 0,
+                    "processing": await self.db.scalar(
+                        select(func.count(Order.id)).where(Order.order_status == 'PROCESSING')
+                    ) or 0,
+                    "shipped": await self.db.scalar(
+                        select(func.count(Order.id)).where(Order.order_status == 'SHIPPED')
+                    ) or 0,
+                    "delivered": await self.db.scalar(
+                        select(func.count(Order.id)).where(Order.order_status == 'DELIVERED')
+                    ) or 0,
+                    "cancelled": await self.db.scalar(
+                        select(func.count(Order.id)).where(Order.order_status == 'CANCELLED')
+                    ) or 0,
+                },
+                "products": {
+                    "total": total_products or 0,
+                    "active": active_products or 0,
+                    "low_stock": await self.db.scalar(
+                        select(func.count(Product.id)).where(Product.is_active == True)
+                    ) or 0  # Placeholder - would need inventory data
+                },
+                "revenue": {
+                    "total": float(total_revenue),
+                    "today": float(revenue_today),
+                    "average_order_value": round(aov, 2)
+                },
+                "subscriptions": {
+                    "total": total_subscriptions,
+                    "active": active_subscriptions
+                },
+                "filters": {
+                    "date_from": start_date.isoformat(),
+                    "date_to": end_date.isoformat(),
+                    "status_filter": status,
+                    "category_filter": category
+                },
+                "generated_at": datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get admin stats: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve admin stats: {str(e)}")
+
+    async def get_admin_overview(self) -> Dict[str, Any]:
+        """Get platform overview statistics for admin dashboard"""
+        try:
+            from models.catalog.product import Product
+            from models.commerce.subscriptions import Subscription
+            from datetime import date
+
+            today = date.today()
+            last_30_days = today - timedelta(days=30)
+
+            # User statistics
+            total_users = await self.db.scalar(
+                select(func.count(User.id)).where(User.role != 'admin')
+            ) or 0
+            new_users_30d = await self.db.scalar(
+                select(func.count(User.id)).where(
+                    and_(User.created_at >= last_30_days, User.role != 'admin')
+                )
+            ) or 0
+
+            # Order statistics
+            total_orders = await self.db.scalar(select(func.count(Order.id))) or 0
+            orders_30d = await self.db.scalar(
+                select(func.count(Order.id)).where(Order.created_at >= last_30_days)
+            ) or 0
+
+            # Revenue statistics
+            total_revenue = await self.db.scalar(
+                select(func.coalesce(func.sum(Order.total_amount), 0)).where(
+                    Order.order_status.in_(['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'])
+                )
+            ) or 0
+            revenue_30d = await self.db.scalar(
+                select(func.coalesce(func.sum(Order.total_amount), 0)).where(
+                    and_(
+                        Order.created_at >= last_30_days,
+                        Order.order_status.in_(['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'])
+                    )
+                )
+            ) or 0
+
+            # Product statistics
+            total_products = await self.db.scalar(select(func.count(Product.id))) or 0
+            active_products = await self.db.scalar(
+                select(func.count(Product.id)).where(Product.is_active == True)
+            ) or 0
+
+            # Subscription statistics
+            total_subscriptions = await self.db.scalar(select(func.count(Subscription.id))) or 0
+            active_subscriptions = await self.db.scalar(
+                select(func.count(Subscription.id)).where(Subscription.status == 'active')
+            ) or 0
+
+            return {
+                "platform_overview": {
+                    "total_users": total_users,
+                    "new_users_last_30d": new_users_30d,
+                    "total_orders": total_orders,
+                    "orders_last_30d": orders_30d,
+                    "total_revenue": float(total_revenue),
+                    "revenue_last_30d": float(revenue_30d),
+                    "average_order_value": float(total_revenue / total_orders) if total_orders > 0 else 0,
+                    "total_products": total_products,
+                    "active_products": active_products,
+                    "total_subscriptions": total_subscriptions,
+                    "active_subscriptions": active_subscriptions,
+                },
+                "generated_at": datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get admin overview: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve admin overview: {str(e)}")

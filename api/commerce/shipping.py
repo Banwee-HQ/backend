@@ -190,3 +190,73 @@ async def calc_cost(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to calculate shipping cost: {str(e)}"
         )
+
+
+# ==========================================================
+# ADMIN ENDPOINTS - Moved from admin.py
+# ==========================================================
+
+@router.get("/admin/methods", dependencies=[Depends(require_admin)])
+async def get_all_shipping_methods_admin(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    is_active: Optional[bool] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all shipping methods (admin only)."""
+    try:
+        shipping_service = ShippingService(db)
+        methods = await shipping_service.get_all_methods(
+            page=page,
+            limit=limit,
+            is_active=is_active
+        )
+        return Response.success(data=methods)
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to fetch shipping methods")
+
+
+@router.post("/admin/methods", dependencies=[Depends(require_admin)])
+async def create_shipping_method_admin(
+    method_data: MethodCreate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create shipping method (admin only)."""
+    try:
+        shipping_service = ShippingService(db)
+        method = await shipping_service.create(method_data)
+        return Response.success(data=method, message="Shipping method created successfully")
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to create shipping method")
+
+
+@router.patch("/methods/{method_id}", dependencies=[Depends(require_admin)])
+async def update_shipping_method_admin(
+    method_id: UUID,
+    method_data: MethodUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update shipping method (admin only)."""
+    try:
+        shipping_service = ShippingService(db)
+        method = await shipping_service.update(method_id, method_data)
+        return Response.success(data=method, message="Shipping method updated successfully")
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to update shipping method")
+
+
+@router.delete("/methods/{method_id}", dependencies=[Depends(require_admin)])
+async def delete_shipping_method_admin(
+    method_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete shipping method (admin only)."""
+    try:
+        shipping_service = ShippingService(db)
+        await shipping_service.delete(method_id)
+        return Response.success(message="Shipping method deleted successfully")
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to delete shipping method")

@@ -7,7 +7,7 @@ from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
-from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
+from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, AdminUserUpdate, UserStatusUpdate
 from core.dependencies import get_current_auth_user, require_admin
 from models.accounts.user import User as AuthUser, UserRole
 
@@ -173,3 +173,211 @@ async def delete(
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND, message="User not found")
     return Response.success(message="User deleted successfully")
+
+
+# ============================================================================
+# ADMIN USER MANAGEMENT ROUTES
+# ============================================================================
+
+@router.put("/{user_id}/status")
+async def update_user_status(
+    user_id: UUID,
+    payload: UserStatusUpdate,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user active status (admin only)."""
+    try:
+        service = UserService(db)
+        user = await service.update_status(user_id, payload.is_active)
+        if not user:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        return Response.success(
+            data={"id": str(user.id), "is_active": user.is_active},
+            message="User status updated successfully"
+        )
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update user status: {str(e)}"
+        )
+
+
+@router.post("/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: UUID,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Send password reset email to user (admin only)."""
+    try:
+        service = UserService(db)
+        result = await service.initiate_password_reset(user_id)
+        return Response.success(message="Password reset email sent successfully")
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to send password reset email: {str(e)}"
+        )
+
+
+@router.post("/{user_id}/deactivate")
+async def deactivate_user(
+    user_id: UUID,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Deactivate user account (admin only)."""
+    try:
+        service = UserService(db)
+        user = await service.deactivate(user_id)
+        if not user:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        return Response.success(
+            data={"id": str(user.id), "is_active": False},
+            message="User deactivated successfully"
+        )
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to deactivate user: {str(e)}"
+        )
+
+
+@router.post("/{user_id}/activate")
+async def activate_user(
+    user_id: UUID,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Activate user account (admin only)."""
+    try:
+        service = UserService(db)
+        user = await service.activate(user_id)
+        if not user:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        return Response.success(
+            data={"id": str(user.id), "is_active": True},
+            message="User activated successfully"
+        )
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to activate user: {str(e)}"
+        )
+
+
+@router.put("/{user_id}/verify")
+async def verify_user(
+    user_id: UUID,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify user account (admin only)."""
+    try:
+        service = UserService(db)
+        user = await service.verify(user_id)
+        if not user:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+        return Response.success(
+            data={"id": str(user.id), "verified": user.verified},
+            message="User verified successfully"
+        )
+    except APIException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to verify user: {str(e)}"
+        )
+
+
+@router.get("/{user_id}/activity")
+async def get_user_activity(
+    user_id: UUID,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user activity log (admin only)."""
+    try:
+        service = UserService(db)
+        activity = await service.get_activity_log(user_id, page, limit)
+        return Response.success(data=activity)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get user activity: {str(e)}"
+        )
+
+
+# ==========================================================
+# ADMIN ENDPOINTS - Moved from admin.py
+# ==========================================================
+
+@router.get("/admin/all", dependencies=[Depends(require_admin)])
+async def get_all_users_admin(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    role: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all users with filters (admin only)."""
+    try:
+        service = UserService(db)
+        users = await service.get_all_users(
+            page=page,
+            limit=limit,
+            role=role,
+            search=search,
+            status=status
+        )
+        return Response.success(data=users)
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch users: {str(e)}")
+
+
+@router.put("/{user_id}/status", dependencies=[Depends(require_admin)])
+async def update_user_status_admin(
+    user_id: str,
+    is_active: bool,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user status (admin only)."""
+    try:
+        service = UserService(db)
+        result = await service.update_status(user_id, is_active)
+        return Response.success(data=result, message="User status updated")
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to update user status")
+
+
+@router.delete("/{user_id}/admin", dependencies=[Depends(require_admin)])
+async def delete_user_admin(
+    user_id: str,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete user (admin only)."""
+    try:
+        service = UserService(db)
+        await service.delete(user_id)
+        return Response.success(message="User deleted successfully")
+    except Exception as e:
+        raise APIException(status_code=500, message="Failed to delete user")

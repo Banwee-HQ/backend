@@ -213,3 +213,34 @@ class TestInventoryEndpoints:
         response = await async_client.post("/v1/inventory/adjustments", headers=admin_headers, json=stock_data)
         # May fail if product doesn't exist
         assert response.status_code in [200, 201, 404]
+
+
+@pytest.mark.api
+@pytest.mark.unit
+class TestAdminProductEndpoints:
+    """Test admin product management endpoints."""
+
+    async def test_get_admin_products(self, async_client: AsyncClient, admin_headers: dict):
+        """Test getting all products as admin."""
+        response = await async_client.get("/v1/admin/products", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    async def test_create_product_as_admin(self, async_client: AsyncClient, admin_headers: dict, sample_product_data):
+        """Test creating product as admin."""
+        response = await async_client.post("/v1/admin/products", headers=admin_headers, json=sample_product_data)
+        assert response.status_code in [200, 201]
+
+    async def test_update_product_as_admin(self, async_client: AsyncClient, admin_headers: dict):
+        """Test updating product as admin."""
+        product_id = str(uuid4())
+        update_data = {"price": 39.99, "is_active": True}
+        response = await async_client.patch(f"/v1/admin/products/{product_id}", headers=admin_headers, json=update_data)
+        assert response.status_code in [200, 404]
+
+    async def test_delete_product_as_admin(self, async_client: AsyncClient, admin_headers: dict):
+        """Test deleting product as admin."""
+        product_id = str(uuid4())
+        response = await async_client.delete(f"/v1/admin/products/{product_id}", headers=admin_headers)
+        assert response.status_code in [200, 404]

@@ -2,7 +2,7 @@
 Consolidated payment models
 Includes: PaymentMethod, PaymentIntent, Transaction
 """
-from sqlalchemy import String, Boolean, ForeignKey, Float, Text, Integer, DateTime, func, Index
+from sqlalchemy import String, Boolean, ForeignKey, Float, Text, Integer, Date, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON, ENUM as PG_ENUM
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -59,6 +59,20 @@ class TransactionType(str, Enum):
     PAYOUT = "payout"
     CHARGEBACK = "chargeback"
     ADJUSTMENT = "adjustment"
+
+
+class PaymentFailureReason(str, Enum):
+    """Payment failure reason categories"""
+    INSUFFICIENT_FUNDS = "insufficient_funds"
+    CARD_DECLINED = "card_declined"
+    EXPIRED_CARD = "expired_card"
+    INVALID_CARD = "invalid_card"
+    AUTHENTICATION_REQUIRED = "authentication_required"
+    PROCESSING_ERROR = "processing_error"
+    NETWORK_ERROR = "network_error"
+    FRAUD_SUSPECTED = "fraud_suspected"
+    LIMIT_EXCEEDED = "limit_exceeded"
+    UNKNOWN = "unknown"
 
 
 class PaymentMethod(Base):
@@ -299,6 +313,82 @@ class Transaction(Base):
             "idempotency_key": self.idempotency_key,
             "request_id": self.request_id,
             "metadata": self.transaction_metadata,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PaymentAnalytics(Base):
+    """Daily payment analytics and metrics"""
+    __tablename__ = "payment_analytics"
+
+    # Common fields (previously from BaseModel)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
+    # Date for this analytics record
+    date: Mapped[Date] = mapped_column(Date)
+
+    # Payment volume metrics
+    total_payments: Mapped[int] = mapped_column(Integer, default=0)
+    successful_payments: Mapped[int] = mapped_column(Integer, default=0)
+    failed_payments: Mapped[int] = mapped_column(Integer, default=0)
+    pending_payments: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Success rate
+    success_rate: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Volume metrics
+    total_volume: Mapped[float] = mapped_column(Float, default=0.0)
+    successful_volume: Mapped[float] = mapped_column(Float, default=0.0)
+    average_payment_amount: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Currency
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+
+    # Breakdown by payment method (JSON: {"card": {...}, "bank_account": {...}})
+    breakdown_by_method: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Breakdown by country (JSON: {"US": {...}, "CA": {...}})
+    breakdown_by_country: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Breakdown by currency (JSON: {"USD": {...}, "EUR": {...}})
+    breakdown_by_currency: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Failure analysis (JSON: {"insufficient_funds": 5, "card_declined": 3})
+    failure_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Processing times (JSON: {"average_ms": 1500, "p95_ms": 3000})
+    processing_metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Additional metrics (JSON)
+    additional_metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        {'schema': 'commerce'},
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert payment analytics to dictionary"""
+        return {
+            "id": str(self.id),
+            "date": self.date.isoformat() if self.date else None,
+            "total_payments": self.total_payments,
+            "successful_payments": self.successful_payments,
+            "failed_payments": self.failed_payments,
+            "pending_payments": self.pending_payments,
+            "success_rate": self.success_rate,
+            "total_volume": self.total_volume,
+            "successful_volume": self.successful_volume,
+            "average_payment_amount": self.average_payment_amount,
+            "currency": self.currency,
+            "breakdown_by_method": self.breakdown_by_method,
+            "breakdown_by_country": self.breakdown_by_country,
+            "breakdown_by_currency": self.breakdown_by_currency,
+            "failure_breakdown": self.failure_breakdown,
+            "processing_metrics": self.processing_metrics,
+            "additional_metrics": self.additional_metrics,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

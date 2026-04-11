@@ -13,8 +13,9 @@ from core.logging import get_structured_logger as get_logger
 from core.db import get_db
 from core.utils.response import Response
 from models.accounts.user import User
-from models.admin.analytics import EventType, TrafficSource
-from services.admin.analytics import AnalyticsService
+from models.system import EventType
+from models.accounts import TrafficSource
+from services.analytics.analytics import AnalyticsService
 from core.exceptions import APIException
 from services.accounts.auth import AuthService
 from fastapi.security import OAuth2PasswordBearer
@@ -717,4 +718,134 @@ async def revenue(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to retrieve revenue metrics: {str(e)}"
+        )
+
+
+# ==========================================================
+# ADMIN ANALYTICS ENDPOINTS - Moved from admin.py
+# ==========================================================
+
+@router.get("/admin/stats", dependencies=[Depends(require_admin)])
+async def get_admin_stats(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
+):
+    """Get admin dashboard statistics with filters."""
+    try:
+        stats = await analytics_service.get_admin_stats(
+            date_from=date_from,
+            date_to=date_to,
+            status=status,
+            category=category
+        )
+        return Response.success(data=stats)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch admin stats: {str(e)}"
+        )
+
+
+@router.get("/admin/dashboard", dependencies=[Depends(require_admin)])
+async def get_admin_dashboard(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    analytics_service: AnalyticsService = Depends(get_analytics_service)
+):
+    """Get comprehensive admin dashboard data."""
+    try:
+        overview = await analytics_service.get_admin_overview()
+        return Response.success(data=overview)
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to fetch dashboard data: {str(e)}"
+        )
+
+
+@router.get("/admin/export/orders", dependencies=[Depends(require_admin)])
+async def export_orders_admin(
+    format: str = Query("csv"),
+    order_status: Optional[str] = Query(None, alias="status"),
+    q: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export orders to CSV, Excel, or PDF (admin only)."""
+    from fastapi.responses import StreamingResponse
+    from services.export import ExportService
+    from services.commerce.orders import OrderService
+
+    if format not in ['csv', 'excel', 'pdf']:
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Invalid format. Use csv, excel, or pdf"
+        )
+
+    try:
+        order_service = OrderService(db)
+
+        # Fetch all orders using pagination
+        all_orders = []
+        page = 1
+        limit = 100
+
+        while True:
+            orders_data = await order_service.list_all(
+                page=page,
+                limit=limit,
+                order_status=order_status,
+                q=q,
+                date_from=date_from,
+                date_to=date_to,
+                min_price=min_price,
+                max_price=max_price
+            )
+
+            orders_batch = orders_data.get('data', [])
+            if not orders_batch:
+                break
+
+            all_orders.extend(orders_batch)
+
+            if len(orders_batch) < limit:
+                break
+
+            page += 1
+        
+        export_service = ExportService()
+        
+        if format == "csv":
+            output = export_service.export_orders_to_csv(all_orders)
+            media_type = "text/csv"
+            filename = f"orders_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        elif format == "excel":
+            output = export_service.export_orders_to_excel(all_orders)
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            filename = f"orders_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        else:  # pdf
+            output = export_service.export_orders_to_pdf(all_orders)
+            media_type = "application/pdf"
+            filename = f"orders_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return StreamingResponse(
+            output,
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to export orders: {str(e)}"
         )

@@ -32,7 +32,7 @@ from api import (
     products_router, review_router, inventory_router, wishlist_router,
     cart_router, orders_router, payments_router, refunds_router, shipping_router,
     shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router,
-    admin_router, analytics_router,
+    analytics_router,
     health_router, contact_messages_router,
 )
 
@@ -121,7 +121,15 @@ v1_router.include_router(tax_router)
 v1_router.include_router(promocodes_router)
 v1_router.include_router(subscriptions_router)
 v1_router.include_router(webhooks_router)
-v1_router.include_router(admin_router)
+# Admin routes are distributed to domain-specific modules:
+# - /users/* for user management (in accounts/user.py)
+# - /products/admin/* for product management (in catalog/products.py)
+# - /orders/admin/* for order management (in commerce/orders.py)
+# - /refunds/admin/* for refund management (in commerce/refunds.py)
+# - /subscriptions/admin/* for subscription management (in commerce/subscriptions.py)
+# - /tax/admin/* for tax rate management (in commerce/tax.py)
+# - /inventory/sync* for inventory sync (in catalog/inventory.py)
+# - /analytics/admin/* for analytics/stats (in analytics/analytics.py)
 v1_router.include_router(analytics_router)
 v1_router.include_router(health_router)
 v1_router.include_router(contact_messages_router)

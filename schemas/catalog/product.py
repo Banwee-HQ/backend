@@ -215,3 +215,33 @@ class ImageUpdate(BaseModel):
     is_primary: Optional[bool] = None
 
 
+# Admin product management schemas
+class ProductPatch(BaseModel):
+    """Request model for partial product updates via PATCH."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    compare_at_price: Optional[float] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_featured: Optional[bool] = None
+    tags: Optional[list] = None
+    seo_title: Optional[str] = None
+
+
+class VariantStockUpdate(BaseModel):
+    """Request model for updating variant stock."""
+    quantity: int
+    reason: Optional[str] = None
+
+
+class ProductModeration(BaseModel):
+    """Request model for product moderation."""
+    action: str  # "approve" or "reject"
+    reason: Optional[str] = None
+
+
+class ProductFeatureToggle(BaseModel):
+    """Request model for toggling product featured status."""
+    featured: bool

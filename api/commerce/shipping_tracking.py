@@ -92,23 +92,6 @@ async def get(
             message=f"Failed to get shipment tracking: {str(e)}"
         )
 
-@router.get("/orders/{order_id}/shipments")
-async def get_order_shipments(
-    order_id: str,
-    current_user: User = Depends(get_current_auth_user),
-    shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
-):
-    """Get all shipments for an order"""
-    try:
-        shipments = await shipping_service.get_order_shipments(order_id)
-        return APIResponse.success(data=shipments)
-    
-    except Exception as e:
-        raise APIException(
-            status_code=500,
-            message=f"Failed to get order shipments: {str(e)}"
-        )
-
 @router.post("/track")
 async def track_shipment(
     tracking_request: Track,
@@ -375,45 +358,6 @@ async def track_shipment_background(tracking_number: str, carrier: ShippingCarri
             await shipping_service.track_shipment(tracking_number, carrier)
         except Exception as e:
             print(f"Background tracking failed for {tracking_number}: {e}")
-
-# ==========================================================
-# ORDER TRACKING - From orders module
-# ==========================================================
-@router.get("/orders/{order_id}")
-async def get_order_tracking(
-    order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get order tracking information (authenticated)."""
-    try:
-        # Get order from orders service
-        from services.commerce.orders import OrderService
-        order_service = OrderService(db)
-        tracking = await order_service.tracking(order_id, current_user.id)
-        if tracking is None:
-            raise APIException(status_code=404, message="Order not found or tracking unavailable")
-        return APIResponse.success(data=tracking)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
-
-
-@router.get("/track/{order_id}")
-async def get_public_tracking(
-    order_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get order tracking (public - no auth required)."""
-    try:
-        from services.commerce.orders import OrderService
-        order_service = OrderService(db)
-        tracking = await order_service.tracking_public(order_id)
-        return APIResponse.success(data=tracking)
-    except Exception:
-        raise APIException(status_code=404, message="Order not found or tracking unavailable")
-
 
 # Webhook endpoints for carrier notifications
 @router.post("/webhooks/{carrier}")
