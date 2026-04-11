@@ -40,16 +40,11 @@ async def calculate_tax(
         logger.info(f"Tax amount calculated: {tax_amount}")
         
         # Get tax rate for response
-        tax_rate = await tax_service.get_tax_rate(
+        tax_info = await tax_service.info(
             country_code=request.country_code or 'US',
             province_code=request.state_code
         )
-        
-        # Get tax info
-        tax_info = await tax_service.get_tax_info(
-            country_code=request.country_code or 'US',
-            province_code=request.state_code
-        )
+        tax_rate = tax_info.get("tax_rate", 0.0)
         
         response_data = {
             "tax_amount": float(tax_amount),

@@ -132,7 +132,7 @@ class OrderService:
             logger.info(f"Shipping cost: ${shipping_cost} ({shipping_method.name})")
         
         # Step 3: Calculate tax based on shipping address
-        tax_rate = await self.tax_service.get_tax_rate(
+        tax_rate = await self.tax_service.rate(
             shipping_address.country or "US",
             shipping_address.state
         )

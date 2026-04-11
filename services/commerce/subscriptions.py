@@ -190,7 +190,7 @@ class SubscriptionService:
                 country = customer_address.get('country', '')
                 state = customer_address.get('state', '')
                 
-                tax_rate_value = await tax_service.get_tax_rate(country, state)
+                tax_rate_value = await tax_service.rate(country, state)
                 tax_amount = float(subtotal + shipping_cost) * tax_rate_value
                 tax_rate = Decimal(str(tax_rate_value))
                 

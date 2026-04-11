@@ -50,7 +50,7 @@ class CartService:
         cart = await self.get_or_create(user_id)
         
         if not cart.items:
-            return self._create_empty_cart_response(None, country_code, province_code, cart.id)
+            return self._create_empty_cart_response(country_code, province_code, cart.id)
 
         # Calculate comprehensive pricing
         pricing_result = await self._calculate_cart_pricing(cart.items, country_code, province_code)
@@ -184,7 +184,7 @@ class CartService:
         tax_rate = 0.0
         if country_code and subtotal > 0:
             try:
-                tax_rate = await self.tax_service.get_tax_rate(country_code, province_code)
+                tax_rate = await self.tax_service.rate(country_code, province_code)
                 if tax_rate:
                     tax_amount = (subtotal * Decimal(str(tax_rate))).quantize(
                         Decimal('0.01'), rounding=ROUND_HALF_UP
@@ -407,7 +407,6 @@ class CartService:
 
     def _create_empty_cart_response(
         self, 
-        session_id: Optional[str], 
         country_code: str, 
         province_code: Optional[str],
         cart_id: Optional[UUID] = None
@@ -415,8 +414,6 @@ class CartService:
         """Create empty cart response"""
         return {
             "id": str(cart_id) if cart_id else None,
-            "user_id": None,
-            "session_id": session_id,
             "items": [],
             "pricing": {
                 "subtotal": 0.0,
@@ -824,8 +821,7 @@ class CartService:
     async def move_to_cart(
         self,
         user_id: UUID,
-        item_id: UUID,
-        session_id: Optional[str] = None
+        item_id: UUID
     ) -> Dict[str, Any]:
         """Move saved item back to active cart"""
         try:
@@ -846,7 +842,7 @@ class CartService:
             item.is_saved_for_later = False
             await self.db.commit()
             
-            return await self.get_cart(user_id=user_id, session_id=session_id)
+            return await self.get_cart(user_id=user_id)
         except HTTPException:
             raise
         except Exception as e:
@@ -855,12 +851,11 @@ class CartService:
 
     async def saved_items(
         self,
-        user_id: UUID,
-        session_id: Optional[str] = None
+        user_id: UUID
     ) -> Dict[str, Any]:
         """Get all items saved for later"""
         try:
-            cart = await self.get_or_create(user_id=user_id, session_id=session_id)
+            cart = await self.get_or_create(user_id=user_id)
             
             saved_items = [
                 {

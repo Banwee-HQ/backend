@@ -16,7 +16,7 @@ class TaxService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def get_tax_rate(
+    async def rate(
         self, 
         country_code: str, 
         province_code: Optional[str] = None
@@ -31,47 +31,8 @@ class TaxService:
         Returns:
             Tax rate as decimal (e.g., 0.0725 for 7.25%)
         """
-        try:
-            # First try to find province-specific tax rate
-            if province_code:
-                result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_code == country_code.upper(),
-                            TaxRate.province_code == province_code.upper(),
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                tax_rate = result.scalar_one_or_none()
-                
-                if tax_rate:
-                    logger.info(f"Found tax rate for {country_code}-{province_code}: {tax_rate.tax_rate * 100}%")
-                    return tax_rate.tax_rate
-            
-            # Fall back to country-level tax rate
-            result = await self.db.execute(
-                select(TaxRate).where(
-                    and_(
-                        TaxRate.country_code == country_code.upper(),
-                        TaxRate.province_code.is_(None),
-                        TaxRate.is_active == True
-                    )
-                )
-            )
-            tax_rate = result.scalar_one_or_none()
-            
-            if tax_rate:
-                logger.info(f"Found country tax rate for {country_code}: {tax_rate.tax_rate * 100}%")
-                return tax_rate.tax_rate
-            
-            # Default to 0% if no tax rate found
-            logger.warning(f"No tax rate found for {country_code}-{province_code}, defaulting to 0%")
-            return 0.0
-            
-        except Exception as e:
-            logger.error(f"Error getting tax rate for {country_code}-{province_code}: {e}")
-            return 0.0
+        tax_info = await self.info(country_code, province_code)
+        return tax_info.get("tax_rate", 0.0)
     
     async def calculate_tax(
         self, 
@@ -91,12 +52,12 @@ class TaxService:
             Tax amount
         """
         logger.info(f"Calculating tax for amount ${amount:.2f}, country: {country_code}, province: {province_code}")
-        tax_rate = await self.get_tax_rate(country_code, province_code)
+        tax_rate = await self.rate(country_code, province_code)
         tax_amount = amount * tax_rate
         logger.info(f"Calculated tax: ${amount:.2f} × {tax_rate * 100}% = ${tax_amount:.2f}")
         return round(tax_amount, 2)
     
-    async def get_tax_info(
+    async def info(
         self, 
         country_code: str, 
         province_code: Optional[str] = None
