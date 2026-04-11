@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status, Background
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user, get_order_service
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from services.commerce.orders import OrderService
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from schemas.commerce.orders import Create, Checkout, Note
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -39,11 +39,18 @@ async def create(
 async def get(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific order."""
+    """Get a specific order. Admins can view any order, users can only view their own."""
     try:
-        order = await order_service.get(order_id, current_user.id)
+        order_service = OrderService(db)
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        
+        if is_admin:
+            order = await order_service.get_by_id(order_id)
+        else:
+            order = await order_service.get(order_id, current_user.id)
+            
         if not order:
             raise APIException(status_code=404, message="Order not found")
         return Response.success(data=order)
@@ -58,14 +65,28 @@ async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status_filter: Optional[str] = Query(None),
+    customer_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query(None),
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
-    """List user's orders."""
+    """List orders. Returns all orders for admin, user's orders for regular users."""
     try:
-        orders = await order_service.list(current_user.id, page, limit, status_filter)
+        order_service = OrderService(db)
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        
+        if is_admin:
+            orders = await order_service.get_all_orders(
+                page=page, limit=limit, customer_id=customer_id, status=status_filter,
+                date_from=date_from, date_to=date_to, sort_by=sort_by, sort_order=sort_order
+            )
+        else:
+            orders = await order_service.list(current_user.id, page, limit, status_filter)
+            
         if isinstance(orders, dict):
-            # support different shapes returned by service
             if "orders" in orders and "pagination" in orders:
                 return Response.success(data=orders.get("orders", []), pagination=orders.get("pagination", {}))
             if "data" in orders:
@@ -90,10 +111,11 @@ async def list(
 async def validate(
     request: Checkout,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Comprehensive checkout validation."""
     try:
+        order_service = OrderService(db)
         validation_result = await order_service.validate_checkout(current_user.id, request)
         return Response.success(data=validation_result)
     except Exception as e:
@@ -105,10 +127,11 @@ async def checkout(
     request: Checkout,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Place order with comprehensive validation."""
     try:
+        order_service = OrderService(db)
         order = await order_service.place(current_user.id, request, background_tasks)
         return Response.success(data=order, message="Order placed successfully")
     except Exception as e:
@@ -119,10 +142,11 @@ async def checkout(
 async def cancel(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Cancel an order."""
     try:
+        order_service = OrderService(db)
         order = await order_service.cancel(order_id, current_user.id)
         return Response.success(data=order, message="Order cancelled successfully")
     except Exception as e:
@@ -133,10 +157,10 @@ async def cancel(
 async def cancel_post(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Compatibility: allow POST to cancel an order."""
-    return await cancel(order_id=order_id, current_user=current_user, order_service=order_service)
+    return await cancel(order_id=order_id, current_user=current_user, db=db)
 
 
 
@@ -144,10 +168,11 @@ async def cancel_post(
 async def get_invoice(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get order invoice (PDF)."""
     try:
+        order_service = OrderService(db)
         invoice_result = await order_service.invoice(order_id, current_user.id)
         if invoice_result.get('success') and invoice_result.get('pdf_bytes'):
             from fastapi.responses import Response
@@ -165,14 +190,15 @@ async def get_invoice(
 # NOTES - Create, Get, List Only (Immutable Audit Records)
 # ==========================================================
 @router.post("/{order_id}/notes")
-async def create(
+async def create_note(
     order_id: UUID,
     request: Note,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """Add note to order."""
     try:
+        order_service = OrderService(db)
         result = await order_service.add_note(order_id, current_user.id, request.note)
         return Response.success(data=result, message="Note added successfully")
     except Exception as e:
@@ -202,10 +228,11 @@ async def get(
 async def list(
     order_id: UUID,
     current_user: User = Depends(get_current_auth_user),
-    order_service: OrderService = Depends(get_order_service)
+    db: AsyncSession = Depends(get_db)
 ):
     """List all notes for an order."""
     try:
+        order_service = OrderService(db)
         notes = await order_service.notes(order_id, current_user.id)
         return Response.success(data=notes)
     except Exception as e:
@@ -268,98 +295,81 @@ async def get_public_tracking(
         raise APIException(status_code=404, message="Order not found or tracking unavailable")
 
 
-# ==========================================================
-# ADMIN ENDPOINTS - Moved from admin.py
-# ==========================================================
-
-@router.get("/admin/all", dependencies=[Depends(require_admin)])
-async def get_all_orders_admin(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    customer_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    sort_by: Optional[str] = Query(None),
-    sort_order: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all orders (admin only)."""
-    try:
-        order_service = OrderService(db)
-        orders = await order_service.get_all_orders(
-            page=page,
-            limit=limit,
-            customer_id=customer_id,
-            status=status,
-            date_from=date_from,
-            date_to=date_to,
-            sort_by=sort_by,
-            sort_order=sort_order
-        )
-        return Response.success(data=orders)
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to fetch orders: {str(e)}")
-
-
-@router.patch("/{order_id}/status", dependencies=[Depends(require_admin)])
-async def update_order_status_admin(
+@router.patch("/{order_id}/status")
+async def update_status(
     order_id: str,
     request: dict,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update order status (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.update_status(order_id, request.get("status"), request.get("notes"))
         return Response.success(data=result, message="Order status updated")
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to update order status: {str(e)}")
 
 
-@router.put("/{order_id}/deliver", dependencies=[Depends(require_admin)])
-async def mark_order_as_delivered(
+@router.put("/{order_id}/deliver")
+async def deliver(
     order_id: str,
     request: dict = {},
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Mark order as delivered (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.deliver(order_id, request.get("notes"))
         return Response.success(data=result, message="Order marked as delivered")
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to mark order as delivered: {str(e)}")
 
 
-@router.post("/{order_id}/ship", dependencies=[Depends(require_admin)])
-async def ship_order(
+@router.post("/{order_id}/ship")
+async def ship(
     order_id: str,
     request: dict,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Ship order (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         result = await order_service.ship(order_id, request.get("carrier"), request.get("tracking_number"))
         return Response.success(data=result, message="Order shipped")
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to ship order: {str(e)}")
 
 
-@router.get("/admin/statistics", dependencies=[Depends(require_admin)])
-async def get_order_statistics(
+@router.get("/statistics")
+async def statistics(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order statistics (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         order_service = OrderService(db)
         stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
         return Response.success(data=stats)
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch statistics: {str(e)}")

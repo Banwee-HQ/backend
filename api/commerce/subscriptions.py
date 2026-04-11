@@ -22,7 +22,7 @@ from schemas.commerce.subscriptions import (
 )
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from models.catalog.product import Product, ProductVariant, ProductImage
 from models.commerce.subscriptions import Subscription
 
@@ -243,22 +243,35 @@ async def create(
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    search: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
-    ):
-    """Get user's subscriptions."""
+):
+    """List subscriptions. Returns all subscriptions for admin, user's subscriptions for regular users."""
     try:
         subscription_service = SubscriptionService(db)
-        subscriptions, total = await subscription_service.list(
-            user_id=current_user.id, page=page, limit=limit
-        )
-        serialized = [sub.to_dict(include_products=True) for sub in subscriptions]
-        return Response.success(data=serialized, pagination={
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "pages": max(1, (total + limit - 1) // limit)
-        })
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        
+        if is_admin:
+            result = await subscription_service.get_all_subscriptions(
+                page=page, limit=limit, status=status_filter, search=search,
+                date_from=date_from, date_to=date_to, sort_by=sort_by, sort_order=sort_order
+            )
+            return Response.success(data=result)
+        else:
+            subscriptions, total = await subscription_service.list(
+                user_id=current_user.id, page=page, limit=limit
+            )
+            serialized = [sub.to_dict(include_products=True) for sub in subscriptions]
+            return Response.success(data=serialized, pagination={
+                "page": page, "limit": limit, "total": total,
+                "pages": max(1, (total + limit - 1) // limit)
+            })
     except APIException:
         raise
     except Exception as e:
@@ -451,10 +464,16 @@ async def get(
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
     ):
-    """Get a specific subscription."""
+    """Get a specific subscription. Admins can view any subscription, users can only view their own."""
     try:
         subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.get(subscription_id, current_user.id)
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        
+        if is_admin:
+            subscription = await subscription_service.get_by_id(subscription_id)
+        else:
+            subscription = await subscription_service.get(subscription_id, current_user.id)
+            
         if not subscription:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -819,67 +838,3 @@ async def orders(
             message=f"Failed to fetch subscription orders: {str(e)}"
         )
 
-
-# ============================================================================
-# ADMIN SUBSCRIPTION MANAGEMENT ROUTES
-# ============================================================================
-
-@router.get("/admin", dependencies=[Depends(require_admin)])
-async def list_admin(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    search: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    sort_by: str = Query("created_at"),
-    sort_order: str = Query("desc"),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all subscriptions (admin only)."""
-    try:
-        from services.commerce.subscriptions import SubscriptionService
-        subscription_service = SubscriptionService(db)
-        result = await subscription_service.get_all_subscriptions(
-            page=page,
-            limit=limit,
-            status=status_filter,
-            search=search,
-            date_from=date_from,
-            date_to=date_to,
-            sort_by=sort_by,
-            sort_order=sort_order
-        )
-        return Response.success(data=result)
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch subscriptions: {str(e)}"
-        )
-
-
-@router.get("/admin/{subscription_id}", dependencies=[Depends(require_admin)])
-async def get_admin(
-    subscription_id: UUID,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a single subscription by ID (admin only)."""
-    try:
-        from services.commerce.subscriptions import SubscriptionService
-        subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.get_by_id(subscription_id)
-        if not subscription:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Subscription not found"
-            )
-        return Response.success(data=subscription)
-    except APIException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch subscription: {str(e)}"
-        )
