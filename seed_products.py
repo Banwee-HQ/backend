@@ -21,6 +21,7 @@ from core.utils.encryption import PasswordManager
 
 from models.accounts.user import User
 from models.catalog.product import Product, ProductVariant, ProductImage
+from models.catalog.review import Review
 from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
 from models.commerce.shipping import ShippingMethod
 from models.commerce.tax_rates import TaxRate
@@ -202,8 +203,34 @@ async def seed():
         db.add(location)
         await db.flush()
 
+        # ── Sample customer users ───────────────────────────────────
+        customers = []
+        customer_data = [
+            {"email": "alice@example.com", "firstname": "Alice", "lastname": "Cooper"},
+            {"email": "bob@example.com", "firstname": "Bob", "lastname": "Smith"},
+            {"email": "carol@example.com", "firstname": "Carol", "lastname": "Jones"},
+        ]
+        for c in customer_data:
+            user = User(
+                id=uuid7(),
+                email=c["email"],
+                firstname=c["firstname"],
+                lastname=c["lastname"],
+                hashed_password=pm.hash_password("Password123!"),
+                role="customer",
+                account_status="active",
+                verification_status="verified",
+                phone_verified=False,
+                language="en",
+                failed_login_attempts=0,
+            )
+            db.add(user)
+            customers.append(user)
+        await db.flush()
+
         # ── Products, variants, inventory ──────────────────────────
         total_variants = 0
+        products_created = []
         for p_data in PRODUCTS:
             product = Product(
                 id=uuid7(),
@@ -223,6 +250,7 @@ async def seed():
             )
             db.add(product)
             await db.flush()
+            products_created.append(product)
 
             for idx, v in enumerate(p_data["variants"]):
                 variant = ProductVariant(
@@ -268,6 +296,7 @@ async def seed():
                     notes=f"Seed: {v['sku']}",
                 ))
 
+                # Primary image
                 db.add(ProductImage(
                     id=uuid7(),
                     variant_id=variant.id,
@@ -275,6 +304,16 @@ async def seed():
                     alt_text=f"{p_data['name']} — {v['name']}",
                     is_primary=(idx == 0),
                     sort_order=idx,
+                    format="jpg",
+                ))
+                # Secondary image (ensures variants have at least two images)
+                db.add(ProductImage(
+                    id=uuid7(),
+                    variant_id=variant.id,
+                    url=f"https://cdn.banwee.com/products/{p_data['slug']}-{idx+1}-2.jpg",
+                    alt_text=f"{p_data['name']} — {v['name']} (alt)",
+                    is_primary=False,
+                    sort_order=idx+1,
                     format="jpg",
                 ))
 
@@ -300,6 +339,43 @@ async def seed():
         ]
         for tr in tax_rates:
             db.add(tr)
+
+        # ── Related products (by id) ───────────────────────────────
+        # Attach 2 deterministic related products per product using rotation
+        n = len(products_created)
+        for i, prod in enumerate(products_created):
+            related = [str(products_created[(i + 1) % n].id), str(products_created[(i + 2) % n].id)] if n > 2 else []
+            meta = prod.product_metadata or {}
+            meta["related_product_ids"] = related
+            prod.product_metadata = meta
+            db.add(prod)
+
+        # ── Seed reviews for products ──────────────────────────────
+        # Create 2 reviews per product from sample customers and update aggregates
+        for i, prod in enumerate(products_created):
+            # deterministic ratings for variety
+            ratings = [5, 4] if i % 2 == 0 else [4, 3]
+            for j, rating in enumerate(ratings):
+                reviewer = customers[(i + j) % len(customers)] if customers else admin
+                review = Review(
+                    id=uuid7(),
+                    product_id=prod.id,
+                    user_id=reviewer.id,
+                    rating=rating,
+                    comment=f"Seed review ({rating} stars) for {prod.name}",
+                    is_verified_purchase=True,
+                    is_approved=True,
+                )
+                db.add(review)
+                # update product aggregates
+                prev_count = prod.rating_count or 0
+                prev_avg = prod.rating_average or 0.0
+                new_total = prev_avg * prev_count + rating
+                new_count = prev_count + 1
+                prod.rating_count = new_count
+                prod.review_count = (prod.review_count or 0) + 1
+                prod.rating_average = round(new_total / new_count, 2)
+                db.add(prod)
 
         await db.commit()
 
