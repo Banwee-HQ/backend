@@ -27,7 +27,11 @@ async def create(
     """Create a refund request."""
     try:
         refund_service = RefundService(db)
-        refund = await refund_service.create(user_id=current_user.id, data=refund_data)
+        refund = await refund_service.request(
+            user_id=current_user.id,
+            order_id=refund_data.get("order_id"),
+            refund_request=refund_data
+        )
         return Response.success(data=refund, message="Refund created successfully")
     except APIException:
         raise
@@ -57,7 +61,7 @@ async def list(
         
         if is_admin:
             # Admin gets all refunds
-            result = await refund_service.get_all_refunds(
+            result = await refund_service.list(
                 status=refund_status,
                 page=page,
                 limit=limit,
@@ -101,9 +105,9 @@ async def get(
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         if is_admin:
-            refund = await refund_service.get_refund_details(refund_id)
+            refund = await refund_service.get(refund_id)
         else:
-            refund = await refund_service.get(user_id=current_user.id, refund_id=refund_id)
+            refund = await refund_service.get(refund_id, current_user.id)
             
         if not refund:
             raise APIException(

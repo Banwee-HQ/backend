@@ -252,20 +252,16 @@ async def list(
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         if is_admin:
-            result = await subscription_service.get_all_subscriptions(
+            result = await subscription_service.list(
                 page=page, limit=limit, status=status_filter, search=search,
                 date_from=date_from, date_to=date_to, sort_by=sort_by, sort_order=sort_order
             )
             return Response.success(data=result)
         else:
-            subscriptions, total = await subscription_service.list(
-                user_id=current_user.id, page=page, limit=limit
+            result = await subscription_service.list(
+                user_id=current_user.id, page=page, limit=limit, status=status_filter
             )
-            serialized = [sub.to_dict(include_products=True) for sub in subscriptions]
-            return Response.success(data=serialized, pagination={
-                "page": page, "limit": limit, "total": total,
-                "pages": max(1, (total + limit - 1) // limit)
-            })
+            return Response.success(data=result)
     except APIException:
         raise
     except Exception as e:
@@ -464,7 +460,7 @@ async def get(
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         if is_admin:
-            subscription = await subscription_service.get_by_id(subscription_id)
+            subscription = await subscription_service.get(subscription_id)
         else:
             subscription = await subscription_service.get(subscription_id, current_user.id)
             
@@ -473,7 +469,7 @@ async def get(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Subscription not found"
             )
-        return Response.success(data=subscription.to_dict(include_products=True))
+        return Response.success(data=subscription)
     except APIException:
         raise
     except Exception as e:
