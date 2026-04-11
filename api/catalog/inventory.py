@@ -254,7 +254,7 @@ async def get_adj(
     """Get a specific stock adjustment by ID (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        adjustment = await inventory_service.get_adjustment(adjustment_id)
+        adjustment = await inventory_service.adjustment(action="get", adjustment_id=adjustment_id)
         if not adjustment:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
         return Response.success(data=adjustment)
@@ -287,7 +287,7 @@ async def delete_adj(
     """Delete a stock adjustment (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        deleted = await inventory_service.delete_adjustment(adjustment_id)
+        deleted = await inventory_service.adjustment(action="delete", adjustment_id=adjustment_id)
         if not deleted:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
         return Response.success(message="Stock adjustment deleted successfully")

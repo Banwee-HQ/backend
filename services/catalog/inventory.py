@@ -224,56 +224,56 @@ class InventoryService:
     async def list(self, page: int = 1, limit: int = 10, product_id: Optional[UUID] = None, location_id: Optional[UUID] = None, low_stock: Optional[bool] = None, search: Optional[str] = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> dict:
         try:
             logger.info(f"get_all_inventory_items called", metadata={
-    "page": page,
-    "limit": limit,
-    "sort_by": sort_by,
-    "sort_order": sort_order,
-    "low_stock": low_stock,
-    "search": search
-})
-            offset = (page - 1) * limit
-            
-            # Build query with proper eager loading
-            query = select(Inventory).options(
-                joinedload(Inventory.variant).joinedload(ProductVariant.product),
-                joinedload(Inventory.variant).joinedload(ProductVariant.images),
-                joinedload(Inventory.location)
-            )
-            count_query = select(func.count(Inventory.id))
+                "page": page,
+                "limit": limit,
+                "sort_by": sort_by,
+                "sort_order": sort_order,
+                "low_stock": low_stock,
+                "search": search
+            })
+                        offset = (page - 1) * limit
+                        
+                        # Build query with proper eager loading
+                        query = select(Inventory).options(
+                            joinedload(Inventory.variant).joinedload(ProductVariant.product),
+                            joinedload(Inventory.variant).joinedload(ProductVariant.images),
+                            joinedload(Inventory.location)
+                        )
+                        count_query = select(func.count(Inventory.id))
 
-            conditions = []
-            if product_id:
-                conditions.append(Inventory.variant.has(ProductVariant.product_id == product_id))
-            if location_id:
-                conditions.append(Inventory.location_id == location_id)
-            if low_stock is not None:
-                if low_stock:
-                    conditions.append(Inventory.quantity_available <= Inventory.low_stock_threshold)
-                else:
-                    conditions.append(Inventory.quantity_available > Inventory.low_stock_threshold)
-            if search:
-                # Search in product name, variant name, variant SKU, and location name
-                search_term = f"%{search.lower()}%"
-                search_conditions = [
-                    Inventory.variant.has(ProductVariant.product.has(Product.name.ilike(search_term))),
-                    Inventory.variant.has(ProductVariant.name.ilike(search_term)),
-                    Inventory.variant.has(ProductVariant.sku.ilike(search_term)),
-                    Inventory.location.has(WarehouseLocation.name.ilike(search_term))
-                ]
-                conditions.append(or_(*search_conditions))
-            
-            if conditions:
-                query = query.filter(and_(*conditions))
-                count_query = count_query.filter(and_(*conditions))
+                        conditions = []
+                        if product_id:
+                            conditions.append(Inventory.variant.has(ProductVariant.product_id == product_id))
+                        if location_id:
+                            conditions.append(Inventory.location_id == location_id)
+                        if low_stock is not None:
+                            if low_stock:
+                                conditions.append(Inventory.quantity_available <= Inventory.low_stock_threshold)
+                            else:
+                                conditions.append(Inventory.quantity_available > Inventory.low_stock_threshold)
+                        if search:
+                            # Search in product name, variant name, variant SKU, and location name
+                            search_term = f"%{search.lower()}%"
+                            search_conditions = [
+                                Inventory.variant.has(ProductVariant.product.has(Product.name.ilike(search_term))),
+                                Inventory.variant.has(ProductVariant.name.ilike(search_term)),
+                                Inventory.variant.has(ProductVariant.sku.ilike(search_term)),
+                                Inventory.location.has(WarehouseLocation.name.ilike(search_term))
+                            ]
+                            conditions.append(or_(*search_conditions))
+                        
+                        if conditions:
+                            query = query.filter(and_(*conditions))
+                            count_query = count_query.filter(and_(*conditions))
 
-            # Build dynamic sorting - simplified approach with defaults
-            sort_field = sort_by or "updated_at"
-            sort_dir = sort_order or "desc"
-            
-            logger.info(f"Applying sorting", metadata={
-    "sort_field": sort_field,
-    "sort_dir": sort_dir
-})
+                        # Build dynamic sorting - simplified approach with defaults
+                        sort_field = sort_by or "updated_at"
+                        sort_dir = sort_order or "desc"
+                        
+                        logger.info(f"Applying sorting", metadata={
+                "sort_field": sort_field,
+                "sort_dir": sort_dir
+            })
             
             if sort_field == "created_at":
                 if sort_dir == "asc":
@@ -589,29 +589,42 @@ class InventoryService:
         adjustments = result.scalars().all()
         return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
 
-    async def get_adjustment(self, adjustment_id: UUID) -> Optional[StockAdjustmentResponse]:
-        """Get a specific stock adjustment by ID"""
-        result = await self.db.execute(
-            select(StockAdjustment)
-            .filter(StockAdjustment.id == adjustment_id)
-            .options(joinedload(StockAdjustment.adjusted_by))
-        )
-        adjustment = result.scalar_one_or_none()
-        if adjustment:
-            return StockAdjustmentResponse.model_validate(adjustment)
-        return None
-
-    async def delete_adjustment(self, adjustment_id: UUID) -> bool:
-        """Delete a stock adjustment"""
-        result = await self.db.execute(
-            select(StockAdjustment).filter(StockAdjustment.id == adjustment_id)
-        )
-        adjustment = result.scalar_one_or_none()
-        if not adjustment:
-            return False
-        await self.db.delete(adjustment)
-        await self.db.commit()
-        return True
+    async def adjustment(
+        self,
+        action: str,
+        adjustment_id: UUID
+    ) -> Union[Optional[StockAdjustmentResponse], bool]:
+        """
+        Manage stock adjustments: get or delete
+        
+        Args:
+            action: "get" or "delete"
+            adjustment_id: The adjustment ID
+        """
+        if action == "get":
+            result = await self.db.execute(
+                select(StockAdjustment)
+                .filter(StockAdjustment.id == adjustment_id)
+                .options(joinedload(StockAdjustment.adjusted_by))
+            )
+            adjustment = result.scalar_one_or_none()
+            if adjustment:
+                return StockAdjustmentResponse.model_validate(adjustment)
+            return None
+        
+        elif action == "delete":
+            result = await self.db.execute(
+                select(StockAdjustment).filter(StockAdjustment.id == adjustment_id)
+            )
+            adjustment = result.scalar_one_or_none()
+            if not adjustment:
+                return False
+            await self.db.delete(adjustment)
+            await self.db.commit()
+            return True
+        
+        else:
+            raise APIException(status_code=400, message=f"Invalid action: {action}. Use 'get' or 'delete'")
 
     async def is_low_stock(self, inventory_id: UUID) -> bool:
         inventory_item = await self.get(inventory_id)
