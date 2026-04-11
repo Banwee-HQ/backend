@@ -1,403 +1,184 @@
-# API Reference
+# API Reference (auto-generated snapshot)
 
 Base URL: `/v1`
 
 All authenticated endpoints require a Bearer token in the `Authorization` header.
 
----
-
-## Auth
-
-### POST /auth/register
-Register a new user.
-
-**Body:** `{ email, password, firstname, lastname }`
-
-### POST /auth/login
-Login and receive access + refresh tokens.
-
-**Body:** `{ email, password }`
-
-### POST /auth/refresh
-Refresh access token.
-
-**Body:** `{ refresh_token }`
-
-### POST /auth/revoke
-Revoke a refresh token.
-
-**Body:** `{ refresh_token }`
-
-### POST /auth/logout
-Logout current user. 🔒
-
-### GET /auth/profile
-Get current user profile. 🔒
-
-### PUT /auth/profile
-Update current user profile. 🔒
-
-**Body:** `{ firstname?, lastname?, phone? }`
-
-### PUT /auth/change-password
-Change password. 🔒
-
-**Body:** `{ current_password, new_password }`
-
-### GET /auth/addresses
-Get user addresses. 🔒
-
-### POST /auth/addresses
-Add a new address. 🔒
-
-**Body:** `{ street, city, state, post_code, country, is_default? }`
-
-### PUT /auth/addresses/{id}
-Update an address. 🔒
-
-### DELETE /auth/addresses/{id}
-Delete an address. 🔒
-
-### GET /auth/verify-email
-Verify email with token.
-
-**Query:** `token`
-
-### POST /auth/resend-verification
-Resend verification email.
-
-**Body:** `{ email }`
-
-### POST /auth/forgot-password
-Request password reset.
-
-**Body:** `{ email }`
-
-### POST /auth/reset-password
-Reset password with token.
-
-**Body:** `{ token, new_password }`
+This file is an auto-generated snapshot of route decorators as of 2026-04-10. It groups endpoints by area — use `postman_collection.json` for runnable examples.
 
 ---
 
-## OAuth
+## Auth / Accounts
 
-### GET /auth/facebook/callback
-Facebook OAuth callback.
+- POST `/auth/register` — register a new user
+- POST `/auth/login` — login (returns access + refresh tokens)
+- POST `/auth/refresh` — refresh access token
+- POST `/auth/revoke` — revoke refresh token
+- POST `/auth/logout` — logout current user (requires auth)
+- GET `/auth/me` — current user (requires auth)
+- GET `/auth/verify-email` — verify email token (query param `token`)
+- POST `/auth/resend-verification`
+- POST `/auth/forgot-password`
+- POST `/auth/reset-password`
+- PATCH `/auth/me` — update current user
+- PATCH `/auth/me/password` — change password
+- DELETE `/auth/me`
 
----
-
-## Users (Admin)
-
-### GET /users/me
-Get current user. 🔒
-
-### GET /users/profile
-Get user profile. 🔒
-
-### PUT /users/profile
-Update user profile. 🔒
-
-### GET /users/search
-Search users. 🔒 Admin
-
-**Query:** `q, page?, limit?`
-
-### GET /users
-List all users. 🔒 Admin
-
-### POST /users
-Create a user. 🔒 Admin
-
-### GET /users/{id}
-Get user by ID. 🔒 Admin
-
-### PUT /users/{id}/status
-Update user status. 🔒 Admin
-
-### DELETE /users/{id}
-Delete user. 🔒 Admin
-
-### POST /users/{id}/reset-password
-Reset user password. 🔒 Admin
-
-### POST /users/{id}/deactivate
-Deactivate user. 🔒 Admin
-
-### GET /users/me/addresses
-Get current user addresses. 🔒
-
-### GET /users/{id}/addresses
-Get user addresses. 🔒 Admin
-
-### GET /users/addresses/{id}
-Get address by ID. 🔒
-
-### POST /users/addresses
-Add address. 🔒
-
-### PUT /users/addresses/{id}
-Update address. 🔒
-
-### DELETE /users/addresses/{id}
-Delete address. 🔒
-
-### GET /users/{id}/wishlists
-Get user wishlists. 🔒
-
-### POST /users/{id}/wishlists
-Create wishlist. 🔒
-
-### POST /users/{id}/wishlists/{wid}/items
-Add item to wishlist. 🔒
-
-**Body:** `{ product_id, variant_id?, quantity? }`
-
-### DELETE /users/{id}/wishlists/{wid}/items/{item_id}
-Remove item from wishlist. 🔒
-
-### PUT /users/{id}/wishlists/{wid}/default
-Set default wishlist. 🔒
+OAuth endpoints:
+- GET `/accounts/{provider}/login`
+- GET `/accounts/callback/{provider}`
 
 ---
 
-## Categories
+## Users / Admin
 
-### GET /categories
-List all categories.
+- GET `/users/me`
+- GET `/users/profile`
+- POST `/users` — create user (admin)
+- GET `/users` — list users (admin)
+- GET `/users/{user_id}`
+- PATCH/PUT `/users/{user_id}`
+- PUT `/users/{user_id}/status`
+- POST `/users/{user_id}/reset-password`
+- POST `/users/{user_id}/deactivate`
+- POST `/users/{user_id}/activate`
 
-### GET /categories/{id}
-Get category by ID.
-
-### POST /categories
-Create category. 🔒 Admin
-
-**Body:** `{ name, slug, description?, image_url?, parent_id? }`
-
-### PUT /categories/{id}
-Update category. 🔒 Admin
-
-### DELETE /categories/{id}
-Delete category. 🔒 Admin
-
----
-
-## Products
-
-
-**Query:** `q, category?, page?, limit?`
-
-
-### GET /products/home
-Get home page products (featured, popular, deals).
-
-### GET /products
-List products.
-
-**Query:** `page?, limit?, category?, featured?, popular?, sale?`
-
-
-### GET /products/{id}
-Get product by ID.
-
-### GET /products/{id}/recommendations
-Get product recommendations.
-
-### GET /products/{id}/variants
-Get product variants.
-
-### GET /products/variants/{id}
-Get variant by ID.
-
-
-### POST /products
-Create product. 🔒 Admin
-
-### PUT /products/{id}
-Update product. 🔒 Admin
-
-### DELETE /products/{id}
-Delete product. 🔒 Admin
+Addresses:
+- POST `/accounts/addresses` — create address
+- GET `/accounts/addresses` — list
+- GET `/accounts/addresses/{address_id}`
+- PATCH `/accounts/addresses/{address_id}`
+- DELETE `/accounts/addresses/{address_id}`
 
 ---
 
-## Reviews
+## Catalog
 
-### GET /reviews
-List reviews.
+Products:
+- GET `/products/home`
+- GET `/products` — list/search (query: `q, page, limit, category`)
+- GET `/products/featured`, `/products/deals`
+- GET `/products/{product_id}`
+- POST `/products` — create (admin)
+- PATCH `/products/{product_id}` — update (admin)
+- DELETE `/products/{product_id}`
+- POST `/products/{product_id}/variants`
+- GET `/products/{product_id}/variants`
+- GET `/products/variants/{variant_id}`
+- PATCH `/products/variants/{variant_id}`
+- DELETE `/products/variants/{variant_id}`
+- Image endpoints: POST `/products/variants/{variant_id}/images`, GET `/products/images/{image_id}`, PATCH/DELETE `/products/images/{image_id}`
 
-### POST /reviews
-Create review. 🔒
+Reviews & Wishlist:
+- GET/POST `/reviews`
+- GET `/reviews/{review_id}`
+- GET `/reviews/product/{product_id}`
+- Wishlist endpoints under `/wishlist` — add/get/remove/update
 
-**Body:** `{ product_id, rating, comment? }`
-
-### GET /reviews/{id}
-Get review by ID.
-
-### GET /reviews/product/{id}
-Get reviews for a product.
-
-### PUT /reviews/{id}
-Update review. 🔒
-
-### DELETE /reviews/{id}
-Delete review. 🔒
-
----
-
-## Search
-
-### GET /search
-Full-text search.
-
-**Query:** `q, page?, limit?`
-
-### GET /search/autocomplete
-Autocomplete suggestions.
-
-**Query:** `q`
-
----
-
-## Wishlist
-
-### GET /wishlist
-Get current user's wishlist. 🔒
-
-### POST /wishlist/add
-Add item to wishlist. 🔒
-
-**Body:** `{ product_id, variant_id?, quantity? }`
-
-### DELETE /wishlist/items/{product_id}
-Remove item from wishlist. 🔒
-
----
-
-## Inventory
-
-### GET /inventory/check-stock/{variant_id}
-Check stock for a variant.
-
-### POST /inventory/check-stock/bulk
-Bulk stock check.
-
-**Body:** `{ variant_ids: string[] }`
-
-### POST /inventory/locations
-Create inventory location. 🔒 Admin
-
-### GET /inventory/locations
-List inventory locations. 🔒 Admin
-
-### GET /inventory/locations/{id}
-Get inventory location. 🔒 Admin
-
-### PUT /inventory/locations/{id}
-Update inventory location. 🔒 Admin
-
-### DELETE /inventory/locations/{id}
-Delete inventory location. 🔒 Admin
-
-### POST /inventory
-Create inventory record. 🔒 Admin
-
-### GET /inventory
-List inventory. 🔒 Admin
-
-### GET /inventory/{id}
-Get inventory record. 🔒 Admin
-
-### PUT /inventory/{id}
-Update inventory record. 🔒 Admin
-
-### DELETE /inventory/{id}
-Delete inventory record. 🔒 Admin
-
-### POST /inventory/adjustments
-Create inventory adjustment. 🔒 Admin
-
-### GET /inventory/{id}/adjustments
-Get adjustments for inventory record. 🔒 Admin
-
-### GET /inventory/adjustments/all
-Get all adjustments. 🔒 Admin
+Inventory:
+- GET `/inventory/check-stock/{variant_id}`
+- POST `/inventory/check-stock/bulk`
+- POST `/inventory/locations` — create location (admin)
+- GET `/inventory/locations`, GET `/inventory/locations/{location_id}`
+- PATCH/PUT/DELETE `/inventory/locations/{location_id}`
+- POST `/inventory` — create inventory record (admin)
+- GET `/inventory`, GET `/inventory/{inventory_id}`
+- PATCH/PUT/DELETE `/inventory/{inventory_id}`
+- POST `/inventory/adjustments`, GET `/inventory/adjustments/{adjustment_id}`, GET `/inventory/adjustments`
 
 ---
 
 ## Cart
 
-### GET /cart
-Get current cart. 🔒
-
-### POST /cart/add
-Add item to cart. 🔒
-
-**Body:** `{ variant_id, quantity }`
-
-### PUT /cart/items/{id}
-Update cart item quantity. 🔒
-
-**Body:** `{ quantity }`
-
-### DELETE /cart/items/{id}
-Remove cart item. 🔒
-
-### POST /cart/promocode
-Apply promo code. 🔒
-
-**Body:** `{ code }`
-
-### DELETE /cart/promocode
-Remove promo code. 🔒
-
-### GET /cart/count
-Get cart item count. 🔒
-
-### POST /cart/validate
-Validate cart. 🔒
-
-### POST /cart/shipping-options
-Get shipping options for cart. 🔒
-
-**Body:** `{ address_id }`
-
-### POST /cart/calculate
-Calculate cart totals. 🔒
-
-### POST /cart/clear
-Clear cart. 🔒
-
-### GET /cart/checkout-summary
-Get checkout summary. 🔒
+- GET `/cart`
+- POST `/cart/add`
+- PUT `/cart/items/{id}`
+- DELETE `/cart/items/{id}`
+- POST `/cart/promocode`, DELETE `/cart/promocode`
+- GET `/cart/count`
+- POST `/cart/validate`, `/cart/calculate`, `/cart/shipping-options`
+- POST `/cart/clear`, GET `/cart/checkout-summary`
 
 ---
 
 ## Orders
 
-### POST /orders
-Create order. 🔒
+- POST `/orders` — create
+- POST `/orders/checkout/validate` — validate checkout
+- POST `/orders/checkout` — place order
+- GET `/orders`, GET `/orders/{order_id}`
+- POST/PATCH `/orders/{order_id}/cancel` — cancel
+- GET `/orders/{order_id}/invoice`
+- GET `/orders/{order_id}/tracking` and other tracking endpoints under shipping tracking
 
-### POST /orders/create-payment-intent
-Create Stripe payment intent. 🔒
+Admin order endpoints (`/admin/orders`):
+- GET `/admin/orders`, GET `/admin/orders/{order_id}`
+- PUT `/admin/orders/{order_id}/ship`
+- PUT/PATCH `/admin/orders/{order_id}/status`
+- GET `/admin/orders/export`, GET `/admin/orders/statistics`, GET `/admin/orders/all`
 
-### POST /orders/checkout/validate
-Validate checkout data. 🔒
+---
 
-**Body:** `{ shipping_address_id, shipping_method_id, payment_method_id, discount_code?, notes?, currency?, country_code? }`
+## Payments & Webhooks
 
-### POST /orders/checkout
-Place order. 🔒
+- GET `/payments` — list transactions
+- GET `/payments/methods`, POST `/payments/methods`, DELETE `/payments/methods/{id}`, PUT `/payments/methods/{id}/default`
+- GET `/payments/failures/user/failed-payments`, POST `/payments/failures/{id}/retry`
+- POST `/commerce/webhooks/stripe` — Stripe webhook endpoint
+- Order payment flows: POST `/orders/create-payment-intent` and integrations in services/commerce/payments.py
 
-**Body:** `{ shipping_address_id, shipping_method_id, payment_method_id, discount_code?, notes?, currency?, country_code?, frontend_calculated_total? }`
+---
 
-### GET /orders
-List user orders. 🔒
+## Subscriptions
 
-**Query:** `page?, limit?`
+- POST `/subscriptions` — create
+- POST `/subscriptions/calculate-cost`
+- GET `/subscriptions`, GET `/subscriptions/{subscription_id}`
+- PUT/PATCH `/subscriptions/{subscription_id}`
+- POST `/subscriptions/{subscription_id}/cancel`, POST `/subscriptions/{subscription_id}/pause`, POST `/subscriptions/{subscription_id}/resume`
+- Endpoints to add/remove products, set quantities, apply/remove discounts
 
-### GET /orders/{id}
-Get order by ID. 🔒
+---
+
+## Refunds & Promocodes
+
+- Refunds: POST `/refunds/orders/{order_id}/request`, GET `/refunds/orders/{order_id}/eligibility`, GET `/refunds`, GET `/refunds/{refund_id}`, PUT `/refunds/{refund_id}/cancel`, GET `/refunds/stats/summary`
+- Promocodes: GET `/promocodes`, GET `/promocodes/{id}`, POST `/promocodes`, PUT `/promocodes/{id}`, DELETE `/promocodes/{id}`
+
+---
+
+## Shipping & Shipping Tracking
+
+- GET `/shipping/methods`, GET `/shipping/methods/{method_id}`
+- POST/PATCH/DELETE `/shipping/methods` (admin)
+- POST `/shipping/calculate`
+- Shipping tracking endpoints: POST `/shipping_tracking/shipments`, GET `/shipping_tracking/shipments/{shipment_id}`, GET `/shipping_tracking/orders/{order_id}/shipments`, POST `/shipping_tracking/track`, POST `/shipping_tracking/webhooks/{carrier}`
+
+---
+
+## Tax
+
+- POST `/tax/calculate`
+- Admin tax rates under `/admin/tax-rates` (list, create, update, delete, bulk-update)
+
+---
+
+## Admin / Analytics
+
+- Large set of endpoints under `/admin/*` for analytics, users, products, inventory sync, tax rates, payments and more. Key endpoints include `/admin/dashboard`, `/admin/stats`, `/admin/payments`, `/admin/inventory`, `/admin/subscriptions` and `/admin/analytics/*`.
+
+---
+
+## System
+
+- GET `/` — health
+- Contact messages under `/system/contact-messages` (POST, GET, GET/{id}, PATCH, DELETE)
+
+---
+
+Notes:
+- This snapshot is intended as a developer-facing quick reference. For executable examples and request bodies use `postman_collection.json` in the repository root.
+
 
 ### PUT /orders/{id}/cancel
 Cancel order. 🔒
