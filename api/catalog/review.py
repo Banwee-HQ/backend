@@ -26,16 +26,9 @@ async def list(
     try:
         review_service = ReviewService(db)
         
-        if product_id:
-            # Get reviews for specific product
-            reviews = await review_service.for_product(
-                product_id, page, limit, min_rating, max_rating, sort_by
-            )
-        else:
-            # Get all reviews
-            reviews = await review_service.list(
-                page, limit, min_rating, max_rating, sort_by
-            )
+        reviews = await review_service.list(
+            product_id=product_id, page=page, limit=limit, min_rating=min_rating, max_rating=max_rating, sort_by=sort_by
+        )
         
         return Response.success(data=reviews)
     except APIException:
@@ -120,8 +113,8 @@ async def for_product(
     """Get all reviews for a specific product with optional filtering and sorting."""
     try:
         review_service = ReviewService(db)
-        reviews = await review_service.for_product(
-            product_id, page, limit, min_rating, max_rating, sort_by
+        reviews = await review_service.list(
+            product_id=product_id, page=page, limit=limit, min_rating=min_rating, max_rating=max_rating, sort_by=sort_by
         )
         return Response.success(data=reviews)
     except APIException:

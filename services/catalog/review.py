@@ -90,8 +90,8 @@ class ReviewService:
         
         return sort_field, sort_order
 
-    async def list(self, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
-        """Get all reviews with pagination and filtering"""
+    async def list(self, product_id: Optional[UUID] = None, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
+        """Get all reviews with pagination and filtering. If product_id is provided, filter by product."""
         offset = (page - 1) * limit
         query = select(Review).options(
             selectinload(Review.user).load_only(
@@ -101,38 +101,9 @@ class ReviewService:
         )
         total_query = select(func.count()).select_from(Review)
 
-        if min_rating is not None:
-            query = query.filter(Review.rating >= min_rating)
-            total_query = total_query.filter(Review.rating >= min_rating)
-        if max_rating is not None:
-            query = query.filter(Review.rating <= max_rating)
-            total_query = total_query.filter(Review.rating <= max_rating)
-
-        # Apply sorting
-        sort_field, sort_order = self._parse_sort_by(sort_by)
-        if sort_order == 'asc':
-            query = query.order_by(getattr(Review, sort_field).asc())
-        else:
-            query = query.order_by(getattr(Review, sort_field).desc())
-
-        total_reviews = (await self.db.execute(total_query)).scalar_one()
-        reviews = (await self.db.execute(query.offset(offset).limit(limit))).scalars().all()
-
-        return {
-            "total": total_reviews,
-            "page": page,
-            "limit": limit,
-            "data": [ReviewResponse.from_orm(r) for r in reviews]
-        }
-
-    async def for_product(self, product_id: UUID, page: int = 1, limit: int = 10, min_rating: Optional[int] = None, max_rating: Optional[int] = None, sort_by: Optional[str] = None) -> dict:
-        offset = (page - 1) * limit
-        query = select(Review).where(Review.product_id == product_id).options(
-            selectinload(Review.user).load_only(
-                User.id, User.firstname, User.lastname)
-        )
-        total_query = select(func.count()).select_from(
-            Review).where(Review.product_id == product_id)
+        if product_id is not None:
+            query = query.where(Review.product_id == product_id)
+            total_query = total_query.where(Review.product_id == product_id)
 
         if min_rating is not None:
             query = query.filter(Review.rating >= min_rating)
