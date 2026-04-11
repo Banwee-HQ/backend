@@ -12,12 +12,9 @@ from uuid import UUID
 from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
-from core.dependencies import get_current_auth_user, get_current_admin_user, get_shipping_tracking_service
-from models.accounts.user import User
-from models.commerce.shipping_tracking import (
-    ShipmentTracking, ShippingProvider, ShippingCarrier, 
-    TrackingStatus, ShipmentType
-)
+from core.dependencies import get_current_auth_user, require_admin
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from services.commerce.shipping_tracking import ShippingTrackingService
 from datetime import datetime
 
@@ -27,17 +24,18 @@ from schemas.commerce.shipping_tracking import (
     Track
 )
 
-router = APIRouter(prefix="/shipping-tracking", tags=["Shipping Tracking"])
+router = APIRouter(prefix="/shipping-tracking", tags=["shipping-tracking"])
 
 @router.post("/shipments")
 async def create_shipment(
     shipment_data: Create,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_auth_user),
-    shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
+    current_user = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Create a new shipment tracking record"""
     try:
+        shipping_service = ShippingTrackingService(db)
         # Convert string IDs to UUID
         shipment_dict = shipment_data.dict()
         shipment_dict['order_id'] = UUID(shipment_dict['order_id'])
@@ -67,14 +65,15 @@ async def create_shipment(
         )
 
 @router.get("/shipments/{shipment_id}")
-async def get(
+async def get_shipment(
     shipment_id: str,
-    current_user: User = Depends(get_current_auth_user),
-    shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
+    current_user = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get detailed tracking information for a shipment"""
     try:
-        shipment = await shipping_service.get_shipment_tracking(shipment_id)
+        shipping_service = ShippingTrackingService(db)
+        shipment = await shipping_service.get_shipment(shipment_id)
         
         if not shipment:
             raise HTTPException(status_code=404, detail="Shipment not found")
@@ -90,19 +89,21 @@ async def get(
         )
 
 @router.post("/track")
-async def track_shipment(
+async def track(
     tracking_request: Track,
-    current_user: User = Depends(get_current_auth_user),
-    shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
+    current_user = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Track a shipment using carrier-specific integration"""
     try:
-        tracking_data = await shipping_service.track_shipment(
+        shipping_service = ShippingTrackingService(db)
+        tracking_info = await shipping_service.track_shipment(
             tracking_request.tracking_number,
             tracking_request.carrier
         )
         
         return APIResponse.success(
+            data=tracking_info,
             data=tracking_data,
             message="Tracking information retrieved successfully"
         )
@@ -119,11 +120,12 @@ async def track_shipment(
 async def update_shipment_status(
     shipment_id: str,
     update_data: Update,
-    current_user: User = Depends(get_current_auth_user),
-    shipping_service: ShippingTrackingService = Depends(get_shipping_tracking_service)
+    current_user = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Update shipment status and create tracking event"""
     try:
+        shipping_service = ShippingTrackingService(db)
         shipment = await shipping_service.update_shipment_status(
             shipment_id,
             update_data.status,

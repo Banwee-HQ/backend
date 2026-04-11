@@ -193,11 +193,13 @@ async def list(
 async def patch(
     inventory_id: UUID,
     inventory_data: Update,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Partially update an inventory item (Admin access)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         item = await inventory_service.update(inventory_id, inventory_data)
         return Response.success(data=item, message="Inventory item updated successfully")
@@ -210,11 +212,13 @@ async def patch(
 @router.delete("/{inventory_id}")
 async def delete(
     inventory_id: UUID,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an inventory item (Admin access)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         await inventory_service.delete(inventory_id)
         return Response.success(message="Inventory item deleted successfully")
@@ -230,11 +234,13 @@ async def delete(
 @router.post("/adjustments")
 async def create_adj(
     adjustment_data: AdjustmentCreate,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a stock adjustment (Admin access)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         inventory_service = InventoryService(db)
         updated_inventory = await inventory_service.adjust_stock(adjustment_data, adjusted_by_user_id=current_user.id)
         return Response.success(data=updated_inventory, message="Stock adjusted successfully")
@@ -247,7 +253,7 @@ async def create_adj(
 @router.get("/adjustments/{adjustment_id}")
 async def get_adj(
     adjustment_id: UUID,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific stock adjustment by ID (Admin access)."""
@@ -265,7 +271,7 @@ async def get_adj(
 
 @router.get("/adjustments")
 async def list_adj(
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all stock adjustments (Admin access)."""
@@ -280,7 +286,7 @@ async def list_adj(
 @router.delete("/adjustments/{adjustment_id}")
 async def delete_adj(
     adjustment_id: UUID,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a stock adjustment (Admin access)."""

@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import List
 from core.db import get_db, logger
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user
 from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
@@ -31,11 +31,13 @@ router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 @router.post("/trigger-order-processing")
 async def trigger_order_processing(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger subscription order processing (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         scheduler = SubscriptionScheduler(db)
         result = await scheduler.process_due_subscriptions()
         return Response.success(data=result, message="Subscription order processing triggered successfully")
@@ -49,11 +51,13 @@ async def trigger_order_processing(
 
 @router.post("/trigger-notifications")
 async def trigger_notifications(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger subscription order notifications (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         return Response.success(message="Subscription order notifications triggered successfully")
     except Exception as e:
         logger.error(f"Error triggering subscription notifications: {e}")

@@ -88,7 +88,7 @@ async def rates(
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all tax rates with filtering and pagination (alias for /admin/tax-rates, Admin only)"""
@@ -216,7 +216,7 @@ async def list(
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all tax rates with filtering and pagination (Admin only)"""
@@ -329,7 +329,7 @@ async def get(
 @router.post("/admin/tax-rates", response_model=RateResponse, status_code=status.HTTP_201_CREATED)
 async def create(
     data: RateCreate,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new tax rate (Admin only)"""
@@ -394,7 +394,7 @@ async def create(
 async def update(
     tax_rate_id: UUID,
     data: RateUpdate,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update an existing tax rate (Admin only)"""
@@ -449,7 +449,7 @@ async def update(
 @router.delete("/admin/tax-rates/{tax_rate_id}")
 async def delete(
     tax_rate_id: UUID,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a tax rate (Admin only)"""
@@ -480,7 +480,7 @@ async def delete(
 @router.post("/admin/tax-rates/bulk-update")
 async def bulk_update(
     updates: List[dict],
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk update multiple tax rates (Admin only)"""
