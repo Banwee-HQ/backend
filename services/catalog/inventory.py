@@ -48,20 +48,18 @@ class InventoryService:
         locations = result.scalars().all()
         return [WarehouseLocationResponse.model_validate(location) for location in locations]
 
-    async def get_location(self, location_id: UUID) -> Optional[WarehouseLocationResponse]:
+    async def get_location(self, location_id: UUID, raw: bool = False) -> Optional[WarehouseLocationResponse | WarehouseLocation]:
+        """Get location by ID. Set raw=True to return SQLAlchemy model instead of response schema."""
         result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
         location = result.scalars().first()
-        if location:
-            return WarehouseLocationResponse.model_validate(location)
-        return None
-
-    async def get_location_model(self, location_id: UUID) -> Optional[WarehouseLocation]:
-        """Get the raw SQLAlchemy model for internal operations"""
-        result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
-        return result.scalars().first()
+        if not location:
+            return None
+        if raw:
+            return location
+        return WarehouseLocationResponse.model_validate(location)
 
     async def update_location(self, location_id: UUID, location_data: WarehouseLocationUpdate) -> WarehouseLocationResponse:
-        location = await self.get_location_model(location_id)
+        location = await self.get_location(location_id, raw=True)
         if not location:
             raise APIException(status_code=404, message="Warehouse location not found")
         
@@ -74,7 +72,7 @@ class InventoryService:
         return WarehouseLocationResponse.model_validate(location)
 
     async def delete_location(self, location_id: UUID):
-        location = await self.get_location_model(location_id)
+        location = await self.get_location(location_id, raw=True)
         if not location:
             raise APIException(status_code=404, message="Warehouse location not found")
         

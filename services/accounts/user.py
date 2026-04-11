@@ -178,8 +178,9 @@ class UserService:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def update(self, user_id: UUID, user_data) -> Optional[User]:
-        """Update user. Accepts either UserUpdate Pydantic model or a plain dict."""
+    async def update(self, user_id: UUID, user_data, allowed_fields: Optional[list] = None) -> Optional[User]:
+        """Update user. Accepts either UserUpdate Pydantic model or plain dict.
+        If allowed_fields provided, only those fields will be updated (for admin)."""
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
         user = result.scalar_one_or_none()
@@ -196,14 +197,15 @@ class UserService:
         # Update fields
         for field, value in data_dict.items():
             if hasattr(user, field):
-                setattr(user, field, value)
+                if allowed_fields is None or field in allowed_fields:
+                    setattr(user, field, value)
 
         await self.db.commit()
         await self.db.refresh(user)
         return user
 
-    async def delete(self, user_id: UUID) -> bool:
-        """Delete user"""
+    async def delete(self, user_id: UUID, soft_delete: bool = True) -> bool:
+        """Delete user. Set soft_delete=False for hard delete."""
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
         user = result.scalar_one_or_none()
@@ -211,8 +213,14 @@ class UserService:
         if not user:
             return False
 
-        await self.db.delete(user)
-        await self.db.commit()
+        if soft_delete:
+            user.is_active = False
+            user.account_status = "deleted"
+            await self.db.commit()
+            await self.db.refresh(user)
+        else:
+            await self.db.delete(user)
+            await self.db.commit()
         return True
 
     async def search(
@@ -440,27 +448,6 @@ class UserService:
             }
         }
 
-    async def update(self, user_id: str, user_data: dict) -> Optional[User]:
-        """Update user details (admin only)."""
-        try:
-            result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
-            user = result.scalar_one_or_none()
-            
-            if not user:
-                return None
-            
-            # Update allowed fields
-            allowed_fields = ['firstname', 'lastname', 'email', 'role', 'is_active', 'phone', 'account_status']
-            for field, value in user_data.items():
-                if field in allowed_fields and hasattr(user, field):
-                    setattr(user, field, value)
-            
-            await self.db.commit()
-            await self.db.refresh(user)
-            return user
-        except Exception:
-            return None
-
     async def reset_password(self, user_id: str) -> dict:
         """Reset user password and send reset email (admin only)."""
         try:
@@ -500,51 +487,6 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
         return user
-
-    async def get_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get a user by ID (admin only)."""
-        try:
-            result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
-            user = result.scalar_one_or_none()
-
-            if not user:
-                return None
-
-            return {
-                "id": str(user.id),
-                "email": user.email,
-                "firstname": user.firstname,
-                "lastname": user.lastname,
-                "role": user.role,
-                "is_active": user.is_active,
-                "created_at": user.created_at.isoformat() if user.created_at else None,
-                "last_login": user.last_login.isoformat() if user.last_login else None
-            }
-        except Exception:
-            return None
-
-    async def delete(self, user_id: str) -> bool:
-        """Delete user (admin only) - soft delete only."""
-        try:
-            result = await self.db.execute(select(User).where(User.id == UUID(user_id)))
-            user = result.scalar_one_or_none()
-
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-
-            # Soft delete only
-            user.is_active = False
-            user.account_status = "deleted"
-
-            await self.db.commit()
-            await self.db.refresh(user)
-            return True
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to delete user: {str(e)}"
-            )
 
     async def admin_reset_password(self, user_id: str) -> Dict[str, Any]:
         """Send password reset email to user (admin only)."""
