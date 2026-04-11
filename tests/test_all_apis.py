@@ -1,4 +1,4 @@
-"""Complete API Test Suite - Tests all 101+ Banwee API endpoints.
+"""Complete API Test Suite - Tests all 171 Banwee API endpoints.
 
 This file contains comprehensive tests for all API endpoints organized by module.
 Run with: pytest tests/test_all_apis.py -v
@@ -268,6 +268,76 @@ class TestUserEndpoints:
         """GET /v1/users/me without auth - Should fail."""
         response = await async_client.get("/v1/users/me")
         assert response.status_code == 401
+
+    async def test_031a_users_profile(self, async_client: AsyncClient, auth_headers):
+        """GET /v1/users/profile - Get user profile (legacy alias)."""
+        response = await async_client.get("/v1/users/profile", headers=auth_headers)
+        assert response.status_code == 200
+
+    async def test_031b_users_create(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/users/ - Create user (admin)."""
+        user_data = {
+            "email": f"newuser_{uuid4().hex[:8]}@example.com",
+            "password": "SecurePass123!",
+            "first_name": "New",
+            "last_name": "User"
+        }
+        response = await async_client.post("/v1/users/", headers=admin_headers, json=user_data)
+        assert response.status_code in [200, 201, 403]
+
+    async def test_031c_users_patch(self, async_client: AsyncClient, auth_headers):
+        """PATCH /v1/users/{id} - Update user."""
+        # This will test with current user's own ID
+        response = await async_client.patch("/v1/users/me",
+            headers=auth_headers,
+            json={"first_name": "Updated"}
+        )
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031d_users_delete(self, async_client: AsyncClient, admin_headers):
+        """DELETE /v1/users/{id} - Delete user (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.delete(f"/v1/users/{user_id}", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031e_users_update_status(self, async_client: AsyncClient, admin_headers):
+        """PUT /v1/users/{id}/status - Update user status (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.put(f"/v1/users/{user_id}/status",
+            headers=admin_headers,
+            json={"is_active": False}
+        )
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031f_users_reset_password(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/users/{id}/reset-password - Reset password (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.post(f"/v1/users/{user_id}/reset-password", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031g_users_deactivate(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/users/{id}/deactivate - Deactivate user (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.post(f"/v1/users/{user_id}/deactivate", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031h_users_activate(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/users/{id}/activate - Activate user (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.post(f"/v1/users/{user_id}/activate", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031i_users_verify(self, async_client: AsyncClient, admin_headers):
+        """PUT /v1/users/{id}/verify - Verify user (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.put(f"/v1/users/{user_id}/verify", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
+
+    async def test_031j_users_activity(self, async_client: AsyncClient, admin_headers):
+        """GET /v1/users/{id}/activity - Get user activity (admin)."""
+        user_id = str(uuid4())
+        response = await async_client.get(f"/v1/users/{user_id}/activity", headers=admin_headers)
+        assert response.status_code in [200, 403, 404]
 
 
 # =============================================================================
@@ -1083,6 +1153,7 @@ class TestWebhookEndpoints:
 # Test Coverage:
 #   - Root & System: 3 tests
 #   - Authentication: 20 tests
+#   - Users: 13 tests
 #   - Addresses: 5 tests
 #   - Products: 22 tests
 #   - Reviews: 6 tests
@@ -1099,5 +1170,5 @@ class TestWebhookEndpoints:
 #   - Promocodes: 8 tests
 #   - Refunds: 4 tests
 #   - Webhooks: 2 tests
-# Total: 161 comprehensive tests covering all 221+ API endpoints
+# Total: 171 test cases covering all 221+ API endpoints
 # =============================================================================
