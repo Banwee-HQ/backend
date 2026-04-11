@@ -465,7 +465,14 @@ class UserService:
             await self.db.commit()
             await self.db.refresh(user)
 
-            # TODO: Send password reset email
+            # Send password reset email
+            from services.accounts.email import EmailService
+            email_service = EmailService(self.db)
+            await email_service.send_password_reset_email(
+                recipient_email=user.email,
+                reset_token=reset_token,
+                reset_link=None  # EmailService will generate the link
+            )
 
             return {
                 "success": True,
