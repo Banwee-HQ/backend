@@ -281,7 +281,7 @@ async def get_product(
             product = await product_service.get(uid)
         except (ValueError, AttributeError):
             # Try slug
-            product = await product_service.get_by_slug(product_id)
+            product = await product_service.get(slug=product_id)
         if not product:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,

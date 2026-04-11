@@ -454,26 +454,20 @@ class ProductService:
             pages=1
         )
 
-    async def get(self, product_id: UUID) -> Optional[ProductResponse]:
-        """Get product by ID."""
+    async def get(self, product_id: Optional[UUID] = None, slug: Optional[str] = None) -> Optional[ProductResponse]:
+        """Get product by ID or slug."""
+        if not product_id and not slug:
+            raise ValueError("Either product_id or slug must be provided")
+
         query = select(Product).options(
             selectinload(Product.variants).selectinload(ProductVariant.images),
             selectinload(Product.variants).selectinload(ProductVariant.inventory)
-        ).where(Product.id == product_id)
+        )
 
-        result = await self.db.execute(query)
-        product = result.scalar_one_or_none()
-
-        if product:
-            return self._convert_product_to_response(product)
-        return None
-
-    async def get_by_slug(self, slug: str) -> Optional[ProductResponse]:
-        """Get product by slug."""
-        query = select(Product).options(
-            selectinload(Product.variants).selectinload(ProductVariant.images),
-            selectinload(Product.variants).selectinload(ProductVariant.inventory)
-        ).where(Product.slug == slug)
+        if product_id:
+            query = query.where(Product.id == product_id)
+        else:
+            query = query.where(Product.slug == slug)
 
         result = await self.db.execute(query)
         product = result.scalar_one_or_none()
