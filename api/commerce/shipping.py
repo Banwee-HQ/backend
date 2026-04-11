@@ -27,17 +27,28 @@ router = APIRouter(prefix="/shipping", tags=["shipping"])
 
 @router.get("/methods")
 async def list(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    is_active: Optional[bool] = Query(None),
+    all_methods: bool = Query(False, description="Return all methods (admin only)"),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all active shipping methods."""
+    """List shipping methods. Users see active methods, admins can see all."""
     try:
         shipping_service = ShippingService(db)
+        if all_methods:
+            if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+                raise APIException(status_code=403, message="Admin access required")
+            methods = await shipping_service.get_all_methods(
+                page=page, limit=limit, is_active=is_active
+            )
+            return Response.success(data=methods)
         methods = await shipping_service.list_active()
         methods_data = [MethodInDB.model_validate(method) for method in methods]
-        return Response.success(
-            data=methods_data,
-            message="Active shipping methods retrieved successfully"
-        )
+        return Response.success(data=methods_data)
+    except APIException:
+        raise
     except Exception as e:
         logger.error(f"Error getting shipping methods: {e}")
         raise APIException(
