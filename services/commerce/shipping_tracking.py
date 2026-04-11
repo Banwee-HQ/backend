@@ -37,7 +37,7 @@ class ShippingTrackingService:
             ShippingCarrier.PUROLATOR: PurolatorIntegration(),
         }
 
-    async def create_shipment(self, shipment_data: Dict[str, Any]) -> ShipmentTracking:
+    async def create(self, shipment_data: Dict[str, Any]) -> ShipmentTracking:
         """Create a new shipment tracking record"""
         try:
             # Get provider
@@ -161,40 +161,49 @@ class ShippingTrackingService:
                 await self.db.commit()
             raise APIException(status_code=500, message=f"Failed to track shipment: {str(e)}")
 
-    async def get_shipment_tracking(self, shipment_id: str) -> Optional[Dict[str, Any]]:
-        """Get detailed tracking information for a shipment"""
+    async def get(
+        self,
+        shipment_id: Optional[str] = None,
+        order_id: Optional[str] = None
+    ) -> Union[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Get shipment tracking information
+        
+        Args:
+            shipment_id: Get specific shipment by ID
+            order_id: Get all shipments for an order
+            
+        Returns:
+            Single shipment dict if shipment_id provided, list of shipments if order_id provided
+        """
         try:
-            shipment_result = await self.db.execute(
-                select(ShipmentTracking).where(
-                    ShipmentTracking.id == shipment_id
-                ).options(selectinload(ShipmentTracking.tracking_events))
-            )
-            shipment = shipment_result.scalar_one_or_none()
-
-            if not shipment:
-                return None
-
-            return shipment.to_dict()
+            if shipment_id:
+                # Get specific shipment
+                shipment_result = await self.db.execute(
+                    select(ShipmentTracking).where(
+                        ShipmentTracking.id == shipment_id
+                    ).options(selectinload(ShipmentTracking.tracking_events))
+                )
+                shipment = shipment_result.scalar_one_or_none()
+                return shipment.to_dict() if shipment else None
+            
+            elif order_id:
+                # Get all shipments for order
+                shipments_result = await self.db.execute(
+                    select(ShipmentTracking).where(
+                        ShipmentTracking.order_id == order_id
+                    ).options(selectinload(ShipmentTracking.tracking_events))
+                )
+                shipments = shipments_result.scalars().all()
+                return [shipment.to_dict() for shipment in shipments]
+            
+            else:
+                raise APIException(status_code=400, message="Either shipment_id or order_id must be provided")
 
         except Exception as e:
             raise APIException(status_code=500, message=f"Failed to get shipment tracking: {str(e)}")
 
-    async def get_order_shipments(self, order_id: str) -> List[Dict[str, Any]]:
-        """Get all shipments for an order"""
-        try:
-            shipments_result = await self.db.execute(
-                select(ShipmentTracking).where(
-                    ShipmentTracking.order_id == order_id
-                ).options(selectinload(ShipmentTracking.tracking_events))
-            )
-            shipments = shipments_result.scalars().all()
-
-            return [shipment.to_dict() for shipment in shipments]
-
-        except Exception as e:
-            raise APIException(status_code=500, message=f"Failed to get order shipments: {str(e)}")
-
-    async def update_shipment_status(self, shipment_id: str, status: TrackingStatus, 
+    async def update(self, shipment_id: str, status: TrackingStatus, 
                                    event_data: Dict[str, Any] = None) -> ShipmentTracking:
         """Update shipment status and create tracking event"""
         try:

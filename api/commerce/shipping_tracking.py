@@ -42,7 +42,7 @@ async def create_shipment(
         if shipment_dict.get('order_item_id'):
             shipment_dict['order_item_id'] = UUID(shipment_dict['order_item_id'])
         
-        shipment = await shipping_service.create_shipment(shipment_dict)
+        shipment = await shipping_service.create(shipment_dict)
         
         # Trigger initial tracking in background
         background_tasks.add_task(
@@ -126,8 +126,8 @@ async def update_shipment_status(
     """Update shipment status and create tracking event"""
     try:
         shipping_service = ShippingTrackingService(db)
-        shipment = await shipping_service.update_shipment_status(
-            shipment_id,
+        shipment = await shipping_service.update(
+            str(shipment_id),
             update_data.status,
             update_data.dict(exclude={'status'})
         )
