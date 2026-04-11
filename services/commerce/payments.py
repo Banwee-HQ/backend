@@ -329,155 +329,125 @@ class PaymentService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create payment method: {str(e)}")
 
-    async def method(
-        self,
-        action: str,
-        user_id: UUID,
-        payment_method_id: Optional[UUID] = None,
-        stripe_payment_method_id: Optional[str] = None,
-        stripe_token: Optional[str] = None,
-        payment_method_data: Optional[Dict] = None,
-        is_default: bool = False,
-        update_data: Optional[Dict[str, Any]] = None
-    ) -> Union[PaymentMethod, List[PaymentMethod], bool, None]:
-        """
-        Manage payment methods: create, get, list, update, delete, set_default
-        
-        Args:
-            action: "create", "get", "list", "update", "delete", or "set_default"
-            user_id: The user ID
-            payment_method_id: Required for "get", "update", "delete", "set_default" actions
-            stripe_payment_method_id: Required for "create" action (Stripe PaymentMethod ID)
-            stripe_token: Alternative for "create" action (legacy Stripe token)
-            payment_method_data: Optional additional data for "create" action
-            is_default: Whether to set as default (for "create" or "set_default" actions)
-            update_data: Fields to update (for "update" action)
-        """
-        if action == "get":
-            if not payment_method_id:
-                raise HTTPException(status_code=400, detail="payment_method_id required for get action")
-            result = await self.db.execute(
-                select(PaymentMethod).where(
-                    PaymentMethod.id == payment_method_id,
-                    PaymentMethod.user_id == user_id
-                )
+    async def get(self, payment_method_id: UUID, user_id: UUID) -> Optional[PaymentMethod]:
+        """Get a specific payment method by ID"""
+        result = await self.db.execute(
+            select(PaymentMethod).where(
+                PaymentMethod.id == payment_method_id,
+                PaymentMethod.user_id == user_id
             )
-            return result.scalar_one_or_none()
-        
-        elif action == "list":
+        )
+        return result.scalar_one_or_none()
+
+    async def list(self, user_id: UUID) -> List[PaymentMethod]:
+        """Get all payment methods for a user"""
+        result = await self.db.execute(
+            select(PaymentMethod).where(
+                and_(PaymentMethod.user_id == user_id, PaymentMethod.is_active == True)
+            ).order_by(PaymentMethod.is_default.desc(), PaymentMethod.created_at.desc())
+        )
+        return result.scalars().all()
+
+    async def update(self, payment_method_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[PaymentMethod]:
+        """Update a payment method"""
+        try:
             result = await self.db.execute(
                 select(PaymentMethod).where(
-                    and_(PaymentMethod.user_id == user_id, PaymentMethod.is_active == True)
-                ).order_by(PaymentMethod.is_default.desc(), PaymentMethod.created_at.desc())
-            )
-            return result.scalars().all()
-        
-        elif action == "delete":
-            if not payment_method_id:
-                raise HTTPException(status_code=400, detail="payment_method_id required for delete action")
-            
-            result = await self.db.execute(
-                select(PaymentMethod).where(
-                    and_(PaymentMethod.id == payment_method_id, PaymentMethod.user_id == user_id)
-                )
+                    and_(
+                        PaymentMethod.id == payment_method_id,
+                        PaymentMethod.user_id == user_id,
+                        PaymentMethod.is_active == True
+                    )
+                ).with_for_update()
             )
             payment_method = result.scalar_one_or_none()
             
             if not payment_method:
-                raise HTTPException(status_code=404, detail="Payment method not found")
+                return None
             
-            try:
-                if payment_method.stripe_payment_method_id:
-                    try:
-                        stripe_pm = stripe.PaymentMethod.retrieve(payment_method.stripe_payment_method_id)
-                        if getattr(stripe_pm, "customer", None):
-                            stripe.PaymentMethod.detach(payment_method.stripe_payment_method_id)
-                    except stripe.error.InvalidRequestError as detach_error:
-                        message = str(detach_error).lower()
-                        if "not attached" not in message:
-                            raise
-                
-                payment_method.is_active = False
-                await self.db.commit()
-                return True
-                
-            except stripe.error.StripeError as e:
-                raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
-        
-        elif action == "set_default":
-            if not payment_method_id:
-                raise HTTPException(status_code=400, detail="payment_method_id required for set_default action")
+            allowed_fields = ['expiry_month', 'expiry_year']
+            for field, value in update_data.items():
+                if field in allowed_fields and hasattr(payment_method, field):
+                    setattr(payment_method, field, value)
             
-            try:
-                result = await self.db.execute(
-                    select(PaymentMethod).where(
-                        and_(
-                            PaymentMethod.id == payment_method_id,
-                            PaymentMethod.user_id == user_id,
-                            PaymentMethod.is_active == True
-                        )
-                    ).with_for_update()
-                )
-                new_default = result.scalar_one_or_none()
-                
-                if not new_default:
-                    return False
-                
-                existing_defaults = await self.db.execute(
-                    select(PaymentMethod).where(
-                        and_(
-                            PaymentMethod.user_id == user_id,
-                            PaymentMethod.is_default == True,
-                            PaymentMethod.is_active == True
-                        )
-                    ).with_for_update()
-                )
-                
-                for pm in existing_defaults.scalars().all():
-                    pm.is_default = False
-                
-                new_default.is_default = True
-                await self.db.commit()
-                return True
-                
-            except Exception as e:
-                await self.db.rollback()
-                raise HTTPException(status_code=500, detail=f"Failed to set default payment method: {str(e)}")
-        
-        elif action == "update":
-            if not payment_method_id:
-                raise HTTPException(status_code=400, detail="payment_method_id required for update action")
+            await self.db.commit()
+            await self.db.refresh(payment_method)
+            return payment_method
             
-            try:
-                result = await self.db.execute(
-                    select(PaymentMethod).where(
-                        and_(
-                            PaymentMethod.id == payment_method_id,
-                            PaymentMethod.user_id == user_id,
-                            PaymentMethod.is_active == True
-                        )
-                    ).with_for_update()
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to update payment method: {str(e)}")
+
+    async def delete(self, payment_method_id: UUID, user_id: UUID) -> bool:
+        """Delete a payment method"""
+        result = await self.db.execute(
+            select(PaymentMethod).where(
+                and_(
+                    PaymentMethod.id == payment_method_id,
+                    PaymentMethod.user_id == user_id
                 )
-                payment_method = result.scalar_one_or_none()
-                
-                if not payment_method:
-                    return None
-                
-                allowed_fields = ['expiry_month', 'expiry_year']
-                for field, value in (update_data or {}).items():
-                    if field in allowed_fields and hasattr(payment_method, field):
-                        setattr(payment_method, field, value)
-                
-                await self.db.commit()
-                await self.db.refresh(payment_method)
-                return payment_method
-                
-            except Exception as e:
-                await self.db.rollback()
-                raise HTTPException(status_code=500, detail=f"Failed to update payment method: {str(e)}")
+            )
+        )
+        payment_method = result.scalar_one_or_none()
         
-        else:
-            raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+        if not payment_method:
+            raise HTTPException(status_code=404, detail="Payment method not found")
+        
+        try:
+            if payment_method.stripe_payment_method_id:
+                try:
+                    stripe_pm = stripe.PaymentMethod.retrieve(payment_method.stripe_payment_method_id)
+                    if getattr(stripe_pm, "customer", None):
+                        stripe.PaymentMethod.detach(payment_method.stripe_payment_method_id)
+                except stripe.error.InvalidRequestError as detach_error:
+                    message = str(detach_error).lower()
+                    if "not attached" not in message:
+                        raise
+            
+            payment_method.is_active = False
+            await self.db.commit()
+            return True
+            
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+
+    async def set_default(self, payment_method_id: UUID, user_id: UUID) -> bool:
+        """Set a payment method as default for the user"""
+        try:
+            result = await self.db.execute(
+                select(PaymentMethod).where(
+                    and_(
+                        PaymentMethod.id == payment_method_id,
+                        PaymentMethod.user_id == user_id,
+                        PaymentMethod.is_active == True
+                    )
+                ).with_for_update()
+            )
+            new_default = result.scalar_one_or_none()
+            
+            if not new_default:
+                return False
+            
+            existing_defaults = await self.db.execute(
+                select(PaymentMethod).where(
+                    and_(
+                        PaymentMethod.user_id == user_id,
+                        PaymentMethod.is_default == True,
+                        PaymentMethod.is_active == True
+                    )
+                ).with_for_update()
+            )
+            
+            for pm in existing_defaults.scalars().all():
+                pm.is_default = False
+            
+            new_default.is_default = True
+            await self.db.commit()
+            return True
+            
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to set default payment method: {str(e)}")
 
     async def create_intent(
         self,

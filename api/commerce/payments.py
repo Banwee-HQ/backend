@@ -79,7 +79,7 @@ async def get_method(
 ):
     """Get a specific payment method"""
     service = PaymentService(db)
-    method = await service.method(action="get", payment_method_id=payment_method_id, user_id=current_user.id)
+    method = await service.get(payment_method_id, current_user.id)
     if not method:
         raise APIException(status_code=404, message="Payment method not found")
     return Response.success(data=MethodResponse.from_orm(method))
@@ -92,7 +92,7 @@ async def list_methods(
 ):
     """List all payment methods for user"""
     service = PaymentService(db)
-    payment_methods = await service.method(action="list", user_id=current_user.id)
+    payment_methods = await service.list(current_user.id)
     if not payment_methods:
         payment_methods = []
     return Response.success(data=[MethodResponse.from_orm(pm) for pm in payment_methods])
@@ -107,11 +107,10 @@ async def patch_method(
 ):
     """Update a payment method (partial)"""
     service = PaymentService(db)
-    updated_method = await service.method(
-        action="update",
-        payment_method_id=payment_method_id,
-        user_id=current_user.id,
-        update_data=payment_method_data.dict(exclude_unset=True)
+    updated_method = await service.update(
+        payment_method_id,
+        current_user.id,
+        payment_method_data.dict(exclude_unset=True)
     )
     if not updated_method:
         raise APIException(status_code=404, message="Payment method not found")
@@ -126,7 +125,7 @@ async def delete_method(
 ):
     """Delete a payment method"""
     service = PaymentService(db)
-    success = await service.method(action="delete", payment_method_id=payment_method_id, user_id=current_user.id)
+    success = await service.delete(payment_method_id, current_user.id)
     if not success:
         raise APIException(status_code=404, message="Payment method not found")
     return Response.success(message="Payment method deleted successfully")
@@ -284,7 +283,7 @@ async def set_default_method(
 ):
     """Set a payment method as default"""
     service = PaymentService(db)
-    success = await service.method(action="set_default", payment_method_id=payment_method_id, user_id=current_user.id)
+    success = await service.set_default(payment_method_id, current_user.id)
     if not success:
         raise APIException(status_code=404, message="Payment method not found")
     return Response.success(message="Payment method set as default successfully")

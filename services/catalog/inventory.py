@@ -36,80 +36,57 @@ class InventoryService:
         self.lock_service = lock_service
 
     # --- WarehouseLocation CRUD ---
-    async def location(
-        self,
-        action: str,
-        location_id: Optional[UUID] = None,
-        location_data: Optional[WarehouseLocationCreate] = None,
-        raw: bool = False
-    ) -> Union[WarehouseLocationResponse, List[WarehouseLocationResponse], WarehouseLocation, bool, None]:
-        """
-        Manage warehouse locations: create, list, get, update, delete
+    async def create_location(self, location_data: WarehouseLocationCreate) -> WarehouseLocationResponse:
+        """Create a new warehouse location"""
+        new_location = WarehouseLocation(id=uuid7(), **location_data.model_dump())
+        self.db.add(new_location)
+        await self.db.commit()
+        await self.db.refresh(new_location)
+        return WarehouseLocationResponse.model_validate(new_location)
+
+    async def list_locations(self) -> List[WarehouseLocationResponse]:
+        """List all warehouse locations"""
+        result = await self.db.execute(select(WarehouseLocation).order_by(WarehouseLocation.name))
+        locations = result.scalars().all()
+        return [WarehouseLocationResponse.model_validate(location) for location in locations]
+
+    async def get_location(self, location_id: UUID, raw: bool = False) -> Optional[WarehouseLocationResponse | WarehouseLocation]:
+        """Get location by ID. Set raw=True to return SQLAlchemy model instead of response schema."""
+        result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
+        location = result.scalars().first()
+        if not location:
+            return None
+        if raw:
+            return location
+        return WarehouseLocationResponse.model_validate(location)
+
+    async def update_location(self, location_id: UUID, location_data: WarehouseLocationUpdate) -> WarehouseLocationResponse:
+        """Update a warehouse location"""
+        location = await self.get_location(location_id, raw=True)
+        if not location:
+            raise APIException(status_code=404, message="Warehouse location not found")
         
-        Args:
-            action: "create", "list", "get", "update", or "delete"
-            location_id: Required for "get", "update", "delete" actions
-            location_data: Required for "create" and "update" actions
-            raw: For "get" action, return SQLAlchemy model instead of response schema
-        """
-        if action == "create":
-            if not location_data:
-                raise APIException(status_code=400, message="location_data required for create action")
-            new_location = WarehouseLocation(id=uuid7(), **location_data.model_dump())
-            self.db.add(new_location)
-            await self.db.commit()
-            await self.db.refresh(new_location)
-            return WarehouseLocationResponse.model_validate(new_location)
+        for field, value in location_data.model_dump(exclude_unset=True).items():
+            setattr(location, field, value)
         
-        elif action == "list":
-            result = await self.db.execute(select(WarehouseLocation).order_by(WarehouseLocation.name))
-            locations = result.scalars().all()
-            return [WarehouseLocationResponse.model_validate(location) for location in locations]
+        location.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(location)
+        return WarehouseLocationResponse.model_validate(location)
+
+    async def delete_location(self, location_id: UUID):
+        """Delete a warehouse location"""
+        location = await self.get_location(location_id, raw=True)
+        if not location:
+            raise APIException(status_code=404, message="Warehouse location not found")
         
-        elif action == "get":
-            if not location_id:
-                raise APIException(status_code=400, message="location_id required for get action")
-            result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
-            location = result.scalars().first()
-            if not location:
-                return None
-            if raw:
-                return location
-            return WarehouseLocationResponse.model_validate(location)
+        # Check if there are any inventory items in this location
+        inventory_count = await self.db.scalar(select(func.count(Inventory.id)).filter(Inventory.location_id == location_id))
+        if inventory_count > 0:
+            raise APIException(status_code=400, message="Cannot delete location with existing inventory. Move all items first.")
         
-        elif action == "update":
-            if not location_id or not location_data:
-                raise APIException(status_code=400, message="location_id and location_data required for update action")
-            location = await self.location("get", location_id=location_id, raw=True)
-            if not location:
-                raise APIException(status_code=404, message="Warehouse location not found")
-            
-            for field, value in location_data.model_dump(exclude_unset=True).items():
-                setattr(location, field, value)
-            
-            location.updated_at = datetime.now(timezone.utc)
-            await self.db.commit()
-            await self.db.refresh(location)
-            return WarehouseLocationResponse.model_validate(location)
-        
-        elif action == "delete":
-            if not location_id:
-                raise APIException(status_code=400, message="location_id required for delete action")
-            location = await self.location("get", location_id=location_id, raw=True)
-            if not location:
-                raise APIException(status_code=404, message="Warehouse location not found")
-            
-            # Check if there are any inventory items in this location
-            inventory_count = await self.db.scalar(select(func.count(Inventory.id)).filter(Inventory.location_id == location_id))
-            if inventory_count > 0:
-                raise APIException(status_code=400, message="Cannot delete location with existing inventory. Move all items first.")
-            
-            await self.db.delete(location)
-            await self.db.commit()
-            return True
-        
-        else:
-            raise APIException(status_code=400, message=f"Invalid action: {action}. Use 'create', 'list', 'get', 'update', or 'delete'")
+        await self.db.delete(location)
+        await self.db.commit()
 
     # --- Inventory CRUD and Adjustment ---
     async def get(
@@ -231,46 +208,46 @@ class InventoryService:
                 "low_stock": low_stock,
                 "search": search
             })
-                        offset = (page - 1) * limit
-                        
-                        # Build query with proper eager loading
-                        query = select(Inventory).options(
-                            joinedload(Inventory.variant).joinedload(ProductVariant.product),
-                            joinedload(Inventory.variant).joinedload(ProductVariant.images),
-                            joinedload(Inventory.location)
-                        )
-                        count_query = select(func.count(Inventory.id))
+            offset = (page - 1) * limit
+            
+            # Build query with proper eager loading
+            query = select(Inventory).options(
+                joinedload(Inventory.variant).joinedload(ProductVariant.product),
+                joinedload(Inventory.variant).joinedload(ProductVariant.images),
+                joinedload(Inventory.location)
+            )
+            count_query = select(func.count(Inventory.id))
 
-                        conditions = []
-                        if product_id:
-                            conditions.append(Inventory.variant.has(ProductVariant.product_id == product_id))
-                        if location_id:
-                            conditions.append(Inventory.location_id == location_id)
-                        if low_stock is not None:
-                            if low_stock:
-                                conditions.append(Inventory.quantity_available <= Inventory.low_stock_threshold)
-                            else:
-                                conditions.append(Inventory.quantity_available > Inventory.low_stock_threshold)
-                        if search:
-                            # Search in product name, variant name, variant SKU, and location name
-                            search_term = f"%{search.lower()}%"
-                            search_conditions = [
-                                Inventory.variant.has(ProductVariant.product.has(Product.name.ilike(search_term))),
-                                Inventory.variant.has(ProductVariant.name.ilike(search_term)),
-                                Inventory.variant.has(ProductVariant.sku.ilike(search_term)),
-                                Inventory.location.has(WarehouseLocation.name.ilike(search_term))
-                            ]
-                            conditions.append(or_(*search_conditions))
-                        
-                        if conditions:
-                            query = query.filter(and_(*conditions))
-                            count_query = count_query.filter(and_(*conditions))
+            conditions = []
+            if product_id:
+                conditions.append(Inventory.variant.has(ProductVariant.product_id == product_id))
+            if location_id:
+                conditions.append(Inventory.location_id == location_id)
+            if low_stock is not None:
+                if low_stock:
+                    conditions.append(Inventory.quantity_available <= Inventory.low_stock_threshold)
+                else:
+                    conditions.append(Inventory.quantity_available > Inventory.low_stock_threshold)
+            if search:
+                # Search in product name, variant name, variant SKU, and location name
+                search_term = f"%{search.lower()}%"
+                search_conditions = [
+                    Inventory.variant.has(ProductVariant.product.has(Product.name.ilike(search_term))),
+                    Inventory.variant.has(ProductVariant.name.ilike(search_term)),
+                    Inventory.variant.has(ProductVariant.sku.ilike(search_term)),
+                    Inventory.location.has(WarehouseLocation.name.ilike(search_term))
+                ]
+                conditions.append(or_(*search_conditions))
+            
+            if conditions:
+                query = query.filter(and_(*conditions))
+                count_query = count_query.filter(and_(*conditions))
 
-                        # Build dynamic sorting - simplified approach with defaults
-                        sort_field = sort_by or "updated_at"
-                        sort_dir = sort_order or "desc"
-                        
-                        logger.info(f"Applying sorting", metadata={
+            # Build dynamic sorting - simplified approach with defaults
+            sort_field = sort_by or "updated_at"
+            sort_dir = sort_order or "desc"
+            
+            logger.info(f"Applying sorting", metadata={
                 "sort_field": sort_field,
                 "sort_dir": sort_dir
             })
@@ -589,42 +566,29 @@ class InventoryService:
         adjustments = result.scalars().all()
         return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
 
-    async def adjustment(
-        self,
-        action: str,
-        adjustment_id: UUID
-    ) -> Union[Optional[StockAdjustmentResponse], bool]:
-        """
-        Manage stock adjustments: get or delete
-        
-        Args:
-            action: "get" or "delete"
-            adjustment_id: The adjustment ID
-        """
-        if action == "get":
-            result = await self.db.execute(
-                select(StockAdjustment)
-                .filter(StockAdjustment.id == adjustment_id)
-                .options(joinedload(StockAdjustment.adjusted_by))
-            )
-            adjustment = result.scalar_one_or_none()
-            if adjustment:
-                return StockAdjustmentResponse.model_validate(adjustment)
-            return None
-        
-        elif action == "delete":
-            result = await self.db.execute(
-                select(StockAdjustment).filter(StockAdjustment.id == adjustment_id)
-            )
-            adjustment = result.scalar_one_or_none()
-            if not adjustment:
-                return False
-            await self.db.delete(adjustment)
-            await self.db.commit()
-            return True
-        
-        else:
-            raise APIException(status_code=400, message=f"Invalid action: {action}. Use 'get' or 'delete'")
+    async def get_adjustment(self, adjustment_id: UUID) -> Optional[StockAdjustmentResponse]:
+        """Get a specific stock adjustment by ID"""
+        result = await self.db.execute(
+            select(StockAdjustment)
+            .filter(StockAdjustment.id == adjustment_id)
+            .options(joinedload(StockAdjustment.adjusted_by))
+        )
+        adjustment = result.scalar_one_or_none()
+        if adjustment:
+            return StockAdjustmentResponse.model_validate(adjustment)
+        return None
+
+    async def delete_adjustment(self, adjustment_id: UUID) -> bool:
+        """Delete a stock adjustment"""
+        result = await self.db.execute(
+            select(StockAdjustment).filter(StockAdjustment.id == adjustment_id)
+        )
+        adjustment = result.scalar_one_or_none()
+        if not adjustment:
+            return False
+        await self.db.delete(adjustment)
+        await self.db.commit()
+        return True
 
     async def is_low_stock(self, inventory_id: UUID) -> bool:
         inventory_item = await self.get(inventory_id)

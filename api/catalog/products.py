@@ -232,7 +232,7 @@ async def variants(
     """Get all variants for a product."""
     try:
         product_service = ProductService(db)
-        variants = await product_service.variant(action="list", product_id=product_id)
+        variants = await product_service.list_variants(product_id)
         return Response.success(data=variants)
     except Exception as e:
         raise APIException(
@@ -249,7 +249,7 @@ async def get_variant(
     """Get a specific product variant by ID."""
     try:
         product_service = ProductService(db)
-        variant = await product_service.variant(action="get", variant_id=variant_id)
+        variant = await product_service.get_variant(variant_id)
         if not variant:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -373,7 +373,7 @@ async def create_variant(
     """Create a new variant for a product (admin only)."""
     try:
         product_service = ProductService(db)
-        variant = await product_service.variant(action="create", product_id=product_id, variant_data=variant_data)
+        variant = await product_service.create_variant(product_id, variant_data)
         return Response.success(data=variant, message="Variant created successfully", code=status.HTTP_201_CREATED)
     except APIException:
         raise
@@ -389,7 +389,7 @@ async def get_variant(
     """Get a specific variant by ID."""
     try:
         product_service = ProductService(db)
-        variant = await product_service.variant(action="get", variant_id=variant_id)
+        variant = await product_service.get_variant(variant_id)
         if not variant:
             raise APIException(status_code=404, message="Variant not found")
         return Response.success(data=variant)
@@ -407,7 +407,7 @@ async def list_variants(
     """List all variants for a product."""
     try:
         product_service = ProductService(db)
-        variants = await product_service.variant(action="list", product_id=product_id)
+        variants = await product_service.list_variants(product_id)
         return Response.success(data=variants)
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch variants: {str(e)}")
@@ -423,7 +423,7 @@ async def patch_variant(
     """Update a variant (admin only)."""
     try:
         product_service = ProductService(db)
-        variant = await product_service.variant(action="update", variant_id=variant_id, update_data=variant_data)
+        variant = await product_service.update_variant(variant_id, variant_data)
         return Response.success(data=variant, message="Variant updated successfully")
     except APIException:
         raise
@@ -440,7 +440,7 @@ async def delete_variant(
     """Delete a variant (admin only)."""
     try:
         product_service = ProductService(db)
-        deleted = await product_service.variant(action="delete", variant_id=variant_id)
+        deleted = await product_service.delete_variant(variant_id)
         if not deleted:
             raise APIException(status_code=404, message="Variant not found")
         return Response.success(message="Variant deleted successfully")
@@ -463,8 +463,7 @@ async def create_image(
     """Create a new image for a variant (admin only)."""
     try:
         product_service = ProductService(db)
-        image = await product_service.image(
-            action="create",
+        image = await product_service.create_image(
             variant_id=variant_id,
             url=image_data.url,
             alt_text=image_data.alt_text,
@@ -486,7 +485,7 @@ async def get_image(
     """Get a specific image by ID."""
     try:
         product_service = ProductService(db)
-        image = await product_service.image(action="get", image_id=image_id)
+        image = await product_service.get_image(image_id)
         if not image:
             raise APIException(status_code=404, message="Image not found")
         return Response.success(data=image)
@@ -504,7 +503,7 @@ async def list_images(
     """List all images for a variant."""
     try:
         product_service = ProductService(db)
-        images = await product_service.image(action="list", variant_id=variant_id)
+        images = await product_service.list_images(variant_id)
         return Response.success(data=images)
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch images: {str(e)}")
@@ -520,8 +519,7 @@ async def patch_image(
     """Update an image (admin only)."""
     try:
         product_service = ProductService(db)
-        image = await product_service.image(
-            action="update",
+        image = await product_service.update_image(
             image_id=image_id,
             url=image_data.url,
             alt_text=image_data.alt_text,
@@ -546,7 +544,7 @@ async def delete_image(
     """Delete an image (admin only)."""
     try:
         product_service = ProductService(db)
-        deleted = await product_service.image(action="delete", image_id=image_id)
+        deleted = await product_service.delete_image(image_id)
         if not deleted:
             raise APIException(status_code=404, message="Image not found")
         return Response.success(message="Image deleted successfully")
