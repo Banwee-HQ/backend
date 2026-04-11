@@ -26,7 +26,7 @@ class DiscountEngine:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def validate_discount_code(
+    async def get_discount(
         self,
         discount_code: str,
         subscription_id: Optional[str] = None,
@@ -563,7 +563,7 @@ class DiscountEngine:
                 "pages": 0
             }
 
-    async def create_discount(
+    async def create(
         self,
         code: str,
         discount_type: str,

@@ -647,19 +647,6 @@ class CartService:
         
         return result.scalar() or 0
 
-    async def merge_guest(
-        self,
-        user_id: UUID,
-        guest_cart_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Merge guest cart with user cart after login
-        Since PostgreSQL version doesn't support guest carts,
-        this is mainly for compatibility
-        """
-        # For PostgreSQL version, just return the user's existing cart
-        return await self.get_cart(user_id=user_id)
-
     async def checkout_summary(
         self,
         user_id: Optional[UUID] = None,
@@ -907,15 +894,16 @@ class CartService:
             logger.error(f"Failed to get saved items: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to get saved items: {str(e)}")
 
-    async def merge_cart(
+    async def merge(
         self,
         user_id: UUID,
         guest_cart_id: Optional[str] = None,
+        guest_cart_data: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Merge guest cart with user cart after login"""
         try:
-            # For now, just return the user's cart
+            # For PostgreSQL version, just return the user's existing cart
             # Guest cart merging can be implemented later if needed
             logger.info(f"Merging cart for user {user_id}, guest_cart_id: {guest_cart_id}")
             return await self.get_cart(user_id=user_id, session_id=session_id)
