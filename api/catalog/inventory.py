@@ -272,7 +272,7 @@ async def list_adj(
     """List all stock adjustments (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        adjustments = await inventory_service.all_adjustments()
+        adjustments = await inventory_service.adjustments()
         return Response.success(data=adjustments)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustments: {e}")

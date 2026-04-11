@@ -121,7 +121,7 @@ class AuthService:
                 )
             
             # Get user from token
-            user = await self.get_by_id(user_id_from_token)
+            user = await self.get(user_id=user_id_from_token)
             if not user or not user.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -157,21 +157,21 @@ class AuthService:
         # This method can be used to clear the token on the client side.
         return True
 
-    async def get_by_id(self, user_id: str) -> Optional[User]:
-        """Get user by ID."""
-        result = await self.db.execute(select(User).where(User.id == user_id))
-        return result.scalar_one_or_none()
-
-    async def get_by_email(self, email: str) -> Optional[User]:
-        """Get user by email."""
-        result = await self.db.execute(select(User).where(User.email == email))
-        return result.scalar_one_or_none()
+    async def get(self, user_id: Optional[str] = None, email: Optional[str] = None) -> Optional[User]:
+        """Get user by ID or email."""
+        if user_id:
+            result = await self.db.execute(select(User).where(User.id == user_id))
+            return result.scalar_one_or_none()
+        elif email:
+            result = await self.db.execute(select(User).where(User.email == email))
+            return result.scalar_one_or_none()
+        return None
 
     
     async def create(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> UserResponse:
         """Create a new user."""
         # Check if user already exists
-        existing_user = await self.get_by_email(user_data.email)
+        existing_user = await self.get(email=user_data.email)
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -189,7 +189,7 @@ class AuthService:
     async def authenticate(self, email: str, password: str, background_tasks: BackgroundTasks) -> AuthResponse:
         """Authenticate user and return JWT tokens."""
         print(f"Attempting to authenticate user: {email}")
-        user = await self.get_by_email(email)
+        user = await self.get(email=email)
         if not user:
             print(f"User {email} not found.")
             raise HTTPException(
@@ -323,7 +323,7 @@ class AuthService:
 
     async def send_reset(self, email: str, background_tasks: BackgroundTasks):
         """Send password reset email"""
-        user = await self.get_by_email(email)
+        user = await self.get(email=email)
         if not user:
             # Return silently for security (don't reveal if email exists)
             logger.info(f"Password reset requested for non-existent email: {email}")

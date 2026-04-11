@@ -544,23 +544,15 @@ class InventoryService:
                 message=f"Failed to adjust stock: {str(e)}"
             )
 
-    async def adjustments(self, inventory_id: UUID) -> List[StockAdjustmentResponse]:
-        result = await self.db.execute(
-            select(StockAdjustment)
-            .filter(StockAdjustment.inventory_id == inventory_id)
-            .order_by(StockAdjustment.created_at.desc())
-            .options(joinedload(StockAdjustment.adjusted_by))
-        )
-        adjustments = result.scalars().all()
-        return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
-
-    async def all_adjustments(self) -> List[StockAdjustmentResponse]:
-        """Get all stock adjustments across all inventory items"""
-        result = await self.db.execute(
-            select(StockAdjustment)
-            .order_by(StockAdjustment.created_at.desc())
-            .options(joinedload(StockAdjustment.adjusted_by))
-        )
+    async def adjustments(self, inventory_id: Optional[UUID] = None) -> List[StockAdjustmentResponse]:
+        """Get stock adjustments. If inventory_id provided, filters by inventory item."""
+        query = select(StockAdjustment).options(joinedload(StockAdjustment.adjusted_by))
+        
+        if inventory_id:
+            query = query.filter(StockAdjustment.inventory_id == inventory_id)
+        
+        query = query.order_by(StockAdjustment.created_at.desc())
+        result = await self.db.execute(query)
         adjustments = result.scalars().all()
         return [StockAdjustmentResponse.model_validate(adjustment) for adjustment in adjustments]
 
