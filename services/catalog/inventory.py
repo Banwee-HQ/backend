@@ -85,13 +85,28 @@ class InventoryService:
         await self.db.commit()
 
     # --- Inventory CRUD and Adjustment ---
-    async def get(self, inventory_id: UUID, serialized: bool = False) -> Optional[Inventory | dict]:
-        """Get inventory item by ID. Set serialized=True to return dict instead of model."""
-        result = await self.db.execute(select(Inventory).filter(Inventory.id == inventory_id).options(
-            joinedload(Inventory.variant).joinedload(ProductVariant.product),
-            joinedload(Inventory.variant).joinedload(ProductVariant.images),
-            joinedload(Inventory.location)
-        ))
+    async def get(
+        self,
+        inventory_id: Optional[UUID] = None,
+        variant_id: Optional[UUID] = None,
+        serialized: bool = False
+    ) -> Optional[Inventory | dict]:
+        """Get inventory item by ID or variant_id. Set serialized=True to return dict instead of model."""
+        if not inventory_id and not variant_id:
+            raise ValueError("Either inventory_id or variant_id must be provided")
+        
+        if variant_id:
+            result = await self.db.execute(select(Inventory).filter(Inventory.variant_id == variant_id).options(
+                joinedload(Inventory.variant).joinedload(ProductVariant.product),
+                joinedload(Inventory.variant).joinedload(ProductVariant.images),
+                joinedload(Inventory.location)
+            ))
+        else:
+            result = await self.db.execute(select(Inventory).filter(Inventory.id == inventory_id).options(
+                joinedload(Inventory.variant).joinedload(ProductVariant.product),
+                joinedload(Inventory.variant).joinedload(ProductVariant.images),
+                joinedload(Inventory.location)
+            ))
         item = result.scalars().unique().first()
         
         if not item:
@@ -178,13 +193,6 @@ class InventoryService:
         except Exception as e:
             logger.error(f"Error serializing inventory item", metadata={"item_id": str(item.id)}, exception=e)
             return None
-
-    async def get_by_variant(self, variant_id: UUID) -> Optional[Inventory]:
-        result = await self.db.execute(select(Inventory).filter(Inventory.variant_id == variant_id).options(
-            joinedload(Inventory.variant).joinedload(ProductVariant.product),
-            joinedload(Inventory.location)
-        ))
-        return result.scalars().unique().first()
 
     async def list(self, page: int = 1, limit: int = 10, product_id: Optional[UUID] = None, location_id: Optional[UUID] = None, low_stock: Optional[bool] = None, search: Optional[str] = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> dict:
         try:
@@ -412,7 +420,7 @@ class InventoryService:
         }
 
     async def create(self, inventory_data: InventoryCreate) -> InventoryResponse:
-        existing_inventory = await self.get_by_variant(inventory_data.variant_id)
+        existing_inventory = await self.get(variant_id=inventory_data.variant_id)
         if existing_inventory:
             raise APIException(status_code=400, message="Inventory for this variant already exists.")
         
@@ -707,7 +715,7 @@ class InventoryService:
                     new_quantity = item_data["quantity"]
                     
                     # Get current inventory to calculate change
-                    inventory = await self.get_by_variant(variant_id)
+                    inventory = await self.get(variant_id=variant_id)
                     
                     if not inventory:
                         continue  # Skip items not found

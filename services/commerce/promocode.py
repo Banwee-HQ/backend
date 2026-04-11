@@ -22,13 +22,25 @@ class PromocodeService:
         await self.db.refresh(new_promocode)
         return new_promocode
 
-    async def get_by_code(self, code: str) -> Optional[Promocode]:
-        result = await self.db.execute(select(Promocode).where(Promocode.code == code, Promocode.is_active == True))
-        return result.scalars().first()
-
-    async def get(self, promocode_id: UUID) -> Optional[Promocode]:
-        result = await self.db.execute(select(Promocode).where(Promocode.id == promocode_id))
-        return result.scalars().first()
+    async def get(
+        self,
+        promocode_id: Optional[UUID] = None,
+        code: Optional[str] = None,
+        active_only: bool = False
+    ) -> Optional[Promocode]:
+        """Get promocode by ID or code. If active_only=True, filter for active promocodes."""
+        if not promocode_id and not code:
+            raise ValueError("Either promocode_id or code must be provided")
+        
+        if code:
+            query = select(Promocode).where(Promocode.code == code)
+            if active_only:
+                query = query.where(Promocode.is_active == True)
+            result = await self.db.execute(query)
+            return result.scalars().first()
+        else:
+            result = await self.db.execute(select(Promocode).where(Promocode.id == promocode_id))
+            return result.scalars().first()
 
     async def list(
         self,
@@ -94,7 +106,7 @@ class PromocodeService:
         """
         from datetime import datetime, timezone
         
-        promocode = await self.get_by_code(code)
+        promocode = await self.get(code=code, active_only=True)
         
         if not promocode:
             return False, "Promocode not found", None
