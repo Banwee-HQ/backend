@@ -1013,12 +1013,6 @@ class TestPromocodeEndpoints:
             headers=auth_headers, json={"code": "TEST20", "cart_total": 100.0})
         assert response.status_code in [200, 400, 403]
 
-    async def test_114_promocodes_validate(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/promocodes/validate - Validate promocode."""
-        response = await async_client.post("/v1/promocodes/validate",
-            headers=auth_headers, json={"code": "TEST20", "cart_total": 100.0})
-        assert response.status_code in [200, 400, 403]
-
     async def test_114a_promocodes_trigger_cleanup(self, async_client: AsyncClient, admin_headers):
         """POST /v1/promocodes/trigger-cleanup - Trigger promocode cleanup."""
         response = await async_client.post("/v1/promocodes/trigger-cleanup", headers=admin_headers)

@@ -34,6 +34,7 @@ class UserService:
         }
 
     async def create(self, user_data: UserCreate, background_tasks: BackgroundTasks) -> User:
+        """Create a new user with verification email"""
         hashed_password = self.password_manager.hash_password(
             user_data.password)
         verification_token = secrets.token_urlsafe(32)
@@ -66,27 +67,13 @@ class UserService:
 
     async def verify(self, token: str, background_tasks: BackgroundTasks):
         """Verify user email with token and send welcome email."""
-        print(f"🔧 DEBUG: UserService.verify_email called with token: '{token}'")
-        print(f"🔧 DEBUG: Token length: {len(token)}")
         
         result = await self.db.execute(
             select(User).where(User.verification_token == token)
         )
         user = result.scalar_one_or_none()
 
-        print(f"🔧 DEBUG: Database query result: {user}")
-        print(f"🔧 DEBUG: User found: {user is not None}")
-
         if not user:
-            # Let's also check if there are any users with verification tokens at all
-            all_users_result = await self.db.execute(
-                select(User).where(User.verification_token.isnot(None))
-            )
-            all_users = all_users_result.scalars().all()
-            print(f"🔧 DEBUG: Total users with verification tokens: {len(all_users)}")
-            for u in all_users[:3]:  # Show first 3 for debugging
-                print(f"🔧 DEBUG: User {u.email} has token: {u.verification_token[:20]}... (expires: {u.token_expiration})")
-            
             logger.warning(f"Email verification failed: No user found with token {token[:20]}...")
             raise APIException(
                 status_code=400,

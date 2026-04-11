@@ -16,6 +16,7 @@ class ShippingService:
         self.db = db
 
     async def create(self, shipping_method_data: ShippingMethodCreate) -> ShippingMethod:
+        """Create a new shipping method"""
         new_shipping_method = ShippingMethod(
             id=uuid7(),
             **shipping_method_data.dict(exclude_unset=True)
@@ -26,6 +27,7 @@ class ShippingService:
         return new_shipping_method
 
     async def get(self, shipping_method_id: UUID) -> Optional[ShippingMethod]:
+        """Get a shipping method by ID"""
         result = await self.db.execute(select(ShippingMethod).where(ShippingMethod.id == shipping_method_id))
         return result.scalars().first()
 
@@ -65,6 +67,7 @@ class ShippingService:
         return 0.0
 
     async def update(self, shipping_method_id: UUID, shipping_method_data: ShippingMethodUpdate) -> Optional[ShippingMethod]:
+        """Update a shipping method"""
         shipping_method = await self.get(shipping_method_id)
         if not shipping_method:
             raise APIException(
@@ -78,6 +81,7 @@ class ShippingService:
         return shipping_method
 
     async def delete(self, shipping_method_id: UUID) -> bool:
+        """Delete a shipping method"""
         shipping_method = await self.get(shipping_method_id)
         if not shipping_method:
             return False
