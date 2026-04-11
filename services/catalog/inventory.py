@@ -36,53 +36,80 @@ class InventoryService:
         self.lock_service = lock_service
 
     # --- WarehouseLocation CRUD ---
-    async def create_location(self, location_data: WarehouseLocationCreate) -> WarehouseLocationResponse:
-        new_location = WarehouseLocation(id=uuid7(), **location_data.model_dump())
-        self.db.add(new_location)
-        await self.db.commit()
-        await self.db.refresh(new_location)
-        return WarehouseLocationResponse.model_validate(new_location)
-
-    async def list_locations(self) -> List[WarehouseLocationResponse]:
-        result = await self.db.execute(select(WarehouseLocation).order_by(WarehouseLocation.name))
-        locations = result.scalars().all()
-        return [WarehouseLocationResponse.model_validate(location) for location in locations]
-
-    async def get_location(self, location_id: UUID, raw: bool = False) -> Optional[WarehouseLocationResponse | WarehouseLocation]:
-        """Get location by ID. Set raw=True to return SQLAlchemy model instead of response schema."""
-        result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
-        location = result.scalars().first()
-        if not location:
-            return None
-        if raw:
-            return location
-        return WarehouseLocationResponse.model_validate(location)
-
-    async def update_location(self, location_id: UUID, location_data: WarehouseLocationUpdate) -> WarehouseLocationResponse:
-        location = await self.get_location(location_id, raw=True)
-        if not location:
-            raise APIException(status_code=404, message="Warehouse location not found")
+    async def location(
+        self,
+        action: str,
+        location_id: Optional[UUID] = None,
+        location_data: Optional[WarehouseLocationCreate] = None,
+        raw: bool = False
+    ) -> Union[WarehouseLocationResponse, List[WarehouseLocationResponse], WarehouseLocation, bool, None]:
+        """
+        Manage warehouse locations: create, list, get, update, delete
         
-        for field, value in location_data.model_dump(exclude_unset=True).items():
-            setattr(location, field, value)
+        Args:
+            action: "create", "list", "get", "update", or "delete"
+            location_id: Required for "get", "update", "delete" actions
+            location_data: Required for "create" and "update" actions
+            raw: For "get" action, return SQLAlchemy model instead of response schema
+        """
+        if action == "create":
+            if not location_data:
+                raise APIException(status_code=400, message="location_data required for create action")
+            new_location = WarehouseLocation(id=uuid7(), **location_data.model_dump())
+            self.db.add(new_location)
+            await self.db.commit()
+            await self.db.refresh(new_location)
+            return WarehouseLocationResponse.model_validate(new_location)
         
-        location.updated_at = datetime.now(timezone.utc)
-        await self.db.commit()
-        await self.db.refresh(location)
-        return WarehouseLocationResponse.model_validate(location)
-
-    async def delete_location(self, location_id: UUID):
-        location = await self.get_location(location_id, raw=True)
-        if not location:
-            raise APIException(status_code=404, message="Warehouse location not found")
+        elif action == "list":
+            result = await self.db.execute(select(WarehouseLocation).order_by(WarehouseLocation.name))
+            locations = result.scalars().all()
+            return [WarehouseLocationResponse.model_validate(location) for location in locations]
         
-        # Check if there are any inventory items in this location
-        inventory_count = await self.db.scalar(select(func.count(Inventory.id)).filter(Inventory.location_id == location_id))
-        if inventory_count > 0:
-            raise APIException(status_code=400, message="Cannot delete location with existing inventory. Move all items first.")
+        elif action == "get":
+            if not location_id:
+                raise APIException(status_code=400, message="location_id required for get action")
+            result = await self.db.execute(select(WarehouseLocation).filter(WarehouseLocation.id == location_id))
+            location = result.scalars().first()
+            if not location:
+                return None
+            if raw:
+                return location
+            return WarehouseLocationResponse.model_validate(location)
         
-        await self.db.delete(location)
-        await self.db.commit()
+        elif action == "update":
+            if not location_id or not location_data:
+                raise APIException(status_code=400, message="location_id and location_data required for update action")
+            location = await self.location("get", location_id=location_id, raw=True)
+            if not location:
+                raise APIException(status_code=404, message="Warehouse location not found")
+            
+            for field, value in location_data.model_dump(exclude_unset=True).items():
+                setattr(location, field, value)
+            
+            location.updated_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            await self.db.refresh(location)
+            return WarehouseLocationResponse.model_validate(location)
+        
+        elif action == "delete":
+            if not location_id:
+                raise APIException(status_code=400, message="location_id required for delete action")
+            location = await self.location("get", location_id=location_id, raw=True)
+            if not location:
+                raise APIException(status_code=404, message="Warehouse location not found")
+            
+            # Check if there are any inventory items in this location
+            inventory_count = await self.db.scalar(select(func.count(Inventory.id)).filter(Inventory.location_id == location_id))
+            if inventory_count > 0:
+                raise APIException(status_code=400, message="Cannot delete location with existing inventory. Move all items first.")
+            
+            await self.db.delete(location)
+            await self.db.commit()
+            return True
+        
+        else:
+            raise APIException(status_code=400, message=f"Invalid action: {action}. Use 'create', 'list', 'get', 'update', or 'delete'")
 
     # --- Inventory CRUD and Adjustment ---
     async def get(

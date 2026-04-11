@@ -33,7 +33,7 @@ async def create_location(
     """Create a new warehouse location (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        location = await inventory_service.create_location(location_data)
+        location = await inventory_service.location(action="create", location_data=location_data)
         return Response.success(data=location, message="Warehouse location created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
@@ -50,7 +50,7 @@ async def get_location(
     """Get a specific warehouse location by ID."""
     try:
         inventory_service = InventoryService(db)
-        location = await inventory_service.get_location(location_id)
+        location = await inventory_service.location(action="get", location_id=location_id)
         if not location:
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Warehouse location not found")
         return Response.success(data=location)
@@ -68,7 +68,7 @@ async def list_locations(
     """List all warehouse locations."""
     try:
         inventory_service = InventoryService(db)
-        locations = await inventory_service.list_locations()
+        locations = await inventory_service.location(action="list")
         return Response.success(data=locations)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch locations: {e}")
@@ -84,7 +84,7 @@ async def update_location(
     """Partially update a warehouse location (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        location = await inventory_service.update_location(location_id, location_data)
+        location = await inventory_service.location(action="update", location_id=location_id, location_data=location_data)
         return Response.success(data=location, message="Warehouse location updated successfully")
     except APIException:
         raise
@@ -101,7 +101,7 @@ async def delete_location(
     """Delete a warehouse location (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        await inventory_service.delete_location(location_id)
+        await inventory_service.location(action="delete", location_id=location_id)
         return Response.success(message="Warehouse location deleted successfully")
     except APIException:
         raise
