@@ -4,12 +4,13 @@ from typing import List, Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate, ProductPatch, VariantStockUpdate, ProductModeration, ProductFeatureToggle
 from services.catalog.products import ProductService
+from models.accounts.user import UserRole
 
 logger = get_logger(__name__)
 
@@ -596,61 +597,41 @@ async def delete_image(
         raise APIException(status_code=500, message=f"Failed to delete image: {str(e)}")
 
 
-# ==========================================================
-# ADMIN ENDPOINTS - Moved from admin.py
-# ==========================================================
-
-@router.get("/admin/all", dependencies=[Depends(require_admin)])
-async def get_all_products_admin(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    category: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all products with filters (admin only)."""
-    try:
-        product_service = ProductService(db)
-        products = await product_service.get_all_products(
-            page=page,
-            limit=limit,
-            category=category,
-            status=status,
-            search=search
-        )
-        return Response.success(data=products)
-    except Exception as e:
-        raise APIException(status_code=500, message="Failed to fetch products")
-
-
-@router.patch("/{product_id}/moderate", dependencies=[Depends(require_admin)])
-async def moderate_product(
+@router.patch("/{product_id}/moderate")
+async def moderate(
     product_id: UUID,
     request: dict,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Moderate product (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         product_service = ProductService(db)
         result = await product_service.moderate(product_id, request.get("status"), request.get("notes"))
         return Response.success(data=result, message="Product moderated successfully")
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to moderate product: {str(e)}")
 
 
-@router.patch("/{product_id}/feature", dependencies=[Depends(require_admin)])
-async def feature_product(
+@router.patch("/{product_id}/feature")
+async def feature(
     product_id: UUID,
     featured: bool = True,
-    current_user: User = Depends(require_admin),
+    current_user = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Feature/unfeature product (admin only)."""
     try:
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise APIException(status_code=403, message="Admin access required")
         product_service = ProductService(db)
         result = await product_service.set_featured(product_id, featured)
         return Response.success(data=result, message="Product featured status updated")
+    except APIException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to update featured status: {str(e)}")
