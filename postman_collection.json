@@ -223,6 +223,40 @@
       ]
     },
     {
+      "name": "Webhooks",
+      "item": [
+        { "name": "Stripe Webhook (post)", "request": { "method": "POST", "url": "{{base_url}}/commerce/webhooks/stripe", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {}\n}" } } },
+        { "name": "Webhooks Health", "request": { "method": "GET", "url": "{{base_url}}/commerce/webhooks/health" } }
+      ]
+    },
+    {
+      "name": "Shipping Tracking",
+      "item": [
+        { "name": "Create Shipment", "request": { "method": "POST", "url": "{{base_url}}/shipping_tracking/shipments", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"ORDER_ID\",\n  \"carrier\": \"DHL\",\n  \"tracking_number\": \"TRACK123\"\n}" } } },
+        { "name": "Get Shipment", "request": { "method": "GET", "url": "{{base_url}}/shipping_tracking/shipments/:shipment_id" } },
+        { "name": "Get Order Shipments", "request": { "method": "GET", "url": "{{base_url}}/shipping_tracking/orders/:order_id/shipments" } },
+        { "name": "Track Shipment", "request": { "method": "POST", "url": "{{base_url}}/shipping_tracking/track", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tracking_number\": \"TRACK123\"\n}" } } },
+        { "name": "Carrier Webhook", "request": { "method": "POST", "url": "{{base_url}}/shipping_tracking/webhooks/:carrier", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"delivered\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        { "name": "Check Stock (variant)", "request": { "method": "GET", "url": "{{base_url}}/inventory/check-stock/:variant_id" } },
+        { "name": "Bulk Check Stock", "request": { "method": "POST", "url": "{{base_url}}/inventory/check-stock/bulk", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID1\", \"VARIANT_ID2\"]\n}" } } },
+        { "name": "Create Inventory Location", "request": { "method": "POST", "url": "{{base_url}}/inventory/locations", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Warehouse\",\n  \"address\": \"123 Warehouse Rd\"\n}" } } },
+        { "name": "Create Inventory Adjustment", "request": { "method": "POST", "url": "{{base_url}}/inventory/adjustments", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"inventory_id\": \"INVENTORY_ID\",\n  \"quantity_change\": -1,\n  \"reason\": \"order_purchase\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Tax",
+      "item": [
+        { "name": "Calculate Tax", "request": { "method": "POST", "url": "{{base_url}}/tax/calculate", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"amount\": 100.00\n}" } } },
+        { "name": "List Tax Rates (admin)", "request": { "method": "GET", "url": "{{base_url}}/admin/tax-rates" } },
+        { "name": "Create Tax Rate (admin)", "request": { "method": "POST", "url": "{{base_url}}/admin/tax-rates", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"rate\": 0.08\n}" } } }
+      ]
+    },
+    {
       "name": "Contact Messages",
       "item": [
         { "name": "Submit Message", "request": { "method": "POST", "url": "{{base_url}}/contact-messages", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"subject\": \"Product Inquiry\",\n  \"message\": \"I have a question about your products.\"\n}" } } },
