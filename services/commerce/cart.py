@@ -52,24 +52,23 @@ class CartService:
         if not cart.items:
             return self._create_empty_cart_response(country_code, province_code, cart.id)
 
-        # Manually fetch variant and product data to avoid lazy loading issues
-        variant_ids = [item.variant_id for item in cart.items]
-        product_ids = [item.product_id for item in cart.items]
+        # Eager load cart items with variant and product relationships
+        from sqlalchemy.orm import selectinload
+        from models.catalog.product import Product, ProductVariant
         
-        # Fetch variants separately
-        variants_result = await self.db.execute(
-            select(ProductVariant)
-            .options(selectinload(ProductVariant.images))
-            .where(ProductVariant.id.in_(variant_ids))
+        cart_result = await self.db.execute(
+            select(Cart)
+            .options(
+                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
+                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.product),
+                selectinload(Cart.items).selectinload(CartItem.product)
+            )
+            .where(Cart.id == cart.id)
         )
-        variants_map = {v.id: v for v in variants_result.scalars().all()}
+        cart = cart_result.scalar_one()
         
-        # Fetch products separately
-        products_result = await self.db.execute(
-            select(Product)
-            .where(Product.id.in_(product_ids))
-        )
-        products_map = {p.id: p for p in products_result.scalars().all()}
+        if not cart.items:
+            return self._create_empty_cart_response(country_code, province_code, cart.id)
 
         # Calculate comprehensive pricing
         pricing_result = await self._calculate_cart_pricing(cart.items, country_code, province_code)
@@ -92,12 +91,12 @@ class CartService:
             "currency": "USD"
         }
         
-        # Add detailed item information using manually fetched data
+        # Add detailed item information using eagerly loaded data
         for item in cart.items:
             try:
-                # Get variant and product from the maps
-                variant = variants_map.get(item.variant_id)
-                product = products_map.get(item.product_id)
+                # Use eagerly loaded variant and product from cart
+                variant = item.variant
+                product = item.product
                 
                 if not variant:
                     logger.error(f"Cart item {item.id} variant {item.variant_id} not found in database")
@@ -115,7 +114,7 @@ class CartService:
 
                 item_total = current_price * item.quantity
 
-                # Access images
+                # Access eagerly loaded images
                 variant_images = []
                 if variant.images:
                     variant_images = [
@@ -160,7 +159,7 @@ class CartService:
                         "category": product.category,
                         "is_featured": product.is_featured,
                         "rating_average": product.rating_average,
-                        "availability_status": product.availability_status
+                        "availability_status": variant.availability_status
                     }
                 })
             except Exception as e:
@@ -182,19 +181,11 @@ class CartService:
         subtotal = Decimal('0.00')
         item_breakdown = []
         
-        # Manually fetch variants to avoid lazy loading issues
-        variant_ids = [item.variant_id for item in cart_items]
-        variants_result = await self.db.execute(
-            select(ProductVariant)
-            .where(ProductVariant.id.in_(variant_ids))
-        )
-        variants_map = {v.id: v for v in variants_result.scalars().all()}
-        
-        # Calculate subtotal from current variant prices
+        # Calculate subtotal from current variant prices using eagerly loaded data
         for item in cart_items:
             try:
-                # Get variant from map
-                variant = variants_map.get(item.variant_id)
+                # Use eagerly loaded variant from cart item
+                variant = item.variant
                 
                 if not variant:
                     logger.error(f"Cart item {item.id} variant {item.variant_id} not found in database for pricing")
@@ -486,7 +477,10 @@ class CartService:
         # Get variant to check availability and get current price
         result = await self.db.execute(
             select(ProductVariant)
-            .options(selectinload(ProductVariant.product))
+            .options(
+                selectinload(ProductVariant.product),
+                selectinload(ProductVariant.inventory)
+            )
             .where(ProductVariant.id == variant_id)
         )
         variant = result.scalar_one_or_none()
@@ -566,7 +560,9 @@ class CartService:
         # Get cart item
         result = await self.db.execute(
             select(CartItem)
-            .options(selectinload(CartItem.variant))
+            .options(
+                selectinload(CartItem.variant).selectinload(ProductVariant.inventory)
+            )
             .join(Cart)
             .where(
                 and_(
