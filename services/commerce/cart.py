@@ -80,15 +80,34 @@ class CartService:
                 if not item.variant:
                     logger.error(f"Cart item {item.id} has no variant loaded")
                     continue
-                
+
+                if not item.product:
+                    logger.error(f"Cart item {item.id} has no product loaded")
+                    continue
+
                 # Get current price (sale_price if available, otherwise base_price)
                 current_price = item.variant.sale_price or item.variant.base_price
                 if current_price is None:
                     logger.error(f"Variant {item.variant_id} has no price data")
                     current_price = Decimal('0.00')
-                
+
                 item_total = current_price * item.quantity
-            
+
+                # Safely access images - handle case where images might not be loaded
+                variant_images = []
+                try:
+                    if hasattr(item.variant, 'images') and item.variant.images:
+                        variant_images = [
+                            {
+                                "id": str(img.id),
+                                "url": img.url,
+                                "alt_text": img.alt_text,
+                                "is_primary": img.is_primary
+                            } for img in item.variant.images
+                        ]
+                except Exception as img_error:
+                    logger.warning(f"Could not load images for variant {item.variant_id}: {img_error}")
+
                 cart_response["items"].append({
                     "id": str(item.id),
                     "variant_id": str(item.variant_id),
@@ -112,25 +131,18 @@ class CartService:
                         "weight": getattr(item.variant, 'weight', 0.0),  # Default weight if not available
                         "attributes": item.variant.attributes,
                         "is_active": item.variant.is_active,
-                        "images": [
-                            {
-                                "id": str(img.id),
-                                "url": img.url,
-                                "alt_text": img.alt_text,
-                                "is_primary": img.is_primary
-                            } for img in item.variant.images
-                        ] if item.variant.images else []
+                        "images": variant_images
                     },
                     "product": {
                         "id": str(item.product.id),
                         "name": item.product.name,
                         "slug": item.product.slug,
                         "short_description": item.product.short_description,
-                        "category": item.product.category if item.product else None,
+                        "category": item.product.category,
                         "is_featured": item.product.is_featured,
                         "rating_average": item.product.rating_average,
                         "availability_status": item.product.availability_status
-                    } if item.product else None
+                    }
                 })
             except Exception as e:
                 logger.error(f"Error processing cart item {item.id}: {e}")
@@ -158,16 +170,16 @@ class CartService:
                 if not item.variant:
                     logger.error(f"Cart item {item.id} has no variant loaded in pricing calculation")
                     continue
-                
+
                 # Always use current price from database (sale_price if available, otherwise base_price)
                 current_price = Decimal(str(item.variant.sale_price or item.variant.base_price))
                 if current_price is None:
                     logger.error(f"Variant {item.variant_id} has no price data in pricing calculation")
                     current_price = Decimal('0.00')
-                
+
                 item_total = current_price * Decimal(str(item.quantity))
                 subtotal += item_total
-                
+
                 item_breakdown.append({
                     'variant_id': str(item.variant_id),
                     'quantity': item.quantity,
