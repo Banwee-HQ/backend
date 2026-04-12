@@ -86,7 +86,8 @@ class CartService:
                     continue
 
                 # Get current price (sale_price if available, otherwise base_price)
-                current_price = item.variant.sale_price or item.variant.base_price
+                # Use getattr to avoid triggering lazy load
+                current_price = getattr(item.variant, 'sale_price', None) or getattr(item.variant, 'base_price', None)
                 if current_price is None:
                     logger.error(f"Variant {item.variant_id} has no price data")
                     current_price = Decimal('0.00')
@@ -108,6 +109,25 @@ class CartService:
                 except Exception as img_error:
                     logger.warning(f"Could not load images for variant {item.variant_id}: {img_error}")
 
+                # Safely access variant properties using getattr
+                variant_id = getattr(item.variant, 'id', item.variant_id)
+                variant_name = getattr(item.variant, 'name', 'Unknown')
+                variant_sku = getattr(item.variant, 'sku', '')
+                variant_base_price = getattr(item.variant, 'base_price', 0.0)
+                variant_sale_price = getattr(item.variant, 'sale_price', None)
+                variant_attributes = getattr(item.variant, 'attributes', {})
+                variant_is_active = getattr(item.variant, 'is_active', True)
+
+                # Safely access product properties using getattr
+                product_id = getattr(item.product, 'id', item.product_id)
+                product_name = getattr(item.product, 'name', 'Unknown')
+                product_slug = getattr(item.product, 'slug', '')
+                product_short_description = getattr(item.product, 'short_description', '')
+                product_category = getattr(item.product, 'category', '')
+                product_is_featured = getattr(item.product, 'is_featured', False)
+                product_rating_average = getattr(item.product, 'rating_average', 0.0)
+                product_availability_status = getattr(item.product, 'availability_status', 'unknown')
+
                 cart_response["items"].append({
                     "id": str(item.id),
                     "variant_id": str(item.variant_id),
@@ -117,31 +137,31 @@ class CartService:
                     "total_price": float(item_total),
                     "added_at": item.created_at.isoformat() if item.created_at else None,
                     "variant": {
-                        "id": str(item.variant.id),
-                        "name": item.variant.name,
-                        "sku": item.variant.sku,
-                        "base_price": float(item.variant.base_price),
-                        "sale_price": float(item.variant.sale_price) if item.variant.sale_price else None,
+                        "id": str(variant_id),
+                        "name": variant_name,
+                        "sku": variant_sku,
+                        "base_price": float(variant_base_price),
+                        "sale_price": float(variant_sale_price) if variant_sale_price else None,
                         "current_price": float(current_price),
-                        "on_sale": item.variant.sale_price is not None,
+                        "on_sale": variant_sale_price is not None,
                         "discount_percentage": (
-                            round(((item.variant.base_price - item.variant.sale_price) / item.variant.base_price) * 100, 1)
-                            if item.variant.sale_price else 0
+                            round(((variant_base_price - variant_sale_price) / variant_base_price) * 100, 1)
+                            if variant_sale_price else 0
                         ),
                         "weight": getattr(item.variant, 'weight', 0.0),  # Default weight if not available
-                        "attributes": item.variant.attributes,
-                        "is_active": item.variant.is_active,
+                        "attributes": variant_attributes,
+                        "is_active": variant_is_active,
                         "images": variant_images
                     },
                     "product": {
-                        "id": str(item.product.id),
-                        "name": item.product.name,
-                        "slug": item.product.slug,
-                        "short_description": item.product.short_description,
-                        "category": item.product.category,
-                        "is_featured": item.product.is_featured,
-                        "rating_average": item.product.rating_average,
-                        "availability_status": item.product.availability_status
+                        "id": str(product_id),
+                        "name": product_name,
+                        "slug": product_slug,
+                        "short_description": product_short_description,
+                        "category": product_category,
+                        "is_featured": product_is_featured,
+                        "rating_average": product_rating_average,
+                        "availability_status": product_availability_status
                     }
                 })
             except Exception as e:
@@ -398,6 +418,9 @@ class CartService:
         )
         cart = result.scalar_one_or_none()
 
+        if cart:
+            logger.info(f"Found cart {cart.id} with {len(cart.items) if cart.items else 0} items for user {user_id}")
+
         if not cart:
             # Create new cart and re-query with proper eager loading
             new_cart = Cart(user_id=user_id)
@@ -414,6 +437,7 @@ class CartService:
                 .where(Cart.user_id == user_id)
             )
             cart = result2.scalar_one()
+            logger.info(f"Created new cart {cart.id} for user {user_id}")
 
         return cart
 
