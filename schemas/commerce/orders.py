@@ -60,9 +60,9 @@ class ItemResponse(BaseModel):
 class Response(BaseModel):
     id: UUID
     user_id: UUID
-    order_status: OrderStatus
-    payment_status: PaymentStatus
-    fulfillment_status: FulfillmentStatus
+    order_status: Optional[OrderStatus] = None
+    payment_status: Optional[PaymentStatus] = None
+    fulfillment_status: Optional[FulfillmentStatus] = None
     total_amount: float
     subtotal: Optional[float] = None
     tax_amount: Optional[float] = None

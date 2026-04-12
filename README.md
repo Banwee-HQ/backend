@@ -127,7 +127,7 @@ All routes are versioned under `/v1`.
 | Auth | `/v1/auth` | Register, login, refresh, logout, password change |
 | OAuth | `/v1/auth/oauth` | Google & Facebook login |
 | Users | `/v1/users` | Profile, addresses |
-| Products | `/v1/products` | Catalog, search, reviews, inventory, wishlist |
+| Products | `/v1/products` | Catalog, search, reviews, inventory, |
 | Categories | `/v1/categories` | Category tree |
 | Cart | `/v1/cart` | Cart management |
 | Orders | `/v1/orders` | Order lifecycle |

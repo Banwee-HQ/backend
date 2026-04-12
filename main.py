@@ -32,7 +32,7 @@ from core.exceptions import (
 
 from api import (
     auth_router, oauth_router, oauth_social_router, user_router, addresses_router,
-    products_router, review_router, inventory_router, wishlist_router,
+    products_router, review_router, inventory_router, 
     cart_router, orders_router, payments_router, refunds_router, shipping_router,
     shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router,
     analytics_router,
@@ -114,7 +114,6 @@ v1_router.include_router(addresses_router)
 v1_router.include_router(products_router)
 v1_router.include_router(review_router)
 v1_router.include_router(inventory_router)
-v1_router.include_router(wishlist_router)
 v1_router.include_router(cart_router)
 v1_router.include_router(orders_router)
 v1_router.include_router(payments_router)

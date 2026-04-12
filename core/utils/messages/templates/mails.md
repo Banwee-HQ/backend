@@ -12,7 +12,6 @@ In an e-commerce platform, email communication plays a **critical role** in enga
 | **Abandoned Cart Reminder**      | Encourage users to complete a purchase they started.            |
 | **Price Drop Alert**             | Notify customers of price reductions on items they're watching. |
 | **Browse Abandonment**           | Remind users about products they viewed but didn’t add to cart. |
-| **Wishlist Reminder**            | Nudge users about items saved in their wishlist.                |
 
 ---
 

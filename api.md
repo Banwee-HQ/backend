@@ -73,11 +73,10 @@ Products:
 - PATCH `/products/{product_id}/moderate/` — moderate product (admin)
 - PATCH `/products/{product_id}/feature/` — feature product (admin)
 
-Reviews & Wishlist:
+Reviews:
 - GET/POST `/reviews/`
 - GET `/reviews/{review_id}/`
-- GET `/reviews/product/{product_id}/`
-- Wishlist endpoints under `/wishlists/` — add/get/remove/update
+- GET `/reviews/product/{product_id}/`update
 
 Inventory:
 - POST `/inventory/locations/` — create location (admin)

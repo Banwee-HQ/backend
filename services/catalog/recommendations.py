@@ -351,7 +351,6 @@ class RecommendationService:
             return []
         
         query = select(Product).options(
-            selectinload(Product.category),
             selectinload(Product.variants).selectinload(ProductVariant.images),
             selectinload(Product.variants).selectinload(ProductVariant.inventory)
         ).where(
@@ -375,16 +374,17 @@ class RecommendationService:
         return [product_service._convert_product_to_response(p) for p in ordered_products]
     
     async def _get_fallback_recommendations(
-        self, 
-        source_product: Product, 
+        self,
+        source_product: Product,
         limit: int
     ) -> List[ProductResponse]:
         """
         Fallback: Simple category-based recommendations.
+        If no products in same category, return any active products.
         """
         try:
+            # First try products in the same category
             query = select(Product).options(
-                selectinload(Product.category),
                 selectinload(Product.variants).selectinload(ProductVariant.images),
                 selectinload(Product.variants).selectinload(ProductVariant.inventory)
             ).where(
@@ -394,10 +394,26 @@ class RecommendationService:
                     Product.is_active == True
                 )
             ).limit(limit)
-            
+
             result = await self.db.execute(query)
             products = result.scalars().all()
-            
+
+            # If no products in same category, get any active products
+            if not products:
+                logger.info(f"No products in category {source_product.category}, falling back to any active products")
+                query = select(Product).options(
+                    selectinload(Product.variants).selectinload(ProductVariant.images),
+                    selectinload(Product.variants).selectinload(ProductVariant.inventory)
+                ).where(
+                    and_(
+                        Product.id != source_product.id,
+                        Product.is_active == True
+                    )
+                ).limit(limit)
+
+                result = await self.db.execute(query)
+                products = result.scalars().all()
+
             from services.catalog.products import ProductService
             product_service = ProductService(self.db)
             

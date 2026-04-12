@@ -511,23 +511,6 @@ def upgrade() -> None:
     op.create_index('idx_reviews_user_approved', 'reviews', ['user_id', 'is_approved'], unique=False, schema='catalog')
     op.create_index('idx_reviews_user_id', 'reviews', ['user_id'], unique=False, schema='catalog')
     op.create_index('idx_reviews_verified', 'reviews', ['is_verified_purchase'], unique=False, schema='catalog')
-    op.create_table('wishlists',
-    sa.Column('id', GUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('user_id', GUID(), nullable=False),
-    sa.Column('name', sa.String(length=225), nullable=False),
-    sa.Column('is_default', sa.Boolean(), nullable=False),
-    sa.Column('is_public', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['accounts.users.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    schema='catalog'
-    )
-    op.create_index('idx_wishlists_default', 'wishlists', ['is_default'], unique=False, schema='catalog')
-    op.create_index('idx_wishlists_name', 'wishlists', ['name'], unique=False, schema='catalog')
-    op.create_index('idx_wishlists_public', 'wishlists', ['is_public'], unique=False, schema='catalog')
-    op.create_index('idx_wishlists_user_default', 'wishlists', ['user_id', 'is_default'], unique=False, schema='catalog')
-    op.create_index('idx_wishlists_user_id', 'wishlists', ['user_id'], unique=False, schema='catalog')
     op.create_table('carts',
     sa.Column('id', GUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -736,25 +719,6 @@ def upgrade() -> None:
     op.create_index('idx_variant_substitutions_similarity_score', 'variant_substitutions', ['similarity_score'], unique=False, schema='catalog')
     op.create_index('idx_variant_substitutions_substitute_active', 'variant_substitutions', ['substitute_variant_id', 'is_active'], unique=False, schema='catalog')
     op.create_index('idx_variant_substitutions_substitute_id', 'variant_substitutions', ['substitute_variant_id'], unique=False, schema='catalog')
-    op.create_table('wishlist_items',
-    sa.Column('id', GUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('wishlist_id', GUID(), nullable=False),
-    sa.Column('product_id', GUID(), nullable=False),
-    sa.Column('variant_id', GUID(), nullable=True),
-    sa.Column('quantity', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['product_id'], ['catalog.products.id'], ),
-    sa.ForeignKeyConstraint(['variant_id'], ['catalog.product_variants.id'], ),
-    sa.ForeignKeyConstraint(['wishlist_id'], ['catalog.wishlists.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    schema='catalog'
-    )
-    op.create_index('idx_wishlist_items_created_at', 'wishlist_items', ['created_at'], unique=False, schema='catalog')
-    op.create_index('idx_wishlist_items_product_id', 'wishlist_items', ['product_id'], unique=False, schema='catalog')
-    op.create_index('idx_wishlist_items_variant_id', 'wishlist_items', ['variant_id'], unique=False, schema='catalog')
-    op.create_index('idx_wishlist_items_wishlist_id', 'wishlist_items', ['wishlist_id'], unique=False, schema='catalog')
-    op.create_index('idx_wishlist_items_wishlist_product', 'wishlist_items', ['wishlist_id', 'product_id'], unique=False, schema='catalog')
     op.create_table('cart_items',
     sa.Column('id', GUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -1371,12 +1335,6 @@ def downgrade() -> None:
     op.drop_index('idx_cart_items_cart_product_variant', table_name='cart_items', schema='commerce')
     op.drop_index('idx_cart_items_cart_id', table_name='cart_items', schema='commerce')
     op.drop_table('cart_items', schema='commerce')
-    op.drop_index('idx_wishlist_items_wishlist_product', table_name='wishlist_items', schema='catalog')
-    op.drop_index('idx_wishlist_items_wishlist_id', table_name='wishlist_items', schema='catalog')
-    op.drop_index('idx_wishlist_items_variant_id', table_name='wishlist_items', schema='catalog')
-    op.drop_index('idx_wishlist_items_product_id', table_name='wishlist_items', schema='catalog')
-    op.drop_index('idx_wishlist_items_created_at', table_name='wishlist_items', schema='catalog')
-    op.drop_table('wishlist_items', schema='catalog')
     op.drop_index('idx_variant_substitutions_substitute_id', table_name='variant_substitutions', schema='catalog')
     op.drop_index('idx_variant_substitutions_substitute_active', table_name='variant_substitutions', schema='catalog')
     op.drop_index('idx_variant_substitutions_similarity_score', table_name='variant_substitutions', schema='catalog')
@@ -1432,12 +1390,6 @@ def downgrade() -> None:
     op.drop_table('payment_methods', schema='commerce')
     op.drop_index('idx_carts_user_id', table_name='carts', schema='commerce')
     op.drop_table('carts', schema='commerce')
-    op.drop_index('idx_wishlists_user_id', table_name='wishlists', schema='catalog')
-    op.drop_index('idx_wishlists_user_default', table_name='wishlists', schema='catalog')
-    op.drop_index('idx_wishlists_public', table_name='wishlists', schema='catalog')
-    op.drop_index('idx_wishlists_name', table_name='wishlists', schema='catalog')
-    op.drop_index('idx_wishlists_default', table_name='wishlists', schema='catalog')
-    op.drop_table('wishlists', schema='catalog')
     op.drop_index('idx_reviews_verified', table_name='reviews', schema='catalog')
     op.drop_index('idx_reviews_user_id', table_name='reviews', schema='catalog')
     op.drop_index('idx_reviews_user_approved', table_name='reviews', schema='catalog')

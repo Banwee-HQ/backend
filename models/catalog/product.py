@@ -69,7 +69,6 @@ class Product(Base):
     # Relationships with optimized lazy loading
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="select")
     reviews = relationship("Review", back_populates="product", lazy="select")
-    wishlist_items = relationship("WishlistItem", back_populates="product", lazy="select")
     cart_items = relationship("CartItem", back_populates="product", lazy="select")
 
     # Product metadata as JSON columns for querying (cross-platform compatible)

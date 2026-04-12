@@ -108,7 +108,6 @@ class User(Base):
     cart = relationship("Cart", back_populates="user", uselist=False, cascade="all, delete-orphan", lazy="select")
     orders = relationship("Order", back_populates="user", lazy="select")  # Don't eager load orders
     reviews = relationship("Review", back_populates="user", lazy="select")
-    wishlists = relationship("Wishlist", back_populates="user", lazy="select")
     subscriptions = relationship("Subscription", back_populates="user", lazy="select")
     payment_methods = relationship("PaymentMethod", back_populates="user", lazy="select")
     transactions = relationship("Transaction", back_populates="user", lazy="select")

@@ -986,7 +986,7 @@ class ProductService:
         return await self.get(product_id)
 
     async def delete(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
-        """Delete a product and all its associated data (variants, inventory, reviews, cart items, wishlist items)."""
+        """Delete a product and all its associated data (variants, inventory, reviews, cart item)."""
         from models.commerce.orders import OrderItem
         
         query = select(Product).where(Product.id == product_id)
@@ -1027,13 +1027,6 @@ class ProductService:
         )).scalars().all()
         for cart_item in cart_items:
             await self.db.delete(cart_item)
-
-        # Delete all wishlist items for this product
-        wishlist_items = (await self.db.execute(
-            select(WishlistItem).where(WishlistItem.product_id == product_id)
-        )).scalars().all()
-        for wishlist_item in wishlist_items:
-            await self.db.delete(wishlist_item)
 
         # Delete the product (this will cascade delete variants and inventory due to cascade="all, delete-orphan")
         await self.db.delete(product)

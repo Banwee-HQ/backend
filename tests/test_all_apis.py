@@ -551,70 +551,6 @@ class TestReviewEndpoints:
 
 
 # =============================================================================
-# WISHLIST ENDPOINTS (3 endpoints)
-# =============================================================================
-
-@pytest.mark.api
-class TestWishlistEndpoints:
-    """Test all 3 wishlist endpoints."""
-
-    async def test_048_wishlist_get(self, async_client: AsyncClient, auth_headers):
-        """GET /v1/wishlists/ - Get wishlist."""
-        response = await async_client.get("/v1/wishlists/", headers=auth_headers)
-        assert response.status_code == 200
-
-    async def test_049_wishlist_add(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/wishlists/ - Create wishlist."""
-        payload = {"name": "Test Wishlist", "is_default": False}
-        response = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
-        assert response.status_code in [200, 201]
-
-    async def test_050_wishlist_remove(self, async_client: AsyncClient, auth_headers):
-        """DELETE /v1/wishlists/{id} - Delete wishlist."""
-        # Create then delete a wishlist to verify delete route
-        payload = {"name": "To Delete", "is_default": False}
-        create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
-        if create_resp.status_code in [200, 201]:
-            wid = create_resp.json()["data"]["id"]
-            response = await async_client.delete(f"/v1/wishlists/{wid}/", headers=auth_headers)
-            assert response.status_code in [200, 404]
-
-    async def test_050a_wishlist_update(self, async_client: AsyncClient, auth_headers):
-        """PATCH /v1/wishlists/{id} - Update wishlist."""
-        # Create then update a wishlist
-        payload = {"name": "To Update", "is_default": False}
-        create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
-        if create_resp.status_code in [200, 201]:
-            wid = create_resp.json()["data"]["id"]
-            response = await async_client.patch(f"/v1/wishlists/{wid}/", 
-                headers=auth_headers, json={"name": "Updated Name"})
-            assert response.status_code in [200, 404]
-
-    async def test_050b_wishlist_add_item(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/wishlists/{id}/items - Add item to wishlist."""
-        # Create wishlist then add item
-        payload = {"name": "Test Wishlist", "is_default": False}
-        create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
-        if create_resp.status_code in [200, 201]:
-            wid = create_resp.json()["data"]["id"]
-            response = await async_client.post(f"/v1/wishlists/{wid}/items/", 
-                headers=auth_headers, json={"variant_id": str(uuid4()), "quantity": 1})
-            assert response.status_code in [200, 201, 404]
-
-    async def test_050c_wishlist_remove_item(self, async_client: AsyncClient, auth_headers):
-        """DELETE /v1/wishlists/{id}/items/{variant_id} - Remove item from wishlist."""
-        # Create wishlist then remove item
-        payload = {"name": "Test Wishlist", "is_default": False}
-        create_resp = await async_client.post("/v1/wishlists/", headers=auth_headers, json=payload)
-        if create_resp.status_code in [200, 201]:
-            wid = create_resp.json()["data"]["id"]
-            variant_id = str(uuid4())
-            response = await async_client.delete(f"/v1/wishlists/{wid}/items/{variant_id}/", 
-                headers=auth_headers)
-            assert response.status_code in [200, 404]
-
-
-# =============================================================================
 # CART ENDPOINTS (7 endpoints)
 # =============================================================================
 
@@ -1259,7 +1195,6 @@ class TestWebhookEndpoints:
 #   - Addresses: 5 tests
 #   - Products: 22 tests
 #   - Reviews: 6 tests
-#   - Wishlist: 6 tests
 #   - Cart: 6 tests
 #   - Orders: 5 tests
 #   - Payments: 8 tests

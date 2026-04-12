@@ -1,5 +1,5 @@
 from .accounts import AuthService, UserService, AddressService, EmailService
-from .catalog import ProductService, ReviewService, InventoryService, WishlistService, VariantTrackingService, RecommendationService
+from .catalog import ProductService, ReviewService, InventoryService, VariantTrackingService, RecommendationService
 from .commerce import CartService, OrderService, PaymentService, RefundService, ShippingService, ShippingTrackingService, TaxService, PromocodeService, DiscountEngine, SubscriptionService, WebhookService, TransactionService
 from .system import JinjaTemplateService, ValidationService, ContactMessageService
 

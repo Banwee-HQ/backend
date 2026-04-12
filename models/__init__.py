@@ -4,7 +4,6 @@ from .accounts import User, Address, UserSession, CustomerLifecycleMetrics, Traf
 from .catalog import (
     Product, ProductVariant, ProductImage,
     Review, Inventory, WarehouseLocation, StockAdjustment,
-    Wishlist, WishlistItem,
     VariantTrackingEntry, VariantPriceHistory, VariantAnalytics, VariantSubstitution,
 )
 from .commerce import (

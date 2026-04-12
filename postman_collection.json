@@ -80,14 +80,6 @@
       ]
     },
     {
-      "name": "Wishlist",
-      "item": [
-        { "name": "Get Wishlist", "request": { "method": "GET", "url": "{{base_url}}/wishlists/" } },
-        { "name": "Add to Wishlist", "request": { "method": "POST", "url": "{{base_url}}/wishlists/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"PRODUCT_ID\",\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 1\n}" } } },
-        { "name": "Remove from Wishlist", "request": { "method": "DELETE", "url": "{{base_url}}/wishlists/:product_id/" } }
-      ]
-    },
-    {
       "name": "Cart",
       "item": [
         { "name": "Get Cart", "request": { "method": "GET", "url": "{{base_url}}/cart/" } },

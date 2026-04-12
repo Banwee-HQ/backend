@@ -272,18 +272,6 @@ async def test_extended_product_endpoints(client: AsyncClient):
     return all(results)
 
 
-async def test_wishlist_endpoints(client: AsyncClient):
-    """Test wishlist endpoints."""
-    print_header("WISHLIST ENDPOINTS")
-    
-    results = []
-    
-    # Without auth
-    results.append(await test_endpoint(client, "GET", "/v1/wishlists/", expected_status=401))
-    
-    return all(results)
-
-
 async def test_shipping_endpoints(client: AsyncClient):
     """Test shipping endpoints."""
     print_header("SHIPPING ENDPOINTS")
@@ -508,24 +496,6 @@ async def test_extended_review_endpoints(client: AsyncClient):
     # Without auth
     results.append(await test_endpoint(client, "POST", "/v1/reviews/", expected_status=401, json={}))
     results.append(await test_endpoint(client, "PUT", f"/v1/reviews/{review_id}/", expected_status=405, json={}))
-    
-    return all(results)
-
-
-async def test_extended_wishlist_endpoints(client: AsyncClient):
-    """Test extended wishlist endpoints."""
-    print_header("EXTENDED WISHLIST ENDPOINTS")
-    
-    results = []
-    
-    # Without auth
-    results.append(await test_endpoint(client, "POST", "/v1/wishlists/", expected_status=401, json={}))
-    
-    wishlist_id = str(uuid4())
-    results.append(await test_endpoint(client, "GET", f"/v1/wishlists/{wishlist_id}/", expected_status=401))
-    results.append(await test_endpoint(client, "PATCH", f"/v1/wishlists/{wishlist_id}/", expected_status=401, json={}))
-    results.append(await test_endpoint(client, "DELETE", f"/v1/wishlists/{wishlist_id}/", expected_status=401))
-    results.append(await test_endpoint(client, "POST", f"/v1/wishlists/{wishlist_id}/items/", expected_status=404, json={}))
     
     return all(results)
 
@@ -946,8 +916,6 @@ async def main():
         all_passed &= await test_extended_analytics_endpoints(client)
         all_passed &= await test_analytics_track_endpoint(client)
         all_passed &= await test_analytics_export_endpoints(client)
-        all_passed &= await test_wishlist_endpoints(client)
-        all_passed &= await test_extended_wishlist_endpoints(client)
         all_passed &= await test_shipping_endpoints(client)
         all_passed &= await test_extended_shipping_endpoints(client)
         all_passed &= await test_payment_endpoints(client)
