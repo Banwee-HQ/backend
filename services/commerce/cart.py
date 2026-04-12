@@ -4,7 +4,7 @@ PostgreSQL-based cart with real-time tax and pricing calculations
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, func, update
-from sqlalchemy.orm import selectinload, noload, lazyload
+from sqlalchemy.orm import selectinload, noload, lazyload, joinedload
 from fastapi import HTTPException
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -52,6 +52,25 @@ class CartService:
         if not cart.items:
             return self._create_empty_cart_response(country_code, province_code, cart.id)
 
+        # Manually fetch variant and product data to avoid lazy loading issues
+        variant_ids = [item.variant_id for item in cart.items]
+        product_ids = [item.product_id for item in cart.items]
+        
+        # Fetch variants separately
+        variants_result = await self.db.execute(
+            select(ProductVariant)
+            .options(selectinload(ProductVariant.images))
+            .where(ProductVariant.id.in_(variant_ids))
+        )
+        variants_map = {v.id: v for v in variants_result.scalars().all()}
+        
+        # Fetch products separately
+        products_result = await self.db.execute(
+            select(Product)
+            .where(Product.id.in_(product_ids))
+        )
+        products_map = {p.id: p for p in products_result.scalars().all()}
+
         # Calculate comprehensive pricing
         pricing_result = await self._calculate_cart_pricing(cart.items, country_code, province_code)
         
@@ -73,60 +92,40 @@ class CartService:
             "currency": "USD"
         }
         
-        # Add detailed item information
+        # Add detailed item information using manually fetched data
         for item in cart.items:
             try:
-                # Check if variant and product are loaded
-                if not item.variant:
-                    logger.error(f"Cart item {item.id} has no variant loaded")
+                # Get variant and product from the maps
+                variant = variants_map.get(item.variant_id)
+                product = products_map.get(item.product_id)
+                
+                if not variant:
+                    logger.error(f"Cart item {item.id} variant {item.variant_id} not found in database")
                     continue
 
-                if not item.product:
-                    logger.error(f"Cart item {item.id} has no product loaded")
+                if not product:
+                    logger.error(f"Cart item {item.id} product {item.product_id} not found in database")
                     continue
 
                 # Get current price (sale_price if available, otherwise base_price)
-                # Use getattr to avoid triggering lazy load
-                current_price = getattr(item.variant, 'sale_price', None) or getattr(item.variant, 'base_price', None)
+                current_price = variant.sale_price or variant.base_price
                 if current_price is None:
                     logger.error(f"Variant {item.variant_id} has no price data")
                     current_price = Decimal('0.00')
 
                 item_total = current_price * item.quantity
 
-                # Safely access images - handle case where images might not be loaded
+                # Access images
                 variant_images = []
-                try:
-                    if hasattr(item.variant, 'images') and item.variant.images:
-                        variant_images = [
-                            {
-                                "id": str(img.id),
-                                "url": img.url,
-                                "alt_text": img.alt_text,
-                                "is_primary": img.is_primary
-                            } for img in item.variant.images
-                        ]
-                except Exception as img_error:
-                    logger.warning(f"Could not load images for variant {item.variant_id}: {img_error}")
-
-                # Safely access variant properties using getattr
-                variant_id = getattr(item.variant, 'id', item.variant_id)
-                variant_name = getattr(item.variant, 'name', 'Unknown')
-                variant_sku = getattr(item.variant, 'sku', '')
-                variant_base_price = getattr(item.variant, 'base_price', 0.0)
-                variant_sale_price = getattr(item.variant, 'sale_price', None)
-                variant_attributes = getattr(item.variant, 'attributes', {})
-                variant_is_active = getattr(item.variant, 'is_active', True)
-
-                # Safely access product properties using getattr
-                product_id = getattr(item.product, 'id', item.product_id)
-                product_name = getattr(item.product, 'name', 'Unknown')
-                product_slug = getattr(item.product, 'slug', '')
-                product_short_description = getattr(item.product, 'short_description', '')
-                product_category = getattr(item.product, 'category', '')
-                product_is_featured = getattr(item.product, 'is_featured', False)
-                product_rating_average = getattr(item.product, 'rating_average', 0.0)
-                product_availability_status = getattr(item.product, 'availability_status', 'unknown')
+                if variant.images:
+                    variant_images = [
+                        {
+                            "id": str(img.id),
+                            "url": img.url,
+                            "alt_text": img.alt_text,
+                            "is_primary": img.is_primary
+                        } for img in variant.images
+                    ]
 
                 cart_response["items"].append({
                     "id": str(item.id),
@@ -137,31 +136,31 @@ class CartService:
                     "total_price": float(item_total),
                     "added_at": item.created_at.isoformat() if item.created_at else None,
                     "variant": {
-                        "id": str(variant_id),
-                        "name": variant_name,
-                        "sku": variant_sku,
-                        "base_price": float(variant_base_price),
-                        "sale_price": float(variant_sale_price) if variant_sale_price else None,
+                        "id": str(variant.id),
+                        "name": variant.name,
+                        "sku": variant.sku,
+                        "base_price": float(variant.base_price),
+                        "sale_price": float(variant.sale_price) if variant.sale_price else None,
                         "current_price": float(current_price),
-                        "on_sale": variant_sale_price is not None,
+                        "on_sale": variant.sale_price is not None,
                         "discount_percentage": (
-                            round(((variant_base_price - variant_sale_price) / variant_base_price) * 100, 1)
-                            if variant_sale_price else 0
+                            round(((variant.base_price - variant.sale_price) / variant.base_price) * 100, 1)
+                            if variant.sale_price else 0
                         ),
-                        "weight": getattr(item.variant, 'weight', 0.0),  # Default weight if not available
-                        "attributes": variant_attributes,
-                        "is_active": variant_is_active,
+                        "weight": getattr(variant, 'weight', 0.0),
+                        "attributes": variant.attributes,
+                        "is_active": variant.is_active,
                         "images": variant_images
                     },
                     "product": {
-                        "id": str(product_id),
-                        "name": product_name,
-                        "slug": product_slug,
-                        "short_description": product_short_description,
-                        "category": product_category,
-                        "is_featured": product_is_featured,
-                        "rating_average": product_rating_average,
-                        "availability_status": product_availability_status
+                        "id": str(product.id),
+                        "name": product.name,
+                        "slug": product.slug,
+                        "short_description": product.short_description,
+                        "category": product.category,
+                        "is_featured": product.is_featured,
+                        "rating_average": product.rating_average,
+                        "availability_status": product.availability_status
                     }
                 })
             except Exception as e:
@@ -183,16 +182,26 @@ class CartService:
         subtotal = Decimal('0.00')
         item_breakdown = []
         
+        # Manually fetch variants to avoid lazy loading issues
+        variant_ids = [item.variant_id for item in cart_items]
+        variants_result = await self.db.execute(
+            select(ProductVariant)
+            .where(ProductVariant.id.in_(variant_ids))
+        )
+        variants_map = {v.id: v for v in variants_result.scalars().all()}
+        
         # Calculate subtotal from current variant prices
         for item in cart_items:
             try:
-                # Check if variant is loaded
-                if not item.variant:
-                    logger.error(f"Cart item {item.id} has no variant loaded in pricing calculation")
+                # Get variant from map
+                variant = variants_map.get(item.variant_id)
+                
+                if not variant:
+                    logger.error(f"Cart item {item.id} variant {item.variant_id} not found in database for pricing")
                     continue
 
                 # Always use current price from database (sale_price if available, otherwise base_price)
-                current_price = Decimal(str(item.variant.sale_price or item.variant.base_price))
+                current_price = Decimal(str(variant.sale_price or variant.base_price))
                 if current_price is None:
                     logger.error(f"Variant {item.variant_id} has no price data in pricing calculation")
                     current_price = Decimal('0.00')
@@ -205,7 +214,7 @@ class CartService:
                     'quantity': item.quantity,
                     'unit_price': float(current_price),
                     'total_price': float(item_total),
-                    'on_sale': item.variant.sale_price is not None
+                    'on_sale': variant.sale_price is not None
                 })
             except Exception as e:
                 logger.error(f"Error calculating price for cart item {item.id}: {e}")
@@ -257,7 +266,7 @@ class CartService:
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.product),
                 selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.inventory),
-                selectinload(Cart.items).selectinload(CartItem.product)
+                joinedload(Cart.items).joinedload(CartItem.product)
             )
             .where(Cart.user_id == user_id)
         )
@@ -408,12 +417,7 @@ class CartService:
         """Get existing cart or create new one"""
         result = await self.db.execute(
             select(Cart)
-            .options(
-                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
-                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.inventory),
-                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.product),
-                selectinload(Cart.items).selectinload(CartItem.product),
-            )
+            .options(selectinload(Cart.items))
             .where(Cart.user_id == user_id)
         )
         cart = result.scalar_one_or_none()
@@ -422,18 +426,14 @@ class CartService:
             logger.info(f"Found cart {cart.id} with {len(cart.items) if cart.items else 0} items for user {user_id}")
 
         if not cart:
-            # Create new cart and re-query with proper eager loading
+            # Create new cart and re-query
             new_cart = Cart(user_id=user_id)
             self.db.add(new_cart)
             await self.db.commit()
-            # Re-query with options to avoid lazy load issues
+            # Re-query with simple eager loading
             result2 = await self.db.execute(
                 select(Cart)
-                .options(
-                    selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.images),
-                    selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.inventory),
-                    selectinload(Cart.items).selectinload(CartItem.product),
-                )
+                .options(selectinload(Cart.items))
                 .where(Cart.user_id == user_id)
             )
             cart = result2.scalar_one()
