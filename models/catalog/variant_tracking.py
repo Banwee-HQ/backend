@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, JSON, Text, Boolean, func, Index, Enum as SQLEnum
+from sqlalchemy import String, Integer, Numeric, DateTime, ForeignKey, JSON, Text, Boolean, func, Index, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -49,7 +49,7 @@ class VariantTrackingEntry(Base):
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"))
 
     # Price tracking
-    price_at_time: Mapped[float] = mapped_column(Float)
+    price_at_time: Mapped[float] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Tracking metadata
@@ -103,10 +103,10 @@ class VariantPriceHistory(Base):
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
 
     # Price information
-    old_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    new_price: Mapped[float] = mapped_column(Float)
-    old_sale_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    new_sale_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    old_price: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    new_price: Mapped[float] = mapped_column(Numeric(10, 2))
+    old_sale_price: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    new_sale_price: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Change metadata
@@ -180,11 +180,11 @@ class VariantAnalytics(Base):
     active_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
 
     # Revenue metrics
-    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    total_revenue: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
     average_subscription_duration_days: Mapped[int] = mapped_column(Integer, default=0)
 
     # Performance metrics
-    churn_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    churn_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
     popularity_rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Currency
@@ -245,13 +245,13 @@ class VariantSubstitution(Base):
     substitute_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
 
     # Substitution metadata
-    similarity_score: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0 to 1.0
+    similarity_score: Mapped[float] = mapped_column(Numeric(3, 2), default=0.0)  # 0.0 to 1.0
     substitution_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # "out_of_stock", "discontinued", "price_match"
 
     # Usage tracking
     times_suggested: Mapped[int] = mapped_column(Integer, default=0)
     times_accepted: Mapped[int] = mapped_column(Integer, default=0)
-    acceptance_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    acceptance_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

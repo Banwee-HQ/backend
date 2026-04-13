@@ -4,7 +4,7 @@ Handles complete order lifecycle with backend-only price calculations
 """
 import hashlib
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc, delete
+from sqlalchemy import select, and_, or_, desc, delete, String
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
 from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
@@ -212,7 +212,7 @@ class OrderService:
             subtotal=subtotal,
             shipping_cost=shipping_cost,
             tax_amount=tax_amount,
-            tax_rate=tax_rate,
+            tax_rate=float(tax_rate),
             discount_amount=discount_amount,
             total_amount=total_amount,
             currency=currency,
@@ -227,6 +227,19 @@ class OrderService:
         """
         Comprehensive checkout validation with detailed error reporting
         """
+        def _clean_result(r: dict) -> dict:
+            """Ensure result is fully JSON-serializable."""
+            return {
+                'valid': bool(r.get('valid', False)),
+                'can_proceed': bool(r.get('can_proceed', False)),
+                'errors': [
+                    e if isinstance(e, dict) else {'message': str(e)}
+                    for e in r.get('errors', [])
+                ],
+                'warnings': r.get('warnings', []),
+                'pricing': r.get('pricing'),
+            }
+
         validation_result = {
             'valid': True,
             'can_proceed': True,
@@ -249,7 +262,7 @@ class OrderService:
                 validation_result['valid'] = False
                 validation_result['can_proceed'] = False
                 validation_result['errors'].extend(cart_validation.get('issues', []))
-                return validation_result
+                return _clean_result(validation_result)
             
             cart = cart_validation['cart']
             
@@ -262,7 +275,7 @@ class OrderService:
                     'severity': 'error', 
                     'message': 'Cart has no valid items for checkout'
                 })
-                return validation_result
+                return _clean_result(validation_result)
             
             # Step 2: Validate shipping address
             shipping_address_result = await self.db.execute(
@@ -279,7 +292,7 @@ class OrderService:
                     'field': 'shipping_address_id',
                     'message': 'Invalid shipping address'
                 })
-                return validation_result
+                return _clean_result(validation_result)
             
             # Step 3: Validate shipping method
             shipping_method = await self.shipping_service.get(request.shipping_method_id)
@@ -290,7 +303,7 @@ class OrderService:
                     'field': 'shipping_method_id',
                     'message': 'Invalid or inactive shipping method'
                 })
-                return validation_result
+                return _clean_result(validation_result)
             
             # Step 4: Validate payment method
             payment_method_result = await self.db.execute(
@@ -307,7 +320,7 @@ class OrderService:
                     'field': 'payment_method_id',
                     'message': 'Invalid payment method'
                 })
-                return validation_result
+                return _clean_result(validation_result)
             
             # Step 5: Calculate comprehensive pricing
             pricing = await self.calc_pricing(
@@ -317,12 +330,12 @@ class OrderService:
                 getattr(request, 'discount_code', None),
                 getattr(request, 'currency', 'USD')
             )
-            validation_result['pricing'] = pricing.breakdown
+            validation_result['pricing'] = pricing['breakdown']
             
             # Step 6: Validate frontend price if provided
             if hasattr(request, 'frontend_calculated_total') and request.frontend_calculated_total:
                 frontend_total = Decimal(str(request.frontend_calculated_total))
-                backend_total = pricing.total_amount
+                backend_total = pricing['total_amount']
                 price_difference = abs(frontend_total - backend_total)
                 
                 # Allow small rounding differences (up to 1 cent)
@@ -336,7 +349,7 @@ class OrderService:
                     })
             
             logger.info(f"Checkout validation completed for user {user_id}: {validation_result['valid']}")
-            return validation_result
+            return _clean_result(validation_result)
             
         except Exception as e:
             import traceback
@@ -348,7 +361,7 @@ class OrderService:
                 'type': 'system_error',
                 'message': f'Checkout validation failed: {str(e)}'
             })
-            return validation_result
+            return _clean_result(validation_result)
 
     async def place(
         self, 
@@ -484,7 +497,7 @@ class OrderService:
                 'post_code': shipping_address.post_code
             }
             order.shipping_address = order.billing_address.copy()
-            order.notes = request.notes
+            order.customer_notes = request.notes
             await self.db.flush()
             
             # Step 5: Create order items and update inventory
@@ -1167,114 +1180,133 @@ class OrderService:
     ) -> Dict[str, Any]:
         """Get paginated list of orders. If user_id is None, returns all orders (admin)."""
         from sqlalchemy import func
+        import traceback
 
-        offset = (page - 1) * limit
+        try:
+            offset = (page - 1) * limit
 
-        # Build base query
-        base_query = select(Order).options(
-            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
-            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
-            selectinload(Order.user)
-        )
-        count_query = select(func.count()).select_from(Order)
-
-        # Apply filters
-        conditions = []
-
-        if user_id:
-            conditions.append(Order.user_id == user_id)
-
-        if status:
-            conditions.append(Order.order_status == status)
-
-        if q:
-            conditions.append(
-                or_(
-                    Order.id.cast(String).ilike(f"%{q}%"),
-                    Order.user.has(User.email.ilike(f"%{q}%"))
-                )
+            # Build base query
+            base_query = select(Order).options(
+                selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
+                selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+                selectinload(Order.user)
             )
+            count_query = select(func.count()).select_from(Order)
 
-        if date_from:
-            try:
-                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
-                conditions.append(Order.created_at >= from_date)
-            except ValueError:
-                pass
+            # Apply filters
+            conditions = []
 
-        if date_to:
-            try:
-                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
-                conditions.append(Order.created_at <= to_date)
-            except ValueError:
-                pass
+            if user_id:
+                conditions.append(Order.user_id == user_id)
 
-        if min_price is not None:
-            conditions.append(Order.total_amount >= min_price)
+            if status:
+                conditions.append(Order.order_status == status)
 
-        if max_price is not None:
-            conditions.append(Order.total_amount <= max_price)
+            if q:
+                conditions.append(
+                    or_(
+                        Order.id.cast(String).ilike(f"%{q}%"),
+                        Order.user.has(User.email.ilike(f"%{q}%"))
+                    )
+                )
 
-        # Apply all conditions
-        if conditions:
-            base_query = base_query.where(and_(*conditions))
-            count_query = count_query.where(and_(*conditions))
+            if date_from:
+                try:
+                    from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                    conditions.append(Order.created_at >= from_date)
+                except ValueError:
+                    pass
 
-        # Apply sorting
-        sort_column = Order.created_at
-        if sort_by == "total":
-            sort_column = Order.total_amount
-        elif sort_by == "status":
-            sort_column = Order.order_status
+            if date_to:
+                try:
+                    to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                    conditions.append(Order.created_at <= to_date)
+                except ValueError:
+                    pass
 
-        if sort_order == "asc":
-            base_query = base_query.order_by(sort_column.asc())
-        else:
-            base_query = base_query.order_by(sort_column.desc())
+            if min_price is not None:
+                conditions.append(Order.total_amount >= min_price)
 
-        # Get total count
-        total = await self.db.scalar(count_query) or 0
+            if max_price is not None:
+                conditions.append(Order.total_amount <= max_price)
 
-        # Get paginated results
-        result = await self.db.execute(base_query.offset(offset).limit(limit))
-        orders = result.scalars().all()
+            # Apply all conditions
+            if conditions:
+                base_query = base_query.where(and_(*conditions))
+                count_query = count_query.where(and_(*conditions))
 
-        formatted_orders = []
-        for order in orders:
-            order_dict = await self._format_order_response(order)
-            if order.user:
-                order_dict["customer"] = {
-                    "id": str(order.user.id),
-                    "email": order.user.email,
-                    "name": f"{order.user.firstname} {order.user.lastname}"
+            # Apply sorting
+            sort_column = Order.created_at
+            if sort_by == "total":
+                sort_column = Order.total_amount
+            elif sort_by == "status":
+                sort_column = Order.order_status
+
+            if sort_order == "asc":
+                base_query = base_query.order_by(sort_column.asc())
+            else:
+                base_query = base_query.order_by(sort_column.desc())
+
+            # Get total count
+            total = await self.db.scalar(count_query) or 0
+
+            # Get paginated results
+            result = await self.db.execute(base_query.offset(offset).limit(limit))
+            orders = result.scalars().all()
+
+            formatted_orders = []
+            for order in orders:
+                order_response = await self._format_order_response(order)
+                order_dict = order_response.model_dump() if hasattr(order_response, 'model_dump') else order_response.dict()
+                if order.user:
+                    order_dict["customer"] = {
+                        "id": str(order.user.id),
+                        "email": order.user.email,
+                        "name": f"{order.user.firstname} {order.user.lastname}"
+                    }
+                formatted_orders.append(order_dict)
+
+            return {
+                "orders": formatted_orders,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "pages": (total + limit - 1) // limit if limit > 0 else 1
                 }
-            formatted_orders.append(order_dict)
-
-        return {
-            "orders": formatted_orders,
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": total,
-                "pages": (total + limit - 1) // limit if limit > 0 else 1
             }
-        }
+        except Exception as e:
+            logger.error(f"Error in list method: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
 
-    async def get(self, order_id: UUID, user_id: UUID) -> Optional[OrderResponse]:
-        """Get a specific order by ID"""
-        
-        query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).options(
-            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
-            selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
-        )
+    async def get(self, order_id: UUID, user_id: Optional[UUID] = None) -> Optional[OrderResponse]:
+        """Get a specific order by ID. If user_id is provided, only return that user's order."""
+        import traceback
+        try:
+            # Build query - filter by user_id if provided (for regular users), no filter for admins
+            if user_id:
+                query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).options(
+                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
+                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
+                )
+            else:
+                query = select(Order).where(Order.id == order_id).options(
+                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
+                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
+                )
 
-        result = await self.db.execute(query)
-        order = result.scalar_one_or_none()
+            result = await self.db.execute(query)
+            order = result.scalar_one_or_none()
 
-        if not order:
-            return None
+            if not order:
+                return None
 
-        return await self._format_order_response(order)
+            return await self._format_order_response(order)
+        except Exception as e:
+            logger.error(f"Error in get method for order {order_id}: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
 
     async def cancel(self, order_id: UUID, user_id: UUID) -> OrderResponse:
         """Cancel an order with transaction safety"""
@@ -1503,16 +1535,18 @@ class OrderService:
                         for img in item.variant.images
                     ] if item.variant.images else []
                 }
+            else:
+                logger.warning(f"Order item {item.id} has no variant associated")
             
             # Add to calculated subtotal
             calculated_subtotal += item.total_price or 0
             
             items.append(OrderItemResponse(
-                id=str(item.id),
-                variant_id=str(item.variant.id),
+                id=item.id,
+                variant_id=item.variant.id if item.variant else item.variant_id,
                 quantity=item.quantity,
-                price_per_unit=item.price_per_unit,
-                total_price=item.total_price,
+                price_per_unit=float(item.price_per_unit) if item.price_per_unit else 0.0,
+                total_price=float(item.total_price) if item.total_price else 0.0,
                 variant=variant_data
             ))
 
@@ -1554,21 +1588,24 @@ class OrderService:
             estimated_delivery = (order.created_at + timedelta(days=estimated_days)).isoformat()
 
         return OrderResponse(
-            id=str(order.id),
-            user_id=str(order.user_id),
-            status=current_status,
-            total_amount=corrected_total,  # Use corrected total instead of order.total_amount
-            subtotal=display_subtotal,
-            tax_amount=order.tax_amount,
-            shipping_amount=order.shipping_cost,
-            discount_amount=order.discount_amount,  # Now using the actual field from Order model
+            id=order.id,
+            user_id=order.user_id,
+            order_status=order.order_status,
+            payment_status=order.payment_status,
+            fulfillment_status=order.fulfillment_status,
+            total_amount=float(corrected_total),  # Use corrected total instead of order.total_amount
+            subtotal=float(display_subtotal) if display_subtotal else None,
+            tax_amount=float(order.tax_amount) if order.tax_amount else None,
+            shipping_cost=float(order.shipping_cost) if order.shipping_cost else None,
+            discount_amount=float(order.discount_amount) if order.discount_amount else None,
             currency=order.currency,  # Use order's currency
             tracking_number=order.tracking_number,
             estimated_delivery=estimated_delivery,
             shipping_address=order.shipping_address,
             billing_address=order.billing_address,
             items=items,
-            created_at=order.created_at.isoformat() if order.created_at else ""
+            created_at=order.created_at if order.created_at else datetime.utcnow(),
+            updated_at=order.updated_at
         )
 
     async def _validate_and_recalculate_prices(self, cart) -> Dict[str, Any]:
@@ -2000,23 +2037,32 @@ class OrderService:
         
         return OrderResponse(
             id=order.id,
-            order_number=order.order_number,
-            status=order.order_status,
+            user_id=order.user_id,
+            order_status=order.order_status,
             payment_status=order.payment_status,
             fulfillment_status=order.fulfillment_status,
-            total_amount=order.total_amount,
+            total_amount=float(order.total_amount),
+            subtotal=float(order.subtotal) if order.subtotal else None,
+            tax_amount=float(order.tax_amount) if order.tax_amount else None,
+            shipping_cost=float(order.shipping_cost) if order.shipping_cost else None,
+            discount_amount=float(order.discount_amount) if order.discount_amount else None,
             currency=order.currency,
-            created_at=order.created_at,
+            tracking_number=order.tracking_number,
+            estimated_delivery=None,
+            shipping_address=order.shipping_address,
+            billing_address=order.billing_address,
             items=[
                 OrderItemResponse(
                     id=item.id,
                     variant_id=item.variant_id,
                     quantity=item.quantity,
-                    price_per_unit=item.price_per_unit,
-                    total_price=item.total_price
+                    price_per_unit=float(item.price_per_unit) if item.price_per_unit else 0.0,
+                    total_price=float(item.total_price) if item.total_price else 0.0
                 )
                 for item in order.items
-            ]
+            ],
+            created_at=order.created_at if order.created_at else datetime.utcnow(),
+            updated_at=order.updated_at
         )
 
     async def tracking(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
@@ -2255,8 +2301,17 @@ class OrderService:
         except HTTPException:
             raise
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Failed to generate invoice for order {order_id}: {e}")
             logger.error(f"Order data: {order_data if 'order_data' in locals() else 'Not available'}")
+
+            # Check if it's a system library dependency error
+            if 'libgobject' in error_msg or 'cannot load library' in error_msg or 'dyld' in error_msg or 'GTK' in error_msg:
+                raise HTTPException(
+                    status_code=503,
+                    detail="PDF generation is not available on this server. System libraries (GTK+) are missing. Please install the required dependencies or use a different server configuration."
+                )
+
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to generate invoice: {str(e)}"

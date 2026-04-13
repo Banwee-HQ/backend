@@ -1,38 +1,24 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field, model_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, model_validator, AwareDatetime
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
 from enum import Enum
 
-from models.accounts.user import UserRole, AccountStatus, VerificationStatus, AddressKind
+from models.accounts.user import UserRole, AccountStatus, VerificationStatus
 
 class AddressBase(BaseModel):
-    label: Optional[str] = None
-    recipient_name: Optional[str] = None
-    phone: Optional[str] = None
-    street: Optional[str] = None
-    street_address: Optional[str] = None
-    apartment: Optional[str] = None
+    street: str
     city: str
-    state: str
+    state: Optional[str] = None
     country: str
     post_code: Optional[str] = None
-    postal_code: Optional[str] = None
-    is_default: Optional[bool] = False
-    kind: AddressKind = AddressKind.SHIPPING
 
     @model_validator(mode="after")
     def normalize_fields(self):
-        # Allow street_address as alias for street
-        if not self.street and self.street_address:
-            self.street = self.street_address
-        if not self.street:
-            self.street = ""
-        # Allow postal_code as alias for post_code
-        if not self.post_code and self.postal_code:
-            self.post_code = self.postal_code
         if not self.post_code:
             self.post_code = ""
+        if not self.state:
+            self.state = ""
         return self
 
 
@@ -40,21 +26,17 @@ class AddressCreate(AddressBase):
     pass
 
 
-class AddressUpdate(AddressBase):
+class AddressUpdate(BaseModel):
     street: Optional[str] = None
-    street_address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     country: Optional[str] = None
     post_code: Optional[str] = None
-    postal_code: Optional[str] = None
-    kind: Optional[str] = None
 
 
 class AddressResponse(AddressBase):
     id: UUID
     user_id: UUID
-    is_default: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -92,7 +74,7 @@ class Update(BaseModel):
     lastname: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    age: Optional[int] = None
+    date_of_birth: Optional[AwareDatetime] = None
     gender: Optional[str] = None
     country: Optional[str] = None
     language: Optional[str] = None
@@ -131,7 +113,7 @@ class Response(BaseModel):
     verification_status: VerificationStatus
     verified: bool
     is_active: bool
-    age: Optional[int] = None
+    date_of_birth: Optional[AwareDatetime] = None
     gender: Optional[str] = None
     country: Optional[str] = None
     language: Optional[str] = None

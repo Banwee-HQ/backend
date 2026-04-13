@@ -3,7 +3,7 @@ Simplified Subscription Service
 Handles subscription creation, updates, and pricing calculations
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.subscriptions import Subscription
@@ -123,19 +123,18 @@ class SubscriptionService:
             discount_value=pricing.get("discount_value"),
             discount_code=pricing.get("discount_code")
         )
-        
+
         self.db.add(subscription)
         await self.db.flush()
-        
+
         # Add products to association table
-        from models.commerce.subscriptions import subscription_product_association
+        from models.commerce.subscriptions import SubscriptionProductAssociation
         for variant in variants:
-            await self.db.execute(
-                subscription_product_association.insert().values(
-                    subscription_id=subscription.id,
-                    product_variant_id=variant.id
-                )
+            association = SubscriptionProductAssociation(
+                subscription_id=subscription.id,
+                product_variant_id=variant.id
             )
+            self.db.add(association)
         
         await self.db.commit()
         await self.db.refresh(subscription)
@@ -425,31 +424,30 @@ class SubscriptionService:
         
         if auto_renew is not None:
             subscription.auto_renew = auto_renew
-        
+
         if variant_ids:
             subscription.variant_ids = variant_ids
-            
+
             # Update association table
-            from models.commerce.subscriptions import subscription_product_association
+            from models.commerce.subscriptions import SubscriptionProductAssociation
             await self.db.execute(
-                subscription_product_association.delete().where(
-                    subscription_product_association.c.subscription_id == subscription.id
+                delete(SubscriptionProductAssociation).where(
+                    SubscriptionProductAssociation.subscription_id == subscription.id
                 )
             )
-            
+
             variant_uuids = [UUID(vid) for vid in variant_ids]
             variant_result = await self.db.execute(
                 select(ProductVariant).where(ProductVariant.id.in_(variant_uuids))
             )
             variants = variant_result.scalars().all()
-            
+
             for variant in variants:
-                await self.db.execute(
-                    subscription_product_association.insert().values(
-                        subscription_id=subscription.id,
-                        product_variant_id=variant.id
-                    )
+                association = SubscriptionProductAssociation(
+                    subscription_id=subscription.id,
+                    product_variant_id=variant.id
                 )
+                self.db.add(association)
         
         if variant_quantities:
             if not subscription.subscription_metadata:
@@ -585,17 +583,17 @@ class SubscriptionService:
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
-        
-        from models.commerce.subscriptions import subscription_product_association
-        
+
+        from models.commerce.subscriptions import SubscriptionProductAssociation
+
         existing_ids = {str(v.id) for v in subscription.products}
         for vid in variant_ids:
             if str(vid) not in existing_ids:
-                await self.db.execute(
-                    subscription_product_association.insert().values(
-                        subscription_id=subscription.id, product_variant_id=vid
-                    )
+                association = SubscriptionProductAssociation(
+                    subscription_id=subscription.id,
+                    product_variant_id=vid
                 )
+                self.db.add(association)
                 if subscription.variant_ids is None:
                     subscription.variant_ids = []
                 if str(vid) not in subscription.variant_ids:
@@ -610,15 +608,15 @@ class SubscriptionService:
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
-        
-        from models.commerce.subscriptions import subscription_product_association
-        
+
+        from models.commerce.subscriptions import SubscriptionProductAssociation
+
         for vid in variant_ids:
             await self.db.execute(
-                subscription_product_association.delete().where(
+                delete(SubscriptionProductAssociation).where(
                     and_(
-                        subscription_product_association.c.subscription_id == subscription.id,
-                        subscription_product_association.c.product_variant_id == vid
+                        SubscriptionProductAssociation.subscription_id == subscription.id,
+                        SubscriptionProductAssociation.product_variant_id == vid
                     )
                 )
             )

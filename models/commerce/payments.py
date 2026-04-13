@@ -2,7 +2,7 @@
 Consolidated payment models
 Includes: PaymentMethod, PaymentIntent, Transaction
 """
-from sqlalchemy import String, Boolean, ForeignKey, Float, Text, Integer, Date, DateTime, func, Index
+from sqlalchemy import String, Boolean, ForeignKey, Numeric, Text, Integer, Date, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON, ENUM as PG_ENUM
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -274,7 +274,7 @@ class Transaction(Base):
     payment_intent_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.payment_intents.id"), nullable=True)
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    amount: Mapped[float] = mapped_column(Float)
+    amount: Mapped[float] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # pending, succeeded, failed, cancelled, refunded
@@ -337,12 +337,10 @@ class PaymentAnalytics(Base):
     pending_payments: Mapped[int] = mapped_column(Integer, default=0)
 
     # Success rate
-    success_rate: Mapped[float] = mapped_column(Float, default=0.0)
-
-    # Volume metrics
-    total_volume: Mapped[float] = mapped_column(Float, default=0.0)
-    successful_volume: Mapped[float] = mapped_column(Float, default=0.0)
-    average_payment_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    success_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
+    total_volume: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    successful_volume: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    average_payment_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
 
     # Currency
     currency: Mapped[str] = mapped_column(String(3), default="USD")

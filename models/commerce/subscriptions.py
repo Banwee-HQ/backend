@@ -3,7 +3,7 @@ Consolidated subscription models
 Includes: Subscription and related subscription models
 Optimized for PostgreSQL with partial indexes for active subscriptions and products
 """
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Float, Table, JSON, Text, Integer, Date, func, Index, Column
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, Table, JSON, Text, Integer, Date, func, Index, Column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -38,15 +38,22 @@ class BillingCycle(str, Enum):
     YEARLY = "yearly"
 
 
-# --- Association table: Subscription <-> ProductVariant ---
-subscription_product_association = Table(
-    "subscription_product_association",
-    Base.metadata,
-    Column("subscription_id", GUID(), ForeignKey("commerce.subscriptions.id"), primary_key=True),
-    Column("product_variant_id", GUID(), ForeignKey("catalog.product_variants.id"), primary_key=True),
-    Index('idx_sub_product_association_variant', 'product_variant_id'),
-    extend_existing=True
-)
+# --- Association model: Subscription <-> ProductVariant ---
+class SubscriptionProductAssociation(Base):
+    """Association table for Subscription and ProductVariant many-to-many relationship"""
+    __tablename__ = "subscription_product_association"
+    __table_args__ = (
+        Index('idx_sub_product_association_variant', 'product_variant_id'),
+        Index('idx_sub_product_association_subscription', 'subscription_id'),
+        {'schema': 'commerce'}
+    )
+
+    subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"), primary_key=True)
+    product_variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"), primary_key=True)
+
+    # Relationships
+    subscription = relationship("Subscription", backref="variant_associations")
+    product_variant = relationship("ProductVariant", backref="subscription_associations")
 
 
 class SubscriptionProduct(Base):
@@ -73,8 +80,8 @@ class SubscriptionProduct(Base):
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
-    unit_price: Mapped[float] = mapped_column(Float)
-    total_price: Mapped[float] = mapped_column(Float)
+    unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
+    total_price: Mapped[float] = mapped_column(Numeric(10, 2))
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
 
     # Removal tracking
@@ -158,24 +165,24 @@ class Subscription(Base):
     delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.addresses.id"), nullable=True)
 
     # --- Pricing at creation ---
-    price_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price_at_creation: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     variant_prices_at_creation: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
-    shipping_amount_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    tax_amount_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    tax_rate_at_creation: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    shipping_amount_at_creation: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    tax_amount_at_creation: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    tax_rate_at_creation: Mapped[Optional[float]] = mapped_column(Numeric(5, 4), nullable=True)
 
     # --- Current/dynamic pricing ---
     current_variant_prices: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
-    current_shipping_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    current_tax_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    current_tax_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    current_shipping_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    current_tax_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    current_tax_rate: Mapped[Optional[float]] = mapped_column(Numeric(5, 4), nullable=True)
 
     # --- Products & variants ---
     variant_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     subscription_products = relationship("SubscriptionProduct", back_populates="subscription", lazy="select")
     products = relationship(
         "ProductVariant",
-        secondary=subscription_product_association,
+        secondary="subscription_product_association",
         backref="subscriptions_containing",
         lazy="selectin"
     )
@@ -186,7 +193,7 @@ class Subscription(Base):
     # --- Discount fields ---
     discount_id = Column(GUID(), ForeignKey("commerce.promocodes.id"), nullable=True)
     discount_type = Column(String(20), nullable=True)  # "percentage" or "fixed"
-    discount_value = Column(Float, nullable=True)
+    discount_value = Column(Numeric(10, 2), nullable=True)
     discount_code = Column(String(50), nullable=True)
 
     # --- Relationships ---
@@ -346,14 +353,14 @@ class SubscriptionAnalytics(Base):
     resumed_subscriptions: Mapped[int] = mapped_column(Integer, default=0)
 
     # Revenue metrics
-    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
-    average_subscription_value: Mapped[float] = mapped_column(Float, default=0.0)
-    monthly_recurring_revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    total_revenue: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    average_subscription_value: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    monthly_recurring_revenue: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
 
     # Performance metrics
-    churn_rate: Mapped[float] = mapped_column(Float, default=0.0)
-    conversion_rate: Mapped[float] = mapped_column(Float, default=0.0)
-    retention_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    churn_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
+    conversion_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
+    retention_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
 
     # Currency
     currency: Mapped[str] = mapped_column(String(3), default="USD")

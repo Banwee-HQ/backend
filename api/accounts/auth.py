@@ -125,7 +125,7 @@ async def me(
             "firstname": current_user.firstname,
             "lastname": current_user.lastname,
             "full_name": f"{current_user.firstname} {current_user.lastname}",
-            "age": current_user.age,
+            "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
             "gender": current_user.gender,
             "country": current_user.country,
             "language": current_user.language,
@@ -299,6 +299,17 @@ async def update(
         if "last_name" in user_data and "lastname" not in user_data:
             user_data["lastname"] = user_data.pop("last_name")
 
+        # Parse date_of_birth string to timezone-aware datetime if needed
+        if "date_of_birth" in user_data and isinstance(user_data["date_of_birth"], str):
+            from datetime import datetime as dt, timezone
+            try:
+                parsed = dt.fromisoformat(user_data["date_of_birth"])
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                user_data["date_of_birth"] = parsed
+            except ValueError:
+                raise APIException(status_code=400, message="Invalid date_of_birth format. Use ISO format: YYYY-MM-DD")
+
         # Update user fields
         for field, value in user_data.items():
             if hasattr(current_user, field) and field not in ['id', 'hashed_password', 'created_at']:
@@ -316,7 +327,7 @@ async def update(
             "first_name": current_user.firstname,
             "last_name": current_user.lastname,
             "full_name": f"{current_user.firstname} {current_user.lastname}",
-            "age": current_user.age,
+            "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
             "gender": current_user.gender,
             "country": current_user.country,
             "language": current_user.language,
@@ -338,7 +349,7 @@ async def update(
             "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
         }
         
-        return APIResponse.success(data=user_response, message="Profile updated successfully")
+        return Response.success(data=user_response, message="Profile updated successfully")
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,

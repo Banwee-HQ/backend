@@ -1,7 +1,7 @@
 """
 Validation rules models for tax and shipping fallback calculations
 """
-from sqlalchemy import String, Boolean, DateTime, func, Float, Text, Integer, Index
+from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, GUID
@@ -30,8 +30,8 @@ class TaxValidationRule(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     location_code: Mapped[str] = mapped_column(String(10))  # Country/state code (e.g., "US-CA", "GB")
-    tax_rate: Mapped[float] = mapped_column(Float)  # Tax rate as decimal (e.g., 0.08 for 8%)
-    minimum_tax: Mapped[float] = mapped_column(Float, default=0.01)  # Minimum tax amount
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 4))  # Tax rate as decimal (e.g., 0.08 for 8%)
+    minimum_tax: Mapped[float] = mapped_column(Numeric(10, 2), default=0.01)  # Minimum tax amount
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -78,10 +78,10 @@ class ShippingValidationRule(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     location_code: Mapped[str] = mapped_column(String(10))  # Country/state code (e.g., "US-CA", "GB")
-    weight_min: Mapped[float] = mapped_column(Float, default=0.0)  # Minimum weight in kg
-    weight_max: Mapped[float] = mapped_column(Float)  # Maximum weight in kg
-    base_rate: Mapped[float] = mapped_column(Float)  # Base shipping rate
-    minimum_shipping: Mapped[float] = mapped_column(Float, default=0.01)  # Minimum shipping amount
+    weight_min: Mapped[float] = mapped_column(Numeric(10, 3), default=0.0)  # Minimum weight in kg
+    weight_max: Mapped[float] = mapped_column(Numeric(10, 3))  # Maximum weight in kg
+    base_rate: Mapped[float] = mapped_column(Numeric(10, 2))  # Base shipping rate
+    minimum_shipping: Mapped[float] = mapped_column(Numeric(10, 2), default=0.01)  # Minimum shipping amount
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

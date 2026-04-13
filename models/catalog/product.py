@@ -1,7 +1,7 @@
 """
 Optimized product models with strategic JSON usage
 """
-from sqlalchemy import Column, String, ForeignKey, DateTime, Float, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
+from sqlalchemy import Column, String, ForeignKey, DateTime, Numeric, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
@@ -55,7 +55,7 @@ class Product(Base):
     product_status: Mapped[ProductStatus] = mapped_column(SQLEnum(ProductStatus), default=ProductStatus.ACTIVE)
 
     # Quality metrics as columns for sorting/filtering (aggregated from variants)
-    rating_average: Mapped[float] = mapped_column(Float, default=0.0)
+    rating_average: Mapped[float] = mapped_column(Numeric(3, 2), default=0.0)
     rating_count: Mapped[int] = mapped_column(Integer, default=0)
     review_count: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -182,8 +182,8 @@ class ProductVariant(Base):
     name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
 
     # Pricing as columns
-    base_price: Mapped[float] = mapped_column(Float)
-    sale_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    base_price: Mapped[float] = mapped_column(Numeric(10, 2))
+    sale_price: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Use JSON only for complex attributes that need querying
     attributes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)    # Flexible metadata as JSON columns for querying (cross-platform compatible)

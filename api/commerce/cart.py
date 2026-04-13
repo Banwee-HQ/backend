@@ -178,20 +178,19 @@ async def validate(
         
         # Convert result to dict for response
         result_dict = {
-            "valid": result.valid,
-            "can_checkout": result.can_checkout,
-            "issues": result.issues,
-            "summary": result.summary,
+            "valid": result.get('valid', False),
+            "can_checkout": result.get('can_checkout', False),
+            "issues": result.get('issues', []),
+            "summary": result.get('summary', {}),
         }
 
-        if result.valid and result.can_checkout:
+        if result.get('valid', False) and result.get('can_checkout', False):
             return Response.success(data=result_dict, message="Cart validation successful - ready for checkout")
-        elif result.issues:
-            error_count = len([i for i in result.issues if i.get("severity") == "error"])
-            warning_count = len([i for i in result.issues if i.get("severity") == "warning"])
+        elif result.get('issues'):
+            error_count = len([i for i in result.get('issues', []) if i.get("severity") == "error"])
+            warning_count = len([i for i in result.get('issues', []) if i.get("severity") == "warning"])
             if error_count > 0:
-                # Extract errors for the errors field
-                errors = [i for i in result.issues if i.get("severity") == "error"]
+                errors = [i for i in result_dict["issues"] if i.get("severity") == "error"]
                 return Response.error(data=result_dict, message=f"Cart validation failed with {error_count} error(s) and {warning_count} warning(s).", errors=errors)
             else:
                 return Response.success(data=result_dict,

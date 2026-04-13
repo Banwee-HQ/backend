@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.accounts.user import Address, User, AddressKind
+from models.accounts.user import Address, User
 from models.commerce.orders import Order
 from core.exceptions import APIException
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
@@ -38,8 +38,6 @@ class AddressService:
         state: Optional[str] = None,
         country: Optional[str] = None,
         post_code: Optional[str] = None,
-        kind: str = "Shipping",
-        is_default: bool = False,
         **kwargs
     ) -> Address:
         """Create a new address for a user."""
@@ -51,14 +49,10 @@ class AddressService:
             state=state or "",
             country=country or "",
             post_code=post_code or "",
-            kind=kind,
-            is_default=is_default,
         )
-
         self.db.add(address)
         await self.db.commit()
         await self.db.refresh(address)
-
         return address
 
     async def get(self, address_id: UUID) -> Optional[Address]:
@@ -68,25 +62,20 @@ class AddressService:
         return result.scalars().first()
 
     async def list(self, user_id: UUID, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Fetch addresses for a given user with pagination."""
+        """Fetch addresses for a given user with pagination. First = default."""
         offset = (page - 1) * limit
-        
-        # Get total count
         count_query = select(func.count()).select_from(Address).where(Address.user_id == user_id)
         total_result = await self.db.execute(count_query)
         total = total_result.scalar()
-        
-        # Get paginated results
         query = (
             select(Address)
             .where(Address.user_id == user_id)
-            .order_by(Address.created_at.desc())
+            .order_by(Address.created_at.asc())  # oldest first = default
             .offset(offset)
             .limit(limit)
         )
         result = await self.db.execute(query)
         addresses = result.scalars().all()
-        
         return {
             "data": addresses,
             "pagination": {
@@ -123,26 +112,10 @@ class AddressService:
     # CUSTOM LOGIC
     # -----------------------------------------------------------
 
-    async def default(self, user_id: UUID, kind: str = "Shipping") -> Optional[Address]:
-        """Get a user's default address by kind (Shipping or Billing)."""
-        # For shipping, first try to find an address marked as default
-        if kind == "Shipping":
-            query = select(Address).where(
-                Address.user_id == user_id,
-                Address.is_default == True,
-                Address.kind == kind
-            )
-            result = await self.db.execute(query)
-            address = result.scalars().first()
-            if address:
-                return address
-
-        # Return the most recent address of the specified kind
-        kind_enum = AddressKind.BILLING if kind == "Billing" else AddressKind.SHIPPING
+    async def default(self, user_id: UUID) -> Optional[Address]:
+        """Get a user's first (default) address."""
         query = select(Address).where(
-            Address.user_id == user_id,
-            Address.kind == kind_enum
-        ).order_by(Address.created_at.desc())
-
+            Address.user_id == user_id
+        ).order_by(Address.created_at.asc())
         result = await self.db.execute(query)
         return result.scalars().first()

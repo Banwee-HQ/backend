@@ -3,7 +3,7 @@ Shipping Tracking Models
 Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, etc.)
 """
 
-from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Float, Index
+from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID, ENUM as PG_ENUM, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -185,10 +185,10 @@ class ShipmentTracking(Base):
     delivery_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Package information
-    package_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Weight in kg
+    package_weight: Mapped[Optional[float]] = mapped_column(Numeric(10, 3), nullable=True)  # Weight in kg
     package_dimensions: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {length, width, height} in cm
-    package_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Declared value
-    insurance_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    package_value: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)  # Declared value
+    insurance_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Service details
     service_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Express, Standard, etc.

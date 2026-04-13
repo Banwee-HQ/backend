@@ -7,6 +7,7 @@ import asyncio
 import os
 import sys
 import re
+import random
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -27,6 +28,18 @@ from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjust
 from models.commerce.shipping import ShippingMethod
 from models.commerce.tax_rates import TaxRate
 
+CATEGORIES = [
+    {"name": "Grains, Cereals & Beans", "slug": "grains-pulses"},
+    {"name": "Fruits & Vegetables", "slug": "fruits-vegetables"},
+    {"name": "Meat, Poultry & Seafood", "slug": "meat-seafood"},
+    {"name": "Dairy, Eggs & Fats", "slug": "dairy-fats"},
+    {"name": "Spices, Herbs & Seasonings", "slug": "spices-herbs"},
+    {"name": "Pantry & Sweeteners", "slug": "pantry-sweeteners"},
+    {"name": "Nuts, Seeds & Snacks", "slug": "nuts-seeds-snacks"},
+    {"name": "Beverages, Tea & Coffee", "slug": "beverages"},
+    {"name": "Bakery & Prepared Foods", "slug": "bakery"},
+    {"name": "Fibers & Industrial Crops", "slug": "fibers"}
+]
 
 # ─────────────────────────────────────────────
 # Product catalogue data
@@ -37,7 +50,7 @@ PRODUCTS = [
         "slug": "organic-ghanaian-cocoa-powder",
         "description": "Premium organic cocoa powder sourced from Ghana's finest cocoa farms. Rich flavour perfect for baking and beverages.",
         "short_description": "Premium organic cocoa powder from Ghana",
-        "category": "food",
+        "category": random.choice(CATEGORIES)["slug"],
         "product_metadata": {"origin": "Ghana", "certifications": ["organic", "fair-trade"], "shelf_life_months": 24},
         "variants": [
             {"sku": "COCO-250G", "name": "250g Bag",  "base_price": 12.99, "quantity": 50,
@@ -62,7 +75,7 @@ PRODUCTS = [
         "slug": "shea-butter-moisturizer",
         "description": "Pure African shea butter for deep skin hydration. Natural and unrefined from Ghana and Burkina Faso.",
         "short_description": "Pure African shea butter for deep hydration",
-        "category": "beauty",
+        "category": random.choice(CATEGORIES)["slug"],
         "product_metadata": {"origin": "Ghana/Burkina Faso", "skin_types": ["all", "dry", "sensitive"]},
         "variants": [
             {"sku": "SHEA-100ML", "name": "100ml Jar", "base_price": 9.99,  "quantity": 60,
@@ -84,7 +97,7 @@ PRODUCTS = [
         "slug": "handwoven-kente-cloth",
         "description": "Authentic Ghanaian Kente cloth handwoven by skilled artisans. Traditional patterns with rich cultural significance.",
         "short_description": "Authentic handwoven Ghanaian Kente cloth",
-        "category": "fashion",
+        "category": random.choice(CATEGORIES)["slug"],
         "product_metadata": {"origin": "Ghana", "craft": "handwoven", "material": "cotton/silk blend"},
         "variants": [
             {"sku": "KENTE-STOLE", "name": "Graduation Stole", "base_price": 45.99, "quantity": 20,
@@ -106,7 +119,7 @@ PRODUCTS = [
         "slug": "baobab-superfood-powder",
         "description": "Nutrient-rich baobab fruit powder. High in vitamin C, fibre, and antioxidants. Sustainably harvested from African baobab trees.",
         "short_description": "Nutrient-rich African baobab superfood powder",
-        "category": "food",
+        "category": random.choice(CATEGORIES)["slug"],
         "product_metadata": {"origin": "Zimbabwe/Malawi", "superfood": True},
         "variants": [
             {"sku": "BAOBAB-100G", "name": "100g Pouch", "base_price": 14.99, "quantity": 80,
@@ -131,7 +144,7 @@ PRODUCTS = [
         "slug": "african-black-soap",
         "description": "Traditional African black soap made with plantain skins, cocoa pod powder, and palm kernel oil. Great for all skin types.",
         "short_description": "Traditional African black soap for all skin types",
-        "category": "beauty",
+        "category": random.choice(CATEGORIES)["slug"],
         "product_metadata": {"origin": "Ghana/Nigeria", "skin_concerns": ["acne", "eczema", "dark spots"]},
         "variants": [
             {"sku": "BLACKSOAP-1BAR",  "name": "Single Bar", "base_price": 6.99,  "quantity": 100,
@@ -153,7 +166,7 @@ PRODUCTS = [
         "slug": "moringa-leaf-powder",
         "description": "Pure moringa leaf powder from East Africa. Packed with vitamins, minerals, and amino acids. The ultimate superfood.",
         "short_description": "Pure East African moringa leaf powder",
-        "category": "food",
+        "category": random.choice(CATEGORIES)["slug"],
         "product_metadata": {"origin": "Kenya/Tanzania", "superfood": True},
         "variants": [
             {"sku": "MORINGA-100G", "name": "100g Pouch", "base_price": 11.99, "quantity": 90,

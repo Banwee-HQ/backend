@@ -26,7 +26,6 @@ async def get_current_auth_user(
     except Exception:
         return None
 
-
 def require_admin(current_user: User = Depends(get_current_auth_user)) -> User:
     from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:

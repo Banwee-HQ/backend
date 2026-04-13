@@ -214,11 +214,11 @@ async def create(
         subscription = await subscription_service.create(
             user_id=current_user.id,
             name=subscription_data.name,
-            product_variant_ids=product_variant_ids,
+            variant_ids=product_variant_ids,
             variant_quantities=variant_quantities,
             delivery_type=subscription_data.delivery_type,
             delivery_address_id=subscription_data.delivery_address_id,
-            payment_method_id=subscription_data.payment_method_id,
+            billing_cycle=subscription_data.billing_cycle,
             currency=subscription_data.currency
         )
         return Response.success(

@@ -2,7 +2,7 @@
 Pricing configuration models for subscriptions and commerce
 Includes: PricingConfig for admin-configurable pricing settings
 """
-from sqlalchemy import String, Float, DateTime, func, JSON, Text, Index
+from sqlalchemy import String, Numeric, DateTime, func, JSON, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
@@ -29,7 +29,7 @@ class PricingConfig(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     # Subscription percentage (0.1% to 50%)
-    subscription_percentage: Mapped[float] = mapped_column(Float, default=10.0)
+    subscription_percentage: Mapped[float] = mapped_column(Numeric(5, 2), default=10.0)
 
     # Delivery costs by type (JSON: {"standard": 10.0, "express": 25.0, "overnight": 50.0})
     delivery_costs: Mapped[dict] = mapped_column(JSON, default=dict)

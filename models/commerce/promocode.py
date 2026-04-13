@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, DateTime, func, Float, Text, Integer, Index
+from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, GUID
@@ -39,9 +39,9 @@ class Promocode(Base):
     code: Mapped[str] = mapped_column(String(50), unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     discount_type: Mapped[DiscountType] = mapped_column(String(20))
-    value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
-    minimum_order_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    maximum_discount_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    value: Mapped[float] = mapped_column(Numeric(10, 2))  # 10 for 10% or $10
+    minimum_order_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    maximum_discount_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

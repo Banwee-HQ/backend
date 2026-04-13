@@ -22,6 +22,7 @@ class MethodCreate(BaseModel):
     expiry_month: Optional[int] = Field(None, ge=1, le=12, description="Card expiry month")
     expiry_year: Optional[int] = Field(None, ge=2000, description="Card expiry year")
     is_default: bool = Field(False, description="Whether to set this as the default payment method")
+    payment_method_metadata: Optional[dict] = Field(None, description="Additional metadata (e.g. cardholder name)")
 
 
 class MethodUpdate(BaseModel):

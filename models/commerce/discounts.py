@@ -1,7 +1,7 @@
 """
 Discount management models for subscription product management
 """
-from sqlalchemy import String, Boolean, DateTime, Float, Text, Integer, func, Index, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, Numeric, Text, Integer, func, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -44,9 +44,9 @@ class Discount(Base):
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
     type: Mapped[DiscountType] = mapped_column(String(20))
-    value: Mapped[float] = mapped_column(Float)  # 10 for 10% or $10
-    minimum_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    maximum_discount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    value: Mapped[float] = mapped_column(Numeric(10, 2))  # 10 for 10% or $10
+    minimum_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    maximum_discount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -130,7 +130,7 @@ class SubscriptionDiscount(Base):
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
     discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.discounts.id"))
-    discount_amount: Mapped[float] = mapped_column(Float)
+    discount_amount: Mapped[float] = mapped_column(Numeric(10, 2))
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
 
     # Relationships

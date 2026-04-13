@@ -237,23 +237,31 @@ class InvoiceGenerator:
     ) -> bytes:
         """
         Generate PDF invoice as bytes (useful for email attachments)
-        
+
         Args:
             order_data: Order information dictionary
             template_name: Name of the Jinja2 template file
-            
+
         Returns:
             PDF content as bytes
         """
         try:
             # Generate HTML
             html_content = self.generate_html(order_data, template_name)
-            
+
             # Convert to PDF bytes
             pdf_bytes = HTML(string=html_content).write_pdf()
-            
+
             return pdf_bytes
         except Exception as e:
+            # Check if it's a library dependency error
+            error_str = str(e)
+            if 'libgobject' in error_str or 'cannot load library' in error_str or 'dyld' in error_str:
+                raise Exception(
+                    "PDF generation requires system libraries that are not installed. "
+                    "Please install GTK+ libraries or use a different PDF generation method. "
+                    f"Error: {error_str}"
+                )
             # If WeasyPrint fails, create a simple HTML fallback
             fallback_html = f"""
             <!DOCTYPE html>

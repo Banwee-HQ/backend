@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, DateTime, func, Float, Text, Integer, Index
+from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
@@ -28,7 +28,7 @@ class ShippingMethod(Base):
 
     name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    price: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Numeric(10, 2))
     estimated_days: Mapped[int] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

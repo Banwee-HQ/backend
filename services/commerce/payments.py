@@ -41,7 +41,8 @@ class PaymentService:
         stripe_payment_method_id: Optional[str] = None,
         stripe_token: Optional[str] = None,
         payment_method_data: Optional[Dict] = None,
-        is_default: bool = False
+        is_default: bool = False,
+        payment_method_metadata: Optional[Dict] = None
     ) -> PaymentMethod:
         """Create a new payment method supporting both modern and legacy Stripe APIs"""
         try:
@@ -283,6 +284,10 @@ class PaymentService:
                     return existing_pm
                 # Owned by different user — conflict
                 raise HTTPException(status_code=409, detail="Stripe payment method already associated with another account")
+
+            # Attach metadata (e.g. cardholder name) before saving
+            if payment_method_metadata:
+                payment_method.payment_method_metadata = payment_method_metadata
 
             # Try to insert; if a payment method with same stripe id exists, return it instead
             try:

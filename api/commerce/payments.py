@@ -61,13 +61,15 @@ async def create_method(
             "last_four": payment_method_data.last_four,
             "expiry_month": payment_method_data.expiry_month,
             "expiry_year": payment_method_data.expiry_year,
+            "payment_method_metadata": payment_method_data.payment_method_metadata,
         }
         payment_method = await service.create_method(
             user_id=current_user.id,
             stripe_payment_method_id=payment_method_data.stripe_payment_method_id,
             stripe_token=payment_method_data.stripe_token,
             payment_method_data=method_data,
-            is_default=payment_method_data.is_default
+            is_default=payment_method_data.is_default,
+            payment_method_metadata=payment_method_data.payment_method_metadata,
         )
         return Response.success(data=MethodResponse.from_orm(payment_method), code=status.HTTP_201_CREATED, message="Payment method created successfully")
     except APIException:

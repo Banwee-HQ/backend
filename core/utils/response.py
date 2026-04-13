@@ -7,6 +7,7 @@ from fastapi import status
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime, date
+from decimal import Decimal
 from sqlalchemy import inspect
 
 
@@ -67,11 +68,11 @@ class Response(JSONResponse):
             # Convert SQLAlchemy model to dict
             return self._sqlalchemy_model_to_dict(data)
         elif isinstance(data, UUID):
-            # Convert UUID to string
             return str(data)
         elif isinstance(data, (datetime, date)):
-            # Convert datetime/date to ISO string
             return data.isoformat()
+        elif isinstance(data, Decimal):
+            return float(data)
         elif isinstance(data, list):
             # Convert list of items (may contain Pydantic/SQLAlchemy models)
             return [self._serialize_data(item) for item in data]
@@ -99,6 +100,8 @@ class Response(JSONResponse):
                 value = str(value)
             elif isinstance(value, (datetime, date)):
                 value = value.isoformat() if value else None
+            elif isinstance(value, Decimal):
+                value = float(value)
             result[column.key] = value
         return result
 

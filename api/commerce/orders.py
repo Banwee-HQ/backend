@@ -126,6 +126,9 @@ async def validate(
         validation_result = await order_service.validate_checkout(current_user.id, request)
         return Response.success(data=validation_result, message="Checkout validation completed")
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"VALIDATE CHECKOUT ERROR: {e}\n{tb}")
         raise APIException(status_code=500, message=f"Checkout validation failed: {str(e)}")
 
 

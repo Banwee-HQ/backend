@@ -2,7 +2,7 @@
 User analytics models for accounts service
 Includes: UserSession and CustomerLifecycleMetrics
 """
-from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
+from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -77,7 +77,7 @@ class UserSession(Base):
     page_views: Mapped[int] = mapped_column(Integer, default=0)
     events_count: Mapped[int] = mapped_column(Integer, default=0)
     converted: Mapped[bool] = mapped_column(Boolean, default=False)
-    conversion_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    conversion_value: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Geographic data
     country: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
@@ -134,32 +134,32 @@ class CustomerLifecycleMetrics(Base):
     # Registration and first purchase
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     first_purchase_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    time_to_first_purchase_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    time_to_first_purchase_hours: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Purchase behavior
     total_orders: Mapped[int] = mapped_column(Integer, default=0)
-    total_revenue: Mapped[float] = mapped_column(Float, default=0.0)
-    average_order_value: Mapped[float] = mapped_column(Float, default=0.0)
+    total_revenue: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    average_order_value: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
 
     # Timing metrics
     last_purchase_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     days_since_last_purchase: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    average_days_between_orders: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    average_days_between_orders: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Refund metrics
     total_refunds: Mapped[int] = mapped_column(Integer, default=0)
-    total_refund_amount: Mapped[float] = mapped_column(Float, default=0.0)
-    refund_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    total_refund_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    refund_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
 
     # Customer segmentation
     customer_segment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    lifetime_value: Mapped[float] = mapped_column(Float, default=0.0)
-    predicted_ltv: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lifetime_value: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    predicted_ltv: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Engagement metrics
     total_sessions: Mapped[int] = mapped_column(Integer, default=0)
     total_page_views: Mapped[int] = mapped_column(Integer, default=0)
-    average_session_duration: Mapped[float] = mapped_column(Float, default=0.0)
+    average_session_duration: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
 
     # Last updated
     metrics_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

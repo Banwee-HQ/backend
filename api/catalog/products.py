@@ -101,7 +101,8 @@ async def get_home_data(
 @router.get("/")
 async def list(
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=1000),
+    category: Optional[str] = Query(None, description="category of the products"),
     q: Optional[str] = Query(None, description="Search query for filtering"),
     min_price: Optional[float] = Query(None, ge=0, description="Minimum price filter"),
     max_price: Optional[float] = Query(None, ge=0, description="Maximum price filter"),
@@ -123,6 +124,7 @@ async def list(
 
         filters = {
             "q": q,
+            "category":category,
             "min_price": min_price,
             "max_price": max_price,
             "min_rating": min_rating,

@@ -379,7 +379,7 @@ class EmailService:
         """Render an email using Jinja template"""
         try:
             rendered = await self.template_service.render_email(template_name, context)
-            return rendered.content
+            return rendered['content']
         except Exception as e:
             print(f"❌ Failed to render email template {template_name}: {e}")
             raise
@@ -476,7 +476,7 @@ class EmailService:
         from services.system.templates import JinjaTemplateService
         template_service = JinjaTemplateService(template_dir="core/utils/messages/templates")
         rendered = await template_service.render_email(template_name, context)
-        return rendered.content
+        return rendered['content']
 
     def send_order_confirmation(
         self,

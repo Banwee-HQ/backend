@@ -2,7 +2,7 @@
 Refund models for painless refund processing
 Includes: Refund, RefundItem, RefundReason
 """
-from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
+from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -83,9 +83,9 @@ class Refund(Base):
     reason: Mapped[RefundReason] = mapped_column(SQLEnum(RefundReason))
 
     # Financial information
-    requested_amount: Mapped[float] = mapped_column(Float)
-    approved_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    processed_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    requested_amount: Mapped[float] = mapped_column(Numeric(10, 2))
+    approved_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    processed_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Stripe integration
@@ -201,8 +201,8 @@ class RefundItem(Base):
 
     # Item details
     quantity_to_refund: Mapped[int] = mapped_column(Integer)
-    unit_price: Mapped[float] = mapped_column(Float)
-    total_refund_amount: Mapped[float] = mapped_column(Float)
+    unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
+    total_refund_amount: Mapped[float] = mapped_column(Numeric(10, 2))
 
     # Item condition
     condition_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

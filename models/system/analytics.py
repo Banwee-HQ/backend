@@ -2,7 +2,7 @@
 System analytics models for tracking user behavior
 Includes: AnalyticsEvent, ConversionFunnel, EventType
 """
-from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
+from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
@@ -68,7 +68,7 @@ class AnalyticsEvent(Base):
     category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Financial data
-    revenue: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    revenue: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Timing
@@ -134,8 +134,8 @@ class ConversionFunnel(Base):
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Financial data
-    cart_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    purchase_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cart_value: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    purchase_value: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # Relationships
     session = relationship("UserSession")

@@ -52,11 +52,12 @@
         { "name": "Search Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
         { "name": "Get Home Products", "request": { "method": "GET", "url": "{{base_url}}/products/home/" } },
         { "name": "List Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
+        { "name": "Filter by Category", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?category=grains-pulses", "query": [{ "key": "category", "value": "grains-pulses" }] } } },
         { "name": "Get Product", "request": { "method": "GET", "url": "{{base_url}}/products/:id/" } },
         { "name": "Get Product Variants", "request": { "method": "GET", "url": "{{base_url}}/products/:id/variants/" } },
         { "name": "Get Variant", "request": { "method": "GET", "url": "{{base_url}}/products/variants/:id/" } },
         { "name": "Get Recommendations", "request": { "method": "GET", "url": "{{base_url}}/products/:id/recommendations/" } },
-        { "name": "Create Product", "request": { "method": "POST", "url": "{{base_url}}/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Organic Coffee\",\n  \"description\": \"Premium coffee\",\n  \"category_id\": \"CATEGORY_ID\"\n}" } } },
+        { "name": "Create Product", "request": { "method": "POST", "url": "{{base_url}}/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Organic Coffee\",\n  \"description\": \"Premium coffee\",\n  \"category\": \"beverages\"\n}" } } },
         { "name": "Update Product", "request": { "method": "PUT", "url": "{{base_url}}/products/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
         { "name": "Delete Product", "request": { "method": "DELETE", "url": "{{base_url}}/products/:id/" } }
       ]

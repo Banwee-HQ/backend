@@ -2,7 +2,7 @@
 Optimized order models with hard delete only
 Includes: Order, OrderItem, TrackingEvent
 """
-from sqlalchemy import String, ForeignKey, Float, Text, Integer, DateTime, func, Enum as SQLEnum, Index
+from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
@@ -87,12 +87,12 @@ class Order(Base):
     fulfillment_status: Mapped[FulfillmentStatus] = mapped_column(SQLEnum(FulfillmentStatus), default=FulfillmentStatus.UNFULFILLED)
 
     # Simplified financial information - only the essentials
-    subtotal: Mapped[float] = mapped_column(Float)  # Sum of all product variant prices
-    shipping_cost: Mapped[float] = mapped_column(Float, default=0.0)  # Shipping cost (renamed from shipping_amount)
-    discount_amount: Mapped[float] = mapped_column(Float, default=0.0)  # Discount amount applied to order
-    tax_amount: Mapped[float] = mapped_column(Float, default=0.0)  # Tax amount
-    tax_rate: Mapped[float] = mapped_column(Float, default=0.0)  # Tax rate applied (e.g., 0.08 for 8%)
-    total_amount: Mapped[float] = mapped_column(Float)  # Final total
+    subtotal: Mapped[float] = mapped_column(Numeric(10, 2))  # Sum of all product variant prices
+    shipping_cost: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)  # Shipping cost (renamed from shipping_amount)
+    discount_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)  # Discount amount applied to order
+    tax_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)  # Tax amount
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)  # Tax rate applied (e.g., 0.08 for 8%)
+    total_amount: Mapped[float] = mapped_column(Numeric(10, 2))  # Final total
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Shipping information as columns for frequent access
@@ -182,8 +182,8 @@ class OrderItem(Base):
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
     quantity: Mapped[int] = mapped_column(Integer)
-    price_per_unit: Mapped[float] = mapped_column(Float)
-    total_price: Mapped[float] = mapped_column(Float)
+    price_per_unit: Mapped[float] = mapped_column(Numeric(10, 2))
+    total_price: Mapped[float] = mapped_column(Numeric(10, 2))
 
     # Relationships
     order = relationship("Order", back_populates="items")

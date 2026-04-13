@@ -206,7 +206,7 @@ class ProductService:
     async def list(
         self,
         page: int = 1,
-        limit: int = 10,
+        limit: int = 1000,
         filters: Optional[Dict[str, Any]] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc"
@@ -238,12 +238,11 @@ class ProductService:
             if filters.get("featured"):
                 base_conditions.append(Product.is_featured.is_(True))
         
-        # Build subquery for filtering by category (now it's a string)
-        if filters and filters.get("category"):
-            base_conditions.append(Product.category == filters['category'])
+            # Build subquery for filtering by category (now it's a string)
+            if filters.get("category"):
+                base_conditions.append(Product.category == filters['category'])
         
-        # Build subquery for filtering by variant properties
-        if filters:
+            # Build subquery for filtering by variant properties
             price_filters = []
             if filters.get("min_price") is not None:
                 price_filters.append(ProductVariant.base_price >= filters["min_price"])
