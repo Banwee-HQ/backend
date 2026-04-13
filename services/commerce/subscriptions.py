@@ -14,6 +14,7 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
+from dateutil.relativedelta import relativedelta
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)
@@ -31,26 +32,53 @@ class SubscriptionService:
         name: str,
         variant_ids: List[str],
         variant_quantities: Optional[Dict[str, int]] = None,
-        delivery_type: str = "standard",
         delivery_address_id: Optional[UUID] = None,
+        shipping_method_id: Optional[UUID] = None,
         billing_cycle: str = "monthly",
-        currency: str = "USD",
-        discount_code: Optional[str] = None
+        currency: str = "CAD",
+        discount_code: Optional[str] = None,
+        current_period_start: Optional[str] = None
     ) -> Subscription:
         """Create a new subscription"""
-        
+        logger.info(f"Creating subscription with user_id={user_id}, name={name}, variant_ids={variant_ids}")
+
+        # Determine currency from delivery address if not provided
+        if not currency or currency == "CAD":
+            try:
+                if delivery_address_id:
+                    address_result = await self.db.execute(
+                        select(Address).where(Address.id == delivery_address_id)
+                    )
+                    address = address_result.scalar_one_or_none()
+                    if address:
+                        # Simple country to currency mapping
+                        country_currency_map = {
+                            "US": "USD",
+                            "CA": "CAD",
+                            "GB": "GBP",
+                            "EUR": "EUR",
+                            "AU": "AUD",
+                            "JP": "JPY",
+                        }
+                        currency = country_currency_map.get(address.country.upper(), "CAD")
+            except Exception as e:
+                logger.warning(f"Could not determine currency from address: {e}")
+                currency = "CAD"
+
         # Validate variants
         variant_uuids = [UUID(vid) for vid in variant_ids]
+        logger.info(f"Looking up variants: {variant_uuids}")
         variant_result = await self.db.execute(
             select(ProductVariant)
             .where(ProductVariant.id.in_(variant_uuids))
             .options(selectinload(ProductVariant.product))
         )
         variants = variant_result.scalars().all()
-        
+        logger.info(f"Found variants: {variants}")
+
         if len(variants) != len(variant_uuids):
             raise HTTPException(status_code=400, detail="Some variants not found")
-        
+
         # Get customer address for tax calculation
         customer_address = None
         if delivery_address_id:
@@ -68,29 +96,33 @@ class SubscriptionService:
                     "country": address.country,
                     "post_code": address.post_code
                 }
-        
+
         # Calculate pricing at creation
         pricing = await self._calculate_pricing(
             variants,
             variant_quantities or {},
-            delivery_type,
             customer_address,
             currency,
             user_id,
+            shipping_method_id,
             discount_code
         )
-        
-        # Set billing dates
-        now = datetime.now(timezone.utc)
-        if billing_cycle == "weekly":
-            period_end = now + timedelta(weeks=1)
-        elif billing_cycle == "yearly":
-            from dateutil.relativedelta import relativedelta
-            period_end = now + relativedelta(years=1)
-        else:  # monthly
-            from dateutil.relativedelta import relativedelta
+
+        # Calculate billing period
+        if current_period_start:
+            now = datetime.fromisoformat(current_period_start).replace(tzinfo=timezone.utc)
+        else:
+            now = datetime.now(timezone.utc)
+
+        if billing_cycle == "monthly":
             period_end = now + relativedelta(months=1)
-        
+        elif billing_cycle == "quarterly":
+            period_end = now + relativedelta(months=3)
+        elif billing_cycle == "yearly":
+            period_end = now + relativedelta(years=1)
+        else:
+            period_end = now + relativedelta(months=1)
+
         # Create subscription
         subscription = Subscription(
             user_id=user_id,
@@ -102,8 +134,8 @@ class SubscriptionService:
             current_period_start=now,
             current_period_end=period_end,
             next_billing_date=period_end,
-            delivery_type=delivery_type,
             delivery_address_id=delivery_address_id,
+            shipping_method_id=shipping_method_id,
             variant_ids=variant_ids,
             subscription_metadata={"variant_quantities": variant_quantities or {vid: 1 for vid in variant_ids}},
             # Historical prices at creation
@@ -135,20 +167,30 @@ class SubscriptionService:
                 product_variant_id=variant.id
             )
             self.db.add(association)
-        
+
         await self.db.commit()
-        await self.db.refresh(subscription)
-        
-        return subscription
+
+        # Re-fetch with full eager loading so products are populated
+        result = await self.db.execute(
+            select(Subscription)
+            .where(Subscription.id == subscription.id)
+            .options(
+                selectinload(Subscription.products).selectinload(ProductVariant.product),
+                selectinload(Subscription.products).selectinload(ProductVariant.images),
+                selectinload(Subscription.delivery_address),
+                selectinload(Subscription.shipping_method),
+            )
+        )
+        return result.scalar_one()
 
     async def _calculate_pricing(
         self,
         variants: List[ProductVariant],
         variant_quantities: Dict[str, int],
-        delivery_type: str,
         customer_address: Optional[Dict],
         currency: str,
         user_id: UUID,
+        shipping_method_id: Optional[UUID] = None,
         discount_code: Optional[str] = None
     ) -> Dict[str, Any]:
         """Calculate subscription pricing"""
@@ -173,10 +215,10 @@ class SubscriptionService:
                 "price": float(price),
                 "qty": qty
             })
-        
+
         # Get shipping cost from database
-        shipping_cost = await self._get_shipping_cost(delivery_type)
-        
+        shipping_cost = await self._get_shipping_cost(shipping_method_id)
+
         # Calculate tax
         tax_amount = Decimal('0.00')
         tax_rate = Decimal('0.00')
@@ -190,7 +232,7 @@ class SubscriptionService:
                 state = customer_address.get('state', '')
                 
                 tax_rate_value = await tax_service.rate(country, state)
-                tax_amount = float(subtotal + shipping_cost) * tax_rate_value
+                tax_amount = (subtotal + shipping_cost) * Decimal(str(tax_rate_value))
                 tax_rate = Decimal(str(tax_rate_value))
                 
             except Exception as e:
@@ -246,26 +288,29 @@ class SubscriptionService:
             "discount_code": discount_code_used
         }
 
-    async def _get_shipping_cost(self, delivery_type: str) -> Decimal:
+    async def _get_shipping_cost(self, shipping_method_id: Optional[UUID] = None) -> Decimal:
         """Get shipping cost from database"""
         from models.commerce.shipping import ShippingMethod
-        
+
+        # If shipping_method_id is provided, get that specific method
+        if shipping_method_id:
+            result = await self.db.execute(
+                select(ShippingMethod).where(ShippingMethod.id == shipping_method_id)
+            )
+            method = result.scalar_one_or_none()
+            if method:
+                return Decimal(str(method.price))
+
+        # Fallback to cheapest active method
         result = await self.db.execute(
             select(ShippingMethod).where(ShippingMethod.is_active == True)
         )
         methods = result.scalars().all()
-        
-        # Find matching method
-        delivery_type_lower = delivery_type.lower()
-        for method in methods:
-            if delivery_type_lower in method.name.lower():
-                return Decimal(str(method.price))
-        
-        # Fallback to cheapest
+
         if methods:
             cheapest = min(methods, key=lambda m: m.price)
             return Decimal(str(cheapest.price))
-        
+
         # Final fallback
         return Decimal('8.99')
 
@@ -273,12 +318,14 @@ class SubscriptionService:
         """Get subscription by ID"""
         query = select(Subscription).where(Subscription.id == subscription_id).options(
             selectinload(Subscription.products).selectinload(ProductVariant.product),
-            selectinload(Subscription.products).selectinload(ProductVariant.images)
+            selectinload(Subscription.products).selectinload(ProductVariant.images),
+            selectinload(Subscription.delivery_address),
+                selectinload(Subscription.shipping_method),
         )
-        
+
         if user_id:
             query = query.where(Subscription.user_id == user_id)
-        
+
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -296,7 +343,6 @@ class SubscriptionService:
     ) -> Dict[str, Any]:
         """Get paginated subscriptions. If user_id is None, returns all subscriptions (admin)."""
         from sqlalchemy import func as sqlfunc
-        from models.accounts.user import User
 
         offset = (page - 1) * limit
 
@@ -305,15 +351,19 @@ class SubscriptionService:
             # User-specific query
             base_query = select(Subscription).where(Subscription.user_id == user_id).options(
                 selectinload(Subscription.products).selectinload(ProductVariant.product),
-                selectinload(Subscription.products).selectinload(ProductVariant.images)
+                selectinload(Subscription.products).selectinload(ProductVariant.images),
+                selectinload(Subscription.delivery_address),
+                selectinload(Subscription.shipping_method),
             )
             count_query = select(sqlfunc.count()).select_from(Subscription).where(Subscription.user_id == user_id)
         else:
-            # Admin query - includes user info
-            base_query = (
-                select(Subscription, User)
-                .join(User, Subscription.user_id == User.id)
-                .options(selectinload(Subscription.products))
+            # Admin query — fetch subscriptions first, then join user info separately
+            base_query = select(Subscription).options(
+                selectinload(Subscription.products).selectinload(ProductVariant.product),
+                selectinload(Subscription.products).selectinload(ProductVariant.images),
+                selectinload(Subscription.user),
+                selectinload(Subscription.delivery_address),
+                selectinload(Subscription.shipping_method),
             )
             count_query = select(sqlfunc.count()).select_from(Subscription)
 
@@ -372,15 +422,16 @@ class SubscriptionService:
             subscriptions = result.scalars().all()
             subscriptions_data = [sub.to_dict(include_products=True) for sub in subscriptions]
         else:
-            rows = result.all()
+            subscriptions = result.scalars().all()
             subscriptions_data = []
-            for subscription, user in rows:
+            for subscription in subscriptions:
                 sub_dict = subscription.to_dict(include_products=True)
-                sub_dict["user"] = {
-                    "id": str(user.id),
-                    "name": f"{user.firstname} {user.lastname}",
-                    "email": user.email
-                }
+                if subscription.user:
+                    sub_dict["user"] = {
+                        "id": str(subscription.user.id),
+                        "name": f"{subscription.user.firstname} {subscription.user.lastname}",
+                        "email": subscription.user.email,
+                    }
                 subscriptions_data.append(sub_dict)
 
         return {
@@ -398,11 +449,12 @@ class SubscriptionService:
         subscription_id: UUID,
         user_id: UUID,
         name: Optional[str] = None,
-        delivery_type: Optional[str] = None,
         delivery_address_id: Optional[UUID] = None,
+        shipping_method_id: Optional[UUID] = None,
         auto_renew: Optional[bool] = None,
         variant_ids: Optional[List[str]] = None,
-        variant_quantities: Optional[Dict[str, int]] = None
+        variant_quantities: Optional[Dict[str, int]] = None,
+        current_period_start: Optional[str] = None
     ) -> Subscription:
         """Update subscription"""
         subscription = await self.get(subscription_id, user_id)
@@ -415,15 +467,33 @@ class SubscriptionService:
         
         if name:
             subscription.name = name
-        
-        if delivery_type:
-            subscription.delivery_type = delivery_type
-        
+
         if delivery_address_id:
             subscription.delivery_address_id = delivery_address_id
-        
+
+        if shipping_method_id is not None:
+            subscription.shipping_method_id = shipping_method_id
+
         if auto_renew is not None:
             subscription.auto_renew = auto_renew
+
+        if current_period_start:
+            from datetime import timezone
+            new_period_start = datetime.fromisoformat(current_period_start).replace(tzinfo=timezone.utc)
+            subscription.current_period_start = new_period_start
+
+            # Recalculate period end and next billing date
+            if subscription.billing_cycle == "monthly":
+                new_period_end = new_period_start + relativedelta(months=1)
+            elif subscription.billing_cycle == "quarterly":
+                new_period_end = new_period_start + relativedelta(months=3)
+            elif subscription.billing_cycle == "yearly":
+                new_period_end = new_period_start + relativedelta(years=1)
+            else:
+                new_period_end = new_period_start + relativedelta(months=1)
+
+            subscription.current_period_end = new_period_end
+            subscription.next_billing_date = new_period_end
 
         if variant_ids:
             subscription.variant_ids = variant_ids
@@ -455,9 +525,7 @@ class SubscriptionService:
             subscription.subscription_metadata["variant_quantities"] = variant_quantities
         
         await self.db.commit()
-        await self.db.refresh(subscription)
-        
-        return subscription
+        return await self.get(subscription.id)
 
     async def cancel(self, subscription_id: UUID, user_id: UUID, reason: Optional[str] = None) -> Subscription:
         """Cancel subscription"""
@@ -474,9 +542,7 @@ class SubscriptionService:
             subscription.pause_reason = f"Cancelled: {reason}"
         
         await self.db.commit()
-        await self.db.refresh(subscription)
-        
-        return subscription
+        return await self.get(subscription.id)
 
     async def pause(self, subscription_id: UUID, user_id: UUID, reason: Optional[str] = None) -> Subscription:
         """Pause subscription"""
@@ -493,30 +559,27 @@ class SubscriptionService:
         subscription.pause_reason = reason
         
         await self.db.commit()
-        await self.db.refresh(subscription)
-        
-        return subscription
+        return await self.get(subscription.id)
 
     async def resume(self, subscription_id: UUID, user_id: UUID) -> Subscription:
         """Resume subscription"""
         subscription = await self.get(subscription_id, user_id)
-        
+
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
-        
+
         if subscription.status not in ["paused", "cancelled"]:
             raise HTTPException(status_code=400, detail="Can only resume paused or cancelled subscriptions")
-        
+
         subscription.status = "active"
         subscription.paused_at = None
         subscription.pause_reason = None
         subscription.cancelled_at = None
+        subscription.auto_renew = True
         subscription.next_billing_date = datetime.now(timezone.utc) + timedelta(days=30)
-        
+
         await self.db.commit()
-        await self.db.refresh(subscription)
-        
-        return subscription
+        return await self.get(subscription.id)
 
     async def recalc_pricing(self, subscription: Subscription) -> Dict[str, Any]:
         """Recalculate current pricing for a subscription"""
@@ -546,15 +609,15 @@ class SubscriptionService:
                     "country": address.country,
                     "post_code": address.post_code
                 }
-        
+
         # Calculate current pricing
         pricing = await self._calculate_pricing(
             variants,
             variant_quantities,
-            subscription.delivery_type or "standard",
             customer_address,
-            subscription.currency or "USD",
+            subscription.currency or "CAD",
             subscription.user_id,
+            subscription.shipping_method_id,
             subscription.discount_code
         )
         
@@ -571,9 +634,53 @@ class SubscriptionService:
     # -------------------------------------------------------------------------
 
     async def delete(self, subscription_id: UUID, user_id: UUID) -> bool:
-        subscription = await self.get(subscription_id, user_id)
+        # Fetch subscription without loading relationships for deletion
+        result = await self.db.execute(
+            select(Subscription).where(Subscription.id == subscription_id)
+        )
+        subscription = result.scalar_one_or_none()
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
+
+        from models.commerce.subscriptions import SubscriptionProductAssociation, SubscriptionProduct
+        from models.commerce.discounts import SubscriptionDiscount, ProductRemovalAudit
+        from models.catalog.variant_tracking import VariantTrackingEntry
+        from models.commerce.orders import Order
+        from sqlalchemy import update
+
+        # Delete all child rows that lack DB-level CASCADE
+        await self.db.execute(
+            delete(SubscriptionProductAssociation).where(
+                SubscriptionProductAssociation.subscription_id == subscription_id
+            )
+        )
+        await self.db.execute(
+            delete(SubscriptionProduct).where(
+                SubscriptionProduct.subscription_id == subscription_id
+            )
+        )
+        await self.db.execute(
+            delete(SubscriptionDiscount).where(
+                SubscriptionDiscount.subscription_id == subscription_id
+            )
+        )
+        await self.db.execute(
+            delete(ProductRemovalAudit).where(
+                ProductRemovalAudit.subscription_id == subscription_id
+            )
+        )
+        await self.db.execute(
+            delete(VariantTrackingEntry).where(
+                VariantTrackingEntry.subscription_id == subscription_id
+            )
+        )
+        # Unlink orders — keep them but remove the subscription reference
+        await self.db.execute(
+            update(Order)
+            .where(Order.subscription_id == subscription_id)
+            .values(subscription_id=None)
+        )
+
         await self.db.delete(subscription)
         await self.db.commit()
         return True
@@ -600,8 +707,7 @@ class SubscriptionService:
                     subscription.variant_ids = subscription.variant_ids + [str(vid)]
         
         await self.db.commit()
-        await self.db.refresh(subscription)
-        return subscription
+        return await self.get(subscription.id)
 
     async def remove_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
         """Remove products from a subscription"""
@@ -624,8 +730,7 @@ class SubscriptionService:
             subscription.variant_ids = [v for v in subscription.variant_ids if v not in [str(vid) for vid in variant_ids]]
         
         await self.db.commit()
-        await self.db.refresh(subscription)
-        return subscription
+        return await self.get(subscription.id)
 
     async def set_quantity(self, subscription_id: UUID, variant_id: UUID, quantity: int, user_id: UUID) -> Subscription:
         subscription = await self.get(subscription_id, user_id)
@@ -636,8 +741,7 @@ class SubscriptionService:
         quantities[str(variant_id)] = quantity
         subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
         await self.db.commit()
-        await self.db.refresh(subscription)
-        return subscription
+        return await self.get(subscription.id)
 
     async def adjust_quantity(self, subscription_id: UUID, variant_id: UUID, change: int, user_id: UUID) -> Subscription:
         subscription = await self.get(subscription_id, user_id)
@@ -648,8 +752,7 @@ class SubscriptionService:
         quantities[str(variant_id)] = max(1, quantities.get(str(variant_id), 1) + change)
         subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
         await self.db.commit()
-        await self.db.refresh(subscription)
-        return subscription
+        return await self.get(subscription.id)
 
     async def get_quantities(self, subscription_id: UUID, user_id: UUID) -> Dict[str, int]:
         subscription = await self.get(subscription_id, user_id)
@@ -685,7 +788,7 @@ class SubscriptionService:
     async def _calc_cost(
         self,
         variants: List[ProductVariant],
-        delivery_type: str,
+        shipping_method_id: Optional[UUID],
         customer_address: Optional[Dict],
         currency: str,
         user_id: UUID,
@@ -694,8 +797,8 @@ class SubscriptionService:
         return await self._calculate_pricing(
             variants=variants,
             variant_quantities=variant_quantities or {},
-            delivery_type=delivery_type,
             customer_address=customer_address,
             currency=currency,
             user_id=user_id,
+            shipping_method_id=shipping_method_id,
         )

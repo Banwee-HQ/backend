@@ -142,7 +142,7 @@ class Subscription(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[SubscriptionStatus] = mapped_column(String(50), default=SubscriptionStatus.ACTIVE)
-    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    currency: Mapped[str] = mapped_column(String(3), default="CAD")
     billing_cycle: Mapped[BillingCycle] = mapped_column(String(20), default=BillingCycle.MONTHLY)
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
     current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -161,8 +161,8 @@ class Subscription(Base):
     payment_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # --- Delivery info ---
-    delivery_type: Mapped[Optional[DeliveryType]] = mapped_column(String(50), default=DeliveryType.STANDARD)
     delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.addresses.id"), nullable=True)
+    shipping_method_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.shipping_methods.id"), nullable=True)
 
     # --- Pricing at creation ---
     price_at_creation: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
@@ -182,7 +182,7 @@ class Subscription(Base):
     subscription_products = relationship("SubscriptionProduct", back_populates="subscription", lazy="select")
     products = relationship(
         "ProductVariant",
-        secondary="subscription_product_association",
+        secondary="commerce.subscription_product_association",
         backref="subscriptions_containing",
         lazy="selectin"
     )
@@ -199,6 +199,7 @@ class Subscription(Base):
     # --- Relationships ---
     user = relationship("User", back_populates="subscriptions")
     delivery_address = relationship("Address", foreign_keys=[delivery_address_id])
+    shipping_method = relationship("ShippingMethod", foreign_keys=[shipping_method_id])
     orders = relationship("Order", back_populates="subscription", lazy="select")
     applied_discounts = relationship("SubscriptionDiscount", back_populates="subscription", lazy="select")
     variant_tracking_entries = relationship("VariantTrackingEntry", back_populates="subscription", lazy="select")
@@ -241,39 +242,63 @@ class Subscription(Base):
             # Payment info
             "payment_gateway": self.payment_gateway,
             "payment_reference": self.payment_reference,
-            "delivery_type": self.delivery_type,
             "delivery_address_id": str(self.delivery_address_id) if self.delivery_address_id else None,
+            "shipping_method_id": str(self.shipping_method_id) if self.shipping_method_id else None,
+            "delivery_address": {
+                "id": str(self.delivery_address.id) if self.delivery_address else None,
+                "street": self.delivery_address.street if self.delivery_address else None,
+                "city": self.delivery_address.city if self.delivery_address else None,
+                "state": self.delivery_address.state if self.delivery_address else None,
+                "country": self.delivery_address.country if self.delivery_address else None,
+                "post_code": self.delivery_address.post_code if self.delivery_address else None,
+            } if self.delivery_address else None,
+            "shipping_method": {
+                "id": str(self.shipping_method.id),
+                "name": self.shipping_method.name,
+                "price": float(self.shipping_method.price),
+                "estimated_days": self.shipping_method.estimated_days,
+                "carrier": self.shipping_method.carrier,
+            } if self.shipping_method else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
         if include_products and self.products:
-            products_dict = {}
+            products_list = []
+            quantities = {}
+            if self.subscription_metadata:
+                quantities = self.subscription_metadata.get("variant_quantities", {})
+
             for variant in self.products:
                 try:
-                    if hasattr(variant, 'product') and variant.product:
-                        pid = str(variant.product.id)
-                        if pid not in products_dict:
-                            image_url = None
-                            if hasattr(variant, 'images') and variant.images:
-                                primary_img = next(
-                                    (img for img in variant.images if getattr(img, 'is_primary', False)),
-                                    variant.images[0]
-                                )
-                                image_url = getattr(primary_img, 'url', None)
+                    image_url = None
+                    if hasattr(variant, 'images') and variant.images:
+                        primary_img = next(
+                            (img for img in variant.images if getattr(img, 'is_primary', False)),
+                            variant.images[0]
+                        )
+                        image_url = getattr(primary_img, 'url', None)
 
-                            products_dict[pid] = {
-                                "id": pid,
-                                "name": variant.product.name,
-                                "price": float(getattr(variant, 'base_price', 0)),
-                                "current_price": float(getattr(variant, 'current_price', getattr(variant, 'base_price', 0))),
-                                "image": image_url,
-                                "variant_id": str(variant.id)
-                            }
+                    qty = quantities.get(str(variant.id), 1)
+                    entry = {
+                        "variant_id": str(variant.id),
+                        "product_id": str(variant.product_id),
+                        "name": variant.product.name if variant.product else variant.name,
+                        "variant_name": variant.name,
+                        "sku": variant.sku,
+                        "price": float(getattr(variant, 'base_price', 0) or 0),
+                        "current_price": float(getattr(variant, 'current_price', None) or getattr(variant, 'base_price', 0) or 0),
+                        "quantity": qty,
+                        "image": image_url,
+                    }
+                    if variant.product:
+                        entry["id"] = str(variant.product.id)
+                        entry["slug"] = variant.product.slug
+                    products_list.append(entry)
                 except Exception:
                     continue
 
-            data["products"] = list(products_dict.values())
+            data["products"] = products_list
 
         return data
 
@@ -363,7 +388,7 @@ class SubscriptionAnalytics(Base):
     retention_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)
 
     # Currency
-    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    currency: Mapped[str] = mapped_column(String(3), default="CAD")
 
     # Breakdown by subscription type/plan (JSON)
     plan_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

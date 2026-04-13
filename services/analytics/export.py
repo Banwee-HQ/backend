@@ -310,7 +310,7 @@ class ExportService:
                     'Status': subscription.get('status', ''),
                     'Total Cost': cost_breakdown.get('total_amount', 0),
                     'Currency': cost_breakdown.get('currency', 'USD'),
-                    'Delivery Type': subscription.get('delivery_type', ''),
+                    'Shipping Method': subscription.get('shipping_method', {}).get('name', '') if subscription.get('shipping_method') else '',
                     'Billing Cycle': subscription.get('billing_cycle', ''),
                     'Variants': '; '.join(variant_names),
                     'Admin Fee': cost_breakdown.get('admin_fee', 0),

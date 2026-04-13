@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import List, Optional
 from core.db import get_db, logger
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user, require_admin, require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
@@ -125,7 +125,7 @@ async def plans(
 @router.post("/calculate-cost/")
 async def calculate(
     cost_request: CostCalculation,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
     ):
     """Calculate subscription cost with VAT before creating subscription."""
@@ -162,11 +162,11 @@ async def calculate(
                     "country": address.country,
                     "post_code": address.post_code
                 }
-        
+
         # Calculate cost
         cost_breakdown = await subscription_service._calc_cost(
             variants=variants,
-            delivery_type=cost_request.delivery_type,
+            shipping_method_id=cost_request.shipping_method_id,
             customer_address=customer_address,
             currency=cost_request.currency,
             user_id=current_user.id
@@ -193,11 +193,12 @@ async def calculate(
 @router.post("/")
 async def create(
     subscription_data: Create,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
     ):
     """Create a new subscription with product quantities and VAT calculation."""
     try:
+        logger.info(f"API: Creating subscription, user_id={current_user.id if current_user else 'None'}, data={subscription_data}")
         subscription_service = SubscriptionService(db)
         # Extract data from request
         product_variant_ids = subscription_data.variant_ids or []
@@ -216,10 +217,11 @@ async def create(
             name=subscription_data.name,
             variant_ids=product_variant_ids,
             variant_quantities=variant_quantities,
-            delivery_type=subscription_data.delivery_type,
             delivery_address_id=subscription_data.delivery_address_id,
             billing_cycle=subscription_data.billing_cycle,
-            currency=subscription_data.currency
+            currency=subscription_data.currency,
+            current_period_start=subscription_data.current_period_start,
+            shipping_method_id=subscription_data.shipping_method_id
         )
         return Response.success(
             data=subscription.to_dict(include_products=True),
@@ -243,7 +245,7 @@ async def list(
     date_to: Optional[str] = Query(None),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List subscriptions. Returns all subscriptions for admin, user's subscriptions for regular users."""
@@ -277,7 +279,7 @@ async def list(
 async def add_products(
     subscription_id: UUID,
     request: AddProducts,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
     ):
     """Add products to an existing subscription."""
@@ -309,7 +311,7 @@ async def add_products(
 async def remove_products(
     subscription_id: UUID,
     request: RemoveProducts,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
     ):
     """Remove products from an existing subscription."""
@@ -341,7 +343,7 @@ async def remove_products(
 async def update_quantity(
     subscription_id: UUID,
     request: UpdateQuantity,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update the quantity of a specific variant in a subscription."""
@@ -368,7 +370,7 @@ async def update_quantity(
 async def adjust_quantity(
     subscription_id: UUID,
     request: QuantityChange,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Increment or decrement the quantity of a specific variant in a subscription."""
@@ -393,7 +395,7 @@ async def adjust_quantity(
 @router.get("/{subscription_id}/products/quantities/")
 async def get_quantities(
     subscription_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
     ):
     """Get the quantities of all variants in a subscription."""
@@ -418,7 +420,7 @@ async def get_quantities(
 async def toggle_auto_renew(
     subscription_id: UUID,
     auto_renew: bool,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
     ):
     """Simple toggle for auto-renew setting."""
@@ -455,25 +457,58 @@ async def toggle_auto_renew(
 @router.get("/{subscription_id}/")
 async def get(
     subscription_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
-    ):
+):
     """Get a specific subscription. Admins can view any subscription, users can only view their own."""
     try:
         subscription_service = SubscriptionService(db)
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
-        
+
         if is_admin:
             subscription = await subscription_service.get(subscription_id)
         else:
             subscription = await subscription_service.get(subscription_id, current_user.id)
-            
+
         if not subscription:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Subscription not found"
             )
-        return Response.success(data=subscription)
+
+        # Load variants based on variant_ids directly (more robust than relying on association table)
+        # Also load delivery_address and shipping_method
+        from sqlalchemy.orm import selectinload
+        from models.catalog.products import ProductVariant
+
+        if subscription.variant_ids and len(subscription.variant_ids) > 0:
+            variant_uuids = [UUID(vid) for vid in subscription.variant_ids]
+            variants_result = await db.execute(
+                select(ProductVariant).where(ProductVariant.id.in_(variant_uuids))
+                .options(selectinload(ProductVariant.product), selectinload(ProductVariant.images))
+            )
+            variants = variants_result.scalars().all()
+            # Manually set products for serialization
+            subscription.products = list(variants)
+
+        # Load delivery_address and shipping_method if not already loaded
+        if not hasattr(subscription, 'delivery_address') or subscription.delivery_address is None:
+            from models.accounts.user import Address
+            if subscription.delivery_address_id:
+                address_result = await db.execute(
+                    select(Address).where(Address.id == subscription.delivery_address_id)
+                )
+                subscription.delivery_address = address_result.scalar_one_or_none()
+
+        if not hasattr(subscription, 'shipping_method') or subscription.shipping_method is None:
+            from models.commerce.shipping import ShippingMethod
+            if subscription.shipping_method_id:
+                method_result = await db.execute(
+                    select(ShippingMethod).where(ShippingMethod.id == subscription.shipping_method_id)
+                )
+                subscription.shipping_method = method_result.scalar_one_or_none()
+
+        return Response.success(data=subscription.to_dict(include_products=True))
     except APIException:
         raise
     except Exception as e:
@@ -486,7 +521,7 @@ async def update(
     subscription_id: UUID,
     subscription_data: Update,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a subscription."""
@@ -501,11 +536,12 @@ async def update(
             name=subscription_data.name if hasattr(subscription_data, 'name') else None,
             product_variant_ids=product_variant_ids,
             # Pass other updateable fields from subscription_data
-            delivery_type=subscription_data.delivery_type if hasattr(subscription_data, 'delivery_type') else None,
             delivery_address_id=subscription_data.delivery_address_id if hasattr(subscription_data, 'delivery_address_id') else None,
+            shipping_method_id=subscription_data.shipping_method_id if hasattr(subscription_data, 'shipping_method_id') else None,
             auto_renew=subscription_data.auto_renew if hasattr(subscription_data, 'auto_renew') else None,
             billing_cycle=subscription_data.billing_cycle if hasattr(subscription_data, 'billing_cycle') else None,
-            pause_reason=subscription_data.pause_reason if hasattr(subscription_data, 'pause_reason') else None
+            pause_reason=subscription_data.pause_reason if hasattr(subscription_data, 'pause_reason') else None,
+            current_period_start=subscription_data.current_period_start if hasattr(subscription_data, 'current_period_start') else None
             # Add other fields here as needed
         )
         return Response.success(data=subscription.to_dict(include_products=True), message="Subscription updated successfully")
@@ -520,7 +556,7 @@ async def update(
 async def cancel(
     subscription_id: UUID,
     reason: str = None,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel a subscription (soft delete - status update only)."""
@@ -541,7 +577,7 @@ async def cancel(
 @router.delete("/{subscription_id}/")
 async def delete(
     subscription_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a subscription."""
@@ -552,6 +588,7 @@ async def delete(
     except APIException:
         raise
     except Exception as e:
+        logger.error(f"Error deleting subscription {subscription_id}: {e}", exc_info=True)
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to delete subscription: {str(e)}"
@@ -559,7 +596,7 @@ async def delete(
 @router.post("/{subscription_id}/process-shipment/")
 async def process_shipment(
     subscription_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Manually trigger shipment processing for a subscription."""
@@ -605,7 +642,7 @@ async def pause(
     subscription_id: UUID,
     pause_reason: str = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Pause a subscription."""
@@ -629,7 +666,7 @@ async def pause(
 async def resume(
     subscription_id: UUID,
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Resume a paused subscription or activate a cancelled subscription."""
@@ -654,7 +691,7 @@ async def resume(
 async def remove_product(
     subscription_id: UUID,
     product_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Remove a specific product from a subscription."""
@@ -682,7 +719,7 @@ async def remove_product(
 async def apply_discount(
     subscription_id: UUID,
     discount_request: DiscountApplication,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Apply a discount code to a subscription."""
@@ -706,7 +743,7 @@ async def apply_discount(
 async def remove_discount(
     subscription_id: UUID,
     discount_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Remove a discount from a subscription."""
@@ -729,7 +766,7 @@ async def remove_discount(
 @router.get("/{subscription_id}/details/")
 async def details(
     subscription_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get detailed subscription information for modal display."""
@@ -814,7 +851,7 @@ async def orders(
     subscription_id: UUID,
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get orders created from a subscription."""

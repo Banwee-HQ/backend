@@ -314,7 +314,7 @@ class AnalyticsService:
             
             # Since refunds table is empty, return mock data based on orders
             total_refunds = max(1, int(total_orders * 0.05))  # 5% refund rate
-            total_refund_amount = total_revenue * 0.03  # 3% of revenue
+            total_refund_amount = float(total_revenue) * 0.03  # 3% of revenue
             
             refund_rate = (total_refunds / total_orders * 100) if total_orders > 0 else 0
             refund_amount_rate = (total_refund_amount / total_revenue * 100) if total_revenue > 0 else 0
@@ -1036,7 +1036,7 @@ class AnalyticsService:
             # Product statistics
             total_products = await self.db.scalar(select(func.count(Product.id))) or 0
             active_products = await self.db.scalar(
-                select(func.count(Product.id)).where(Product.is_active == True)
+                select(func.count(Product.id)).where(Product.product_status == "active")
             ) or 0
 
             # Subscription statistics

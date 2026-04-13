@@ -26,6 +26,16 @@ async def get_current_auth_user(
     except Exception:
         return None
 
+
+async def require_auth(
+    current_user: Optional[User] = Depends(get_current_auth_user),
+) -> User:
+    """Raises 401 if user is not authenticated."""
+    if current_user is None:
+        raise APIException(status_code=401, message="Authentication required")
+    return current_user
+
+
 def require_admin(current_user: User = Depends(get_current_auth_user)) -> User:
     from models.accounts.user import UserRole
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:

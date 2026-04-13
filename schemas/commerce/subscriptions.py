@@ -32,33 +32,35 @@ class Create(BaseModel):
     name: Optional[str] = "My Subscription"
     variant_ids: Optional[List[str]] = []
     variant_quantities: Optional[Dict[str, int]] = {}
-    delivery_type: DeliveryType = DeliveryType.STANDARD
     delivery_address_id: Optional[UUID] = None
+    shipping_method_id: Optional[UUID] = None
     billing_cycle: BillingCycle = BillingCycle.MONTHLY
-    currency: str = "USD"
+    currency: str = "CAD"
     discount_code: Optional[str] = None
     # Accept plan_id for compatibility with tests
     plan_id: Optional[str] = None
     payment_method_id: Optional[str] = None
+    current_period_start: Optional[str] = None
 
 
 class Update(BaseModel):
     """Update subscription"""
     name: Optional[str] = None
-    delivery_type: Optional[DeliveryType] = None
     delivery_address_id: Optional[UUID] = None
+    shipping_method_id: Optional[UUID] = None
     auto_renew: Optional[bool] = None
     variant_ids: Optional[List[str]] = None
     variant_quantities: Optional[Dict[str, int]] = None
+    current_period_start: Optional[str] = None
 
 
 class CostCalculation(BaseModel):
     """Request to calculate subscription cost"""
     variant_ids: List[str]
     variant_quantities: Optional[Dict[str, int]] = {}
-    delivery_type: DeliveryType = DeliveryType.STANDARD
     delivery_address_id: Optional[UUID] = None
-    currency: str = "USD"
+    shipping_method_id: Optional[UUID] = None
+    currency: str = "CAD"
 
 
 class AddProducts(BaseModel):
@@ -99,9 +101,9 @@ class Response(BaseModel):
     billing_cycle: BillingCycle
     auto_renew: bool
     next_billing_date: Optional[datetime]
-    delivery_type: Optional[DeliveryType]
     delivery_address_id: Optional[str]
-    
+    shipping_method_id: Optional[str]
+
     # At-creation prices
     price_at_creation: Optional[float]
     variant_prices_at_creation: Optional[List[Dict[str, Any]]]

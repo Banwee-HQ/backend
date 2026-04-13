@@ -147,7 +147,7 @@ async def update_promocode_statuses_task() -> str:
         if not hasattr(core_db, 'db_manager') or not core_db.db_manager:
             return "failed: db not initialized"
         
-        from services.promocode.scheduler import PromoCodeScheduler
+        from services.commerce.promocode_scheduler import PromoCodeScheduler
         
         # Use simple session without retry wrapper for scheduled tasks
         session_factory = core_db.db_manager.session_factory

@@ -33,7 +33,10 @@ class SubscriptionScheduler:
         
         # Find active subscriptions due for billing OR due for retry
         result = await self.db.execute(
-            select(Subscription).where(
+            select(Subscription).options(
+                selectinload(Subscription.shipping_method),
+                selectinload(Subscription.delivery_address),
+            ).where(
                 and_(
                     Subscription.status.in_(["active", "payment_failed"]),
                     or_(
@@ -99,6 +102,24 @@ class SubscriptionScheduler:
     async def process_subscription(self, subscription: Subscription) -> Dict[str, Any]:
         """Process a single subscription - payment first, then order"""
         try:
+            # Check subscription status before processing
+            if subscription.status not in ["active"]:
+                logger.info(f"Skipping subscription {subscription.id} - status is {subscription.status}, not active")
+                return {
+                    "success": False,
+                    "subscription_id": str(subscription.id),
+                    "message": f"Subscription is not active (status: {subscription.status})"
+                }
+
+            # Check auto-renew is enabled
+            if not subscription.auto_renew:
+                logger.info(f"Skipping subscription {subscription.id} - auto-renew is disabled")
+                return {
+                    "success": False,
+                    "subscription_id": str(subscription.id),
+                    "message": "Auto-renew is disabled"
+                }
+
             # Get user
             user_result = await self.db.execute(
                 select(User).where(User.id == subscription.user_id)
@@ -246,7 +267,7 @@ class SubscriptionScheduler:
                 discount_amount=pricing.get("discount", 0.0),
                 total_amount=pricing["total"],
                 currency=subscription.currency or "USD",
-                shipping_method=subscription.delivery_type or "standard",
+                shipping_method=subscription.shipping_method.name if subscription.shipping_method else "standard",
                 shipping_address=shipping_address,
                 billing_address=shipping_address,
                 subscription_id=subscription.id
@@ -355,12 +376,12 @@ class SubscriptionScheduler:
                     "country": address.country,
                     "post_code": address.post_code,
                     "type": "shipping",
-                    "delivery_type": subscription.delivery_type or "standard"
+                    "delivery_type": subscription.shipping_method.name if subscription.shipping_method else "standard"
                 }
-        
+
         return {
             "type": "shipping",
-            "delivery_type": subscription.delivery_type or "standard"
+            "delivery_type": subscription.shipping_method.name if subscription.shipping_method else "standard"
         }
     
     async def _update_billing_dates(self, subscription: Subscription):
