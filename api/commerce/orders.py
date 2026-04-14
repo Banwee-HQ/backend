@@ -92,7 +92,6 @@ async def list(
     limit: int = Query(10, ge=1, le=100),
     status_filter: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    customer_id: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),

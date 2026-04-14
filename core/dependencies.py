@@ -38,7 +38,11 @@ async def require_auth(
 
 def require_admin(current_user: User = Depends(get_current_auth_user)) -> User:
     from models.accounts.user import UserRole
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+    # Convert role to string for comparison since database stores it as string
+    user_role_str = str(current_user.role).lower() if current_user.role else ""
+    # Get the actual enum values, not the string representation
+    allowed_roles_str = [UserRole.ADMIN.value.lower(), UserRole.MANAGER.value.lower()]
+    if user_role_str not in allowed_roles_str:
         raise APIException(status_code=403, message="Admin access required")
     return current_user
 

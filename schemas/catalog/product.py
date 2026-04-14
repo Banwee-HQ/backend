@@ -36,7 +36,7 @@ class VariantCreate(BaseModel):
     sku: Optional[str] = None  # Optional - will be auto-generated if not provided
     name: str
     base_price: float
-    sale_price: Optional[float] = None
+    sale_price: float
     stock: int = 0
     attributes: Optional[Dict[str, Any]] = {}
     specifications: Optional[Dict[str, Any]] = None
@@ -63,7 +63,7 @@ class Create(BaseModel):
     is_bestseller: bool = False
     # Flat fields for simple product creation (auto-creates a default variant)
     base_price: Optional[float] = None
-    sale_price: Optional[float] = None
+    sale_price: float
     cost_price: Optional[float] = None
     quantity: Optional[int] = 0
     sku: Optional[str] = None

@@ -27,6 +27,10 @@ async def me(current_user: AuthUser = Depends(get_current_auth_user)):
             "full_name": f"{current_user.firstname} {current_user.lastname}",
             "phone": current_user.phone,
             "role": current_user.role.value if hasattr(current_user.role, "value") else current_user.role,
+            "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
+            "gender": current_user.gender,
+            "country": current_user.country,
+            "timezone": current_user.timezone,
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
         }
         return Response.success(data=user_data)
@@ -174,6 +178,10 @@ async def patch(
             "verification_status": updated_user.verification_status,
             "verified": updated_user.verified,
             "is_active": updated_user.is_active,
+            "date_of_birth": updated_user.date_of_birth.isoformat() if updated_user.date_of_birth else None,
+            "gender": updated_user.gender,
+            "country": updated_user.country,
+            "timezone": updated_user.timezone,
             "created_at": updated_user.created_at.isoformat() if updated_user.created_at else None,
             "updated_at": updated_user.updated_at.isoformat() if updated_user.updated_at else None,
         }

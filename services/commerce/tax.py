@@ -19,7 +19,9 @@ class TaxService:
     async def rate(
         self, 
         country_code: str, 
-        province_code: Optional[str] = None
+        province_code: Optional[str] = None,
+        province_name: Optional[str] = None,
+        country_name: Optional[str] = None
     ) -> float:
         """
         Get tax rate for a specific location
@@ -27,11 +29,13 @@ class TaxService:
         Args:
             country_code: ISO 3166-1 alpha-2 country code (e.g., "US", "CA", "GB")
             province_code: State/Province code (e.g., "CA" for California, "ON" for Ontario)
+            province_name: State/Province name (e.g., "California", "Ontario")
+            country_name: Full country name (e.g., "United States", "Canada")
         
         Returns:
             Tax rate as decimal (e.g., 0.0725 for 7.25%)
         """
-        tax_info = await self.info(country_code, province_code)
+        tax_info = await self.info(country_code, province_code, province_name, country_name)
         return tax_info.get("tax_rate", 0.0)
     
     async def calculate_tax(
@@ -60,16 +64,48 @@ class TaxService:
     async def info(
         self, 
         country_code: str, 
-        province_code: Optional[str] = None
+        province_code: Optional[str] = None,
+        province_name: Optional[str] = None,
+        country_name: Optional[str] = None
     ) -> dict:
         """
         Get detailed tax information for a location
+        
+        Args:
+            country_code: ISO 3166-1 alpha-2 country code (e.g., "US", "CA", "GB")
+            province_code: State/Province code (e.g., "CA" for California, "ON" for Ontario)
+            province_name: State/Province name (e.g., "California", "Ontario")
+            country_name: Full country name (e.g., "United States", "Canada")
         
         Returns:
             Dictionary with tax rate, name, and location info
         """
         try:
-            # Try province-specific first
+            # Try province-specific by name first
+            if province_name and country_name:
+                result = await self.db.execute(
+                    select(TaxRate).where(
+                        and_(
+                            TaxRate.country_name == country_name,
+                            TaxRate.province_name == province_name,
+                            TaxRate.is_active == True
+                        )
+                    )
+                )
+                tax_rate = result.scalar_one_or_none()
+                
+                if tax_rate:
+                    return {
+                        "country_code": tax_rate.country_code,
+                        "country_name": tax_rate.country_name,
+                        "province_code": tax_rate.province_code,
+                        "province_name": tax_rate.province_name,
+                        "tax_rate": tax_rate.tax_rate,
+                        "tax_percentage": tax_rate.tax_rate * 100,
+                        "tax_name": tax_rate.tax_name,
+                    }
+            
+            # Try province-specific by code
             if province_code:
                 result = await self.db.execute(
                     select(TaxRate).where(
@@ -93,7 +129,31 @@ class TaxService:
                         "tax_name": tax_rate.tax_name,
                     }
             
-            # Fall back to country-level
+            # Try province-specific by name with country code
+            if province_name:
+                result = await self.db.execute(
+                    select(TaxRate).where(
+                        and_(
+                            TaxRate.country_code == country_code.upper(),
+                            TaxRate.province_name == province_name,
+                            TaxRate.is_active == True
+                        )
+                    )
+                )
+                tax_rate = result.scalar_one_or_none()
+                
+                if tax_rate:
+                    return {
+                        "country_code": tax_rate.country_code,
+                        "country_name": tax_rate.country_name,
+                        "province_code": tax_rate.province_code,
+                        "province_name": tax_rate.province_name,
+                        "tax_rate": tax_rate.tax_rate,
+                        "tax_percentage": tax_rate.tax_rate * 100,
+                        "tax_name": tax_rate.tax_name,
+                    }
+            
+            # Fall back to country-level by code
             result = await self.db.execute(
                 select(TaxRate).where(
                     and_(
@@ -115,6 +175,30 @@ class TaxService:
                     "tax_percentage": tax_rate.tax_rate * 100,
                     "tax_name": tax_rate.tax_name,
                 }
+            
+            # Fall back to country-level by name
+            if country_name:
+                result = await self.db.execute(
+                    select(TaxRate).where(
+                        and_(
+                            TaxRate.country_name == country_name,
+                            TaxRate.province_code.is_(None),
+                            TaxRate.is_active == True
+                        )
+                    )
+                )
+                tax_rate = result.scalar_one_or_none()
+                
+                if tax_rate:
+                    return {
+                        "country_code": tax_rate.country_code,
+                        "country_name": tax_rate.country_name,
+                        "province_code": None,
+                        "province_name": None,
+                        "tax_rate": tax_rate.tax_rate,
+                        "tax_percentage": tax_rate.tax_rate * 100,
+                        "tax_name": tax_rate.tax_name,
+                    }
             
             # No tax rate found
             return {

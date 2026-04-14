@@ -33,7 +33,7 @@ async def calculate_tax(
         logger.info(f"Calculating tax for request: subtotal={request.subtotal}, shipping={request.shipping}, country={request.country_code}")
         
         tax_service = TaxService(db)
-        
+        print(request,'========')
         # Calculate tax amount
         tax_amount = await tax_service.calculate_tax(
             amount=request.subtotal + request.shipping,

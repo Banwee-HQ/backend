@@ -279,6 +279,7 @@ class ProductService:
                     )
             
             if filters.get("sale"):
+                # Product is on sale if any variant has a discount (discount_percentage > 0)
                 price_filters.append(
                     and_(
                         ProductVariant.sale_price.isnot(None),
@@ -1035,7 +1036,8 @@ class ProductService:
     async def delete(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
         """Delete a product and all its associated data (variants, inventory, reviews, cart item)."""
         from models.commerce.orders import OrderItem
-        
+        from models.catalog.review import Review
+
         query = select(Product).where(Product.id == product_id)
         result = await self.db.execute(query)
         product = result.scalar_one_or_none()
@@ -1047,9 +1049,12 @@ class ProductService:
         if not is_admin:
             raise HTTPException(
                 status_code=403, detail="Not authorized to delete this product")
-        
+
         # Check if product has any order items (prevent deletion of ordered products)
-        variant_ids = [variant.id for variant in product.variants]
+        variant_ids_result = await self.db.execute(
+            select(ProductVariant.id).where(ProductVariant.product_id == product_id)
+        )
+        variant_ids = [row[0] for row in variant_ids_result.fetchall()]
         if variant_ids:
             order_items = (await self.db.execute(
                 select(OrderItem).where(OrderItem.variant_id.in_(variant_ids))

@@ -216,7 +216,7 @@ class CartService:
         tax_rate = 0.0
         if country_code and subtotal > 0:
             try:
-                tax_rate = await self.tax_service.rate(country_code, province_code)
+                tax_rate = await self.tax_service.rate(country_code, province_code, province_code, country_code)
                 if tax_rate:
                     tax_amount = (subtotal * Decimal(str(tax_rate))).quantize(
                         Decimal('0.01'), rounding=ROUND_HALF_UP

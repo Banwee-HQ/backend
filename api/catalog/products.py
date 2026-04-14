@@ -375,7 +375,7 @@ async def delete(
     """Delete a product (admin only)."""
     try:
         product_service = ProductService(db)
-        await product_service.delete(product_id, current_user.id)
+        await product_service.delete(product_id, current_user.id, is_admin=True)
         return Response.success(message="Product deleted successfully")
     except APIException:
         raise

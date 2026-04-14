@@ -38,35 +38,219 @@ from schemas.common.service_types import PricingCalculationResult
 logger = get_structured_logger(__name__)
 
 
-def get_currency_from_address(address: dict) -> str:
+def get_currency_from_address(country: str) -> str:
     """Determine currency based on country in address."""
-    if not address:
+    if not country:
         return "USD"
     
-    country = address.get("country", "").upper()
+    country = country.upper()
     
-    # Map countries to their currencies
+    # Map countries to their currencies (both codes and full names)
     country_to_currency = {
-        "CA": "CAD",  # Canada
-        "US": "USD",  # United States
-        "GB": "GBP",  # United Kingdom
-        "EUR": "EUR",  # Eurozone countries
-        "AU": "AUD",  # Australia
-        "JP": "JPY",  # Japan
-        "CH": "CHF",  # Switzerland
-        "CNY": "CNY",  # China
-        "IN": "INR",  # India
-        # Add more as needed
+        # North America
+        "CA": "CAD", "CANADA": "CAD",
+        "US": "USD", "UNITED STATES": "USD", "USA": "USD",
+        "MX": "MXN", "MEXICO": "MXN",
+        "GT": "GTQ", "GUATEMALA": "GTQ",
+        "CR": "CRC", "COSTA RICA": "CRC",
+        "PA": "PAB", "PANAMA": "PAB",
+        "JM": "JMD", "JAMAICA": "JMD",
+        "DO": "DOP", "DOMINICAN REPUBLIC": "DOP",
+        "CU": "CUP", "CUBA": "CUP",
+        "HT": "HTG", "HAITI": "HTG",
+        "HN": "HNL", "HONDURAS": "HNL",
+        "NI": "NIO", "NICARAGUA": "NIO",
+        "SV": "SVC", "EL SALVADOR": "SVC",
+        "BB": "BBD", "BARBADOS": "BBD",
+        "BS": "BSD", "BAHAMAS": "BSD",
+        "TT": "TTD", "TRINIDAD AND TOBAGO": "TTD",
+        
+        # Central America
+        "BZ": "BZD", "BELIZE": "BZD",
+        
+        # Europe (Eurozone)
+        "DE": "EUR", "GERMANY": "EUR",
+        "FR": "EUR", "FRANCE": "EUR",
+        "IT": "EUR", "ITALY": "EUR",
+        "ES": "EUR", "SPAIN": "EUR",
+        "NL": "EUR", "NETHERLANDS": "EUR",
+        "BE": "EUR", "BELGIUM": "EUR",
+        "AT": "EUR", "AUSTRIA": "EUR",
+        "IE": "EUR", "IRELAND": "EUR",
+        "PT": "EUR", "PORTUGAL": "EUR",
+        "FI": "EUR", "FINLAND": "EUR",
+        "GR": "EUR", "GREECE": "EUR",
+        "LU": "EUR", "LUXEMBOURG": "EUR",
+        "MT": "EUR", "MALTA": "EUR",
+        "CY": "EUR", "CYPRUS": "EUR",
+        "EE": "EUR", "ESTONIA": "EUR",
+        "LV": "EUR", "LATVIA": "EUR",
+        "LT": "EUR", "LITHUANIA": "EUR",
+        "SK": "EUR", "SLOVAKIA": "EUR",
+        "SI": "EUR", "SLOVENIA": "EUR",
+        "HR": "EUR", "CROATIA": "EUR",
+        "AD": "EUR", "ANDORRA": "EUR",
+        "MC": "EUR", "MONACO": "EUR",
+        "SM": "EUR", "SAN MARINO": "EUR",
+        "VA": "EUR", "VATICAN CITY": "EUR",
+        
+        # Europe (Non-Eurozone)
+        "GB": "GBP", "UNITED KINGDOM": "GBP", "UK": "GBP",
+        "CH": "CHF", "SWITZERLAND": "CHF",
+        "SE": "SEK", "SWEDEN": "SEK",
+        "NO": "NOK", "NORWAY": "NOK",
+        "DK": "DKK", "DENMARK": "DKK",
+        "PL": "PLN", "POLAND": "PLN",
+        "CZ": "CZK", "CZECH REPUBLIC": "CZK",
+        "HU": "HUF", "HUNGARY": "HUF",
+        "RO": "RON", "ROMANIA": "RON",
+        "BG": "BGN", "BULGARIA": "BGN",
+        "IS": "ISK", "ICELAND": "ISK",
+        "UA": "UAH", "UKRAINE": "UAH",
+        "RU": "RUB", "RUSSIA": "RUB",
+        "BY": "BYN", "BELARUS": "BYN",
+        "MD": "MDL", "MOLDOVA": "MDL",
+        "GE": "GEL", "GEORGIA": "GEL",
+        "AM": "AMD", "ARMENIA": "AMD",
+        "AZ": "AZN", "AZERBAIJAN": "AZN",
+        "KZ": "KZT", "KAZAKHSTAN": "KZT",
+        "RS": "RSD", "SERBIA": "RSD",
+        "BA": "BAM", "BOSNIA AND HERZEGOVINA": "BAM",
+        "ME": "EUR", "MONTENEGRO": "EUR",
+        "MK": "MKD", "NORTH MACEDONIA": "MKD",
+        "AL": "ALL", "ALBANIA": "ALL",
+        "XK": "EUR", "KOSOVO": "EUR",
+        "LI": "CHF", "LIECHTENSTEIN": "CHF",
+        
+        # Asia
+        "JP": "JPY", "JAPAN": "JPY",
+        "CN": "CNY", "CHINA": "CNY",
+        "IN": "INR", "INDIA": "INR",
+        "KR": "KRW", "SOUTH KOREA": "KRW", "KOREA": "KRW",
+        "KP": "KPW", "NORTH KOREA": "KPW",
+        "SG": "SGD", "SINGAPORE": "SGD",
+        "HK": "HKD", "HONG KONG": "HKD",
+        "MY": "MYR", "MALAYSIA": "MYR",
+        "TH": "THB", "THAILAND": "THB",
+        "ID": "IDR", "INDONESIA": "IDR",
+        "PH": "PHP", "PHILIPPINES": "PHP",
+        "VN": "VND", "VIETNAM": "VND",
+        "TW": "TWD", "TAIWAN": "TWD",
+        "BN": "BND", "BRUNEI": "BND",
+        "KH": "KHR", "CAMBODIA": "KHR",
+        "LA": "LAK", "LAOS": "LAK",
+        "MM": "MMK", "MYANMAR": "MMK",
+        "BD": "BDT", "BANGLADESH": "BDT",
+        "LK": "LKR", "SRI LANKA": "LKR",
+        "NP": "NPR", "NEPAL": "NPR",
+        "PK": "PKR", "PAKISTAN": "PKR",
+        "AF": "AFN", "AFGHANISTAN": "AFN",
+        "MV": "MVR", "MALDIVES": "MVR",
+        "BT": "BTN", "BHUTAN": "BTN",
+        "MO": "MOP", "MACAU": "MOP",
+        
+        # Central Asia
+        "UZ": "UZS", "UZBEKISTAN": "UZS",
+        "KG": "KGS", "KYRGYZSTAN": "KGS",
+        "TJ": "TJS", "TAJIKISTAN": "TJS",
+        "TM": "TMT", "TURKMENISTAN": "TMT",
+        
+        # Middle East
+        "IL": "ILS", "ISRAEL": "ILS",
+        "SA": "SAR", "SAUDI ARABIA": "SAR",
+        "AE": "AED", "UNITED ARAB EMIRATES": "AED",
+        "QA": "QAR", "QATAR": "QAR",
+        "TR": "TRY", "TURKEY": "TRY",
+        "IR": "IRR", "IRAN": "IRR",
+        "IQ": "IQD", "IRAQ": "IQD",
+        "KW": "KWD", "KUWAIT": "KWD",
+        "BH": "BHD", "BAHRAIN": "BHD",
+        "OM": "OMR", "OMAN": "OMR",
+        "JO": "JOD", "JORDAN": "JOD",
+        "LB": "LBP", "LEBANON": "LBP",
+        "SY": "SYP", "SYRIA": "SYP",
+        "YE": "YER", "YEMEN": "YER",
+        "PS": "ILS", "PALESTINE": "ILS",
+        
+        # Oceania
+        "AU": "AUD", "AUSTRALIA": "AUD",
+        "NZ": "NZD", "NEW ZEALAND": "NZD",
+        "PG": "PGK", "PAPUA NEW GUINEA": "PGK",
+        "FJ": "FJD", "FIJI": "FJD",
+        "SB": "SBD", "SOLOMON ISLANDS": "SBD",
+        "VU": "VUV", "VANUATU": "VUV",
+        "WS": "WST", "SAMOA": "WST",
+        "TO": "TOP", "TONGA": "TOP",
+        "NU": "NZD", "NIUE": "NZD",
+        "CK": "NZD", "COOK ISLANDS": "NZD",
+        
+        # South America
+        "BR": "BRL", "BRAZIL": "BRL",
+        "AR": "ARS", "ARGENTINA": "ARS",
+        "CL": "CLP", "CHILE": "CLP",
+        "CO": "COP", "COLOMBIA": "COP",
+        "PE": "PEN", "PERU": "PEN",
+        "VE": "VES", "VENEZUELA": "VES",
+        "EC": "USD", "ECUADOR": "USD",
+        "BO": "BOB", "BOLIVIA": "BOB",
+        "PY": "PYG", "PARAGUAY": "PYG",
+        "UY": "UYU", "URUGUAY": "UYU",
+        "GY": "GYD", "GUYANA": "GYD",
+        "SR": "SRD", "SURINAME": "SRD",
+        "GF": "EUR", "FRENCH GUIANA": "EUR",
+        
+        # Africa
+        "ZA": "ZAR", "SOUTH AFRICA": "ZAR",
+        "EG": "EGP", "EGYPT": "EGP",
+        "NG": "NGN", "NIGERIA": "NGN",
+        "KE": "KES", "KENYA": "KES",
+        "MA": "MAD", "MOROCCO": "MAD",
+        "DZ": "DZD", "ALGERIA": "DZD",
+        "TN": "TND", "TUNISIA": "TND",
+        "LY": "LYD", "LIBYA": "LYD",
+        "GH": "GHS", "GHANA": "GHS",
+        "ET": "ETB", "ETHIOPIA": "ETB",
+        "TZ": "TZS", "TANZANIA": "TZS",
+        "UG": "UGX", "UGANDA": "UGX",
+        "RW": "RWF", "RWANDA": "RWF",
+        "BW": "BWP", "BOTSWANA": "BWP",
+        "ZM": "ZMW", "ZAMBIA": "ZMW",
+        "ZW": "ZWL", "ZIMBABWE": "ZWL",
+        "MW": "MWK", "MALAWI": "MWK",
+        "MZ": "MZN", "MOZAMBIQUE": "MZN",
+        "AO": "AOA", "ANGOLA": "AOA",
+        "CD": "CDF", "DEMOCRATIC REPUBLIC OF THE CONGO": "CDF",
+        "CG": "XAF", "CONGO": "XAF",
+        "CI": "XOF", "IVORY COAST": "XOF",
+        "SN": "XOF", "SENEGAL": "XOF",
+        "ML": "XOF", "MALI": "XOF",
+        "BF": "XOF", "BURKINA FASO": "XOF",
+        "NE": "XOF", "NIGER": "XOF",
+        "TD": "XAF", "CHAD": "XAF",
+        "CM": "XAF", "CAMEROON": "XAF",
+        "GA": "XAF", "GABON": "XAF",
+        "CF": "XAF", "CENTRAL AFRICAN REPUBLIC": "XAF",
+        "DJ": "DJF", "DJIBOUTI": "DJF",
+        "ER": "ERN", "ERITREA": "ERN",
+        "SO": "SOS", "SOMALIA": "SOS",
+        "SS": "SSP", "SOUTH SUDAN": "SSP",
+        "GM": "GMD", "GAMBIA": "GMD",
+        "GN": "GNF", "GUINEA": "GNF",
+        "SL": "SLL", "SIERRA LEONE": "SLL",
+        "LR": "LRD", "LIBERIA": "LRD",
+        "BI": "BIF", "BURUNDI": "BIF",
+        "MG": "MGA", "MADAGASCAR": "MGA",
+        "MU": "MUR", "MAURITIUS": "MUR",
+        "SC": "SCR", "SEYCHELLES": "SCR",
+        "KM": "KMF", "COMOROS": "KMF",
+        "ST": "STN", "SAO TOME AND PRINCIPE": "STN",
+        "CV": "CVE", "CAPE VERDE": "CVE",
+        "EH": "MAD", "WESTERN SAHARA": "MAD",
+        "NA": "NAD", "NAMIBIA": "NAD",
+        "SZ": "SZL", "ESWATINI": "SZL",
+        "LS": "LSL", "LESOTHO": "LSL",
+        "MR": "MRU", "MAURITANIA": "MRU",
     }
-    
-    # For European countries, use EUR
-    european_countries = [
-        "DE", "FR", "IT", "ES", "NL", "BE", "AT", "IE", "PT", "FI", "GR",
-        "LU", "MT", "CY", "EE", "LV", "LT", "SK", "SI"
-    ]
-    
-    if country in european_countries:
-        return "EUR"
     
     return country_to_currency.get(country, "USD")
 
@@ -165,10 +349,15 @@ class OrderService:
             logger.info(f"Shipping cost: ${shipping_cost} ({shipping_method.name})")
         
         # Step 3: Calculate tax based on shipping address
+        
         tax_rate = await self.tax_service.rate(
-            shipping_address.country or "US",
-            shipping_address.state
+            country_code=None, 
+            province_code=None, 
+            province_name=shipping_address.state,
+            country_name=shipping_address.country or "United States"
         )
+        # print(shipping_address.country,'====',
+        #     shipping_address.state, tax_rate)
         # Tax is calculated on subtotal only (not shipping in most jurisdictions)
         tax_amount = (subtotal * Decimal(str(tax_rate))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         logger.info(f"Tax calculation", metadata={
@@ -457,14 +646,14 @@ class OrderService:
         )
         shipping_method = shipping_method_result.scalar_one()
         
+        
         try:
             # Step 3: PROCESS PAYMENT FIRST (before creating order)
             # Generate a temp order id and deterministic order number using it
             temp_order_id = uuid7()  # Temporary ID for payment processing
             order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[:12].upper()}"
-            # Create a placeholder order record so payment_intents can FK to it
-            # Determine currency from shipping address if available
-            temp_currency = get_currency_from_address(shipping_address_dict) if shipping_address_dict else "USD"
+            
+            temp_currency = get_currency_from_address(shipping_address.country) if shipping_address.country else "USD"
             
             placeholder_order = Order(
                 id=temp_order_id,

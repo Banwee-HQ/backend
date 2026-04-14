@@ -22,75 +22,33 @@ router = APIRouter(prefix="/auth/social", tags=["OAuth"])
 # OAuth provider configurations
 OAUTH_PROVIDERS = {
     "google": {
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
         "user_info_url": "https://www.googleapis.com/oauth2/v2/userinfo",
-        "scope": "openid email profile"
     },
     "facebook": {
-        "auth_url": "https://www.facebook.com/v18.0/dialog/oauth",
-        "token_url": "https://graph.facebook.com/v18.0/oauth/access_token", 
         "user_info_url": "https://graph.facebook.com/me",
-        "scope": "email,public_profile"
     }
 }
 
-@router.get("/{provider}/login/")
-async def oauth_login(provider: str):
-    """Initiate OAuth flow by redirecting to provider"""
-    if provider not in OAUTH_PROVIDERS:
-        raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
-    
-    provider_config = OAUTH_PROVIDERS[provider]
-    
-    if provider == "google":
-        params = {
-            "client_id": settings.GOOGLE_CLIENT_ID,
-            "redirect_uri": f"{settings.FRONTEND_URL}/auth/oauth/{provider}/callback",
-            "response_type": "code",
-            "scope": provider_config["scope"],
-            "access_type": "offline",
-            "state": secrets.token_urlsafe(16)
-        }
-        auth_url = f"{provider_config['auth_url']}?{httpx.QueryParams(params)}"
-        
-    elif provider == "facebook":
-        params = {
-            "client_id": settings.FACEBOOK_APP_ID,
-            "redirect_uri": f"{settings.FRONTEND_URL}/auth/oauth/{provider}/callback",
-            "response_type": "code",
-            "scope": provider_config["scope"],
-            "state": secrets.token_urlsafe(16)
-        }
-        auth_url = f"{provider_config['auth_url']}?{httpx.QueryParams(params)}"
-    
-    return Response.success(data={"auth_url": auth_url})
-
-@router.get("/callback/{provider}/")
-async def oauth_callback(
-    provider: str, 
-    code: str, 
-    state: str = None,
+@router.post("/google")
+async def google_oauth_credential(
+    credential: str = None,
+    mode: str = "login",
     db: AsyncSession = Depends(get_db)
 ):
-    """Handle OAuth callback from provider"""
-    if provider not in OAUTH_PROVIDERS:
-        raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
-    
+    """Handle Google OAuth credential from client-side (Google Identity Services)"""
+    if not credential:
+        raise HTTPException(status_code=400, detail="Google credential is required")
+
     try:
-        # Exchange authorization code for access token
-        access_token = await get_access_token(provider, code)
-        
-        # Get user info from provider
-        user_info = await get_user_info(provider, access_token)
-        
+        # Verify Google credential and get user info
+        user_info = await verify_google_credential(credential)
+
         # Find or create user
-        user = await find_or_create_user(db, provider, user_info)
-        
-        # Generate JWT tokens (same as regular auth)
+        user = await find_or_create_user(db, "google", user_info)
+
+        # Generate JWT tokens
         auth_service = AuthService(db)
-        
-        # Create token data
+
         token_data = {
             "sub": str(user.id),
             "email": user.email,
@@ -98,10 +56,9 @@ async def oauth_callback(
             "is_active": user.is_active
         }
 
-        # Create access and refresh tokens
         access_token = auth_service.make_access_token(token_data)
         refresh_token = await auth_service.make_refresh_token(token_data)
-        
+
         return Response.success(data={
             "access_token": access_token,
             "token_type": "bearer",
@@ -120,52 +77,109 @@ async def oauth_callback(
                 "created_at": user.created_at.isoformat() if user.created_at else None
             }
         })
-        
+
     except Exception as e:
         raise HTTPException(
-            status_code=400, 
-            detail=f"OAuth authentication failed: {str(e)}"
+            status_code=400,
+            detail=f"Google authentication failed: {str(e)}"
         )
 
-async def get_access_token(provider: str, code: str) -> str:
-    """Exchange authorization code for access token"""
-    provider_config = OAUTH_PROVIDERS[provider]
-    
-    if provider == "google":
-        data = {
-            "client_id": settings.GOOGLE_CLIENT_ID,
-            "client_secret": settings.GOOGLE_CLIENT_SECRET,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": f"{settings.FRONTEND_URL}/auth/oauth/{provider}/callback"
+@router.post("/facebook")
+async def facebook_oauth_credential(
+    access_token: str = None,
+    user_id: str = None,
+    mode: str = "login",
+    db: AsyncSession = Depends(get_db)
+):
+    """Handle Facebook OAuth credential from client-side (Facebook Login SDK)"""
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Facebook access token is required")
+
+    try:
+        # Get user info from Facebook using access token
+        user_info = await get_user_info("facebook", access_token)
+
+        # Find or create user
+        user = await find_or_create_user(db, "facebook", user_info)
+
+        # Generate JWT tokens
+        auth_service = AuthService(db)
+
+        token_data = {
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "is_active": user.is_active
         }
-        
-    elif provider == "facebook":
-        data = {
-            "client_id": settings.FACEBOOK_APP_ID,
-            "client_secret": settings.FACEBOOK_APP_SECRET,
-            "code": code,
-            "redirect_uri": f"{settings.FRONTEND_URL}/auth/oauth/{provider}/callback"
+
+        access_token_jwt = auth_service.make_access_token(token_data)
+        refresh_token = await auth_service.make_refresh_token(token_data)
+
+        return Response.success(data={
+            "access_token": access_token_jwt,
+            "token_type": "bearer",
+            "refresh_token": refresh_token,
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "firstname": user.firstname,
+                "lastname": user.lastname,
+                "phone": user.phone,
+                "role": user.role,
+                "verified": user.verified,
+                "is_active": user.is_active,
+                "avatar_url": user.avatar_url,
+                "created_at": user.created_at.isoformat() if user.created_at else None
+            }
+        })
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Facebook authentication failed: {str(e)}"
+        )
+
+async def verify_google_credential(credential: str) -> dict:
+    """Verify Google ID token and get user info"""
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+
+    try:
+        # Verify the ID token
+        id_info = google.oauth2.id_token.verify_oauth2_token(
+            credential,
+            google.auth.transport.requests.Request(),
+            settings.GOOGLE_CLIENT_ID
+        )
+
+        # Extract user info
+        return {
+            "email": id_info.get("email"),
+            "name": id_info.get("name"),
+            "picture": id_info.get("picture"),
+            "given_name": id_info.get("given_name"),
+            "family_name": id_info.get("family_name")
         }
-    
-    async with httpx.AsyncClient() as client:
-        response = await client.post(provider_config["token_url"], data=data)
-        response.raise_for_status()
-        return response.json()["access_token"]
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to verify Google credential: {str(e)}"
+        )
 
 async def get_user_info(provider: str, access_token: str) -> dict:
     """Get user information from OAuth provider"""
     provider_config = OAUTH_PROVIDERS[provider]
-    
+
     if provider == "google":
         params = {"access_token": access_token}
-        
+
     elif provider == "facebook":
         params = {
             "fields": "id,name,email,picture",
             "access_token": access_token
         }
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(provider_config["user_info_url"], params=params)
         response.raise_for_status()
