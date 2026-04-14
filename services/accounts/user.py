@@ -97,7 +97,7 @@ class UserService:
 
         # User verification complete - no welcome email needed
 
-    async def list(self, page: int = 1, limit: int = 10, role: Optional[str] = None, query: Optional[str] = None) -> dict:
+    async def list(self, page: int = 1, limit: int = 10, role: Optional[str] = None, query: Optional[str] = None, status: Optional[str] = None) -> dict:
         """Get paginated list of users with order count"""
         offset = (page - 1) * limit
 
@@ -115,6 +115,14 @@ class UserService:
         if role:
             base_query = base_query.where(User.role == role)
 
+        # Apply status filter if provided
+        if status:
+            # Check if status is account_status (active/inactive) or verification_status
+            if status in ['active', 'inactive']:
+                base_query = base_query.where(User.account_status == status)
+            else:
+                base_query = base_query.where(User.verification_status == status)
+
         # Apply search query if provided
         if query:
             search_term = f"%{query}%"
@@ -131,6 +139,12 @@ class UserService:
         count_query = select(func.count()).select_from(User)
         if role:
             count_query = count_query.where(User.role == role)
+        if status:
+            # Check if status is account_status (active/inactive) or verification_status
+            if status in ['active', 'inactive']:
+                count_query = count_query.where(User.account_status == status)
+            else:
+                count_query = count_query.where(User.verification_status == status)
         count_result = await self.db.execute(count_query)
         total = count_result.scalar()
 

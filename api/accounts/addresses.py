@@ -1,10 +1,10 @@
 """
 Standalone address endpoints at /v1/addresses
 """
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 
 from core.db import get_db
 from core.utils.response import Response
@@ -30,6 +30,8 @@ async def create(
         service = AddressService(db)
         address = await service.create(user_id=current_user.id, **payload.model_dump(exclude_none=True))
         return Response.success(data=address, message="Address created successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating address: {e}")
         raise APIException(
@@ -53,6 +55,8 @@ async def get(
         return Response.success(data=address, message="Address retrieved successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -64,16 +68,19 @@ async def get(
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all addresses for current user with pagination."""
+    """List all addresses for current user with pagination and search."""
     try:
         service = AddressService(db)
-        result = await service.list(current_user.id, page=page, limit=limit)
+        result = await service.list(current_user.id, page=page, limit=limit, search=search)
         if isinstance(result, dict) and "data" in result and "pagination" in result:
             return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Addresses retrieved successfully")
         return Response.success(data=result, message="Addresses retrieved successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -97,6 +104,8 @@ async def patch(
         updated = await service.update(address_id, current_user.id, **payload.model_dump(exclude_unset=True, exclude_none=True))
         return Response.success(data=updated, message="Address updated successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -122,6 +131,8 @@ async def delete(
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Address not found")
         return Response.success(message="Address deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

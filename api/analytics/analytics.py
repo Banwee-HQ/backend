@@ -313,20 +313,46 @@ async def sales_trend(
 ):
     """Get sales trend data over specified number of days."""
     try:
+        analytics_service = AnalyticsService(db)
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
-        
-        trend_data = await get_sales_trend_data(db, start_date=start_date, end_date=end_date)
-        
+
+        trend_data = await analytics_service.get_sales_trend_data(start_date=start_date, end_date=end_date)
+
         return Response.success(
             data=trend_data,
             message="Sales trend data retrieved successfully"
         )
-        
+
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to retrieve sales trend data: {str(e)}"
+        )
+
+@router.get("/users-growth-trend/")
+async def users_growth_trend(
+    days: int = Query(30),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get users growth trend data over specified number of days."""
+    try:
+        analytics_service = AnalyticsService(db)
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=days)
+
+        trend_data = await analytics_service.get_users_growth_trend(start_date=start_date, end_date=end_date)
+
+        return Response.success(
+            data=trend_data,
+            message="Users growth trend data retrieved successfully"
+        )
+
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to retrieve users growth trend data: {str(e)}"
         )
 
 
@@ -661,6 +687,8 @@ async def admin_stats(
         return Response.success(data=stats)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -683,6 +711,8 @@ async def admin_dashboard(
         overview = await analytics_service.get_admin_overview()
         return Response.success(data=overview)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

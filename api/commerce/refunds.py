@@ -1,7 +1,7 @@
 """
 Refunds API - Unified routes with role-based access
 """
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
@@ -34,6 +34,8 @@ async def create(
         )
         return Response.success(data=refund, message="Refund created successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -117,6 +119,8 @@ async def get(
         return Response.success(data=refund)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -165,6 +169,8 @@ async def update_status(
         return Response.success(data=refund, message="Refund status updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -185,6 +191,8 @@ async def patch(
         refund = await refund_service.patch(refund_id, payload)
         return Response.success(data=refund, message="Refund updated successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

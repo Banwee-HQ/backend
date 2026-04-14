@@ -37,6 +37,8 @@ async def create_location(
         return Response.success(data=location, message="Warehouse location created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create location: {e}")
 
@@ -55,6 +57,8 @@ async def get_location(
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Warehouse location not found")
         return Response.success(data=location, message="Warehouse location retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch location: {e}")
@@ -92,6 +96,8 @@ async def update_location(
         return Response.success(data=location, message="Warehouse location updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update location: {e}")
 
@@ -108,6 +114,8 @@ async def delete_location(
         await inventory_service.delete_location(location_id)
         return Response.success(message="Warehouse location deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete location: {e}")
@@ -129,6 +137,8 @@ async def create(
         return Response.success(data=item, message="Inventory item created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create inventory item: {e}")
 
@@ -148,6 +158,8 @@ async def get(
         return Response.success(data=item, message="Inventory item retrieved successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch inventory item: {e}")
 
@@ -158,7 +170,11 @@ async def list(
     limit: int = Query(10, ge=1, le=100),
     product_id: Optional[UUID] = Query(None),
     location_id: Optional[UUID] = Query(None),
+    location_name: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    low_stock: Optional[bool] = Query(None),
+    in_stock: Optional[bool] = Query(None),
+    out_of_stock: Optional[bool] = Query(None),
     sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db)
@@ -171,7 +187,11 @@ async def list(
             limit=limit,
             product_id=product_id,
             location_id=location_id,
+            location_name=location_name,
             search=search,
+            low_stock=low_stock,
+            in_stock=in_stock,
+            out_of_stock=out_of_stock,
             sort_by=sort_by,
             sort_order=sort_order
         )
@@ -203,6 +223,8 @@ async def patch(
         return Response.success(data=item, message="Inventory item updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update inventory item: {e}")
 
@@ -219,6 +241,8 @@ async def delete(
         await inventory_service.delete(inventory_id)
         return Response.success(message="Inventory item deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete inventory item: {e}")
@@ -240,6 +264,8 @@ async def create_adj(
         return Response.success(data=updated_inventory, message="Stock adjusted successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to adjust stock: {e}")
 
@@ -258,6 +284,8 @@ async def get_adj(
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
         return Response.success(data=adjustment, message="Stock adjustment retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustment: {e}")
@@ -296,6 +324,8 @@ async def delete_adj(
             raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
         return Response.success(message="Stock adjustment deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete stock adjustment: {e}")

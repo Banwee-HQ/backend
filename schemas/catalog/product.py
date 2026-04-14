@@ -99,7 +99,7 @@ class Update(BaseModel):
     slug: Optional[str] = None
     description: Optional[str] = None
     short_description: Optional[str] = None
-    category_id: Optional[UUID] = None
+    category: Optional[str] = None
     origin: Optional[str] = None
     product_status: Optional[ProductStatus] = None
     is_featured: Optional[bool] = None
@@ -166,7 +166,8 @@ class Response(BaseModel):
     slug: Optional[str] = None
     description: Optional[str]
     category: Optional[str] = None
-    featured: bool
+    is_featured: bool = False
+    is_bestseller: bool = False
     rating: float
     review_count: int
     origin: Optional[str]

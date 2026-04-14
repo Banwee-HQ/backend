@@ -217,7 +217,7 @@ class InventoryService:
             logger.error(f"Error serializing inventory item", metadata={"item_id": str(item.id)}, exception=e)
             return None
 
-    async def list(self, page: int = 1, limit: int = 10, product_id: Optional[UUID] = None, location_id: Optional[UUID] = None, low_stock: Optional[bool] = None, search: Optional[str] = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> dict:
+    async def list(self, page: int = 1, limit: int = 10, product_id: Optional[UUID] = None, location_id: Optional[UUID] = None, location_name: Optional[str] = None, low_stock: Optional[bool] = None, in_stock: Optional[bool] = None, out_of_stock: Optional[bool] = None, search: Optional[str] = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> dict:
         try:
             logger.info(f"get_all_inventory_items called", metadata={
                 "page": page,
@@ -242,11 +242,23 @@ class InventoryService:
                 conditions.append(Inventory.variant.has(ProductVariant.product_id == product_id))
             if location_id:
                 conditions.append(Inventory.location_id == location_id)
+            if location_name:
+                conditions.append(Inventory.location.has(WarehouseLocation.name == location_name))
             if low_stock is not None:
                 if low_stock:
                     conditions.append(Inventory.quantity_available <= Inventory.low_stock_threshold)
                 else:
                     conditions.append(Inventory.quantity_available > Inventory.low_stock_threshold)
+            if in_stock is not None:
+                if in_stock:
+                    conditions.append(Inventory.quantity_available > Inventory.low_stock_threshold)
+                else:
+                    conditions.append(Inventory.quantity_available <= Inventory.low_stock_threshold)
+            if out_of_stock is not None:
+                if out_of_stock:
+                    conditions.append(Inventory.quantity_available == 0)
+                else:
+                    conditions.append(Inventory.quantity_available > 0)
             if search:
                 # Search in product name, variant name, variant SKU, and location name
                 search_term = f"%{search.lower()}%"

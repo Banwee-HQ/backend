@@ -270,6 +270,8 @@ async def list(
             return Response.success(data=result)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -333,6 +335,8 @@ async def remove_products(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error removing products from subscription: {e}")
         raise APIException(
@@ -357,6 +361,8 @@ async def update_quantity(
             message=f"Variant quantity updated to {request.quantity} successfully"
         )
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error updating variant quantity: {e}")
@@ -386,6 +392,8 @@ async def adjust_quantity(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error adjusting variant quantity: {e}")
         raise APIException(
@@ -409,6 +417,8 @@ async def get_quantities(
             message="Variant quantities retrieved successfully"
         )
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting variant quantities: {e}")
@@ -447,6 +457,8 @@ async def toggle_auto_renew(
                 message=f"Auto-renew {'enabled' if auto_renew else 'disabled'}"
             )
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error updating auto-renew: {e}")
@@ -511,6 +523,8 @@ async def get(
         return Response.success(data=subscription.to_dict(include_products=True))
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -547,6 +561,8 @@ async def update(
         return Response.success(data=subscription.to_dict(include_products=True), message="Subscription updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -569,6 +585,8 @@ async def cancel(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -586,6 +604,8 @@ async def delete(
         await subscription_service.delete(subscription_id, current_user.id)
         return Response.success(message="Subscription deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting subscription {subscription_id}: {e}", exc_info=True)
@@ -632,6 +652,8 @@ async def process_shipment(
             )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -657,6 +679,8 @@ async def pause(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -681,6 +705,8 @@ async def resume(
             message=f"Subscription {action_message} successfully"
         )
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -840,6 +866,8 @@ async def details(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting subscription details: {e}")
         raise APIException(
@@ -862,6 +890,8 @@ async def orders(
         )
         return Response.success(data=orders)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

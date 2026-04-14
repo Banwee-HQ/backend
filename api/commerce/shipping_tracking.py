@@ -60,6 +60,8 @@ async def create_shipment(
     
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=500,
@@ -111,6 +113,8 @@ async def track(
     
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=500,
@@ -139,6 +143,8 @@ async def update_shipment_status(
         )
     
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.subscriptions import Subscription
 from models.catalog.product import ProductVariant
-from models.accounts.user import Address
+from models.accounts.user import Address, User
 from models.commerce.promocode import Promocode
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
@@ -376,13 +376,13 @@ class SubscriptionService:
         if search and not user_id:
             search_term = f"%{search}%"
             from sqlalchemy import or_
-            base_query = base_query.where(
-                or_(
-                    User.email.ilike(search_term),
-                    User.firstname.ilike(search_term),
-                    User.lastname.ilike(search_term),
-                )
+            search_condition = or_(
+                User.email.ilike(search_term),
+                User.firstname.ilike(search_term),
+                User.lastname.ilike(search_term),
             )
+            base_query = base_query.join(User, Subscription.user_id == User.id).where(search_condition)
+            count_query = select(sqlfunc.count(Subscription.id)).select_from(Subscription).join(User, Subscription.user_id == User.id).where(search_condition)
 
         # Apply date filters
         if date_from:

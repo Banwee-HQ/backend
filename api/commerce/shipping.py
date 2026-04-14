@@ -2,7 +2,7 @@
 Shipping routes for managing shipping methods and calculating shipping costs
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
@@ -42,15 +42,27 @@ async def list(
             if current_user is None:
                 raise APIException(status_code=401, message="Authentication required")
             _ = require_admin(current_user)
-            methods = await shipping_service.get_all_methods(
+            methods_data = await shipping_service.get_all_methods(
                 page=page, limit=limit, is_active=is_active
             )
-            return Response.success(data=methods)
+            # Convert items to schema
+            items = [MethodInDB.model_validate(item) for item in methods_data.get("items", [])]
+            return Response.success(
+                data=items,
+                pagination={
+                    "page": methods_data.get("page"),
+                    "limit": methods_data.get("limit"),
+                    "total": methods_data.get("total"),
+                    "pages": methods_data.get("pages")
+                }
+            )
         # Regular users get active methods only
         methods = await shipping_service.list(active_only=True)
         methods_data = [MethodInDB.model_validate(method) for method in methods]
         return Response.success(data=methods_data)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting shipping methods: {e}")
@@ -81,6 +93,8 @@ async def get(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting shipping method {method_id}: {e}")
         raise APIException(
@@ -106,6 +120,8 @@ async def create(
             code=status.HTTP_201_CREATED
         )
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error creating shipping method: {e}")
@@ -138,6 +154,8 @@ async def patch(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating shipping method {method_id}: {e}")
         raise APIException(
@@ -158,6 +176,8 @@ async def delete(
         await shipping_service.delete(method_id)
         return Response.success(message="Shipping method deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting shipping method {method_id}: {e}")

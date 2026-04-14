@@ -3,10 +3,12 @@ from sqlalchemy import select, and_, or_, func, text, desc, update, delete
 from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any, TypeVar
 from uuid import UUID
+import uuid
 from core.utils.uuid_utils import uuid7
 from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage, AvailabilityStatus
-from models.catalog.inventories import Inventory
+from models.catalog.inventories import Inventory, StockAdjustment
 from models.commerce.cart import CartItem
+from models.commerce.orders import OrderItem
 from schemas.catalog.product import (
     Create as ProductCreate, Update as ProductUpdate, Response as ProductResponse,
     VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate,
@@ -166,7 +168,8 @@ class ProductService:
                 name=product.name,
                 slug=getattr(product, 'slug', None),
                 description=product.description,
-                featured=product.is_featured,
+                is_featured=product.is_featured,
+                is_bestseller=product.is_bestseller,
                 rating=product.rating_average,
                 review_count=product.review_count,
                 origin=getattr(product, 'origin', ''),
@@ -786,10 +789,10 @@ class ProductService:
                 status_code=403, detail="Not authorized to update this product")
 
         # Update product fields
-        update_dict = product_data.dict(exclude_unset=True, exclude={'variants'})
+        update_dict = product_data.dict(exclude={'variants'})
         for field, value in update_dict.items():
             setattr(product, field, value)
-        
+
         logger.info(f"Updated product fields: {update_dict}")
 
         # Handle variant updates if provided
@@ -872,10 +875,14 @@ class ProductService:
                                         incoming_image_ids.add(img_id)
                                 
                                 # Delete images that are no longer in the list
+                                images_to_delete = []
                                 for img in variant.images[:]:
                                     if img.id not in incoming_image_ids:
                                         logger.info(f"Deleting removed image {img.id}")
-                                        self.db.delete(img)
+                                        images_to_delete.append(img)
+                                # Remove from the collection to trigger cascade delete
+                                for img in images_to_delete:
+                                    variant.images.remove(img)
                                 
                                 # Update existing images or create new ones
                                 for img_idx, img_data in enumerate(variant_data.images):
@@ -913,11 +920,12 @@ class ProductService:
                                                 sort_order=img_data.get('sort_order', img_idx)
                                             )
                                             self.db.add(image)
+                                            variant.images.append(image)
                             else:
                                 # Empty images array means delete all images
                                 logger.info(f"Deleting all images for variant {variant_id}")
                                 for img in variant.images[:]:
-                                    self.db.delete(img)
+                                    variant.images.remove(img)
                     else:
                         logger.warning(f"Variant {variant_id} not found in product variants")
                 else:
@@ -966,17 +974,51 @@ class ProductService:
             
             # Delete variants that were removed (keep at least one variant)
             variants_to_delete = existing_variant_ids - updated_variant_ids
+            logger.info(f"Existing variant IDs: {existing_variant_ids}")
+            logger.info(f"Updated variant IDs: {updated_variant_ids}")
+            logger.info(f"Variants to delete: {variants_to_delete}")
             if variants_to_delete and len(updated_variant_ids) > 0:
                 logger.info(f"Deleting {len(variants_to_delete)} variants: {variants_to_delete}")
                 for variant in product.variants[:]:
                     if str(variant.id) in variants_to_delete:
-                        # Delete associated inventory
-                        if variant.inventory:
-                            self.db.delete(variant.inventory)
-                        # Delete associated images
-                        for img in variant.images:
-                            self.db.delete(img)
-                        self.db.delete(variant)
+                        logger.info(f"Deleting variant {variant.id}")
+                        # Check if variant is referenced by any order items
+                        logger.info(f"Checking order items for variant {variant.id}")
+                        order_items_result = await self.db.execute(
+                            select(func.count()).select_from(OrderItem).where(OrderItem.variant_id == variant.id)
+                        )
+                        order_items_count = order_items_result.scalar() or 0
+                        logger.info(f"Variant {variant.id} has {order_items_count} order items")
+                        if order_items_count > 0:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Cannot delete variant '{variant.name}' because it is referenced by {order_items_count} order(s). Variants with order history cannot be deleted."
+                            )
+
+                        try:
+                            # Delete images first using delete statement
+                            for img in variant.images[:]:
+                                logger.info(f"Deleting image {img.id}")
+                                await self.db.execute(delete(ProductImage).where(ProductImage.id == img.id))
+                            # Delete inventory using delete statement
+                            if variant.inventory:
+                                logger.info(f"Deleting stock adjustments for inventory {variant.inventory.id}")
+                                await self.db.execute(delete(StockAdjustment).where(StockAdjustment.inventory_id == variant.inventory.id))
+                                logger.info(f"Deleting inventory for variant {variant.id}, inventory_id: {variant.inventory.id}")
+                                await self.db.execute(delete(Inventory).where(Inventory.id == variant.inventory.id))
+                            # Delete variant using delete statement
+                            logger.info(f"Deleting variant {variant.id}")
+                            await self.db.execute(delete(ProductVariant).where(ProductVariant.id == variant.id))
+                            # Remove from in-memory collection to sync with database state
+                            product.variants.remove(variant)
+                            # Expunge from session to prevent any further tracking
+                            self.db.expunge(variant)
+                            logger.info(f"Successfully removed variant {variant.id} from collection and session")
+                        except Exception as e:
+                            logger.error(f"Error deleting variant {variant.id}: {e}")
+                            raise
+            else:
+                logger.info(f"No variants to delete or keeping all variants (variants_to_delete={variants_to_delete}, updated_count={len(updated_variant_ids)})")
 
         await self.db.commit()
         logger.info(f"Product {product_id} updated successfully")

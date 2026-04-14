@@ -2,7 +2,7 @@
 # This file includes all payment-related functionality including failure handling
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_, func, text
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction, PaymentFailureReason
@@ -344,14 +344,44 @@ class PaymentService:
         )
         return result.scalar_one_or_none()
 
-    async def list(self, user_id: UUID) -> List[PaymentMethod]:
-        """Get all payment methods for a user"""
+    async def list(self, user_id: UUID, page: int = 1, limit: int = 10, search: Optional[str] = None) -> Dict[str, Any]:
+        """Get all payment methods for a user with pagination and search"""
+        offset = (page - 1) * limit
+
+        # Build base query with optional search
+        base_conditions = [PaymentMethod.user_id == user_id, PaymentMethod.is_active == True]
+        if search:
+            search_pattern = f"%{search}%"
+            base_conditions.append(
+                or_(
+                    PaymentMethod.last_four.ilike(search_pattern),
+                    PaymentMethod.provider.ilike(search_pattern),
+                    PaymentMethod.brand.ilike(search_pattern) if hasattr(PaymentMethod, 'brand') else text('FALSE')
+                )
+            )
+
         result = await self.db.execute(
-            select(PaymentMethod).where(
-                and_(PaymentMethod.user_id == user_id, PaymentMethod.is_active == True)
-            ).order_by(PaymentMethod.is_default.desc(), PaymentMethod.created_at.desc())
+            select(PaymentMethod).where(and_(*base_conditions))
+            .order_by(PaymentMethod.is_default.desc(), PaymentMethod.created_at.desc())
+            .offset(offset).limit(limit)
         )
-        return result.scalars().all()
+        payment_methods = result.scalars().all()
+
+        # Get total count
+        count_result = await self.db.execute(
+            select(func.count()).select_from(PaymentMethod).where(and_(*base_conditions))
+        )
+        total = count_result.scalar() or 0
+
+        return {
+            "data": payment_methods,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
 
     async def update(self, payment_method_id: UUID, user_id: UUID, update_data: Dict[str, Any]) -> Optional[PaymentMethod]:
         """Update a payment method"""
@@ -1168,22 +1198,178 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """Get user transaction history"""
         offset = (page - 1) * limit
-        
-        query = select(Transaction).where(Transaction.user_id == user_id).order_by(
+
+        from models.accounts.user import User
+
+        query = select(Transaction).where(Transaction.user_id == user_id).options(
+            selectinload(Transaction.user)
+        ).order_by(
             Transaction.created_at.desc()
         ).offset(offset).limit(limit)
-        
+
         result = await self.db.execute(query)
         transactions = result.scalars().all()
-        
+
         # Get total count
         count_result = await self.db.execute(
             select(Transaction).where(Transaction.user_id == user_id)
         )
         total = len(count_result.scalars().all())
-        
+
+        # Construct transaction data with customer_name and payment_method
+        transaction_data = []
+        for transaction in transactions:
+            txn_dict = transaction.to_dict()
+
+            # Add customer_name from user
+            if transaction.user:
+                customer_name = f"{transaction.user.firstname or ''} {transaction.user.lastname or ''}".strip()
+                txn_dict['customer_name'] = customer_name if customer_name else transaction.user.email
+
+            # Add payment_method from metadata
+            payment_method = None
+            if transaction.transaction_metadata:
+                try:
+                    import json
+                    metadata = json.loads(transaction.transaction_metadata)
+                    if 'payment_method_type' in metadata:
+                        payment_method = metadata['payment_method_type'].replace('PaymentType.', '')
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            txn_dict['payment_method'] = payment_method or 'Card'
+
+            transaction_data.append(txn_dict)
+
         return {
-            "transactions": [transaction.to_dict() for transaction in transactions],
+            "transactions": transaction_data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit
+            }
+        }
+
+    async def all_transactions(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        payment_method: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get all transactions (admin only)"""
+        offset = (page - 1) * limit
+
+        from models.accounts.user import User
+
+        # Build base query with filters
+        query = select(Transaction).options(
+            selectinload(Transaction.user)
+        )
+
+        # Apply status filter
+        if status:
+            query = query.where(Transaction.status == status)
+
+        # Apply date range filters
+        if date_from:
+            try:
+                from datetime import datetime
+                date_from_dt = datetime.fromisoformat(date_from)
+                query = query.where(Transaction.created_at >= date_from_dt)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                from datetime import datetime
+                date_to_dt = datetime.fromisoformat(date_to)
+                # Include the entire day by adding 1 day
+                from datetime import timedelta
+                date_to_dt = date_to_dt + timedelta(days=1)
+                query = query.where(Transaction.created_at < date_to_dt)
+            except ValueError:
+                pass
+
+        # Apply search filter (customer name)
+        if search:
+            query = query.join(User, Transaction.user_id == User.id).where(
+                (User.firstname.ilike(f'%{search}%')) |
+                (User.lastname.ilike(f'%{search}%')) |
+                (User.email.ilike(f'%{search}%'))
+            )
+
+        query = query.order_by(
+            Transaction.created_at.desc()
+        ).offset(offset).limit(limit)
+
+        result = await self.db.execute(query)
+        transactions = result.scalars().all()
+
+        # Get total count with same filters
+        count_query = select(Transaction)
+        if status:
+            count_query = count_query.where(Transaction.status == status)
+        if date_from:
+            try:
+                from datetime import datetime
+                date_from_dt = datetime.fromisoformat(date_from)
+                count_query = count_query.where(Transaction.created_at >= date_from_dt)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                from datetime import datetime
+                date_to_dt = datetime.fromisoformat(date_to)
+                from datetime import timedelta
+                date_to_dt = date_to_dt + timedelta(days=1)
+                count_query = count_query.where(Transaction.created_at < date_to_dt)
+            except ValueError:
+                pass
+        if search:
+            count_query = count_query.join(User, Transaction.user_id == User.id).where(
+                (User.firstname.ilike(f'%{search}%')) |
+                (User.lastname.ilike(f'%{search}%')) |
+                (User.email.ilike(f'%{search}%'))
+            )
+
+        count_result = await self.db.execute(count_query)
+        total = len(count_result.scalars().all())
+
+        # Construct transaction data with customer_name and payment_method
+        transaction_data = []
+        for transaction in transactions:
+            txn_dict = transaction.to_dict()
+
+            # Add customer_name from user
+            if transaction.user:
+                customer_name = f"{transaction.user.firstname or ''} {transaction.user.lastname or ''}".strip()
+                txn_dict['customer_name'] = customer_name if customer_name else transaction.user.email
+
+            # Add payment_method from metadata
+            payment_method_value = None
+            if transaction.transaction_metadata:
+                try:
+                    import json
+                    metadata = json.loads(transaction.transaction_metadata)
+                    if 'payment_method_type' in metadata:
+                        payment_method_value = metadata['payment_method_type'].replace('PaymentType.', '')
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            txn_dict['payment_method'] = payment_method_value or 'Card'
+
+            # Apply payment method filter (client-side since it's in metadata)
+            if payment_method and payment_method_value:
+                if payment_method_value.lower() != payment_method.lower():
+                    continue
+
+            transaction_data.append(txn_dict)
+
+        return {
+            "transactions": transaction_data,
             "pagination": {
                 "page": page,
                 "limit": limit,

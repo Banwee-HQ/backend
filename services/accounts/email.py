@@ -399,6 +399,7 @@ class EmailService:
             "order_confirmation": f"Order Confirmation - {kwargs.get('order_number', '')}",
             "shipping_update": f"Shipping Update - {kwargs.get('order_number', '')}",
             "verification": "Verify Your Email",
+            "activation": "Verify Your Email",
             "thank_you": "Thank You for Your Order",
             "review_request": "Review Your Recent Purchase",
             "password_reset": "Reset Your Password",
@@ -432,9 +433,13 @@ class EmailService:
                 "tracking_url": kwargs.get("tracking_url", ""),
             })
         elif mail_type == "verification":
+            verification_link = f"{settings.FRONTEND_URL}/verify-email?token={kwargs.get('verification_token', '')}"
             context.update({
-                "verification_token": kwargs.get("verification_token", ""),
-                "firstname": kwargs.get("firstname", ""),
+                "verification_link": verification_link,
+                "customer_name": kwargs.get("firstname", "Customer"),
+                "company_name": "Banwee",
+                "expiry_time": "24 hours",
+                "current_year": datetime.now().year,
             })
         elif mail_type == "password_reset":
             context.update({
@@ -451,12 +456,19 @@ class EmailService:
                 "delivery_notes": kwargs.get("delivery_notes", ""),
             })
         
-        # Render template
-        template_name = f"account/{mail_type}.html"
-        try:
-            html_content = await self._render_email_template(template_name, context)
-        except Exception:
-            # Fallback to simple HTML if template doesn't exist
+        # Use existing template_map from core/utils/messages/email.py
+        from core.utils.messages.email import template_map
+        
+        template_name = template_map.get(mail_type)
+        
+        if template_name:
+            try:
+                html_content = await self._render_email_template(template_name, context)
+            except Exception:
+                # Fallback to simple HTML if template doesn't exist
+                html_content = f"<p>Hello {context['customer_name']},</p><p>This is a {mail_type} email.</p>"
+        else:
+            # Fallback to simple HTML if no template found
             html_content = f"<p>Hello {context['customer_name']},</p><p>This is a {mail_type} email.</p>"
         
         # Send email

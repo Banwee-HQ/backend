@@ -38,6 +38,39 @@ from schemas.common.service_types import PricingCalculationResult
 logger = get_structured_logger(__name__)
 
 
+def get_currency_from_address(address: dict) -> str:
+    """Determine currency based on country in address."""
+    if not address:
+        return "USD"
+    
+    country = address.get("country", "").upper()
+    
+    # Map countries to their currencies
+    country_to_currency = {
+        "CA": "CAD",  # Canada
+        "US": "USD",  # United States
+        "GB": "GBP",  # United Kingdom
+        "EUR": "EUR",  # Eurozone countries
+        "AU": "AUD",  # Australia
+        "JP": "JPY",  # Japan
+        "CH": "CHF",  # Switzerland
+        "CNY": "CNY",  # China
+        "IN": "INR",  # India
+        # Add more as needed
+    }
+    
+    # For European countries, use EUR
+    european_countries = [
+        "DE", "FR", "IT", "ES", "NL", "BE", "AT", "IE", "PT", "FI", "GR",
+        "LU", "MT", "CY", "EE", "LV", "LT", "SK", "SI"
+    ]
+    
+    if country in european_countries:
+        return "EUR"
+    
+    return country_to_currency.get(country, "USD")
+
+
 class OrderService:
     """
     Comprehensive order service with advanced pricing and security validation
@@ -430,6 +463,9 @@ class OrderService:
             temp_order_id = uuid7()  # Temporary ID for payment processing
             order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[:12].upper()}"
             # Create a placeholder order record so payment_intents can FK to it
+            # Determine currency from shipping address if available
+            temp_currency = get_currency_from_address(shipping_address_dict) if shipping_address_dict else "USD"
+            
             placeholder_order = Order(
                 id=temp_order_id,
                 order_number=order_number,
@@ -441,7 +477,7 @@ class OrderService:
                 shipping_cost=Decimal('0.00'),
                 tax_amount=Decimal('0.00'),
                 total_amount=Decimal('0.00'),
-                currency='USD'
+                currency=temp_currency
             )
             # Provide minimal address dicts to satisfy NOT NULL constraints
             placeholder_order.billing_address = {}
@@ -575,6 +611,7 @@ class OrderService:
             # Return order response using the items we collected
             return OrderResponse(
                 id=order.id,
+                order_number=order.order_number,
                 user_id=user_id,
                 order_status=order.order_status,
                 payment_status=order.payment_status,
@@ -915,6 +952,9 @@ class OrderService:
                 # Use shipping address as billing address if no separate billing address
                 shipping_address_dict = billing_address_dict.copy()
                 
+                # Determine currency from shipping address
+                order_currency = get_currency_from_address(shipping_address_dict)
+                
                 # Create order with backend-calculated prices and idempotency key
                 order = Order(
                     user_id=user_id,
@@ -925,7 +965,7 @@ class OrderService:
                     shipping_cost=shipping_amount,
                     discount_amount=discount_amount,
                     total_amount=total_amount,
-                    currency=request.currency or "USD",  # Use user's currency from frontend
+                    currency=order_currency,  # Automatically determined from address
                     shipping_method=shipping_method.name,
                     tracking_number=None,
                     carrier=None,
@@ -1165,11 +1205,12 @@ class OrderService:
         return await self._format_order_response(order)
 
     async def list(
-        self, 
-        user_id: Optional[UUID] = None, 
-        page: int = 1, 
-        limit: int = 10, 
+        self,
+        user_id: Optional[UUID] = None,
+        page: int = 1,
+        limit: int = 10,
         status: Optional[str] = None,
+        search: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         q: Optional[str] = None,
@@ -1207,6 +1248,14 @@ class OrderService:
                     or_(
                         Order.id.cast(String).ilike(f"%{q}%"),
                         Order.user.has(User.email.ilike(f"%{q}%"))
+                    )
+                )
+
+            if search:
+                conditions.append(
+                    or_(
+                        Order.id.cast(String).ilike(f"%{search}%"),
+                        Order.order_number.ilike(f"%{search}%") if hasattr(Order, 'order_number') else text('FALSE')
                     )
                 )
 
@@ -1288,12 +1337,14 @@ class OrderService:
             if user_id:
                 query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).options(
                     selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
-                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
+                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+                    selectinload(Order.user)
                 )
             else:
                 query = select(Order).where(Order.id == order_id).options(
                     selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.images),
-                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product)
+                    selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+                    selectinload(Order.user)
                 )
 
             result = await self.db.execute(query)
@@ -1423,7 +1474,17 @@ class OrderService:
 
         if tracking_number:
             order.tracking_number = tracking_number
-            order.carrier = carrier_name or order.carrier
+
+        # Auto-populate carrier from ShippingMethod if not provided
+        if not carrier_name and order.shipping_method:
+            from models.commerce.shipping import ShippingMethod
+            shipping_method_result = await self.db.execute(
+                select(ShippingMethod).where(ShippingMethod.name == order.shipping_method)
+            )
+            shipping_method = shipping_method_result.scalar_one_or_none()
+            if shipping_method and shipping_method.carrier:
+                carrier_name = shipping_method.carrier
+
         if carrier_name:
             order.carrier = carrier_name
 
@@ -1587,8 +1648,20 @@ class OrderService:
             estimated_days = 5  # Default, could be from shipping method
             estimated_delivery = (order.created_at + timedelta(days=estimated_days)).isoformat()
 
+        # Generate tracking URL if tracking number and shipping method exist
+        tracking_url = None
+        if order.tracking_number and order.shipping_method:
+            from models.commerce.shipping import ShippingMethod
+            shipping_method_result = await self.db.execute(
+                select(ShippingMethod).where(ShippingMethod.name == order.shipping_method)
+            )
+            shipping_method = shipping_method_result.scalar_one_or_none()
+            if shipping_method and shipping_method.tracking_url_template:
+                tracking_url = shipping_method.tracking_url_template.replace('{tracking_number}', order.tracking_number)
+
         return OrderResponse(
             id=order.id,
+            order_number=order.order_number,
             user_id=order.user_id,
             order_status=order.order_status,
             payment_status=order.payment_status,
@@ -1599,10 +1672,15 @@ class OrderService:
             shipping_cost=float(order.shipping_cost) if order.shipping_cost else None,
             discount_amount=float(order.discount_amount) if order.discount_amount else None,
             currency=order.currency,  # Use order's currency
+            shipping_method=order.shipping_method,
             tracking_number=order.tracking_number,
+            carrier=order.carrier,
+            tracking_url=tracking_url,
             estimated_delivery=estimated_delivery,
             shipping_address=order.shipping_address,
             billing_address=order.billing_address,
+            customer_notes=order.customer_notes,
+            internal_notes=order.internal_notes,
             items=items,
             created_at=order.created_at if order.created_at else datetime.utcnow(),
             updated_at=order.updated_at
@@ -2037,6 +2115,7 @@ class OrderService:
         
         return OrderResponse(
             id=order.id,
+            order_number=order.order_number,
             user_id=order.user_id,
             order_status=order.order_status,
             payment_status=order.payment_status,
@@ -2116,17 +2195,24 @@ class OrderService:
                 message="Failed to retrieve tracking information"
             )
 
-    async def tracking_public(self, order_id: UUID) -> Dict[str, Any]:
+    async def tracking_public(self, order_id: str) -> Dict[str, Any]:
         """Get order tracking information without authentication (public endpoint)"""
         try:
-            # Get order with tracking events (no user_id filter for public access)
-            query = select(Order).where(Order.id == order_id).options(
-                selectinload(Order.tracking_events)
-            )
-            
+            # Try to parse as UUID first, if fails treat as order_number
+            try:
+                order_uuid = UUID(order_id)
+                query = select(Order).where(Order.id == order_uuid).options(
+                    selectinload(Order.tracking_events)
+                )
+            except ValueError:
+                # Not a UUID, treat as order_number
+                query = select(Order).where(Order.order_number == order_id).options(
+                    selectinload(Order.tracking_events)
+                )
+
             result = await self.db.execute(query)
             order = result.scalar_one_or_none()
-            
+
             if not order:
                 raise HTTPException(status_code=404, detail="Order not found")
             

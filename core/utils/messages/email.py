@@ -6,6 +6,39 @@ import asyncio
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from core.config import settings
 from pathlib import Path
+from typing import Dict, Any
+from datetime import datetime
+
+# Template name mapping for all email types
+template_map: Dict[str, str] = {
+    "order_confirmation": "purchase/order_confirmation.html",
+    "payment_receipt": "purchase/payment_receipt.html",
+    "shipping_update": "purchase/shipping_update.html",
+    "order_delivered": "purchase/order_delivered.html",
+    "partial_shipment": "purchase/partial_shipment.html",
+    "digital_delivery": "purchase/digital_delivery.html",
+    "thank_you": "post_purchase/thank_you.html",
+    "review_request": "post_purchase/review_request.html",
+    "referral_request": "post_purchase/referral_request.html",
+    "product_tips": "post_purchase/product_tips.html",
+    "warranty_reminder": "post_purchase/warranty_reminder.html",
+    "activation": "account/activation.html",
+    "verification": "account/activation.html",  # Alias for activation
+    "email_change": "account/email_change.html",
+    "password_reset": "account/password_reset.html",
+    "unsubscribe_confirmation": "account/unsubscribe_confirmation.html",
+    "subscription_renewal": "account/subscription_renewal.html",
+    "subscription_shipment": "account/subscription_shipment.html",
+    "birthday_offer": "marketing/birthday_offer.html",
+    "cross_sell": "marketing/cross_sell.html",
+    "event_invite": "marketing/event_invite.html",
+    "holiday_campaign": "marketing/holiday_campaign.html",
+    "product_launch": "pre_purchase/product_launch.html",
+    "payment_failed": "system/payment_failed.html",
+    "subscription_payment_failed": "system/subscription_payment_failed.html",
+    "subscription_update": "system/subscription_update.html",
+    "invoice": "system/invoice.html",
+}
 
 # Jinja2 template environment
 template_dir = Path(__file__).parent / "templates"
@@ -133,56 +166,21 @@ async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict =
         "shipping_update": "📦 Shipping Update for Your Order",
         "order_delivered": "🎉 Your Order Has Been Delivered!",
         "partial_shipment": "📦 Partial Shipment Notification",
-        "thank_you": "🙏 Thank You for Your Purchase!",
-        "review_request": "⭐ Tell Us What You Think",
-        "referral_request": "🎁 Refer a Friend & Get Rewards",
         "activation": "📧 Verify Your Email Address - Banwee",
         "email_change": "📧 Email Change Confirmation",
         "password_reset": "🔐 Reset Your Password - Banwee",
+        "unsubscribe_confirmation": "📧 Unsubscribe Confirmation",
         "subscription_renewal": "🔄 Subscription Renewal Confirmation",
         "subscription_shipment": "📦 Your Subscription Has Shipped!",
-        "unsubscribe_confirmation": "📧 Unsubscribe Confirmation",
         "birthday_offer": "🎉 Happy Birthday from Banwee!",
         "cross_sell": "🛒 You Might Also Like",
         "event_invite": "🎉 You're Invited!",
         "holiday_campaign": "🎄 Special Holiday Offers from Banwee!",
         "product_launch": "🚀 New Product Launch!",
-        "product_tips": "💡 Product Tips & Tricks",
-        "warranty_reminder": "⏰ Warranty Reminder",
-        "digital_delivery": "📱 Your Digital Product is Ready!",
         "payment_failed": "⚠️ Payment Failed - Action Required",
         "subscription_payment_failed": "⚠️ Subscription Payment Failed",
         "subscription_update": "🔄 Subscription Update",
         "invoice": "📄 Your Invoice - Banwee",
-    }
-
-    template_map = {
-        "order_confirmation": "purchase/order_confirmation.html",
-        "payment_receipt": "purchase/payment_receipt.html",
-        "shipping_update": "purchase/shipping_update.html",
-        "order_delivered": "purchase/order_delivered.html",
-        "partial_shipment": "purchase/partial_shipment.html",
-        "digital_delivery": "purchase/digital_delivery.html",
-        "thank_you": "post_purchase/thank_you.html",
-        "review_request": "post_purchase/review_request.html",
-        "referral_request": "post_purchase/referral_request.html",
-        "product_tips": "post_purchase/product_tips.html",
-        "warranty_reminder": "post_purchase/warranty_reminder.html",
-        "activation": "account/activation.html",
-        "email_change": "account/email_change.html",
-        "password_reset": "account/password_reset.html",
-        "unsubscribe_confirmation": "account/unsubscribe_confirmation.html",
-        "subscription_renewal": "account/subscription_renewal.html",
-        "subscription_shipment": "account/subscription_shipment.html",
-        "birthday_offer": "marketing/birthday_offer.html",
-        "cross_sell": "marketing/cross_sell.html",
-        "event_invite": "marketing/event_invite.html",
-        "holiday_campaign": "marketing/holiday_campaign.html",
-        "product_launch": "pre_purchase/product_launch.html",
-        "payment_failed": "system/payment_failed.html",
-        "subscription_payment_failed": "system/subscription_payment_failed.html",
-        "subscription_update": "system/subscription_update.html",
-        "invoice": "system/invoice.html",
     }
 
     subject = subject_map.get(mail_type, "Notification from Banwee")

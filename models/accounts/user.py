@@ -160,8 +160,12 @@ class User(Base):
             "date_of_birth": self.date_of_birth.isoformat() if self.date_of_birth else None,
             "gender": self.gender,
             "last_login": self.last_login.isoformat() if self.last_login else None,
+            "last_activity_at": self.last_activity_at.isoformat() if self.last_activity_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "failed_login_attempts": self.failed_login_attempts,
+            "locked_until": self.locked_until.isoformat() if self.locked_until else None,
+            "stripe_customer_id": self.stripe_customer_id,
         }
 
 

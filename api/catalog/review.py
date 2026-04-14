@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
@@ -41,6 +41,8 @@ async def list(
             return Response.success(data=result.get("data", []), pagination=pagination)
         return Response.success(data=result)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -101,6 +103,8 @@ async def get(
         return Response.success(data=review, message="Review retrieved successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -135,6 +139,8 @@ async def for_product(
             return Response.success(data=result.get("data", []), pagination=pagination)
         return Response.success(data=result)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

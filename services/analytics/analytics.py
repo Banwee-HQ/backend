@@ -523,6 +523,53 @@ class AnalyticsService:
         except Exception as e:
             logger.error(f"Failed to update conversion funnel: {e}")
 
+    async def get_users_growth_trend(
+        self,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[str, Any]:
+        """Get users growth trend data over the specified period"""
+        try:
+            # Get daily user registrations
+            daily_users = await self.db.execute(
+                select(
+                    func.date(User.created_at).label('date'),
+                    func.count(User.id).label('user_count')
+                ).where(
+                    and_(
+                        User.created_at >= start_date,
+                        User.created_at <= end_date,
+                        User.role != 'admin'
+                    )
+                ).group_by(func.date(User.created_at)).order_by(func.date(User.created_at))
+            )
+
+            trend_data = []
+            total_users = 0
+
+            for row in daily_users:
+                daily_count = row.user_count or 0
+                total_users += daily_count
+
+                trend_data.append({
+                    "date": row.date.isoformat() if row.date else None,
+                    "users": daily_count,
+                    "cumulative_users": total_users
+                })
+
+            return {
+                "period": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat()
+                },
+                "trend_data": trend_data,
+                "total_new_users": total_users
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get users growth trend: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve users growth trend: {str(e)}")
+
     async def get_sales_trend_data(
         self,
         start_date: datetime,

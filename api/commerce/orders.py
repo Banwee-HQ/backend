@@ -2,6 +2,8 @@ from uuid import UUID
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import Optional, List
 from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
@@ -10,6 +12,7 @@ from core.logging import get_structured_logger
 from core.utils.response import Response
 from services.commerce.orders import OrderService
 from models.accounts.user import User, UserRole
+from models.commerce.orders import Order as OrderModel
 from schemas.commerce.orders import Create, Checkout, Note
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -32,6 +35,8 @@ async def create(
         return Response.success(data=order, message="Order created successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to create order: {str(e)}")
 
@@ -46,16 +51,36 @@ async def get(
     try:
         order_service = OrderService(db)
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
-        
+
         if is_admin:
             order = await order_service.get(order_id)
         else:
             order = await order_service.get(order_id, current_user.id)
-            
+
         if not order:
             raise APIException(status_code=404, message="Order not found")
-        return Response.success(data=order, message="Order retrieved successfully")
+
+        # Convert to dict and add customer information for admin
+        order_dict = order.model_dump() if hasattr(order, 'model_dump') else order.dict()
+
+        # Add customer information if user is loaded
+        order_query = select(OrderModel).where(OrderModel.id == order_id).options(
+            selectinload(OrderModel.user)
+        )
+        order_result = await db.execute(order_query)
+        order_with_user = order_result.scalar_one_or_none()
+
+        if order_with_user and order_with_user.user:
+            order_dict["customer"] = {
+                "id": str(order_with_user.user.id),
+                "email": order_with_user.user.email,
+                "name": f"{order_with_user.user.firstname} {order_with_user.user.lastname}" if order_with_user.user.firstname else order_with_user.user.email
+            }
+
+        return Response.success(data=order_dict, message="Order retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch order: {str(e)}")
@@ -66,6 +91,7 @@ async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status_filter: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     customer_id: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -78,15 +104,16 @@ async def list(
     try:
         order_service = OrderService(db)
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
-        
+
         # Use consolidated list method: user_id=None for admin (all orders), user_id=current_user.id for users
         target_user_id = None if is_admin else current_user.id
-        
+
         orders = await order_service.list(
             user_id=target_user_id,
             page=page,
             limit=limit,
             status=status_filter,
+            search=search,
             date_from=date_from,
             date_to=date_to,
             sort_by=sort_by,
@@ -106,6 +133,8 @@ async def list(
                 return Response.success(data=orders.get("data", []), pagination=pagination)
         return Response.success(data=orders)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch orders: {str(e)}")
@@ -231,6 +260,8 @@ async def get_note(
         return Response.success(data=note, message="Note retrieved successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to get note: {str(e)}")
 
@@ -268,6 +299,8 @@ async def get_tracking(
         return Response.success(data=tracking, message="Tracking information retrieved")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
 
@@ -296,10 +329,10 @@ async def get_order_shipments(
 # ==========================================================
 @router.get("/track/{order_id}/")
 async def get_public_tracking(
-    order_id: UUID,
+    order_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get order tracking (public - no auth required)."""
+    """Get order tracking (public - no auth required). Accepts order ID (UUID) or order number."""
     try:
         order_service = OrderService(db)
         tracking = await order_service.tracking_public(order_id)
@@ -328,6 +361,8 @@ async def update_status(
         return Response.success(data=updated_order, message="Order status updated")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to update order status: {str(e)}")
 
@@ -345,6 +380,8 @@ async def deliver(
         result = await order_service.deliver(order_id, request.get("notes"))
         return Response.success(data=result, message="Order marked as delivered")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to mark order as delivered: {str(e)}")
@@ -364,6 +401,8 @@ async def ship(
         return Response.success(data=result, message="Order shipped")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to ship order: {str(e)}")
 
@@ -381,6 +420,8 @@ async def statistics(
         stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
         return Response.success(data=stats, message="Order statistics retrieved")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch statistics: {str(e)}")

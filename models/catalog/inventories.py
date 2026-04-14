@@ -68,7 +68,7 @@ class Inventory(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"), unique=True)
-    location_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.warehouse_locations.id"))
+    location_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("catalog.warehouse_locations.id"), nullable=True)
 
     # Atomic stock tracking fields
     quantity_available: Mapped[int] = mapped_column(Integer, default=0)  # Available for sale

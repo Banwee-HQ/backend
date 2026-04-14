@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
-from typing import List, Optional
+from sqlalchemy import select, update, delete, func
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from models.commerce.shipping import ShippingMethod
@@ -38,6 +38,49 @@ class ShippingService:
             query = query.where(ShippingMethod.is_active == True)
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def get_all_methods(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        is_active: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Get all shipping methods with pagination (admin only).
+        Returns a dict with items, total, pages, and page info.
+        """
+        # Build base query
+        query = select(ShippingMethod)
+        count_query = select(func.count(ShippingMethod.id))
+
+        # Apply filters
+        if is_active is not None:
+            query = query.where(ShippingMethod.is_active == is_active)
+            count_query = count_query.where(ShippingMethod.is_active == is_active)
+
+        # Get total count
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Calculate pagination
+        pages = (total + limit - 1) // limit if total > 0 else 0
+        offset = (page - 1) * limit
+
+        # Apply ordering and pagination
+        query = query.order_by(ShippingMethod.created_at.desc())
+        query = query.offset(offset).limit(limit)
+
+        # Execute query
+        result = await self.db.execute(query)
+        items = result.scalars().all()
+
+        return {
+            "items": items,
+            "total": total,
+            "pages": pages,
+            "page": page,
+            "limit": limit
+        }
 
     async def calc_cost(
         self, 

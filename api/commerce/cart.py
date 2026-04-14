@@ -34,8 +34,8 @@ async def create(
             quantity=request.quantity
         )
         return Response.success(data=cart, message="Item added to cart")
-    except HTTPException as e:
-        raise APIException(status_code=e.status_code, message=e.detail)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to add item to cart: {str(e)}")
 
@@ -69,6 +69,8 @@ async def get(
             province_code=province_code
         )
         return Response.success(data=cart)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to retrieve cart: {e}")
 
@@ -140,6 +142,8 @@ async def count(
             user_id=current_user.id
         )
         return Response.success(data=count)
+    except HTTPException as e:
+        raise
     except Exception:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to get cart count")
@@ -199,6 +203,8 @@ async def validate(
         else:
             return Response.error(data=result_dict, message="Cart validation failed")
             
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -220,6 +226,8 @@ async def calculate(
             data=data
         )
         return Response.success(data=result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to calculate totals: {str(e)}", exc_info=True)
         raise APIException(status_code=status.HTTP_400_BAD_REQUEST,
@@ -239,6 +247,8 @@ async def clear(
             user_id=current_user.id
         )
         return Response.success(data=result, message="Cart cleared successfully")
+    except HTTPException as e:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -258,6 +268,8 @@ async def summary(
             user_id=current_user.id
         )
         return Response.success(data=result)
+    except HTTPException:
+        raise
     except Exception:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                            message="Failed to get checkout summary")

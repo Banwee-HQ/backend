@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from uuid import UUID
@@ -65,6 +65,8 @@ async def list(
             "pages": max(1, (total + limit - 1) // limit)
         })
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -152,6 +154,8 @@ async def get(
         })
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -187,6 +191,8 @@ async def create(
             "updated_at": promocode.updated_at.isoformat() if promocode.updated_at else None
         }, message="Promocode created successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -225,6 +231,8 @@ async def update(
         }, message="Promocode updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -251,6 +259,8 @@ async def delete(
         
         return Response.success(message="Promocode deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(

@@ -201,6 +201,8 @@ async def patch(
         )
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating contact message: {str(e)}")
         raise APIException(
@@ -231,6 +233,8 @@ async def delete(
             message="Contact message deleted successfully"
         )
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error deleting contact message: {str(e)}")

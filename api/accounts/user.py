@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, status, Query, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
@@ -49,6 +49,8 @@ async def create(payload: UserCreate, background_tasks: BackgroundTasks = None, 
         return Response.success(data=user, message="User created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise APIException(
@@ -65,12 +67,8 @@ async def get(
 ):
     """Get a user by ID. Admin can get any user, users can only get themselves."""
     try:
-        # Check if user is admin or requesting their own data
-        if current_user.id != user_id:
-            raise APIException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="You can only access your own user data"
-            )
+        # Since require_admin is used, current_user is already admin/manager
+        # Admins/managers can access any user
         service = UserService(db)
         user = await service.get(user_id)
         if not user:
@@ -92,6 +90,8 @@ async def get(
         }
         return Response.success(data=user_data, message="User retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching user: {e}")
@@ -116,12 +116,14 @@ async def list(
     try:
         service = UserService(db)
         result = await service.list(
-            page=page, limit=limit, role=role, query=search or q
+            page=page, limit=limit, role=role, query=search or q, status=status
         )
         if isinstance(result, dict) and "users" in result and "pagination" in result:
             return Response.success(data=result.get("users", []), pagination=result.get("pagination"))
         return Response.success(data=result)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -207,6 +209,8 @@ async def delete(
         return Response.success(message="User deleted successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to delete user: {str(e)}")
 
@@ -225,6 +229,8 @@ async def update_status(
         return Response.success(data=result, message="User status updated")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to update user status: {str(e)}")
 
@@ -241,6 +247,8 @@ async def reset_password(
         result = await service.reset_password(user_id)
         return Response.success(data=result, message="Password reset email sent")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to reset password: {str(e)}")
@@ -259,6 +267,8 @@ async def deactivate(
         return Response.success(data=result, message="User deactivated")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to deactivate user: {str(e)}")
 
@@ -276,6 +286,8 @@ async def activate(
         return Response.success(data=result, message="User activated")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to activate user: {str(e)}")
 
@@ -292,6 +304,8 @@ async def verify(
         result = await service.verify_user_account(user_id)
         return Response.success(data=result, message="User verified")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to verify user: {str(e)}")
@@ -311,6 +325,8 @@ async def activity(
         activity = await service.get_activity_log(user_id, page, limit)
         return Response.success(data=activity)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get user activity: {str(e)}")

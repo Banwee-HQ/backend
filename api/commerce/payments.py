@@ -74,6 +74,8 @@ async def create_method(
         return Response.success(data=MethodResponse.from_orm(payment_method), code=status.HTTP_201_CREATED, message="Payment method created successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to create payment method: {str(e)}")
 
@@ -93,23 +95,30 @@ async def get_method(
         return Response.success(data=MethodResponse.from_orm(method), message="Payment method retrieved successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get payment method: {str(e)}")
 
 
 @router.get("/methods/")
 async def list_methods(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all payment methods for user"""
+    """List all payment methods for user with pagination and search"""
     try:
         service = PaymentService(db)
-        payment_methods = await service.list(current_user.id)
-        if not payment_methods:
-            payment_methods = []
-        return Response.success(data=[MethodResponse.from_orm(pm) for pm in payment_methods])
+        result = await service.list(current_user.id, page=page, limit=limit, search=search)
+        if isinstance(result, dict) and "data" in result and "pagination" in result:
+            return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Payment methods retrieved successfully")
+        return Response.success(data=result, message="Payment methods retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list payment methods: {str(e)}")
@@ -135,6 +144,8 @@ async def patch_method(
         return Response.success(data=MethodResponse.from_orm(updated_method), message="Payment method updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to update payment method: {str(e)}")
 
@@ -153,6 +164,8 @@ async def delete_method(
             raise APIException(status_code=404, message="Payment method not found")
         return Response.success(message="Payment method deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to delete payment method: {str(e)}")
@@ -181,6 +194,8 @@ async def create_intent(
         return Response.success(data=IntentResponse.from_orm(payment_intent), code=status.HTTP_201_CREATED, message="Payment intent created successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to create payment intent: {str(e)}")
 
@@ -199,6 +214,8 @@ async def get_intent(
             raise APIException(status_code=404, message="Payment intent not found")
         return Response.success(data=IntentResponse.from_orm(intent), message="Payment intent retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get payment intent: {str(e)}")
@@ -226,6 +243,8 @@ async def list_intents(
         return Response.success(data=result)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list payment intents: {str(e)}")
 
@@ -248,6 +267,8 @@ async def get_transaction(
         return Response.success(data=TxnResponse.from_orm(transaction), message="Transaction retrieved successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get transaction: {str(e)}")
 
@@ -263,16 +284,43 @@ async def list_transactions(
     try:
         service = PaymentService(db)
         result = await service.transactions(current_user.id, page=page, limit=limit)
-        if isinstance(result, dict) and "items" in result:
-            pagination = {
-                "page": result.get("page", page),
-                "limit": result.get("limit", limit),
-                "total": result.get("total", 0),
-                "pages": (result.get("total", 0) + limit - 1) // limit
-            }
-            return Response.success(data=[TxnResponse.from_orm(t) for t in result.get("items", [])], pagination=pagination)
-        return Response.success(data=result)
+        return Response.success(data=result.get("transactions", []), pagination=result.get("pagination"))
     except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list transactions: {str(e)}")
+
+
+@router.get("/admin/transactions/")
+async def list_all_transactions(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    payment_method: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all transactions (admin only)"""
+    try:
+        service = PaymentService(db)
+        result = await service.all_transactions(
+            page=page,
+            limit=limit,
+            search=search,
+            status=status,
+            payment_method=payment_method,
+            date_from=date_from,
+            date_to=date_to
+        )
+        return Response.success(data=result.get("transactions", []), pagination=result.get("pagination"))
+    except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list transactions: {str(e)}")
@@ -298,6 +346,8 @@ async def create_refund(
         return Response.success(data=TxnResponse.from_orm(transaction), message="Refund created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to create refund: {str(e)}")
 
@@ -316,6 +366,8 @@ async def get_refund(
             raise APIException(status_code=404, message="Refund not found")
         return Response.success(data=TxnResponse.from_orm(refund), message="Refund retrieved successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get refund: {str(e)}")
@@ -343,6 +395,8 @@ async def list_refunds(
         return Response.success(data=result)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list refunds: {str(e)}")
 
@@ -367,6 +421,8 @@ async def confirm_intent(
         return Response.success(data=IntentResponse.from_orm(payment_intent), message="Payment intent confirmed successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to confirm payment intent: {str(e)}")
 
@@ -385,6 +441,8 @@ async def set_default_method(
             raise APIException(status_code=404, message="Payment method not found")
         return Response.success(message="Payment method set as default successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to set default payment method: {str(e)}")
@@ -411,6 +469,8 @@ async def process_payment(
         )
         return Response.success(data=result, message="Payment processed successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to process payment: {str(e)}")

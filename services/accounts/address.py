@@ -1,6 +1,6 @@
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, and_, func, text
+from sqlalchemy import select, update, delete, and_, or_, func, text
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -61,15 +61,30 @@ class AddressService:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def list(self, user_id: UUID, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Fetch addresses for a given user with pagination. First = default."""
+    async def list(self, user_id: UUID, page: int = 1, limit: int = 10, search: Optional[str] = None) -> Dict[str, Any]:
+        """Fetch addresses for a given user with pagination and search. First = default."""
         offset = (page - 1) * limit
-        count_query = select(func.count()).select_from(Address).where(Address.user_id == user_id)
+
+        # Build base query with optional search
+        base_conditions = [Address.user_id == user_id]
+        if search:
+            search_pattern = f"%{search}%"
+            base_conditions.append(
+                or_(
+                    Address.street.ilike(search_pattern),
+                    Address.city.ilike(search_pattern),
+                    Address.state.ilike(search_pattern),
+                    Address.country.ilike(search_pattern)
+                )
+            )
+
+        count_query = select(func.count()).select_from(Address).where(and_(*base_conditions))
         total_result = await self.db.execute(count_query)
         total = total_result.scalar()
+
         query = (
             select(Address)
-            .where(Address.user_id == user_id)
+            .where(and_(*base_conditions))
             .order_by(Address.created_at.asc())  # oldest first = default
             .offset(offset)
             .limit(limit)

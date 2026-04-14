@@ -90,6 +90,8 @@ async def get_home_data(
                 "deals": deals_products
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error fetching home data")
         raise APIException(
@@ -154,6 +156,8 @@ async def list(
             data=result["data"],
             pagination=pagination
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -171,6 +175,8 @@ async def get_featured(
         product_service = ProductService(db)
         products = await product_service.featured(limit=limit)
         return Response.success(data=products)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -201,6 +207,8 @@ async def get_deals(
             "pages": result.get("total_pages", 1)
         }
         return Response.success(data=result.get("data", result), pagination=pagination)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -219,6 +227,8 @@ async def recommended(
         product_service = ProductService(db)
         products = await product_service.recommended(product_id, limit)
         return Response.success(data=products)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -236,6 +246,8 @@ async def variants(
         product_service = ProductService(db)
         variants = await product_service.list_variants(product_id)
         return Response.success(data=variants)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -259,6 +271,8 @@ async def get_variant(
             )
         return Response.success(data=variant)
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -293,6 +307,8 @@ async def get_product(
         return Response.success(data=product)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Error fetching product {product_id}")
         raise APIException(
@@ -314,6 +330,8 @@ async def create(
         return Response.success(data=product, message="Product created successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -321,7 +339,7 @@ async def create(
         )
 
 
-@router.put("/{product_id}/")
+@router.patch("/{product_id}/")
 async def update(
     product_id: UUID,
     product_data: Update,
@@ -331,9 +349,11 @@ async def update(
     """Update a product (admin only)."""
     try:
         product_service = ProductService(db)
-        product = await product_service.update(product_id, product_data, current_user.id)
+        product = await product_service.update(product_id, product_data, current_user.id, is_admin=True)
         return Response.success(data=product, message="Product updated successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -354,6 +374,8 @@ async def delete(
         await product_service.delete(product_id, current_user.id)
         return Response.success(message="Product deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
@@ -379,6 +401,8 @@ async def create_variant(
         return Response.success(data=variant, message="Variant created successfully", code=status.HTTP_201_CREATED)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to create variant: {str(e)}")
 
@@ -397,6 +421,8 @@ async def get_variant(
         return Response.success(data=variant)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch variant: {str(e)}")
 
@@ -411,6 +437,8 @@ async def list_variants(
         product_service = ProductService(db)
         variants = await product_service.list_variants(product_id)
         return Response.success(data=variants)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch variants: {str(e)}")
 
@@ -428,6 +456,8 @@ async def patch_variant(
         variant = await product_service.update_variant(variant_id, variant_data)
         return Response.success(data=variant, message="Variant updated successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to update variant: {str(e)}")
@@ -447,6 +477,8 @@ async def delete_variant(
             raise APIException(status_code=404, message="Variant not found")
         return Response.success(message="Variant deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to delete variant: {str(e)}")
@@ -475,6 +507,8 @@ async def create_image(
         return Response.success(data=image, message="Image created successfully", code=status.HTTP_201_CREATED)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to create image: {str(e)}")
 
@@ -493,6 +527,8 @@ async def get_image(
         return Response.success(data=image)
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch image: {str(e)}")
 
@@ -507,6 +543,8 @@ async def list_images(
         product_service = ProductService(db)
         images = await product_service.list_images(variant_id)
         return Response.success(data=images)
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to fetch images: {str(e)}")
 
@@ -533,6 +571,8 @@ async def patch_image(
         return Response.success(data=image, message="Image updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to update image: {str(e)}")
 
@@ -552,6 +592,8 @@ async def delete_image(
         return Response.success(message="Image deleted successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to delete image: {str(e)}")
 
@@ -570,6 +612,8 @@ async def moderate(
         return Response.success(data=result, message="Product moderated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to moderate product: {str(e)}")
 
@@ -587,6 +631,8 @@ async def feature(
         result = await product_service.set_featured(product_id, featured)
         return Response.success(data=result, message="Product featured status updated")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to update featured status: {str(e)}")

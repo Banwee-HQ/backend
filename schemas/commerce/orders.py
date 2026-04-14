@@ -59,6 +59,7 @@ class ItemResponse(BaseModel):
 
 class Response(BaseModel):
     id: UUID
+    order_number: str
     user_id: UUID
     order_status: Optional[OrderStatus] = None
     payment_status: Optional[PaymentStatus] = None
@@ -69,10 +70,15 @@ class Response(BaseModel):
     shipping_cost: Optional[float] = None
     discount_amount: Optional[float] = None
     currency: str
-    tracking_number: Optional[str]
-    estimated_delivery: Optional[str]
+    shipping_method: Optional[str] = None
+    tracking_number: Optional[str] = None
+    carrier: Optional[str] = None
+    tracking_url: Optional[str] = None
+    estimated_delivery: Optional[str] = None
     shipping_address: Optional[dict] = None
     billing_address: Optional[dict] = None
+    customer_notes: Optional[str] = None
+    internal_notes: Optional[str] = None
     items: List[ItemResponse]
     created_at: datetime
     updated_at: Optional[datetime] = None

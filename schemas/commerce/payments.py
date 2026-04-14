@@ -98,6 +98,8 @@ class TxnResponse(TxnBase):
     stripe_transaction_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    customer_name: Optional[str] = None
+    payment_method: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

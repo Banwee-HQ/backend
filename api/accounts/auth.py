@@ -34,6 +34,8 @@ async def register(
         auth_service = AuthService(db)
         user = await auth_service.create(user_data, background_tasks)
         return Response.success(data=user, message="User registered successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -75,6 +77,8 @@ async def refresh(
         auth_service = AuthService(db)
         token_data = await auth_service.refresh_token(request.refresh_token)
         return Response.success(data=token_data, message="Token refreshed successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -98,6 +102,8 @@ async def revoke(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 message="Invalid refresh token"
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,6 +153,8 @@ async def me(
             "updated_at": current_user.updated_at.isoformat() if current_user.updated_at else None
         }
         return Response.success(data=user_data)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to get user profile")
         raise APIException(
@@ -190,6 +198,8 @@ async def verify(
         logger.info(f"Email verification successful for token: {token[:20]}...")
         return Response.success(message="Email verified successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
 
 # Simple in-memory rate limiter (in production, use Redis)
@@ -247,6 +257,8 @@ async def resend(
 
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error resending verification email: {e}")
         return Response.success(message="If an account exists with this email, a verification email has been sent.")
@@ -263,6 +275,8 @@ async def forgot_password(
         auth_service = AuthService(db)
         await auth_service.send_reset(request.email, background_tasks)
         return Response.success(message="Password reset email sent")
+    except HTTPException:
+        raise
     except Exception as e:
         # Always return success for security
         return Response.success(message="If the email exists, a reset link has been sent")
@@ -278,6 +292,8 @@ async def reset(
         auth_service = AuthService(db)
         await auth_service.reset_pwd(request.token, request.new_password)
         return Response.success(message="Password reset successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -350,6 +366,8 @@ async def update(
         }
         
         return Response.success(data=user_response, message="Profile updated successfully")
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -406,6 +424,8 @@ async def password(
         return APIResponse.success(message="Password changed successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -435,6 +455,8 @@ async def delete(
 
         return APIResponse.success(message="Account deleted successfully")
     except APIException:
+        raise
+    except HTTPException:
         raise
     except Exception as e:
         raise APIException(
