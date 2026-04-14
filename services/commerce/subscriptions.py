@@ -372,17 +372,30 @@ class SubscriptionService:
             base_query = base_query.where(Subscription.status == status)
             count_query = count_query.where(Subscription.status == status)
 
-        # Apply search filter (admin only with user join)
-        if search and not user_id:
+        # Apply search filter
+        if search:
             search_term = f"%{search}%"
             from sqlalchemy import or_
-            search_condition = or_(
-                User.email.ilike(search_term),
-                User.firstname.ilike(search_term),
-                User.lastname.ilike(search_term),
-            )
-            base_query = base_query.join(User, Subscription.user_id == User.id).where(search_condition)
-            count_query = select(sqlfunc.count(Subscription.id)).select_from(Subscription).join(User, Subscription.user_id == User.id).where(search_condition)
+            if user_id:
+                # User-specific search - search subscription fields
+                search_condition = or_(
+                    Subscription.name.ilike(search_term),
+                    Subscription.payment_reference.ilike(search_term),
+                    Subscription.payment_gateway.ilike(search_term),
+                )
+                base_query = base_query.where(search_condition)
+                count_query = count_query.where(search_condition)
+            else:
+                # Admin search - search user fields
+                search_condition = or_(
+                    User.email.ilike(search_term),
+                    User.firstname.ilike(search_term),
+                    User.lastname.ilike(search_term),
+                    Subscription.name.ilike(search_term),
+                    Subscription.payment_reference.ilike(search_term),
+                )
+                base_query = base_query.join(User, Subscription.user_id == User.id).where(search_condition)
+                count_query = select(sqlfunc.count(Subscription.id)).select_from(Subscription).join(User, Subscription.user_id == User.id).where(search_condition)
 
         # Apply date filters
         if date_from:

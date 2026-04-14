@@ -74,7 +74,8 @@ class AddressService:
                     Address.street.ilike(search_pattern),
                     Address.city.ilike(search_pattern),
                     Address.state.ilike(search_pattern),
-                    Address.country.ilike(search_pattern)
+                    Address.country.ilike(search_pattern),
+                    Address.post_code.ilike(search_pattern)
                 )
             )
 

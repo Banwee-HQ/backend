@@ -2,7 +2,7 @@
 # This file includes all payment-related functionality including failure handling
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text
+from sqlalchemy import select, and_, or_, func, text, String
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction, PaymentFailureReason
@@ -355,8 +355,9 @@ class PaymentService:
             base_conditions.append(
                 or_(
                     PaymentMethod.last_four.ilike(search_pattern),
-                    PaymentMethod.provider.ilike(search_pattern),
-                    PaymentMethod.brand.ilike(search_pattern) if hasattr(PaymentMethod, 'brand') else text('FALSE')
+                    PaymentMethod.provider.cast(String).ilike(search_pattern),
+                    PaymentMethod.type.cast(String).ilike(search_pattern),
+                    PaymentMethod.brand.cast(String).ilike(search_pattern)
                 )
             )
 

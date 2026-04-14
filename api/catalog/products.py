@@ -114,6 +114,8 @@ async def list(
     sort_order: Optional[str] = Query("desc"),
     availability: Optional[bool] = None,
     featured: Optional[bool] = None,
+    is_featured: Optional[bool] = None,
+    is_bestseller: Optional[bool] = None,
     popular: Optional[bool] = None,
     sale: Optional[bool] = None,
     search_mode: Optional[str] = Query("basic", regex="^(basic|advanced)$", description="Search mode: basic or advanced"),
@@ -133,6 +135,8 @@ async def list(
             "max_rating": max_rating,
             "availability": availability,
             "featured": featured,
+            "is_featured": is_featured,
+            "is_bestseller": is_bestseller,
             "popular": popular,
             "sale": sale
         }

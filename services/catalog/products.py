@@ -240,6 +240,12 @@ class ProductService:
 
             if filters.get("featured"):
                 base_conditions.append(Product.is_featured.is_(True))
+
+            if filters.get("is_featured") is not None:
+                base_conditions.append(Product.is_featured.is_(filters["is_featured"]))
+
+            if filters.get("is_bestseller") is not None:
+                base_conditions.append(Product.is_bestseller.is_(filters["is_bestseller"]))
         
             # Build subquery for filtering by category (now it's a string)
             if filters.get("category"):

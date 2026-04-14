@@ -78,7 +78,9 @@ async def calculate_tax(
 @router.get("/rates/")
 async def list_rates(
     country_code: Optional[str] = Query(None),
+    country_name: Optional[str] = Query(None),
     province_code: Optional[str] = Query(None),
+    province_name: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),
@@ -89,13 +91,15 @@ async def list_rates(
 ):
     """List all tax rates with filtering and pagination."""
     return await _list_tax_rates_internal(
-        country_code, province_code, is_active, search, sort_by, sort_order, page, per_page, db
+        country_code, country_name, province_code, province_name, is_active, search, sort_by, sort_order, page, per_page, db
     )
 
 
 async def _list_tax_rates_internal(
     country_code: Optional[str],
+    country_name: Optional[str],
     province_code: Optional[str],
+    province_name: Optional[str],
     is_active: Optional[bool],
     search: Optional[str],
     sort_by: Optional[str],
@@ -114,8 +118,12 @@ async def _list_tax_rates_internal(
         conditions = []
         if country_code:
             conditions.append(TaxRate.country_code == country_code.upper())
+        if country_name:
+            conditions.append(TaxRate.country_name.ilike(f"%{country_name}%"))
         if province_code:
             conditions.append(TaxRate.province_code == province_code.upper())
+        if province_name:
+            conditions.append(TaxRate.province_name.ilike(f"%{province_name}%"))
         if is_active is not None:
             conditions.append(TaxRate.is_active == is_active)
         if search:
