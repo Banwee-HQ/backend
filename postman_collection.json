@@ -1,243 +1,2967 @@
 {
   "info": {
     "name": "Backend API",
-    "description": "Postman collection snapshot of backend API (auto-updated 2026-04-10). Use '{{base_url}}' variable.",
+    "description": "Postman collection snapshot of backend API (auto-generated). Use '{{base_url}}' variable.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "banwee-api-collection"
   },
   "variable": [
-    { "key": "base_url", "value": "http://localhost:8000/v1" },
-    { "key": "access_token", "value": "" },
-    { "key": "refresh_token", "value": "" }
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/v1"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    }
   ],
   "auth": {
     "type": "bearer",
-    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
   },
   "item": [
     {
+      "name": "Addresses",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{address_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{address_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{address_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{address_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{address_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{address_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "Auth",
       "item": [
-        { "name": "Register", "request": { "method": "POST", "url": "{{base_url}}/auth/register/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\"\n}" } } },
-        { "name": "Login", "request": { "method": "POST", "url": "{{base_url}}/auth/login/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}" } } },
-        { "name": "Refresh Token", "request": { "method": "POST", "url": "{{base_url}}/auth/refresh/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" } } },
-        { "name": "Revoke Token", "request": { "method": "POST", "url": "{{base_url}}/auth/revoke/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" } } },
-        { "name": "Logout", "request": { "method": "POST", "url": "{{base_url}}/auth/logout/", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}" }] } } },
-        { "name": "Get Profile", "request": { "method": "GET", "url": "{{base_url}}/auth/me/" } },
-        { "name": "Update Profile", "request": { "method": "PATCH", "url": "{{base_url}}/auth/me/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"firstname\": \"John\",\n  \"lastname\": \"Doe\",\n  \"phone\": \"+1234567890\"\n}" } } },
-        { "name": "Change Password", "request": { "method": "PUT", "url": "{{base_url}}/auth/me/password/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"current_password\": \"oldpass\",\n  \"new_password\": \"newpass\"\n}" } } },
-        { "name": "Get Addresses", "request": { "method": "GET", "url": "{{base_url}}/addresses/" } },
-        { "name": "Add Address", "request": { "method": "POST", "url": "{{base_url}}/addresses/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"street\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"post_code\": \"10001\",\n  \"country\": \"US\",\n  \"is_default\": true\n}" } } },
-        { "name": "Update Address", "request": { "method": "PATCH", "url": "{{base_url}}/addresses/:id/" } },
-        { "name": "Delete Address", "request": { "method": "DELETE", "url": "{{base_url}}/addresses/:id/" } },
-        { "name": "Verify Email", "request": { "method": "GET", "url": { "raw": "{{base_url}}/auth/verify-email/?token=TOKEN", "query": [{ "key": "token", "value": "TOKEN" }] } } },
-        { "name": "Resend Verification", "request": { "method": "POST", "url": "{{base_url}}/auth/resend-verification/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" } } },
-        { "name": "Forgot Password", "request": { "method": "POST", "url": "{{base_url}}/auth/forgot-password/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" } } },
-        { "name": "Reset Password", "request": { "method": "POST", "url": "{{base_url}}/auth/reset-password/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"token\": \"RESET_TOKEN\",\n  \"new_password\": \"newpassword\"\n}" } } }
+        {
+          "name": "POST /forgot-password/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/forgot-password/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /login/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/login/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /logout/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/logout/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /me/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/me/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /me/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /me/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/me/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /me/password/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/me/password/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /refresh/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/refresh/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /register/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/register/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /resend-verification/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/resend-verification/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /reset-password/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/reset-password/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /revoke/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/revoke/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /verify-email/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/verify-email/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       ]
     },
     {
-      "name": "Categories",
+      "name": "Oauth",
       "item": [
-        { "name": "List Categories", "request": { "method": "GET", "url": "{{base_url}}/categories/" } },
-        { "name": "Get Category", "request": { "method": "GET", "url": "{{base_url}}/categories/:id/" } },
-        { "name": "Create Category", "request": { "method": "POST", "url": "{{base_url}}/categories/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Cereals\",\n  \"slug\": \"cereals\",\n  \"description\": \"Cereal products\"\n}" } } },
-        { "name": "Update Category", "request": { "method": "PATCH", "url": "{{base_url}}/categories/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
-        { "name": "Delete Category", "request": { "method": "DELETE", "url": "{{base_url}}/categories/:id/" } }
+        {
+          "name": "POST /facebook",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/facebook",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /google",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/google",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       ]
     },
     {
-      "name": "Products",
+      "name": "User",
       "item": [
-        { "name": "Search Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
-        { "name": "Get Home Products", "request": { "method": "GET", "url": "{{base_url}}/products/home/" } },
-        { "name": "List Products", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
-        { "name": "Filter by Category", "request": { "method": "GET", "url": { "raw": "{{base_url}}/products/?category=grains-pulses", "query": [{ "key": "category", "value": "grains-pulses" }] } } },
-        { "name": "Get Product", "request": { "method": "GET", "url": "{{base_url}}/products/:id/" } },
-        { "name": "Get Product Variants", "request": { "method": "GET", "url": "{{base_url}}/products/:id/variants/" } },
-        { "name": "Get Variant", "request": { "method": "GET", "url": "{{base_url}}/products/variants/:id/" } },
-        { "name": "Get Recommendations", "request": { "method": "GET", "url": "{{base_url}}/products/:id/recommendations/" } },
-        { "name": "Create Product", "request": { "method": "POST", "url": "{{base_url}}/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Organic Coffee\",\n  \"description\": \"Premium coffee\",\n  \"category\": \"beverages\"\n}" } } },
-        { "name": "Update Product", "request": { "method": "PUT", "url": "{{base_url}}/products/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\"\n}" } } },
-        { "name": "Delete Product", "request": { "method": "DELETE", "url": "{{base_url}}/products/:id/" } }
-      ]
-    },
-    {
-      "name": "Reviews",
-      "item": [
-        { "name": "List Reviews", "request": { "method": "GET", "url": "{{base_url}}/reviews/" } },
-        { "name": "Create Review", "request": { "method": "POST", "url": "{{base_url}}/reviews/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": \"PRODUCT_ID\",\n  \"rating\": 5,\n  \"comment\": \"Great product!\"\n}" } } },
-        { "name": "Get Review", "request": { "method": "GET", "url": "{{base_url}}/reviews/:id/" } },
-        { "name": "Get Product Reviews", "request": { "method": "GET", "url": "{{base_url}}/reviews/product/:id/" } },
-        { "name": "Update Review", "request": { "method": "PATCH", "url": "{{base_url}}/reviews/:id/" } },
-        { "name": "Delete Review", "request": { "method": "DELETE", "url": "{{base_url}}/reviews/:id/" } }
-      ]
-    },
-    {
-      "name": "Search",
-      "item": [
-        { "name": "Search", "request": { "method": "GET", "url": { "raw": "{{base_url}}/search/?q=coffee", "query": [{ "key": "q", "value": "coffee" }] } } },
-        { "name": "Autocomplete", "request": { "method": "GET", "url": { "raw": "{{base_url}}/search/autocomplete/?q=cof", "query": [{ "key": "q", "value": "cof" }] } } }
-      ]
-    },
-    {
-      "name": "Cart",
-      "item": [
-        { "name": "Get Cart", "request": { "method": "GET", "url": "{{base_url}}/cart/" } },
-        { "name": "Add to Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/add/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"VARIANT_ID\",\n  \"quantity\": 2\n}" } } },
-        { "name": "Update Cart Item", "request": { "method": "PUT", "url": "{{base_url}}/cart/items/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"quantity\": 3\n}" } } },
-        { "name": "Remove Cart Item", "request": { "method": "DELETE", "url": "{{base_url}}/cart/items/:id/" } },
-        { "name": "Clear Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/clear/" } },
-        { "name": "Apply Promo Code", "request": { "method": "POST", "url": "{{base_url}}/cart/promocode/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\"\n}" } } },
-        { "name": "Remove Promo Code", "request": { "method": "DELETE", "url": "{{base_url}}/cart/promocode/" } },
-        { "name": "Calculate Cart", "request": { "method": "POST", "url": "{{base_url}}/cart/calculate/" } },
-        { "name": "Checkout Summary", "request": { "method": "GET", "url": "{{base_url}}/cart/checkout-summary/" } }
-      ]
-    },
-    {
-      "name": "Orders",
-      "item": [
-        { "name": "Validate Checkout", "request": { "method": "POST", "url": "{{base_url}}/orders/checkout/validate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shipping_address_id\": \"ADDRESS_ID\",\n  \"shipping_method_id\": \"METHOD_ID\",\n  \"payment_method_id\": \"PAYMENT_ID\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\"\n}" } } },
-        { "name": "Place Order", "request": { "method": "POST", "url": "{{base_url}}/orders/checkout/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shipping_address_id\": \"ADDRESS_ID\",\n  \"shipping_method_id\": \"METHOD_ID\",\n  \"payment_method_id\": \"PAYMENT_ID\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\"\n}" } } },
-        { "name": "List Orders", "request": { "method": "GET", "url": { "raw": "{{base_url}}/orders/?page=1&limit=20", "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } } },
-        { "name": "Get Order", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/" } },
-        { "name": "Cancel Order", "request": { "method": "PUT", "url": "{{base_url}}/orders/:id/cancel/" } },
-        { "name": "Get Order Tracking", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/tracking/" } },
-        { "name": "Get Invoice", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/invoice/" } },
-        { "name": "Request Refund", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/refund/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Item damaged\"\n}" } } },
-        { "name": "Reorder", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/reorder/" } },
-        { "name": "Add Order Note", "request": { "method": "POST", "url": "{{base_url}}/orders/:id/notes/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"note\": \"Please leave at door\"\n}" } } },
-        { "name": "Get Order Notes", "request": { "method": "GET", "url": "{{base_url}}/orders/:id/notes/" } }
-      ]
-    },
-    {
-      "name": "Payments",
-      "item": [
-        { "name": "List Transactions", "request": { "method": "GET", "url": "{{base_url}}/payments/" } },
-        { "name": "List Payment Methods", "request": { "method": "GET", "url": "{{base_url}}/payments/methods/" } },
-        { "name": "Add Payment Method", "request": { "method": "POST", "url": "{{base_url}}/payments/methods/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"stripe_payment_method_id\": \"pm_xxx\",\n  \"type\": \"card\",\n  \"provider\": \"visa\",\n  \"last_four\": \"4242\",\n  \"expiry_month\": 12,\n  \"expiry_year\": 2027,\n  \"is_default\": false\n}" } } },
-        { "name": "Delete Payment Method", "request": { "method": "DELETE", "url": "{{base_url}}/payments/methods/:id/" } },
-        { "name": "Set Default Payment Method", "request": { "method": "PATCH", "url": "{{base_url}}/payments/methods/:id/default/" } },
-        { "name": "Get Failed Payments", "request": { "method": "GET", "url": "{{base_url}}/payments/failures/" } },
-        { "name": "Retry Failed Payment", "request": { "method": "POST", "url": "{{base_url}}/payments/failures/:payment_intent_id/retry/" } }
-      ]
-    },
-    {
-      "name": "Subscriptions",
-      "item": [
-        { "name": "Calculate Cost", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/calculate-cost/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"],\n  \"billing_cycle\": \"monthly\"\n}" } } },
-        { "name": "Create Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Monthly Box\",\n  \"variant_ids\": [\"VARIANT_ID\"],\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"USD\"\n}" } } },
-        { "name": "List Subscriptions", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/" } },
-        { "name": "Get Subscription", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/:id/" } },
-        { "name": "Update Subscription", "request": { "method": "PUT", "url": "{{base_url}}/subscriptions/:id/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"auto_renew\": true\n}" } } },
-        { "name": "Cancel Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/cancel/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"No longer needed\"\n}" } } },
-        { "name": "Pause Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/pause/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"pause_reason\": \"Temporary pause\"\n}" } } },
-        { "name": "Resume Subscription", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/resume/" } },
-        { "name": "Add Products", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/:id/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"products\": [{\"variant_id\": \"VARIANT_ID\", \"quantity\": 1}]\n}" } } },
-        { "name": "Remove Products", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id/products/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_ids\": [\"VARIANT_ID\"]\n}" } } },
-        { "name": "Remove Single Product", "request": { "method": "DELETE", "url": "{{base_url}}/subscriptions/:id/products/:product_id/" } },
-        { "name": "Trigger Order Processing", "request": { "method": "POST", "url": "{{base_url}}/subscriptions/trigger-order-processing/" } },
-        { "name": "Get Subscription Plans", "request": { "method": "GET", "url": "{{base_url}}/subscriptions/plans/" } }
-      ]
-    },
-    {
-      "name": "Shipping",
-      "item": [
-        { "name": "List Shipping Methods", "request": { "method": "GET", "url": "{{base_url}}/shipping/methods/" } },
-        { "name": "Get Shipping Method", "request": { "method": "GET", "url": "{{base_url}}/shipping/methods/:id/" } },
-        { "name": "Create Shipping Method", "request": { "method": "POST", "url": "{{base_url}}/shipping/methods/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Standard Shipping\",\n  \"price\": 5.99,\n  \"estimated_days\": 5\n}" } } },
-        { "name": "Calculate Shipping", "request": { "method": "POST", "url": "{{base_url}}/shipping/calculate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"address_id\": \"ADDRESS_ID\",\n  \"method_id\": \"METHOD_ID\",\n  \"items\": []\n}" } } },
-        { "name": "Track Shipment", "request": { "method": "POST", "url": "{{base_url}}/shipping/track/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tracking_number\": \"TRACKING_NUM\",\n  \"carrier\": \"ups\"\n}" } } }
-      ]
-    },
-    {
-      "name": "Promocodes",
-      "item": [
-        { "name": "List Promocodes", "request": { "method": "GET", "url": "{{base_url}}/promocodes/" } },
-        { "name": "Get Promocode", "request": { "method": "GET", "url": "{{base_url}}/promocodes/:id/" } },
-        { "name": "Create Promocode", "request": { "method": "POST", "url": "{{base_url}}/promocodes/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\",\n  \"discount_type\": \"percentage\",\n  \"discount_value\": 10,\n  \"is_active\": true\n}" } } },
-        { "name": "Update Promocode", "request": { "method": "PATCH", "url": "{{base_url}}/promocodes/:id/" } },
-        { "name": "Delete Promocode", "request": { "method": "DELETE", "url": "{{base_url}}/promocodes/:id/" } },
-        { "name": "Validate Promocode", "request": { "method": "POST", "url": "{{base_url}}/promocodes/validate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\"\n}" } } }
-      ]
-    },
-    {
-      "name": "Refunds",
-      "item": [
-        { "name": "List Refunds", "request": { "method": "GET", "url": "{{base_url}}/refunds/" } },
-        { "name": "Get Refund", "request": { "method": "GET", "url": "{{base_url}}/refunds/:id/" } },
-        { "name": "Create Refund", "request": { "method": "POST", "url": "{{base_url}}/refunds/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"ORDER_ID\",\n  \"reason\": \"Not satisfied\"\n}" } } },
-        { "name": "Update Refund", "request": { "method": "PATCH", "url": "{{base_url}}/refunds/:id/" } },
-        { "name": "Update Refund Status", "request": { "method": "PUT", "url": "{{base_url}}/refunds/:id/status/" } }
-      ]
-    },
-    {
-      "name": "Tax",
-      "item": [
-        { "name": "Calculate Tax", "request": { "method": "POST", "url": "{{base_url}}/tax/calculate/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"amount\": 100.00\n}" } } },
-        { "name": "List Tax Rates", "request": { "method": "GET", "url": "{{base_url}}/tax/rates/" } },
-        { "name": "Get Tax Rate", "request": { "method": "GET", "url": "{{base_url}}/tax/rates/:tax_rate_id/" } },
-        { "name": "Create Tax Rate", "request": { "method": "POST", "url": "{{base_url}}/tax/rates/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"country_code\": \"US\",\n  \"state\": \"NY\",\n  \"rate\": 0.08,\n  \"tax_type\": \"sales\"\n}" } } },
-        { "name": "Update Tax Rate", "request": { "method": "PATCH", "url": "{{base_url}}/tax/rates/:tax_rate_id/" } },
-        { "name": "Delete Tax Rate", "request": { "method": "DELETE", "url": "{{base_url}}/tax/rates/:tax_rate_id/" } }
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /me/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /profile/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/profile/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{user_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{user_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{user_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{user_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{user_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{user_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{user_id}/activate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{user_id}/activate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{user_id}/activity/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{user_id}/activity/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{user_id}/deactivate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{user_id}/deactivate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{user_id}/reset-password/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{user_id}/reset-password/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PUT /{user_id}/status/",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/{user_id}/status/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PUT /{user_id}/verify/",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/{user_id}/verify/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       ]
     },
     {
       "name": "Analytics",
       "item": [
-        { "name": "Track Event", "request": { "method": "POST", "url": "{{base_url}}/analytics/track/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"event\": \"page_view\",\n  \"properties\": {}\n}" } } },
-        { "name": "Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/dashboard/" } },
-        { "name": "Simple Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/simple-dashboard/" } },
-        { "name": "KPIs", "request": { "method": "GET", "url": "{{base_url}}/analytics/kpis/" } },
-        { "name": "Revenue", "request": { "method": "GET", "url": "{{base_url}}/analytics/revenue/" } },
-        { "name": "Sales Trend", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales-trend/" } },
-        { "name": "Sales Overview", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales-overview/" } },
-        { "name": "Conversion Rates", "request": { "method": "GET", "url": "{{base_url}}/analytics/conversion-rates/" } },
-        { "name": "Cart Abandonment", "request": { "method": "GET", "url": "{{base_url}}/analytics/cart-abandonment/" } },
-        { "name": "Refund Rates", "request": { "method": "GET", "url": "{{base_url}}/analytics/refund-rates/" } },
-        { "name": "Sales", "request": { "method": "GET", "url": "{{base_url}}/analytics/sales/" } },
-        { "name": "Users", "request": { "method": "GET", "url": "{{base_url}}/analytics/users/" } },
-        { "name": "Products", "request": { "method": "GET", "url": "{{base_url}}/analytics/products/" } },
-        { "name": "Orders", "request": { "method": "GET", "url": "{{base_url}}/analytics/orders/" } },
-        { "name": "Stats", "request": { "method": "GET", "url": "{{base_url}}/analytics/stats/" } },
-        { "name": "Admin Dashboard", "request": { "method": "GET", "url": "{{base_url}}/analytics/dashboard/admin/" } },
-        { "name": "Export Orders", "request": { "method": "GET", "url": "{{base_url}}/analytics/export/orders/" } },
-        { "name": "Export Subscriptions", "request": { "method": "GET", "url": "{{base_url}}/analytics/export/subscriptions/" } }
-      ]
-    },
-    {
-      "name": "Webhooks",
-      "item": [
-        { "name": "Stripe Webhook", "request": { "method": "POST", "url": "{{base_url}}/webhooks/stripe/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {}\n}" } } },
-        { "name": "Webhooks Health", "request": { "method": "GET", "url": "{{base_url}}/webhooks/health/" } }
+        {
+          "name": "GET /cart-abandonment/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/cart-abandonment/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /conversion-rates/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/conversion-rates/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /dashboard/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /dashboard/admin/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard/admin/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /export/orders/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/export/orders/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /kpis/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/kpis/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /orders/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/orders/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /products/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /refund-rates/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/refund-rates/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /repeat-customers/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/repeat-customers/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /revenue/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/revenue/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /sales-overview/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sales-overview/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /sales-trend/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sales-trend/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /sales/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sales/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /simple-dashboard/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/simple-dashboard/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /stats/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/stats/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /time-to-purchase/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/time-to-purchase/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /track/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/track/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /users-growth-trend/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users-growth-trend/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /users/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       ]
     },
     {
       "name": "Inventory",
       "item": [
-        { "name": "Create Inventory Location", "request": { "method": "POST", "url": "{{base_url}}/inventory/locations/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Warehouse\",\n  \"address\": \"123 Warehouse Rd\"\n}" } } },
-        { "name": "List Inventory Locations", "request": { "method": "GET", "url": "{{base_url}}/inventory/locations/" } },
-        { "name": "Get Inventory Location", "request": { "method": "GET", "url": "{{base_url}}/inventory/locations/:location_id/" } },
-        { "name": "Update Inventory Location", "request": { "method": "PATCH", "url": "{{base_url}}/inventory/locations/:location_id/" } },
-        { "name": "Delete Inventory Location", "request": { "method": "DELETE", "url": "{{base_url}}/inventory/locations/:location_id/" } },
-        { "name": "Create Inventory Record", "request": { "method": "POST", "url": "{{base_url}}/inventory/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"VARIANT_ID\",\n  \"location_id\": \"LOCATION_ID\",\n  \"quantity\": 100\n}" } } },
-        { "name": "List Inventory", "request": { "method": "GET", "url": "{{base_url}}/inventory/" } },
-        { "name": "Get Inventory", "request": { "method": "GET", "url": "{{base_url}}/inventory/:inventory_id/" } },
-        { "name": "Update Inventory", "request": { "method": "PATCH", "url": "{{base_url}}/inventory/:inventory_id/" } },
-        { "name": "Delete Inventory", "request": { "method": "DELETE", "url": "{{base_url}}/inventory/:inventory_id/" } },
-        { "name": "Create Inventory Adjustment", "request": { "method": "POST", "url": "{{base_url}}/inventory/adjustments/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"inventory_id\": \"INVENTORY_ID\",\n  \"quantity_change\": -1,\n  \"reason\": \"order_purchase\"\n}" } } },
-        { "name": "List Inventory Adjustments", "request": { "method": "GET", "url": "{{base_url}}/inventory/adjustments/" } },
-        { "name": "Get Inventory Adjustment", "request": { "method": "GET", "url": "{{base_url}}/inventory/adjustments/:adjustment_id/" } }
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /adjustments/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/adjustments/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /adjustments/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/adjustments/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /adjustments/{adjustment_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/adjustments/{adjustment_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /adjustments/{adjustment_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/adjustments/{adjustment_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /locations/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/locations/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /locations/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/locations/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /locations/{location_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/locations/{location_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /locations/{location_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/locations/{location_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /locations/{location_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/locations/{location_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /sync-all/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/sync-all/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /sync/product/{product_id}/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/sync/product/{product_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{inventory_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{inventory_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{inventory_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{inventory_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{inventory_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{inventory_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /deals/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/deals/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /featured/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/featured/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /home/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/home/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /images/{image_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/images/{image_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /images/{image_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/images/{image_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /images/{image_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/images/{image_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /variants/{variant_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/variants/{variant_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /variants/{variant_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/variants/{variant_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /variants/{variant_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/variants/{variant_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /variants/{variant_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/variants/{variant_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /variants/{variant_id}/images/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/variants/{variant_id}/images/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /variants/{variant_id}/images/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/variants/{variant_id}/images/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{product_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{product_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{product_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{product_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{product_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{product_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{product_id}/feature/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{product_id}/feature/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{product_id}/moderate/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{product_id}/moderate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{product_id}/recommendations/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{product_id}/recommendations/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{product_id}/variants/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{product_id}/variants/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{product_id}/variants/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{product_id}/variants/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{product_id}/variants/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{product_id}/variants/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Review",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /product/{product_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/product/{product_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{review_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{review_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /add/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/add/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /calculate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/calculate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /checkout-summary/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/checkout-summary/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /clear/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/clear/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /count/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/count/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /items/{item_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/items/{item_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /items/{item_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/items/{item_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /validate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/validate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{item_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{item_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{item_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{item_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /checkout/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /checkout/validate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout/validate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /statistics/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/statistics/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /track/{order_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/track/{order_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{order_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{order_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{order_id}/cancel/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{order_id}/cancel/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{order_id}/cancel/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{order_id}/cancel/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PUT /{order_id}/deliver/",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/{order_id}/deliver/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{order_id}/invoice/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{order_id}/invoice/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{order_id}/notes/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{order_id}/notes/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{order_id}/notes/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{order_id}/notes/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{order_id}/notes/{note_index}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{order_id}/notes/{note_index}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{order_id}/ship/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{order_id}/ship/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{order_id}/shipments/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{order_id}/shipments/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{order_id}/status/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{order_id}/status/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{order_id}/tracking/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{order_id}/tracking/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /admin/transactions/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/transactions/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /failures/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/failures/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /failures/{payment_intent_id}/retry/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/failures/{payment_intent_id}/retry/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /failures/{payment_intent_id}/status/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/failures/{payment_intent_id}/status/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /intents/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/intents/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /intents/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/intents/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /intents/{payment_intent_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/intents/{payment_intent_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /intents/{payment_intent_id}/confirm/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/intents/{payment_intent_id}/confirm/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /methods/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/methods/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /methods/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/methods/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /methods/{payment_method_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/methods/{payment_method_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /methods/{payment_method_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/methods/{payment_method_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /methods/{payment_method_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/methods/{payment_method_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /methods/{payment_method_id}/default/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/methods/{payment_method_id}/default/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /process/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/process/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /refunds/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/refunds/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /refunds/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/refunds/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /refunds/{refund_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/refunds/{refund_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /transactions/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/transactions/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /transactions/{transaction_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/transactions/{transaction_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Promocodes",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /trigger-cleanup/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/trigger-cleanup/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /validate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/validate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{promocode_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{promocode_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{promocode_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{promocode_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{promocode_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{promocode_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refunds",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /orders/{order_id}/request/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/orders/{order_id}/request/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{refund_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{refund_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{refund_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{refund_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PUT /{refund_id}/status/",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/{refund_id}/status/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipping",
+      "item": [
+        {
+          "name": "POST /calculate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/calculate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /methods/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/methods/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /methods/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/methods/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /methods/{method_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/methods/{method_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /methods/{method_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/methods/{method_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /methods/{method_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/methods/{method_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipping Tracking",
+      "item": [
+        {
+          "name": "GET /carriers/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/carriers/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /providers/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/providers/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /providers/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/providers/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /providers/{provider_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/providers/{provider_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /providers/{provider_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/providers/{provider_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /shipments/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/shipments/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /shipments/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/shipments/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /shipments/{shipment_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/shipments/{shipment_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /shipments/{shipment_id}/status/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/shipments/{shipment_id}/status/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /track/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/track/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /webhooks/{carrier}/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/webhooks/{carrier}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /calculate-cost/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/calculate-cost/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /plans/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/plans/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /trigger-notifications/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/trigger-notifications/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /trigger-order-processing/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/trigger-order-processing/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{subscription_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{subscription_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{subscription_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{subscription_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{subscription_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{subscription_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{subscription_id}/auto-renew/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{subscription_id}/auto-renew/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{subscription_id}/cancel/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{subscription_id}/cancel/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{subscription_id}/details/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{subscription_id}/details/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{subscription_id}/discounts/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{subscription_id}/discounts/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{subscription_id}/discounts/{discount_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{subscription_id}/discounts/{discount_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{subscription_id}/orders/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{subscription_id}/orders/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{subscription_id}/pause/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{subscription_id}/pause/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{subscription_id}/process-shipment/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{subscription_id}/process-shipment/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{subscription_id}/products/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{subscription_id}/products/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{subscription_id}/products/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{subscription_id}/products/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{subscription_id}/products/adjust-quantity/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{subscription_id}/products/adjust-quantity/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{subscription_id}/products/quantities/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{subscription_id}/products/quantities/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{subscription_id}/products/quantity/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{subscription_id}/products/quantity/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{subscription_id}/products/{product_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{subscription_id}/products/{product_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /{subscription_id}/resume/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/{subscription_id}/resume/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tax",
+      "item": [
+        {
+          "name": "POST /calculate/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/calculate/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /countries/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/countries/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /rates/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/rates/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /rates/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/rates/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /rates/bulk-update/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/rates/bulk-update/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /rates/{tax_rate_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/rates/{tax_rate_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /rates/{tax_rate_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/rates/{tax_rate_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /rates/{tax_rate_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/rates/{tax_rate_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /tax-types/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tax-types/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "GET /health/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /stripe/",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/stripe/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       ]
     },
     {
       "name": "Contact Messages",
       "item": [
-        { "name": "Submit Message", "request": { "method": "POST", "url": "{{base_url}}/contact-messages/", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"subject\": \"Product Inquiry\",\n  \"message\": \"I have a question about your products.\"\n}" } } },
-        { "name": "List Messages", "request": { "method": "GET", "url": "{{base_url}}/contact-messages/" } },
-        { "name": "Get Message", "request": { "method": "GET", "url": "{{base_url}}/contact-messages/:id/" } },
-        { "name": "Update Message", "request": { "method": "PATCH", "url": "{{base_url}}/contact-messages/:id/" } },
-        { "name": "Delete Message", "request": { "method": "DELETE", "url": "{{base_url}}/contact-messages/:id/" } }
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "POST /",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "DELETE /{message_id}/",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/{message_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "GET /{message_id}/",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/{message_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "PATCH /{message_id}/",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/{message_id}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       ]
     }
   ]

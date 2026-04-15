@@ -1,462 +1,328 @@
-# API Reference (auto-generated snapshot)
+# API Reference (auto-generated)
 
 Base URL: `/v1`
 
 All authenticated endpoints require a Bearer token in the `Authorization` header.
 
-This file is an auto-generated snapshot of route decorators as of 2026-04-10. It groups endpoints by area — use `postman_collection.json` for runnable examples.
+Generated from current API routes.
 
 ---
 
-## Auth / Accounts
+## Addresses
 
-- POST `/auth/register/` — register a new user
-- POST `/auth/login/` — login (returns access + refresh tokens)
-- POST `/auth/refresh/` — refresh access token
-- POST `/auth/revoke/` — revoke refresh token
-- POST `/auth/logout/` — logout current user (requires auth)
-- GET `/auth/me/` — current user (requires auth)
-- GET `/auth/verify-email/` — verify email token (query param `token`)
-- POST `/auth/resend-verification/`
-- POST `/auth/forgot-password/`
-- POST `/auth/reset-password/`
-- PATCH `/auth/me/` — update current user
-- PUT `/auth/me/password/` — change password
-- DELETE `/auth/me/`
-
-OAuth endpoints:
-- GET `/auth/social/{provider}/login/`
-- GET `/auth/social/{provider}/callback/`
+- GET `/`
+- POST `/`
+- DELETE `/{address_id}/`
+- GET `/{address_id}/`
+- PATCH `/{address_id}/`
 
 ---
 
-## Users / Admin
+## Auth
 
-- GET `/users/me/`
-- GET `/users/profile/`
-- POST `/users/` — create user (admin)
-- GET `/users/` — list users (admin)
-- GET `/users/{user_id}/`
-- PATCH `/users/{user_id}/`
-- PUT `/users/{user_id}/status/`
-- POST `/users/{user_id}/reset-password/`
-- POST `/users/{user_id}/deactivate/`
-- POST `/users/{user_id}/activate/`
-- PUT `/users/{user_id}/verify/`
-- GET `/users/{user_id}/activity/`
-
-Addresses:
-- POST `/addresses/` — create address
-- GET `/addresses/` — list
-- GET `/addresses/{address_id}/`
-- PATCH `/addresses/{address_id}/`
-- DELETE `/addresses/{address_id}/`
+- POST `/forgot-password/`
+- POST `/login/`
+- POST `/logout/`
+- DELETE `/me/`
+- GET `/me/`
+- PATCH `/me/`
+- PATCH `/me/password/`
+- POST `/refresh/`
+- POST `/register/`
+- POST `/resend-verification/`
+- POST `/reset-password/`
+- POST `/revoke/`
+- GET `/verify-email/`
 
 ---
 
-## Catalog
+## Oauth
 
-Products:
-- GET `/products/home/`
-- GET `/products/` — list/search (query: `q, page, limit, category`)
-- GET `/products/featured/`, `/products/deals/`
-- GET `/products/{product_id}/`
-- POST `/products/` — create (admin)
-- PUT `/products/{product_id}/` — update (admin)
-- DELETE `/products/{product_id}/`
-- POST `/products/{product_id}/variants/`
-- GET `/products/{product_id}/variants/`
-- GET `/products/variants/{variant_id}/`
-- PATCH `/products/variants/{variant_id}/`
-- DELETE `/products/variants/{variant_id}/`
-- Image endpoints: POST `/products/variants/{variant_id}/images/`, GET `/products/images/{image_id}/`, PATCH/DELETE `/products/images/{image_id}/`
-- PATCH `/products/{product_id}/moderate/` — moderate product (admin)
-- PATCH `/products/{product_id}/feature/` — feature product (admin)
-
-Reviews:
-- GET/POST `/reviews/`
-- GET `/reviews/{review_id}/`
-- GET `/reviews/product/{product_id}/`update
-
-Inventory:
-- POST `/inventory/locations/` — create location (admin)
-- GET `/inventory/locations/`, GET `/inventory/locations/{location_id}/`
-- PATCH `/inventory/locations/{location_id}/`
-- DELETE `/inventory/locations/{location_id}/`
-- POST `/inventory/` — create inventory record (admin)
-- GET `/inventory/`, GET `/inventory/{inventory_id}/`
-- PATCH `/inventory/{inventory_id}/`
-- DELETE `/inventory/{inventory_id}/`
-- POST `/inventory/adjustments/`, GET `/inventory/adjustments/{adjustment_id}/`, GET `/inventory/adjustments/`
+- POST `/facebook`
+- POST `/google`
 
 ---
 
-## Cart
+## User
 
-- GET `/cart/`
-- POST `/cart/add/`
-- PUT `/cart/items/{id}/`
-- DELETE `/cart/items/{id}/`
-- POST `/cart/promocode/`, DELETE `/cart/promocode/`
-- POST `/cart/clear/`
-- POST `/cart/calculate/`
-- GET `/cart/checkout-summary/`
-
----
-
-## Orders
-
-- POST `/orders/checkout/` — place order
-- GET `/orders/`, GET `/orders/{order_id}/`
-- PUT `/orders/{order_id}/cancel/` — cancel
-- GET `/orders/{order_id}/invoice/`
-- GET `/orders/{order_id}/tracking/` and other tracking endpoints under shipping tracking
-
----
-
-## Payments & Webhooks
-
-- GET `/payments/` — list transactions
-- GET `/payments/methods/`, POST `/payments/methods/`, DELETE `/payments/methods/{id}/`, PATCH `/payments/methods/{id}/default/`
-- GET `/payments/failures/`, POST `/payments/failures/{payment_intent_id}/retry/`
-- POST `/webhooks/stripe/` — Stripe webhook endpoint
-- GET `/webhooks/health/` — Webhook health check
-
----
-
-## Subscriptions
-
-- POST `/subscriptions/` — create
-- POST `/subscriptions/calculate-cost/`
-- GET `/subscriptions/`, GET `/subscriptions/{subscription_id}/`
-- PATCH `/subscriptions/{subscription_id}/`
-- POST `/subscriptions/{subscription_id}/cancel/`, POST `/subscriptions/{subscription_id}/pause/`, POST `/subscriptions/{subscription_id}/resume/`
-- POST `/subscriptions/{subscription_id}/products/` — add products
-- DELETE `/subscriptions/{subscription_id}/products/` — remove products
-- DELETE `/subscriptions/{subscription_id}/products/{product_id}/` — remove single product
-- POST `/subscriptions/trigger-order-processing/` — trigger processing (admin)
-- GET `/subscriptions/plans/` — list subscription plans
-
----
-
-## Refunds & Promocodes
-
-- Refunds: POST `/refunds/`, GET `/refunds/{refund_id}/`, PATCH `/refunds/{refund_id}/`, PUT `/refunds/{refund_id}/status/`
-- Promocodes: GET `/promocodes/`, GET `/promocodes/{id}/`, POST `/promocodes/`, PATCH `/promocodes/{id}/`, DELETE `/promocodes/{id}/`, POST `/promocodes/validate/`, POST `/promocodes/trigger-cleanup/`
-
----
-
-## Shipping & Shipping Tracking
-
-- GET `/shipping/methods/`, GET `/shipping/methods/{method_id}/`
-- POST `/shipping/methods/` (admin)
-- PATCH `/shipping/methods/{method_id}/` (admin)
-- DELETE `/shipping/methods/{method_id}/` (admin)
-- POST `/shipping/calculate/`
-- POST `/shipping/track/`
-- Shipping tracking endpoints: POST `/shipping-tracking/shipments/`, GET `/shipping-tracking/shipments/{shipment_id}/`, POST `/shipping-tracking/track/`, POST `/shipping-tracking/webhooks/{carrier}/`
-
----
-
-## Tax
-
-- POST `/tax/calculate/`
-- GET `/tax/rates/` — list tax rates
-- POST `/tax/rates/` — create tax rate (admin)
-- GET `/tax/rates/{tax_rate_id}/` — get tax rate
-- PATCH `/tax/rates/{tax_rate_id}/` — update tax rate (admin)
-- DELETE `/tax/rates/{tax_rate_id}/` — delete tax rate (admin)
-
----
-
-## Admin / Analytics
-
-- Large set of endpoints under `/admin/*` for analytics, users, products, inventory sync, tax rates, payments and more. Key endpoints include `/admin/dashboard`, `/admin/stats`, `/admin/payments`, `/admin/inventory`, `/admin/subscriptions` and `/admin/analytics/*`.
-
----
-
-## System
-
-- GET `/` — health
-- Contact messages under `/contact-messages/` (POST, GET, GET/{id}, PATCH, DELETE)
+- GET `/`
+- POST `/`
+- GET `/me/`
+- GET `/profile/`
+- DELETE `/{user_id}/`
+- GET `/{user_id}/`
+- PATCH `/{user_id}/`
+- POST `/{user_id}/activate/`
+- GET `/{user_id}/activity/`
+- POST `/{user_id}/deactivate/`
+- POST `/{user_id}/reset-password/`
+- PUT `/{user_id}/status/`
+- PUT `/{user_id}/verify/`
 
 ---
 
 ## Analytics
 
-- POST `/analytics/track/` — track event
-- GET `/analytics/dashboard/` — dashboard
-- GET `/analytics/simple-dashboard/` — simple dashboard
-- GET `/analytics/conversion-rates/` — conversion rates
-- GET `/analytics/cart-abandonment/` — cart abandonment
-- GET `/analytics/time-to-purchase/` — time to purchase
-- GET `/analytics/refund-rates/` — refund rates
-- GET `/analytics/repeat-customers/` — repeat customers
-- GET `/analytics/sales-trend/` — sales trend
-- GET `/analytics/sales-overview/` — sales overview
-- GET `/analytics/sales/` — sales analytics
-- GET `/analytics/users/` — user analytics
-- GET `/analytics/products/` — product analytics
-- GET `/analytics/orders/` — order analytics
-- GET `/analytics/revenue/` — revenue analytics
-- GET `/analytics/kpis/` — KPIs
-- GET `/analytics/stats/` — stats
-- GET `/analytics/dashboard/admin/` — admin dashboard
-- GET `/analytics/export/orders/` — export orders
-- GET `/analytics/export/subscriptions/` — export subscriptions
+- GET `/cart-abandonment/`
+- GET `/conversion-rates/`
+- GET `/dashboard/`
+- GET `/dashboard/admin/`
+- GET `/export/orders/`
+- GET `/kpis/`
+- GET `/orders/`
+- GET `/products/`
+- GET `/refund-rates/`
+- GET `/repeat-customers/`
+- GET `/revenue/`
+- GET `/sales-overview/`
+- GET `/sales-trend/`
+- GET `/sales/`
+- GET `/simple-dashboard/`
+- GET `/stats/`
+- GET `/time-to-purchase/`
+- POST `/track/`
+- GET `/users-growth-trend/`
+- GET `/users/`
 
 ---
 
-Notes:
-- This snapshot is intended as a developer-facing quick reference. For executable examples and request bodies use `postman_collection.json` in the repository root.
+## Inventory
 
+- GET `/`
+- POST `/`
+- GET `/adjustments/`
+- POST `/adjustments/`
+- DELETE `/adjustments/{adjustment_id}/`
+- GET `/adjustments/{adjustment_id}/`
+- GET `/locations/`
+- POST `/locations/`
+- DELETE `/locations/{location_id}/`
+- GET `/locations/{location_id}/`
+- PATCH `/locations/{location_id}/`
+- POST `/sync-all/`
+- POST `/sync/product/{product_id}/`
+- DELETE `/{inventory_id}/`
+- GET `/{inventory_id}/`
+- PATCH `/{inventory_id}/`
 
-### PUT /orders/{id}/cancel/
-Cancel order. 🔒
+---
 
-### GET /orders/{id}/tracking/
-Get order tracking. 🔒
+## Products
 
-### POST /orders/{id}/refund/
-Request refund. 🔒
+- GET `/`
+- POST `/`
+- GET `/deals/`
+- GET `/featured/`
+- GET `/home/`
+- DELETE `/images/{image_id}/`
+- GET `/images/{image_id}/`
+- PATCH `/images/{image_id}/`
+- DELETE `/variants/{variant_id}/`
+- GET `/variants/{variant_id}/`
+- GET `/variants/{variant_id}/`
+- PATCH `/variants/{variant_id}/`
+- GET `/variants/{variant_id}/images/`
+- POST `/variants/{variant_id}/images/`
+- DELETE `/{product_id}/`
+- GET `/{product_id}/`
+- PATCH `/{product_id}/`
+- PATCH `/{product_id}/feature/`
+- PATCH `/{product_id}/moderate/`
+- GET `/{product_id}/recommendations/`
+- GET `/{product_id}/variants/`
+- GET `/{product_id}/variants/`
+- POST `/{product_id}/variants/`
 
-### POST /orders/{id}/reorder/
-Reorder. 🔒
+---
 
-### GET /orders/{id}/invoice/
-Download invoice. 🔒
+## Review
 
-### POST /orders/{id}/notes/
-Add order note. 🔒
+- GET `/`
+- POST `/`
+- GET `/product/{product_id}/`
+- GET `/{review_id}/`
 
-### GET /orders/{id}/notes/
-Get order notes. 🔒
+---
+
+## Cart
+
+- GET `/`
+- POST `/`
+- POST `/add/`
+- POST `/calculate/`
+- GET `/checkout-summary/`
+- POST `/clear/`
+- GET `/count/`
+- DELETE `/items/{item_id}/`
+- PATCH `/items/{item_id}/`
+- POST `/validate/`
+- DELETE `/{item_id}/`
+- PATCH `/{item_id}/`
+
+---
+
+## Orders
+
+- GET `/`
+- POST `/`
+- POST `/checkout/`
+- POST `/checkout/validate/`
+- GET `/statistics/`
+- GET `/track/{order_id}/`
+- GET `/{order_id}/`
+- PATCH `/{order_id}/cancel/`
+- POST `/{order_id}/cancel/`
+- PUT `/{order_id}/deliver/`
+- GET `/{order_id}/invoice/`
+- GET `/{order_id}/notes/`
+- POST `/{order_id}/notes/`
+- GET `/{order_id}/notes/{note_index}/`
+- POST `/{order_id}/ship/`
+- GET `/{order_id}/shipments/`
+- PATCH `/{order_id}/status/`
+- GET `/{order_id}/tracking/`
 
 ---
 
 ## Payments
 
-### GET /payments/
-List payment transactions. 🔒
-
-### GET /payments/methods/
-List payment methods. 🔒
-
-### POST /payments/methods/
-Add payment method. 🔒
-
-**Body:** `{ stripe_payment_method_id, type, provider, last_four, expiry_month, expiry_year, is_default? }`
-
-### DELETE /payments/methods/{id}/
-Delete payment method. 🔒
-
-### PATCH /payments/methods/{id}/
-Update payment method. 🔒
-
-### PATCH /payments/methods/{id}/default/
-Set default payment method. 🔒
-
-### GET /payments/failures/{payment_intent_id}/status/
-Get payment failure status. 🔒
-
-### POST /payments/failures/{payment_intent_id}/retry/
-Retry failed payment. 🔒
-
-### GET /payments/failures/
-Get user's failed payments. 🔒
-
----
-
-## Subscriptions
-
-### POST /subscriptions/calculate-cost/
-Calculate subscription cost. 🔒
-
-**Body:** `{ variant_ids, billing_cycle?, currency?, discount_code? }`
-
-### POST /subscriptions/
-Create subscription. 🔒
-
-**Body:** `{ name, variant_ids, variant_quantities?, delivery_type?, delivery_address_id?, billing_cycle?, currency?, discount_code? }`
-
-### GET /subscriptions/
-List user subscriptions. 🔒
-
-**Query:** `page?, limit?`
-
-### GET /subscriptions/{id}/
-Get subscription by ID. 🔒
-
-### PATCH /subscriptions/{id}/
-Update subscription. 🔒
-
-### POST /subscriptions/{id}/cancel/
-Cancel subscription. 🔒
-
-**Body:** `{ reason? }`
-
-### DELETE /subscriptions/{id}/
-Delete subscription. 🔒
-
-### POST /subscriptions/{id}/pause/
-Pause subscription. 🔒
-
-**Body:** `{ pause_reason? }`
-
-### POST /subscriptions/{id}/resume/
-Resume subscription. 🔒
-
-### POST /subscriptions/{id}/products/
-Add products to subscription. 🔒
-
-**Body:** `{ products: [{variant_id, quantity}] }`
-
-### DELETE /subscriptions/{id}/products/
-Remove products from subscription. 🔒
-
-**Body:** `{ variant_ids: string[] }`
-
-### DELETE /subscriptions/{id}/products/{product_id}/
-Remove single product. 🔒
-
-### POST /subscriptions/trigger-order-processing/
-Trigger order processing. 🔒 Admin
-
----
-
-## Shipping
-
-### GET /shipping/methods/
-List shipping methods.
-
-### GET /shipping/methods/{id}/
-Get shipping method by ID.
-
-### POST /shipping/methods/
-Create shipping method. 🔒 Admin
-
-**Body:** `{ name, description?, price, estimated_days, is_active? }`
-
-### PATCH /shipping/methods/{id}/
-Update shipping method. 🔒 Admin
-
-### DELETE /shipping/methods/{id}/
-Delete shipping method. 🔒 Admin
-
-### POST /shipping/calculate/
-Calculate shipping cost.
-
-**Body:** `{ address_id, method_id, items }`
-
----
-
-## Shipping Tracking
-
-### POST /shipping-tracking/shipments/
-Create shipment. 🔒 Admin
-
-### GET /shipping-tracking/shipments/{id}/
-Get shipment by ID. 🔒
-
-### POST /shipping-tracking/track/
-Track shipment.
-
-**Body:** `{ tracking_number, carrier? }`
+- GET `/`
+- GET `/admin/transactions/`
+- GET `/failures/`
+- POST `/failures/{payment_intent_id}/retry/`
+- GET `/failures/{payment_intent_id}/status/`
+- GET `/intents/`
+- POST `/intents/`
+- GET `/intents/{payment_intent_id}/`
+- POST `/intents/{payment_intent_id}/confirm/`
+- GET `/methods/`
+- POST `/methods/`
+- DELETE `/methods/{payment_method_id}/`
+- GET `/methods/{payment_method_id}/`
+- PATCH `/methods/{payment_method_id}/`
+- POST `/methods/{payment_method_id}/default/`
+- POST `/process/`
+- GET `/refunds/`
+- POST `/refunds/`
+- GET `/refunds/{refund_id}/`
+- GET `/transactions/`
+- GET `/transactions/{transaction_id}/`
 
 ---
 
 ## Promocodes
 
-### GET /promocodes/
-List promocodes. 🔒 Admin
-
-### GET /promocodes/{id}/
-Get promocode by ID. 🔒 Admin
-
-### POST /promocodes/
-Create promocode. 🔒 Admin
-
-**Body:** `{ code, discount_type, discount_value, min_order_amount?, max_uses?, expires_at?, is_active? }`
-
-### PATCH /promocodes/{id}/
-Update promocode. 🔒 Admin
-
-### DELETE /promocodes/{id}/
-Delete promocode. 🔒 Admin
-
-### POST /promocodes/validate/
-Validate promocode. 🔒
-
-### POST /promocodes/trigger-cleanup/
-Trigger cleanup. 🔒 Admin
+- GET `/`
+- POST `/`
+- POST `/trigger-cleanup/`
+- POST `/validate/`
+- DELETE `/{promocode_id}/`
+- GET `/{promocode_id}/`
+- PATCH `/{promocode_id}/`
 
 ---
 
 ## Refunds
 
-### POST /refunds/
-Create refund. 🔒
+- GET `/`
+- POST `/`
+- POST `/orders/{order_id}/request/`
+- GET `/{refund_id}/`
+- PATCH `/{refund_id}/`
+- PUT `/{refund_id}/status/`
 
-### GET /refunds/{id}/
-Get refund by ID. 🔒
+---
 
-### PATCH /refunds/{id}/
-Update refund. 🔒
+## Shipping
 
-### PUT /refunds/{id}/status/
-Update refund status. 🔒 Admin
+- POST `/calculate/`
+- GET `/methods/`
+- POST `/methods/`
+- DELETE `/methods/{method_id}/`
+- GET `/methods/{method_id}/`
+- PATCH `/methods/{method_id}/`
+
+---
+
+## Shipping Tracking
+
+- GET `/carriers/`
+- GET `/providers/`
+- POST `/providers/`
+- DELETE `/providers/{provider_id}/`
+- PATCH `/providers/{provider_id}/`
+- GET `/shipments/`
+- POST `/shipments/`
+- GET `/shipments/{shipment_id}/`
+- PATCH `/shipments/{shipment_id}/status/`
+- POST `/track/`
+- POST `/webhooks/{carrier}/`
+
+---
+
+## Subscriptions
+
+- GET `/`
+- POST `/`
+- POST `/calculate-cost/`
+- GET `/plans/`
+- POST `/trigger-notifications/`
+- POST `/trigger-order-processing/`
+- DELETE `/{subscription_id}/`
+- GET `/{subscription_id}/`
+- PATCH `/{subscription_id}/`
+- PATCH `/{subscription_id}/auto-renew/`
+- POST `/{subscription_id}/cancel/`
+- GET `/{subscription_id}/details/`
+- POST `/{subscription_id}/discounts/`
+- DELETE `/{subscription_id}/discounts/{discount_id}/`
+- GET `/{subscription_id}/orders/`
+- POST `/{subscription_id}/pause/`
+- POST `/{subscription_id}/process-shipment/`
+- DELETE `/{subscription_id}/products/`
+- POST `/{subscription_id}/products/`
+- PATCH `/{subscription_id}/products/adjust-quantity/`
+- GET `/{subscription_id}/products/quantities/`
+- PATCH `/{subscription_id}/products/quantity/`
+- DELETE `/{subscription_id}/products/{product_id}/`
+- POST `/{subscription_id}/resume/`
 
 ---
 
 ## Tax
 
-### POST /tax/calculate/
-Calculate tax.
-
-**Body:** `{ country_code, state?, amount }`
-
-### GET /tax/rates/
-List tax rates. 🔒 Admin
-
-### GET /tax/rates/{tax_rate_id}/
-Get tax rate by ID. 🔒 Admin
-
-### POST /tax/rates/
-Create tax rate. 🔒 Admin
-
-### PATCH /tax/rates/{tax_rate_id}/
-Update tax rate. 🔒 Admin
-
-### DELETE /tax/rates/{tax_rate_id}/
-Delete tax rate. 🔒 Admin
+- POST `/calculate/`
+- GET `/countries/`
+- GET `/rates/`
+- POST `/rates/` , response_model=RateResponse, status_code=status.HTTP_201_CREATED
+- POST `/rates/bulk-update/`
+- DELETE `/rates/{tax_rate_id}/`
+- GET `/rates/{tax_rate_id}/` , response_model=RateResponse
+- PATCH `/rates/{tax_rate_id}/` , response_model=RateResponse
+- GET `/tax-types/`
 
 ---
 
 ## Webhooks
 
-### POST /webhooks/stripe/
-Stripe webhook handler.
-
-### GET /webhooks/health/
-Webhook health check.
+- GET `/health/`
+- POST `/stripe/`
 
 ---
 
 ## Contact Messages
 
-### POST /contact-messages/
-Submit contact message.
+- GET `/`
+- POST `/`
+- DELETE `/{message_id}/`
+- GET `/{message_id}/`
+- PATCH `/{message_id}/`
 
-**Body:** `{ name, email, subject, message }`
+---
 
-### GET /contact-messages/
-List contact messages. 🔒 Admin
+## Health
 
-### GET /contact-messages/{id}/
-Get contact message by ID. 🔒 Admin
+- GET `/`
 
-### PATCH /contact-messages/{id}/
-Update contact message status. 🔒 Admin
+---
 
-### DELETE /contact-messages/{id}/
-Delete contact message. 🔒 Admin
