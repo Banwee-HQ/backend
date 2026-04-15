@@ -28,34 +28,43 @@ class StructuredLogger:
         self.name = name
 
     def debug(self, message: str, *args, **kwargs) -> None:
-        _print("DEBUG", self.name, message % args if args else message)
+        pass
+        # _print("DEBUG", self.name, message % args if args else message)
 
     def info(self, message: str, *args, **kwargs) -> None:
-        _print("INFO", self.name, message % args if args else message)
+        pass
+        # _print("INFO", self.name, message % args if args else message)
 
     def warning(self, message: str, *args, **kwargs) -> None:
-        _print("WARNING", self.name, message % args if args else message)
+        # _print("WARNING", self.name, message % args if args else message)
+        pass
 
     def error(self, message: str, *args, **kwargs) -> None:
-        _print("ERROR", self.name, message % args if args else message)
+        # _print("ERROR", self.name, message % args if args else message)
+        pass
 
     def critical(self, message: str, *args, **kwargs) -> None:
-        _print("CRITICAL", self.name, message % args if args else message)
+        # _print("CRITICAL", self.name, message % args if args else message)
+        pass
 
     def exception(self, message: str, *args, **kwargs) -> None:
-        import traceback
-        _print("ERROR", self.name, message % args if args else message)
-        traceback.print_exc()
+        # import traceback
+        # _print("ERROR", self.name, message % args if args else message)
+        # traceback.print_exc()
+        pass
 
     # Compat shims for any callers using extended methods
     def log_request(self, *args, **kwargs) -> None:
-        _print("INFO", self.name, f"request: {args} {kwargs}")
+        # _print("INFO", self.name, f"request: {args} {kwargs}")
+        pass
 
     def log_database_operation(self, *args, **kwargs) -> None:
-        _print("DEBUG", self.name, f"db: {args} {kwargs}")
+        # _print("DEBUG", self.name, f"db: {args} {kwargs}")
+        pass
 
     def log_business_event(self, *args, **kwargs) -> None:
-        _print("INFO", self.name, f"event: {args} {kwargs}")
+        # _print("INFO", self.name, f"event: {args} {kwargs}")
+        pass
 
 
 def get_structured_logger(name: str) -> StructuredLogger:
