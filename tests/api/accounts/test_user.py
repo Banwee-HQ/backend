@@ -20,7 +20,7 @@ class TestUserEndpoints:
         assert response.status_code == 401
 
     async def test_get_profile_alias(self, async_client: AsyncClient, auth_headers, test_user):
-        """GET /v1/users/profile - Legacy alias for /me."""
+        """GET /v1/users/profile - the route the frontend actually calls."""
         response = await async_client.get("/v1/users/profile/", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["data"]["email"] == test_user.email

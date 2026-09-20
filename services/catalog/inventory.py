@@ -200,8 +200,8 @@ class InventoryService:
                 "id": str(item.id),
                 "variant_id": str(item.variant_id),
                 "location_id": str(item.location_id),
-                "quantity": item.quantity or 0,
-                "quantity_available": getattr(item, 'quantity_available', item.quantity or 0),
+                "quantity": item.quantity_available or 0,
+                "quantity_available": item.quantity_available or 0,
                 "low_stock_threshold": item.low_stock_threshold or 0,
                 "reorder_point": getattr(item, 'reorder_point', 0),
                 "inventory_status": getattr(item, 'inventory_status', 'active'),
@@ -394,8 +394,8 @@ class InventoryService:
                         "id": str(item.id),
                         "variant_id": str(item.variant_id),
                         "location_id": str(item.location_id),
-                        "quantity": item.quantity or 0,
-                        "quantity_available": getattr(item, 'quantity_available', item.quantity or 0),
+                        "quantity": item.quantity_available or 0,
+                        "quantity_available": item.quantity_available or 0,
                         "low_stock_threshold": item.low_stock_threshold or 0,
                         "reorder_point": getattr(item, 'reorder_point', 0),
                         "inventory_status": getattr(item, 'inventory_status', 'active'),
@@ -480,7 +480,6 @@ class InventoryService:
         if "quantity" in update_data:
             quantity_value = update_data.pop("quantity")
             inventory_item.quantity_available = quantity_value
-            inventory_item.quantity = quantity_value
             inventory_item.last_restocked_at = datetime.now(timezone.utc)
 
         if location_name:
@@ -644,7 +643,7 @@ class InventoryService:
         inventory_item = await self.get(inventory_id)
         if not inventory_item:
             return False
-        return inventory_item.quantity <= inventory_item.low_stock_threshold
+        return inventory_item.quantity_available <= inventory_item.low_stock_threshold
 
     # Enhanced inventory integration methods
     async def stock_levels(
@@ -678,10 +677,10 @@ class InventoryService:
                 "product_name": item.variant.product.name if item.variant and item.variant.product else None,
                 "location_id": str(item.location_id),
                 "location_name": item.location.name if item.location else None,
-                "current_quantity": item.quantity,
+                "current_quantity": item.quantity_available,
                 "low_stock_threshold": item.low_stock_threshold,
-                "is_low_stock": item.quantity <= item.low_stock_threshold,
-                "is_out_of_stock": item.quantity <= 0,
+                "is_low_stock": item.quantity_available <= item.low_stock_threshold,
+                "is_out_of_stock": item.quantity_available <= 0,
                 "last_updated": item.updated_at.isoformat() if item.updated_at else None
             })
         
@@ -694,7 +693,7 @@ class InventoryService:
     ) -> Dict[str, Any]:
         """Predict demand based on real subscription patterns"""
         # Get current stock
-        current_stock_query = select(Inventory.quantity).where(Inventory.variant_id == variant_id)
+        current_stock_query = select(Inventory.quantity_available).where(Inventory.variant_id == variant_id)
         current_stock_result = await self.db.execute(current_stock_query)
         current_stock = current_stock_result.scalar() or 0
         
@@ -730,10 +729,10 @@ class InventoryService:
         reorder_suggestions = []
         
         for item in inventory_items:
-            if item.quantity <= item.low_stock_threshold:
+            if item.quantity_available <= item.low_stock_threshold:
                 suggested_quantity = item.low_stock_threshold * 2
                 
-                urgency = "high" if item.quantity <= 0 else "medium" if item.quantity <= item.low_stock_threshold else "low"
+                urgency = "high" if item.quantity_available <= 0 else "medium" if item.quantity_available <= item.low_stock_threshold else "low"
                 
                 reorder_suggestions.append({
                     "variant_id": str(item.variant_id),
@@ -741,11 +740,11 @@ class InventoryService:
                     "product_name": item.variant.product.name if item.variant and item.variant.product else None,
                     "location_id": str(item.location_id),
                     "location_name": item.location.name if item.location else None,
-                    "current_stock": item.quantity,
+                    "current_stock": item.quantity_available,
                     "low_stock_threshold": item.low_stock_threshold,
                     "suggested_quantity": suggested_quantity,
                     "urgency": urgency,
-                    "days_until_stockout": 7 if item.quantity > 0 else 0
+                    "days_until_stockout": 7 if item.quantity_available > 0 else 0
                 })
         
         # Sort by urgency
@@ -775,13 +774,13 @@ class InventoryService:
                         continue  # Skip items not found
                     
                     # Calculate quantity change
-                    quantity_change = new_quantity - inventory.quantity
-                    
+                    quantity_change = new_quantity - inventory.quantity_available
+
                     if quantity_change != 0:  # Only update if there's a change
                         stock_changes.append({
                             "variant_id": variant_id,
                             "quantity_change": quantity_change,
-                            "notes": f"Warehouse sync: {inventory.quantity} -> {new_quantity}"
+                            "notes": f"Warehouse sync: {inventory.quantity_available} -> {new_quantity}"
                         })
                         
                 except Exception as e:

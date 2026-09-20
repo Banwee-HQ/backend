@@ -4,9 +4,12 @@ Brevo (formerly Sendinblue) email service
 import aiohttp
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from core.config import settings
+from core.logging import get_structured_logger
 from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
+
+logger = get_structured_logger(__name__)
 
 # Template name mapping for all email types
 template_map: Dict[str, str] = {
@@ -80,7 +83,7 @@ async def render_email(template_name: str, context: dict) -> str:
         }
         return template.render(**email_context)
     except Exception as e:
-        print(f"❌ Template rendering error ({template_name}): {e}")
+        logger.error(f"Template rendering error ({template_name}): {e}")
         raise RuntimeError(f"Template rendering error: {e}")
 
 
@@ -129,7 +132,7 @@ async def send_email_brevo(
         "textContent": context.get("text_body", "Please view this email in an HTML-capable client."),
     }
 
-    print(f"📤 Sending email via Brevo to {to_email} — {subject}")
+    logger.info(f"Sending email via Brevo to {to_email} — {subject}")
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
@@ -144,16 +147,16 @@ async def send_email_brevo(
         ) as response:
             if response.status in (200, 201):
                 result = await response.json()
-                print(f"✅ Email sent via Brevo: messageId={result.get('messageId')}")
+                logger.info(f"Email sent via Brevo: messageId={result.get('messageId')}")
                 return result
             else:
                 error_text = await response.text()
-                print(f"❌ Brevo error ({response.status}): {error_text}")
+                logger.error(f"Brevo error ({response.status}): {error_text}")
                 raise Exception(f"Brevo API error {response.status}: {error_text}")
 
 
-async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict = {}):
-    """Send email by mail_type key (legacy interface)."""
+async def send_email_by_type(to_email: str, mail_type: str, context: dict = {}):
+    """Send an email by mail_type key, resolving its subject and template automatically."""
     subject_map = {
         "order_confirmation": "✅ Order Confirmation - Thank You!",
         "payment_receipt": "💳 Payment Receipt - Banwee",
@@ -182,7 +185,7 @@ async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict =
     template_name = template_map.get(mail_type)
 
     if not template_name:
-        print(f"⚠️ No template found for mail_type: {mail_type}")
+        logger.warning(f"No template found for mail_type: {mail_type}")
         return
 
     return await send_email_brevo(

@@ -2551,10 +2551,8 @@ class OrderService:
                 ],
                 "subtotal": order.subtotal,
                 "tax_amount": order.tax_amount,
-                # Model uses `shipping_cost` (renamed) — fall back if legacy attribute exists
-                "shipping_amount": getattr(order, 'shipping_cost', getattr(order, 'shipping_amount', 0.0)),
-                # discount_amount may be missing on the model for some records — default to 0.0
-                "discount_amount": getattr(order, 'discount_amount', 0.0),
+                "shipping_amount": order.shipping_cost,
+                "discount_amount": order.discount_amount,
                 "total_amount": order.total_amount,
                 "currency": order.currency,
                 "payment_status": order.payment_status

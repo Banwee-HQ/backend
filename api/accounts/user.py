@@ -17,7 +17,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/me/")
 async def me(current_user: AuthUser = Depends(get_current_auth_user)):
-    """Get current authenticated user (compat alias)."""
+    """Get the current authenticated user."""
     try:
         user_data = {
             "id": str(current_user.id),
@@ -40,7 +40,7 @@ async def me(current_user: AuthUser = Depends(get_current_auth_user)):
 
 @router.get("/profile/")
 async def profile(current_user: AuthUser = Depends(get_current_auth_user)):
-    """Alias for profile under /users for legacy clients."""
+    """Get the current authenticated user - this is the route the frontend actually calls."""
     return await me(current_user)
 
 

@@ -8,7 +8,7 @@ from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate, ProductPatch, VariantStockUpdate, ProductModeration, ProductFeatureToggle
+from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
 from services.catalog.products import ProductService
 from services.catalog.category import CategoryService
 from models.accounts.user import UserRole, User

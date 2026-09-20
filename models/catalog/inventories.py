@@ -84,9 +84,6 @@ class Inventory(Base):
     last_restocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_sold_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Legacy field for backward compatibility
-    quantity: Mapped[int] = mapped_column(Integer, default=0)
-
     # Optimistic locking version counter
     version: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -162,7 +159,6 @@ class Inventory(Base):
         # Update inventory atomically
         old_quantity = self.quantity_available
         self.quantity_available = new_available
-        self.quantity = new_available  # Update legacy field
         self.version += 1  # Optimistic locking
         
         # Update timestamps

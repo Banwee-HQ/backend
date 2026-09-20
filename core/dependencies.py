@@ -12,7 +12,7 @@ from models.accounts.user import User
 
 logger = get_structured_logger(__name__)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login", auto_error=False)
 
 
 async def get_current_auth_user(

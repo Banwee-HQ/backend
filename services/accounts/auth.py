@@ -15,7 +15,7 @@ from schemas.accounts.user import Create as UserCreate, Response as UserResponse
 from schemas.accounts.auth import Token, Auth as AuthResponse
 from services.accounts.user import UserService
 from core.db import get_db
-from core.utils.messages.email import send_email_brevo_legacy
+from core.utils.messages.email import send_email_by_type
 from core.utils.encryption import PasswordManager
 
 logger = get_structured_logger(__name__)
@@ -369,7 +369,7 @@ class AuthService:
             # Background tasks run after the response is sent - an unhandled exception here
             # would break the ASGI response cycle, so a failed send must only be logged.
             try:
-                await send_email_brevo_legacy(to_email=user.email, mail_type='password_reset', context=context)
+                await send_email_by_type(to_email=user.email, mail_type='password_reset', context=context)
             except Exception as e:
                 logger.error(f"Failed to send password reset email to {user.email}: {e}")
 

@@ -524,7 +524,8 @@ class ProductService:
         # Generate SKU if not provided
         sku = variant_data.sku or f"SKU-{product_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
-        # Create variant
+        # Create variant - stock isn't a column on ProductVariant, it's derived from the
+        # related Inventory row's quantity_available, so it's set up separately below.
         variant = ProductVariant(
             id=uuid7(),
             product_id=product_id,
@@ -532,18 +533,20 @@ class ProductService:
             name=variant_data.name,
             base_price=variant_data.base_price,
             sale_price=variant_data.sale_price,
-            stock=variant_data.stock,
             attributes=variant_data.attributes or {},
             specifications=variant_data.specifications,
             dietary_tags=variant_data.dietary_tags or [],
             tags=variant_data.tags,
             availability_status=variant_data.availability_status
         )
-        
+
         self.db.add(variant)
+        await self.db.flush()
+
+        self.db.add(Inventory(id=uuid7(), variant_id=variant.id, quantity_available=variant_data.stock))
         await self.db.commit()
         await self.db.refresh(variant)
-        
+
         # Add images if provided
         if variant_data.image_urls:
             for idx, url in enumerate(variant_data.image_urls):
@@ -567,15 +570,22 @@ class ProductService:
         if not variant:
             raise APIException(status_code=404, message="Variant not found")
         
-        # Update fields
-        data = update_data.model_dump(exclude_unset=True, exclude={"images", "id"})
+        # Update fields - stock is handled separately below since it's derived from the
+        # related Inventory row, not a column on ProductVariant itself.
+        data = update_data.model_dump(exclude_unset=True, exclude={"images", "id", "stock"})
         for field, value in data.items():
             if hasattr(variant, field) and value is not None:
                 setattr(variant, field, value)
-        
+
+        if update_data.stock is not None:
+            if variant.inventory:
+                variant.inventory.quantity_available = update_data.stock
+            else:
+                self.db.add(Inventory(id=uuid7(), variant_id=variant.id, quantity_available=update_data.stock))
+
         await self.db.commit()
         await self.db.refresh(variant)
-        
+
         # Handle images update
         if update_data.images is not None:
             await self.db.execute(delete(ProductImage).where(ProductImage.variant_id == variant_id))
@@ -753,7 +763,6 @@ class ProductService:
                 variant_id=db_variant.id,
                 location_id=warehouse_location_id,
                 quantity_available=stock_quantity,
-                quantity=stock_quantity, # Legacy field for backward compatibility
                 low_stock_threshold=10,
                 reorder_point=5,
                 inventory_status="active"
@@ -805,8 +814,9 @@ class ProductService:
             raise HTTPException(
                 status_code=403, detail="Not authorized to update this product")
 
-        # Update product fields
-        update_dict = product_data.dict(exclude={'variants'})
+        # Update product fields - exclude_unset so omitted fields keep their current value
+        # instead of being overwritten with the schema's None defaults.
+        update_dict = product_data.dict(exclude={'variants'}, exclude_unset=True)
         for field, value in update_dict.items():
             setattr(product, field, value)
 
@@ -853,15 +863,13 @@ class ProductService:
                                 inventory = Inventory(
                                     id=uuid7(),
                                     variant_id=variant.id,
-                                    quantity=variant_data.stock,
                                     quantity_available=variant_data.stock,
                                     low_stock_threshold=10
                                 )
                                 self.db.add(inventory)
                             else:
                                 # Update existing inventory
-                                logger.info(f"Updating inventory for variant {variant_id}: {variant.inventory.quantity} -> {variant_data.stock}")
-                                variant.inventory.quantity = variant_data.stock
+                                logger.info(f"Updating inventory for variant {variant_id}: {variant.inventory.quantity_available} -> {variant_data.stock}")
                                 variant.inventory.quantity_available = variant_data.stock
                         
                         # Handle images if provided (only if explicitly set in the request)
@@ -969,7 +977,6 @@ class ProductService:
                         inventory = Inventory(
                             id=uuid7(),
                             variant_id=new_variant.id,
-                            quantity=variant_data.stock,
                             quantity_available=variant_data.stock,
                             low_stock_threshold=10
                         )
@@ -1041,6 +1048,39 @@ class ProductService:
         logger.info(f"Product {product_id} updated successfully")
 
         # Return the updated product
+        return await self.get(product_id)
+
+    async def moderate(self, product_id: UUID, action: str, notes: Optional[str] = None) -> ProductResponse:
+        """Approve or reject a product, publishing/unpublishing it accordingly."""
+        result = await self.db.execute(select(Product).where(Product.id == product_id))
+        product = result.scalar_one_or_none()
+        if not product:
+            raise APIException(status_code=404, message="Product not found")
+
+        if action == "approved":
+            product.product_status = ProductStatus.ACTIVE
+            if not product.published_at:
+                product.published_at = datetime.now(timezone.utc)
+        elif action == "rejected":
+            product.product_status = ProductStatus.INACTIVE
+        else:
+            raise APIException(status_code=400, message=f"Unknown moderation action: {action}")
+
+        if notes:
+            product.product_metadata = {**(product.product_metadata or {}), "moderation_notes": notes}
+
+        await self.db.commit()
+        return await self.get(product_id)
+
+    async def set_featured(self, product_id: UUID, featured: bool) -> ProductResponse:
+        """Toggle a product's featured flag."""
+        result = await self.db.execute(select(Product).where(Product.id == product_id))
+        product = result.scalar_one_or_none()
+        if not product:
+            raise APIException(status_code=404, message="Product not found")
+
+        product.is_featured = featured
+        await self.db.commit()
         return await self.get(product_id)
 
     async def delete(self, product_id: UUID, user_id: UUID, is_admin: bool = False):

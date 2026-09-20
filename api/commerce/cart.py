@@ -41,12 +41,12 @@ async def create(
 
 
 @router.post("/add/")
-async def add_alias(
+async def add_item(
     payload: Add,
     current_user: User = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Legacy alias for adding item to cart at /cart/add"""
+    """Add item to cart - this is the route the frontend actually calls."""
     return await create(payload, current_user=current_user, db=db)
 
 

@@ -3,12 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
+from core.logging import get_structured_logger
 from schemas.catalog.review import Create, Update
 from services.catalog.review import ReviewService
 from models.accounts.user import User
+
+logger = get_structured_logger(__name__)
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -54,32 +57,18 @@ async def list(
 @router.post("/")
 async def create(
     review_data: Create,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new review for a product."""
     try:
-        print(f"\n=== CREATE REVIEW START ===")
-        print(f"User ID: {current_user.id}")
-        print(f"Product ID: {review_data.product_id}")
-        print(f"Rating: {review_data.rating}")
-        
         review_service = ReviewService(db)
         review = await review_service.create(review_data, current_user.id)
-        
-        print(f"Review created: {review}")
-        print(f"=== CREATE REVIEW SUCCESS ===\n")
         return Response.success(data=review, message="Review created successfully")
-    except APIException as e:
-        print(f"APIException in create_review: {e.message}")
+    except APIException:
         raise
     except Exception as e:
-        print(f"\n=== CREATE REVIEW ERROR ===")
-        print(f"Exception type: {type(e).__name__}")
-        print(f"Exception message: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        print(f"=== END ERROR ===\n")
+        logger.exception(f"Failed to create review for product {review_data.product_id}")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to create review: {str(e)}"
@@ -109,6 +98,51 @@ async def get(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch review: {str(e)}"
+        )
+
+
+@router.patch("/{review_id}/")
+async def update(
+    review_id: UUID,
+    review_data: Update,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a review (owner only)."""
+    try:
+        review_service = ReviewService(db)
+        review = await review_service.update(review_id, review_data, current_user.id)
+        return Response.success(data=review, message="Review updated successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update review: {str(e)}"
+        )
+
+
+@router.delete("/{review_id}/")
+async def delete(
+    review_id: UUID,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a review (owner only)."""
+    try:
+        review_service = ReviewService(db)
+        await review_service.delete(review_id, current_user.id)
+        return Response.success(message="Review deleted successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to delete review: {str(e)}"
         )
 
 

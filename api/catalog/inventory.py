@@ -27,7 +27,7 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 @router.post("/locations/")
 async def create_location(
     location_data: LocationCreate,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
     """Create a new warehouse location (Admin access)."""
@@ -86,7 +86,7 @@ async def list_locations(
 async def update_location(
     location_id: UUID,
     location_data: LocationUpdate,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
     """Partially update a warehouse location (Admin access)."""
@@ -105,7 +105,7 @@ async def update_location(
 @router.delete("/locations/{location_id}/")
 async def delete_location(
     location_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
     """Delete a warehouse location (Admin access)."""
@@ -127,7 +127,7 @@ async def delete_location(
 @router.post("/")
 async def create(
     inventory_data: Create,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> InventoryResponse:
     """Create a new inventory item (Admin access)."""
@@ -273,7 +273,7 @@ async def create_adj(
 @router.get("/adjustments/{adjustment_id}/")
 async def get_adj(
     adjustment_id: UUID,
-    current_user: Optional[User] = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
     """Get a specific stock adjustment by ID (Admin access)."""
@@ -296,7 +296,7 @@ async def list_adj(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     inventory_id: Optional[UUID] = Query(None),
-    current_user: Optional[User] = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
     """List all stock adjustments with pagination (Admin access)."""
@@ -313,7 +313,7 @@ async def list_adj(
 @router.delete("/adjustments/{adjustment_id}/")
 async def delete_adj(
     adjustment_id: UUID,
-    current_user: Optional[User] = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
     """Delete a stock adjustment (Admin access)."""
