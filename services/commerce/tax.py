@@ -56,7 +56,7 @@ class TaxService:
             Tax amount
         """
         logger.info(f"Calculating tax for amount ${amount:.2f}, country: {country_code}, province: {province_code}")
-        tax_rate = await self.rate(country_code, province_code)
+        tax_rate = float(await self.rate(country_code, province_code))
         tax_amount = amount * tax_rate
         logger.info(f"Calculated tax: ${amount:.2f} × {tax_rate * 100}% = ${tax_amount:.2f}")
         return round(tax_amount, 2)

@@ -297,9 +297,9 @@ class AnalyticsService:
         start_date: datetime,
         end_date: datetime
     ) -> Dict[str, Any]:
-        """Get refund rate metrics - simplified to use actual data"""
+        """Get refund rate metrics computed from real Refund records."""
         try:
-            # Orders in the period - use actual order data
+            # Orders in the period
             orders_result = await self.db.execute(
                 select(
                     func.count(Order.id).label('total_orders'),
@@ -314,15 +314,53 @@ class AnalyticsService:
             )
             order_stats = orders_result.first()
             total_orders = order_stats.total_orders or 0
-            total_revenue = order_stats.total_revenue or 0
-            
-            # Since refunds table is empty, return mock data based on orders
-            total_refunds = max(1, int(total_orders * 0.05))  # 5% refund rate
-            total_refund_amount = float(total_revenue) * 0.03  # 3% of revenue
-            
-            refund_rate = (total_refunds / total_orders * 100) if total_orders > 0 else 0
-            refund_amount_rate = (total_refund_amount / total_revenue * 100) if total_revenue > 0 else 0
-            
+            total_revenue = float(order_stats.total_revenue or 0)
+
+            # Completed refunds in the period
+            refund_amount_expr = func.coalesce(Refund.processed_amount, Refund.approved_amount, Refund.requested_amount)
+            refunds_result = await self.db.execute(
+                select(
+                    func.count(Refund.id).label('total_refunds'),
+                    func.sum(refund_amount_expr).label('total_refund_amount')
+                ).where(
+                    and_(
+                        Refund.created_at >= start_date,
+                        Refund.created_at <= end_date,
+                        Refund.status == RefundStatus.COMPLETED
+                    )
+                )
+            )
+            refund_stats = refunds_result.first()
+            total_refunds = refund_stats.total_refunds or 0
+            total_refund_amount = float(refund_stats.total_refund_amount or 0)
+
+            refund_rate = (total_refunds / total_orders * 100) if total_orders > 0 else 0.0
+            refund_amount_rate = (total_refund_amount / total_revenue * 100) if total_revenue > 0 else 0.0
+
+            # Breakdown by reason
+            reason_result = await self.db.execute(
+                select(
+                    Refund.reason,
+                    func.count(Refund.id).label('count'),
+                    func.sum(refund_amount_expr).label('amount')
+                ).where(
+                    and_(
+                        Refund.created_at >= start_date,
+                        Refund.created_at <= end_date,
+                        Refund.status == RefundStatus.COMPLETED
+                    )
+                ).group_by(Refund.reason)
+            )
+            by_reason = []
+            for row in reason_result.all():
+                reason_amount = float(row.amount or 0)
+                by_reason.append({
+                    "reason": row.reason.value if hasattr(row.reason, "value") else row.reason,
+                    "count": row.count,
+                    "amount": reason_amount,
+                    "percentage": round((reason_amount / total_refund_amount * 100), 2) if total_refund_amount > 0 else 0.0
+                })
+
             return {
                 "period": {
                     "start_date": start_date.isoformat(),
@@ -332,17 +370,13 @@ class AnalyticsService:
                     "total_orders": total_orders,
                     "total_refunds": total_refunds,
                     "refund_rate": round(refund_rate, 2),
-                    "total_revenue": float(total_revenue),
-                    "total_refund_amount": float(total_refund_amount),
+                    "total_revenue": total_revenue,
+                    "total_refund_amount": total_refund_amount,
                     "refund_amount_rate": round(refund_amount_rate, 2)
                 },
-                "by_reason": [
-                    {"reason": "defective_product", "count": max(1, total_refunds // 3), "amount": float(total_refund_amount * 0.4), "percentage": 40.0},
-                    {"reason": "not_as_described", "count": max(1, total_refunds // 4), "amount": float(total_refund_amount * 0.3), "percentage": 30.0},
-                    {"reason": "changed_mind", "count": max(1, total_refunds // 5), "amount": float(total_refund_amount * 0.3), "percentage": 30.0}
-                ]
+                "by_reason": by_reason
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to get refund rate metrics: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve refund rate metrics")

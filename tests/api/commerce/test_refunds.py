@@ -16,10 +16,10 @@ class TestRefundEndpoints:
         assert response.status_code in [200, 403]
 
     async def test_116_refunds_create(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/refunds/ - Create refund."""
+        """POST /v1/refunds/ - Create refund for a nonexistent order returns 404."""
         refund_data = {"order_id": str(uuid4()), "reason": "Item damaged", "amount": 50.0}
         response = await async_client.post("/v1/refunds/", headers=auth_headers, json=refund_data)
-        assert response.status_code in [200, 201, 400, 403]
+        assert response.status_code == 404
 
     async def test_117_refunds_get(self, async_client: AsyncClient, auth_headers):
         """GET /v1/refunds/{id} - Get refund."""

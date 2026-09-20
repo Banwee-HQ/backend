@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from core.db import get_db
-from core.dependencies import get_current_auth_user
+from core.dependencies import require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.config import settings
@@ -113,7 +113,7 @@ async def revoke(
 
 @router.post("/logout/")
 async def logout(
-    current_user: User = Depends(get_current_auth_user)
+    current_user: User = Depends(require_auth)
 ):
     """Logout user."""
     return Response.success(message="Logged out successfully")
@@ -121,7 +121,7 @@ async def logout(
 
 @router.get("/me/")
 async def me(
-    current_user: User = Depends(get_current_auth_user)
+    current_user: User = Depends(require_auth)
 ):
     """Get current user profile."""
     try:
@@ -304,7 +304,7 @@ async def reset(
 @router.patch("/me/")
 async def update(
     user_data: dict,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update user profile."""
@@ -384,7 +384,7 @@ async def password(
     req: Request,
     current_password: str = Query(None),
     new_password: str = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Change user password. Accepts JSON body or query params."""
@@ -436,7 +436,7 @@ async def password(
 @router.delete("/me/")
 async def delete(
     password: str,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete user account with password confirmation."""

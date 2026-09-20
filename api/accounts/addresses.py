@@ -9,7 +9,7 @@ from typing import List, Optional
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
-from core.dependencies import get_current_auth_user
+from core.dependencies import require_auth
 from models.accounts.user import User
 from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
 from services.accounts.address import AddressService
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/addresses", tags=["Addresses"])
 @router.post("/")
 async def create(
     payload: AddressCreate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create address for current user."""
@@ -43,7 +43,7 @@ async def create(
 @router.get("/{address_id}/")
 async def get(
     address_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific address for current user."""
@@ -69,7 +69,7 @@ async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     search: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List all addresses for current user with pagination and search."""
@@ -92,7 +92,7 @@ async def list(
 async def patch(
     address_id: UUID,
     payload: AddressUpdate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Partially update address for current user."""
@@ -117,7 +117,7 @@ async def patch(
 @router.delete("/{address_id}/")
 async def delete(
     address_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete address for current user."""

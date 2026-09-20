@@ -143,6 +143,92 @@ async def create(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create inventory item: {e}")
 
 
+# ==========================================================
+# ADJUSTMENTS - 5 Standard APIs
+# ==========================================================
+# Registered before GET /{inventory_id}/ below: that route's single wildcard
+# segment would otherwise swallow /adjustments/ requests first (route matching
+# is registration-order-based), treating "adjustments" as an invalid UUID.
+@router.post("/adjustments/")
+async def create_adj(
+    adjustment_data: AdjustmentCreate,
+    current_user = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Create a stock adjustment (Admin access)."""
+    try:
+        inventory_service = InventoryService(db)
+        updated_inventory = await inventory_service.adjust_stock(adjustment_data, adjusted_by_user_id=current_user.id)
+        return Response.success(data=updated_inventory, message="Stock adjusted successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to adjust stock: {e}")
+
+
+@router.get("/adjustments/{adjustment_id}/")
+async def get_adj(
+    adjustment_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Get a specific stock adjustment by ID (Admin access)."""
+    try:
+        inventory_service = InventoryService(db)
+        adjustment = await inventory_service.get_adjustment(adjustment_id)
+        if not adjustment:
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
+        return Response.success(data=adjustment, message="Stock adjustment retrieved successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustment: {e}")
+
+
+@router.get("/adjustments/")
+async def list_adj(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    inventory_id: Optional[UUID] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Response:
+    """List all stock adjustments with pagination (Admin access)."""
+    try:
+        inventory_service = InventoryService(db)
+        result = await inventory_service.adjustments(inventory_id=inventory_id, page=page, limit=limit)
+        if isinstance(result, dict) and "data" in result and "pagination" in result:
+            return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Stock adjustments retrieved successfully")
+        return Response.success(data=result, message="Stock adjustments retrieved successfully")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustments: {e}")
+
+
+@router.delete("/adjustments/{adjustment_id}/")
+async def delete_adj(
+    adjustment_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+) -> Response:
+    """Delete a stock adjustment (Admin access)."""
+    try:
+        inventory_service = InventoryService(db)
+        deleted = await inventory_service.delete_adjustment(adjustment_id)
+        if not deleted:
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
+        return Response.success(message="Stock adjustment deleted successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete stock adjustment: {e}")
+
+
 @router.get("/{inventory_id}/")
 async def get(
     inventory_id: UUID,
@@ -246,89 +332,6 @@ async def delete(
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete inventory item: {e}")
-
-
-# ==========================================================
-# ADJUSTMENTS - 5 Standard APIs
-# ==========================================================
-@router.post("/adjustments/")
-async def create_adj(
-    adjustment_data: AdjustmentCreate,
-    current_user = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> Response:
-    """Create a stock adjustment (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        updated_inventory = await inventory_service.adjust_stock(adjustment_data, adjusted_by_user_id=current_user.id)
-        return Response.success(data=updated_inventory, message="Stock adjusted successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to adjust stock: {e}")
-
-
-@router.get("/adjustments/{adjustment_id}/")
-async def get_adj(
-    adjustment_id: UUID,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> Response:
-    """Get a specific stock adjustment by ID (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        adjustment = await inventory_service.get_adjustment(adjustment_id)
-        if not adjustment:
-            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
-        return Response.success(data=adjustment, message="Stock adjustment retrieved successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustment: {e}")
-
-
-@router.get("/adjustments/")
-async def list_adj(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    inventory_id: Optional[UUID] = Query(None),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> Response:
-    """List all stock adjustments with pagination (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        result = await inventory_service.adjustments(inventory_id=inventory_id, page=page, limit=limit)
-        if isinstance(result, dict) and "data" in result and "pagination" in result:
-            return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Stock adjustments retrieved successfully")
-        return Response.success(data=result, message="Stock adjustments retrieved successfully")
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustments: {e}")
-
-
-@router.delete("/adjustments/{adjustment_id}/")
-async def delete_adj(
-    adjustment_id: UUID,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> Response:
-    """Delete a stock adjustment (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        deleted = await inventory_service.delete_adjustment(adjustment_id)
-        if not deleted:
-            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
-        return Response.success(message="Stock adjustment deleted successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete stock adjustment: {e}")
 
 
 # ==========================================================

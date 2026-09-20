@@ -8,7 +8,7 @@ from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, AdminUserUpdate, UserStatusUpdate
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin, require_auth
 from models.accounts.user import User as AuthUser, UserRole
 
 logger = get_logger(__name__)
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get("/me/")
-async def me(current_user: AuthUser = Depends(get_current_auth_user)):
+async def me(current_user: AuthUser = Depends(require_auth)):
     """Get the current authenticated user."""
     try:
         user_data = {
@@ -39,7 +39,7 @@ async def me(current_user: AuthUser = Depends(get_current_auth_user)):
 
 
 @router.get("/profile/")
-async def profile(current_user: AuthUser = Depends(get_current_auth_user)):
+async def profile(current_user: AuthUser = Depends(require_auth)):
     """Get the current authenticated user - this is the route the frontend actually calls."""
     return await me(current_user)
 
