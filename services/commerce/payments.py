@@ -343,11 +343,12 @@ class PaymentService:
             raise HTTPException(status_code=500, detail=f"Failed to create payment method: {str(e)}")
 
     async def get(self, payment_method_id: UUID, user_id: UUID) -> Optional[PaymentMethod]:
-        """Get a specific payment method by ID"""
+        """Get a specific payment method by ID - excludes soft-deleted methods, matching list()."""
         result = await self.db.execute(
             select(PaymentMethod).where(
                 PaymentMethod.id == payment_method_id,
-                PaymentMethod.user_id == user_id
+                PaymentMethod.user_id == user_id,
+                PaymentMethod.is_active == True
             )
         )
         return result.scalar_one_or_none()
