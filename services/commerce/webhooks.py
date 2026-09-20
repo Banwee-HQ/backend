@@ -5,6 +5,7 @@ Processes Stripe webhooks with signature verification, rate limiting, and secure
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from fastapi import HTTPException, Request
+import json
 import stripe
 from models.commerce.payments import Transaction, PaymentIntent
 from models.commerce.orders import Order, OrderStatus, PaymentStatus
@@ -22,6 +23,17 @@ logger = get_structured_logger(__name__)
 class WebhookSecurityError(Exception):
     """Raised when a Stripe webhook request fails signature verification."""
     pass
+
+
+def _merge_transaction_metadata(transaction: "Transaction", updates: Dict[str, Any]) -> str:
+    """transaction_metadata is a JSON-serialized string column - decode, merge, re-encode."""
+    existing: Dict[str, Any] = {}
+    if transaction.transaction_metadata:
+        try:
+            existing = json.loads(transaction.transaction_metadata)
+        except (TypeError, ValueError):
+            existing = {}
+    return json.dumps({**existing, **updates})
 
 
 async def verify_stripe_webhook_request(
@@ -162,11 +174,10 @@ class WebhookService:
         if transaction:
             # Update transaction status atomically
             transaction.status = "succeeded"
-            transaction.transaction_details_metadata = {
-                **transaction.transaction_details_metadata,
+            transaction.transaction_metadata = _merge_transaction_metadata(transaction, {
                 "webhook_confirmed_at": datetime.utcnow().isoformat(),
                 "stripe_charges": payment_intent_data.get("charges", {})
-            }
+            })
             
             # If this is an order payment, update order status atomically
             if transaction.order_id:
@@ -179,8 +190,7 @@ class WebhookService:
                     # Update order status to confirmed atomically
                     order.order_status = OrderStatus.CONFIRMED
                     order.confirmed_at = datetime.utcnow()
-                    order.version += 1  # Optimistic locking increment
-                    
+
             
             await self.db.commit()
             
@@ -214,11 +224,10 @@ class WebhookService:
             # Update transaction status atomically
             transaction.status = "failed"
             transaction.failure_reason = payment_intent_data.get("last_payment_error", {}).get("message", "Payment failed")
-            transaction.transaction_details_metadata = {
-                **transaction.transaction_details_metadata,
+            transaction.transaction_metadata = _merge_transaction_metadata(transaction, {
                 "webhook_failed_at": datetime.utcnow().isoformat(),
                 "failure_details": payment_intent_data.get("last_payment_error", {})
-            }
+            })
             
             # If this is an order payment, update order status atomically
             if transaction.order_id:
@@ -229,7 +238,6 @@ class WebhookService:
                 if order:
                     order.order_status = OrderStatus.CANCELLED
                     order.payment_status = PaymentStatus.FAILED
-                    order.version += 1  # Optimistic locking increment
             
             await self.db.commit()
             
@@ -308,7 +316,6 @@ class WebhookService:
                 if order:
                     order.order_status = OrderStatus.CANCELLED
                     order.cancelled_at = datetime.utcnow()
-                    order.version += 1
             
             await self.db.commit()
             
