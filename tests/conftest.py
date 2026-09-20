@@ -40,9 +40,10 @@ from models.accounts.user import User, UserRole
 from services.accounts.auth import AuthService
 from schemas.accounts.user import Create as UserCreate
 
-# Use the actual database URL from environment (Supabase)
-TEST_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.vxemrvsdmrzsbhsozyco:7dQPJXWHWGnQBQvt@aws-1-us-east-1.pooler.supabase.com:5432/postgres")
-print(f"Using database: {TEST_DATABASE_URL[:50]}...")  # Debug output
+# Use the actual database URL from environment (Supabase) - no hardcoded fallback, ever.
+TEST_DATABASE_URL = os.getenv("DATABASE_URL")
+if not TEST_DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set - configure it in .env.dev before running tests")
 if TEST_DATABASE_URL.startswith("postgresql://"):
     TEST_DATABASE_URL = TEST_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
