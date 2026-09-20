@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.accounts.user import User
+from models.accounts.user import User, AccountStatus, VerificationStatus
 from models.commerce.orders import Order
 from core.exceptions import APIException
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
@@ -215,8 +215,7 @@ class UserService:
             return False
 
         if soft_delete:
-            user.is_active = False
-            user.account_status = "deleted"
+            user.account_status = AccountStatus.INACTIVE
             await self.db.commit()
             await self.db.refresh(user)
         else:
@@ -385,7 +384,7 @@ class UserService:
         if not user:
             return None
 
-        user.is_active = is_active
+        user.account_status = AccountStatus.ACTIVE if is_active else AccountStatus.INACTIVE
         await self.db.commit()
         await self.db.refresh(user)
         return user
@@ -399,8 +398,7 @@ class UserService:
         if not user:
             return None
 
-        user.verification_status = 'verified'
-        user.verified = True
+        user.verification_status = VerificationStatus.VERIFIED
         await self.db.commit()
         await self.db.refresh(user)
         return user
@@ -469,7 +467,7 @@ class UserService:
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            user.is_active = False
+            user.account_status = AccountStatus.INACTIVE
             await self.db.commit()
             await self.db.refresh(user)
 
@@ -497,7 +495,7 @@ class UserService:
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            user.is_active = True
+            user.account_status = AccountStatus.ACTIVE
             await self.db.commit()
             await self.db.refresh(user)
 

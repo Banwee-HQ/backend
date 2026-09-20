@@ -18,6 +18,7 @@ from schemas.commerce.refunds import Request as RefundRequest, Response as Refun
 from core.config import settings
 from core.logging import get_structured_logger
 import stripe
+import asyncio
 
 logger = get_structured_logger(__name__)
 
@@ -510,7 +511,8 @@ class RefundService:
                 raise Exception("Original payment transaction not found")
             
             # Create Stripe refund
-            stripe_refund = stripe.Refund.create(
+            stripe_refund = await asyncio.to_thread(
+                stripe.Refund.create,
                 payment_intent=transaction.stripe_payment_intent_id,
                 amount=int(refund.approved_amount * 100),  # Convert to cents
                 reason="requested_by_customer",

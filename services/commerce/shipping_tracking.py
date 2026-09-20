@@ -61,16 +61,17 @@ class ShippingTrackingService:
         try:
             carrier = await self._get_active_carrier(shipment_data['carrier'])
 
-            # Get provider
+            # Get provider - a carrier may have more than one configured provider
+            # (e.g. separate accounts per region), so just take the first active one.
             provider_result = await self.db.execute(
                 select(ShippingProvider).where(
                     and_(
                         ShippingProvider.carrier_id == carrier.id,
                         ShippingProvider.is_active == True
                     )
-                )
+                ).limit(1)
             )
-            provider = provider_result.scalar_one_or_none()
+            provider = provider_result.scalars().first()
 
             if not provider:
                 raise APIException(
@@ -99,6 +100,12 @@ class ShippingTrackingService:
                 notes=shipment_data.get('notes'),
                 internal_notes=shipment_data.get('internal_notes')
             )
+
+            # Populate relationships in-memory so to_dict() doesn't need a lazy load
+            # (the object was constructed directly, not loaded via a selectinload query)
+            shipment.carrier = carrier
+            shipment.provider = provider
+            shipment.tracking_events = []
 
             self.db.add(shipment)
             await self.db.flush()

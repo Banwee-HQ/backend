@@ -365,16 +365,16 @@ class AuthService:
             "current_year": datetime.now().year,
         }
         
-        try:
-            background_tasks.add_task(
-                send_email_brevo_legacy,
-                to_email=user.email,
-                mail_type='password_reset',
-                context=context
-            )
-            logger.info(f"Password reset email queued for {user.email}")
-        except Exception as e:
-            logger.error(f"Failed to queue password reset email for {user.email}. Error: {e}")
+        async def _send_reset_email_safely():
+            # Background tasks run after the response is sent - an unhandled exception here
+            # would break the ASGI response cycle, so a failed send must only be logged.
+            try:
+                await send_email_brevo_legacy(to_email=user.email, mail_type='password_reset', context=context)
+            except Exception as e:
+                logger.error(f"Failed to send password reset email to {user.email}: {e}")
+
+        background_tasks.add_task(_send_reset_email_safely)
+        logger.info(f"Password reset email queued for {user.email}")
 
     async def reset_pwd(self, token: str, new_password: str):
         """Reset password using reset token"""

@@ -819,6 +819,52 @@ class InventoryService:
                 message=f"Failed to update inventory from warehouse data: {str(e)}"
             )
         
+    async def check_stock_batch(
+        self,
+        requests: List[Dict[str, Any]]
+    ) -> Dict[UUID, Dict[str, Any]]:
+        """
+        Check stock for multiple (variant_id, quantity) pairs in a single query,
+        keyed by variant_id. Avoids one round-trip per item when validating a whole cart.
+        """
+        variant_ids = [r["variant_id"] for r in requests]
+        if not variant_ids:
+            return {}
+
+        result = await self.db.execute(
+            select(Inventory).where(Inventory.variant_id.in_(variant_ids))
+        )
+        inventory_by_variant = {inv.variant_id: inv for inv in result.scalars().all()}
+
+        results: Dict[UUID, Dict[str, Any]] = {}
+        for req in requests:
+            variant_id = req["variant_id"]
+            quantity = req["quantity"]
+            inventory = inventory_by_variant.get(variant_id)
+
+            if not inventory:
+                results[variant_id] = {
+                    "available": False,
+                    "current_stock": 0,
+                    "requested_quantity": quantity,
+                    "message": "Product not found in inventory",
+                    "stock_status": "out_of_stock"
+                }
+                continue
+
+            available = inventory.quantity_available >= quantity and inventory.quantity_available > 0
+            results[variant_id] = {
+                "available": available,
+                "current_stock": inventory.quantity_available,
+                "requested_quantity": quantity,
+                "inventory_id": str(inventory.id),
+                "location_id": str(inventory.location_id),
+                "stock_status": inventory.stock_status,
+                "message": "Stock available" if available else "Out of stock" if inventory.quantity_available <= 0 else f"Insufficient stock. Available: {inventory.quantity_available}, Requested: {quantity}"
+            }
+
+        return results
+
     async def check_stock(
         self,
         variant_id: UUID,

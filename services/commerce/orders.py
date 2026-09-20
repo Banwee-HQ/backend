@@ -1029,14 +1029,15 @@ class OrderService:
                 backend_calculated_total = price_validation_result["total_amount"]
                 price_updates = price_validation_result.get("price_updates", [])
                 
-                # STEP 3: CHECK STOCK AVAILABILITY (optimized for Checkout)
+                # STEP 3: CHECK STOCK AVAILABILITY (single batched query instead of one per item)
+                stock_results = await self.inventory_service.check_stock_batch([
+                    {"variant_id": item.variant.id, "quantity": item.quantity} for item in active_items
+                ])
+
                 stock_validation_results = []
                 for item in active_items:
-                    stock_check = await self.inventory_service.check_stock(
-                        variant_id=item.variant.id,
-                        quantity=item.quantity
-                    )
-                    
+                    stock_check = stock_results.get(item.variant.id, {})
+
                     if not stock_check.get("available", False):
                         stock_validation_results.append({
                             "variant_id": item.variant.id,
@@ -2165,67 +2166,43 @@ class OrderService:
 
     async def _send_order_events_with_idempotency(self, order: Order, user_id: UUID, validated_cart_items: List[Dict[str, Any]]):
         """
-        Send immutable ARQ events for order creation using new event system.
-        Events are versioned, validated, and idempotent.
+        Send order-created side effects (confirmation email) after a successful checkout.
         """
         try:
-            from core.worker import enqueue_email, enqueue_notification
-            
-            # Use correlation ID for event tracing
-            correlation_id = str(order.id)
-            
-            # Prepare order items for event
+            from services.accounts.email import EmailService
+
+            # Prepare order items for the email template
             order_items = []
             for item in validated_cart_items:
                 order_items.append({
-                    "product_id": item.get("product_id"),
-                    "variant_id": item["variant_id"],
+                    "name": item.get("product_name", ""),
                     "quantity": item["quantity"],
-                    "price_per_unit": float(item["backend_price"]),
-                    "total_price": float(item["backend_total"]),
-                    "product_name": item.get("product_name", "")
+                    "price": float(item["backend_price"]),
                 })
-            
-            # Get shipping address for event
+
+            # order.shipping_address is stored as a plain JSON dict, not a relationship
             shipping_address = {}
             if order.shipping_address:
                 shipping_address = {
-                    "street": order.shipping_address.street,
-                    "city": order.shipping_address.city,
-                    "state": order.shipping_address.state,
-                    "country": order.shipping_address.country,
-                    "postal_code": order.shipping_address.post_code
+                    "street": order.shipping_address.get("street"),
+                    "city": order.shipping_address.get("city"),
+                    "state": order.shipping_address.get("state"),
+                    "country": order.shipping_address.get("country"),
+                    "postal_code": order.shipping_address.get("postal_code") or order.shipping_address.get("post_code")
                 }
-            
-            # Order created event handled by hybrid task system
-            
-            # Send order confirmation email using ARQ
+
+            # Send order confirmation email
             user_result = await self.db.execute(select(User).where(User.id == user_id))
             user = user_result.scalar_one_or_none()
             if user:
-                await enqueue_email(
-                    "order_confirmation",
-                    user.email,
-                    order_id=str(order.id),
-                    order_details={
-                        "items": order_items,
-                        "total_amount": float(order.total_amount),
-                        "currency": order.currency,
-                        "shipping_address": shipping_address
-                    }
-                )
-                
-                # Send order notification
-                await enqueue_notification(
-                    str(user_id),
-                    "order_created",
-                    title="Order Confirmed",
-                    message=f"Your order #{order.id} has been confirmed and is being processed.",
-                    data={
-                        "order_id": str(order.id),
-                        "total_amount": float(order.total_amount),
-                        "currency": order.currency
-                    }
+                await EmailService(self.db).send_order_confirmation_email(
+                    recipient_email=user.email,
+                    customer_name=user.firstname or user.email,
+                    order_number=order.order_number,
+                    order_date=order.created_at,
+                    total_amount=float(order.total_amount),
+                    items=order_items,
+                    shipping_address=shipping_address
                 )
             
             # Order payment event handled by hybrid task system

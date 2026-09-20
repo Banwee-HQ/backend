@@ -85,7 +85,7 @@ class CartItem(Base):
 
 # DDL statement for the function
 update_cart_updated_at_function = DDL("""
-CREATE OR REPLACE FUNCTION update_cart_updated_at()
+CREATE OR REPLACE FUNCTION commerce.update_cart_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     UPDATE commerce.carts
@@ -99,9 +99,9 @@ $$ LANGUAGE plpgsql;
 # DDL statement for the trigger
 update_cart_updated_at_trigger_ddl = DDL("""
 CREATE TRIGGER trigger_update_cart_updated_at
-AFTER INSERT OR UPDATE OR DELETE ON cart_items
+AFTER INSERT OR UPDATE OR DELETE ON commerce.cart_items
 FOR EACH ROW
-EXECUTE FUNCTION update_cart_updated_at();
+EXECUTE FUNCTION commerce.update_cart_updated_at();
 """)
 
 # Associate the function DDL with the CartItem table's creation

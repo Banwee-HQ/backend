@@ -234,18 +234,13 @@ def sample_cart_item():
 
 @pytest.fixture
 def sample_address_data():
-    """Sample address data."""
+    """Sample address data - matches schemas.accounts.user.AddressCreate."""
     return {
-        "label": "Home",
-        "recipient_name": "Test User",
-        "phone": "+1234567890",
-        "street_address": "123 Test Street",
-        "apartment": "Apt 1",
+        "street": "123 Test Street",
         "city": "Lagos",
         "state": "Lagos State",
-        "postal_code": "100001",
+        "post_code": "100001",
         "country": "NG",
-        "is_default": True
     }
 
 

@@ -471,13 +471,18 @@ class EmailService:
             # Fallback to simple HTML if no template found
             html_content = f"<p>Hello {context['customer_name']},</p><p>This is a {mail_type} email.</p>"
         
-        # Send email
-        await send_email_brevo(
-            to_email=to_email,
-            subject=subject,
-            html_content=html_content
-        )
-        print(f"📧 Email sent ({mail_type}) to {to_email}")
+        # Send email - this always runs as a fire-and-forget background task, so a failure here
+        # (bad credentials, provider outage, rate limit) must never propagate and break the
+        # response/connection of whatever request queued it.
+        try:
+            await send_email_brevo(
+                to_email=to_email,
+                subject=subject,
+                html_content=html_content
+            )
+            logger.info(f"Email sent ({mail_type}) to {to_email}")
+        except Exception as e:
+            logger.error(f"Failed to send {mail_type} email to {to_email}: {e}")
 
     async def _render_email_template(
         self,
@@ -659,6 +664,6 @@ class EmailService:
 
         try:
             await send_email_brevo(to_email=to_email, subject=subject, html_content=body)
-            print(f"📧 {email_type} email sent to {to_email}")
+            logger.info(f"{email_type} email sent to {to_email}")
         except Exception as e:
-            print(f"❌ Failed to send {email_type} email: {e}")
+            logger.error(f"Failed to send {email_type} email: {e}")
