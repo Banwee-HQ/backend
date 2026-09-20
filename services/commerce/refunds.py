@@ -98,14 +98,19 @@ class RefundService:
             # Check for automatic approval
             if refund.is_eligible_for_auto_approval:
                 await self._auto_approve_refund(refund)
-            
-            await self.db.commit()
-            await self.db.refresh(refund)
-            
 
-            
-            # Send refund events using ARQ
-            
+            await self.db.commit()
+            # refresh() only reloads refund's own columns - _format_refund_response
+            # also needs refund.refund_items, which isn't loaded yet and can't be
+            # lazy-loaded here (no greenlet context for an implicit SELECT), so
+            # re-fetch with the same eager-loading get() already uses elsewhere.
+            refund = await self.db.execute(
+                select(Refund).where(Refund.id == refund.id).options(
+                    selectinload(Refund.refund_items)
+                )
+            )
+            refund = refund.scalar_one()
+
             return await self._format_refund_response(refund)
             
         except HTTPException:

@@ -10,13 +10,11 @@ from services.commerce.promocode import PromocodeService
 from services.commerce.promocode_scheduler import PromoCodeScheduler
 from models.accounts.user import User
 from core.dependencies import require_admin, require_auth
-from fastapi.security import OAuth2PasswordBearer
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)
 
 router = APIRouter(prefix="/promocodes", tags=["promocodes"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.get("/")

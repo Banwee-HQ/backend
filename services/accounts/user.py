@@ -123,16 +123,16 @@ class UserService:
                 base_query = base_query.where(User.verification_status == status)
 
         # Apply search query if provided
+        from sqlalchemy import or_
+        search_condition = None
         if query:
             search_term = f"%{query}%"
-            from sqlalchemy import or_
-            base_query = base_query.where(
-                or_(
-                    User.firstname.ilike(search_term),
-                    User.lastname.ilike(search_term),
-                    User.email.ilike(search_term),
-                )
+            search_condition = or_(
+                User.firstname.ilike(search_term),
+                User.lastname.ilike(search_term),
+                User.email.ilike(search_term),
             )
+            base_query = base_query.where(search_condition)
 
         # Get total count
         count_query = select(func.count()).select_from(User)
@@ -144,6 +144,8 @@ class UserService:
                 count_query = count_query.where(User.account_status == status)
             else:
                 count_query = count_query.where(User.verification_status == status)
+        if search_condition is not None:
+            count_query = count_query.where(search_condition)
         count_result = await self.db.execute(count_query)
         total = count_result.scalar()
 
@@ -241,7 +243,10 @@ class UserService:
         try:
             return await self._search_with_similarity(q, limit, role_filter)
         except Exception:
-            # pg_trgm not available - fall back to simple LIKE search
+            # pg_trgm not available - fall back to simple LIKE search. A failed
+            # raw-SQL statement leaves the transaction aborted, so it must be
+            # rolled back before the session can run another query.
+            await self.db.rollback()
             return await self._search_simple(q, limit, role_filter)
 
     async def _search_simple(
@@ -255,7 +260,7 @@ class UserService:
         search_term = f"%{query}%"
         stmt = (
             select(User)
-            .where(User.is_active == True)
+            .where(User.account_status == AccountStatus.ACTIVE)
             .where(
                 or_(
                     User.firstname.ilike(search_term),
@@ -290,8 +295,9 @@ class UserService:
         role_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Advanced search using pg_trgm similarity."""
-        # Build base conditions
-        base_conditions = ["u.is_active = true"]
+        # Build base conditions - account_status/verification_status are the real
+        # columns; is_active/verified are Python-only properties on the model.
+        base_conditions = ["u.account_status = 'active'"]
         params = {
             "query": query,
             "similarity_threshold": self.similarity_threshold,
@@ -314,7 +320,7 @@ class UserService:
                 u.lastname,
                 u.email,
                 u.role,
-                u.verified,
+                (u.verification_status = 'verified') as verified,
                 (
                     -- First name matching
                     CASE WHEN LOWER(u.firstname) = :query THEN :exact_weight
@@ -349,7 +355,7 @@ class UserService:
                 OR similarity(LOWER(u.lastname), :query) > :similarity_threshold
                 OR similarity(LOWER(u.email), :query) > :similarity_threshold
             )
-            ORDER BY relevance_score DESC, u.verified DESC
+            ORDER BY relevance_score DESC, verified DESC
             LIMIT :limit
         """)
         
@@ -424,7 +430,7 @@ class UserService:
             user = result.scalar_one_or_none()
 
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise APIException(status_code=404, message="User not found")
 
             # Generate reset token (stored in the same field the reset-confirmation flow reads from)
             reset_token = secrets.token_urlsafe(32)
@@ -450,12 +456,12 @@ class UserService:
                 "email": user.email
             }
 
-        except HTTPException:
+        except APIException:
             raise
         except Exception as e:
-            raise HTTPException(
+            raise APIException(
                 status_code=500,
-                detail=f"Failed to send password reset email: {str(e)}"
+                message=f"Failed to send password reset email: {str(e)}"
             )
 
     async def deactivate(self, user_id: UUID) -> Dict[str, Any]:
@@ -465,7 +471,7 @@ class UserService:
             user = result.scalar_one_or_none()
 
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise APIException(status_code=404, message="User not found")
 
             user.account_status = AccountStatus.INACTIVE
             await self.db.commit()
@@ -478,12 +484,12 @@ class UserService:
                 "email": user.email
             }
 
-        except HTTPException:
+        except APIException:
             raise
         except Exception as e:
-            raise HTTPException(
+            raise APIException(
                 status_code=500,
-                detail=f"Failed to deactivate user: {str(e)}"
+                message=f"Failed to deactivate user: {str(e)}"
             )
 
     async def activate(self, user_id: UUID) -> Dict[str, Any]:
@@ -493,7 +499,7 @@ class UserService:
             user = result.scalar_one_or_none()
 
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise APIException(status_code=404, message="User not found")
 
             user.account_status = AccountStatus.ACTIVE
             await self.db.commit()
@@ -506,12 +512,12 @@ class UserService:
                 "email": user.email
             }
 
-        except HTTPException:
+        except APIException:
             raise
         except Exception as e:
-            raise HTTPException(
+            raise APIException(
                 status_code=500,
-                detail=f"Failed to activate user: {str(e)}"
+                message=f"Failed to activate user: {str(e)}"
             )
 
     async def update_role(self, user_id: UUID, new_role: str) -> Optional[User]:

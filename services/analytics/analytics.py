@@ -142,7 +142,8 @@ class AnalyticsService:
                 )
             )
             total_revenue, avg_order_value = revenue_result.first() or (0, 0)
-            
+            total_revenue = float(total_revenue or 0)  # DB SUM returns Decimal; the breakdown below multiplies by float ratios
+
             # Mock sessions (assume 3x more sessions than orders)
             total_sessions = max(total_orders * 3, 100)
             conversion_rate = (converted_orders / total_sessions * 100) if total_sessions > 0 else 0

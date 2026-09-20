@@ -1006,9 +1006,10 @@ class InventoryService:
             user_id=user_id,
             notes=f"Stock decremented for order {order_id}" if order_id else "Stock decremented for purchase"
         )
-        
-        await self.db.commit()
-        
+
+        # flush, don't commit - see the matching note in _perform_increment_stock.
+        await self.db.flush()
+
         logger.info("Stock adjusted", metadata={
                 "variant_id": str(variant_id),
                 "previous_quantity": inventory.quantity_available + quantity,
@@ -1128,9 +1129,14 @@ class InventoryService:
             user_id=user_id,
             notes=f"Stock restored from cancelled order {order_id}" if order_id else "Stock restored from cancellation"
         )
-        
-        await self.db.commit()
-        
+
+        # flush, don't commit: every caller (order cancellation, refund auto-approval,
+        # payment failure handling) manages its own larger transaction around this
+        # call - committing here silently finalized (and desynced) that transaction
+        # out from under the caller, which is what made refund auto-approval corrupt
+        # its own not-yet-committed Refund record.
+        await self.db.flush()
+
         logger.info(f"Atomically incremented stock for variant {variant_id}: +{quantity}")
         
         # Queue product availability sync as background task (don't wait for it)

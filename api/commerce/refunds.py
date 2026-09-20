@@ -24,13 +24,29 @@ async def create(
     current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a refund request."""
+    """Create a refund request.
+
+    Takes a raw dict (order_id plus the Request fields) rather than the Request
+    schema directly since order_id isn't part of Request - it's a path param on
+    the sibling /orders/{order_id}/request/ route instead. RefundService.request()
+    reads refund_request.items/.reason/etc. as attributes, so this must build a
+    real Request model; passing the dict straight through used to make
+    refund_request.items resolve to dict.items (the builtin method) instead of
+    the item list, which blew up with "'method' object is not iterable" on any
+    order that actually passed the eligibility check.
+    """
     try:
+        raw_order_id = refund_data.get("order_id")
+        if not raw_order_id:
+            raise APIException(status_code=400, message="order_id is required")
+        order_id = UUID(raw_order_id)
+        refund_request = Request(**{k: v for k, v in refund_data.items() if k != "order_id"})
+
         refund_service = RefundService(db)
         refund = await refund_service.request(
             user_id=current_user.id,
-            order_id=refund_data.get("order_id"),
-            refund_request=refund_data
+            order_id=order_id,
+            refund_request=refund_request
         )
         return Response.success(data=refund, message="Refund created successfully")
     except APIException:
