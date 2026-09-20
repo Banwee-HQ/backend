@@ -19,6 +19,10 @@ from models.commerce.shipping_tracking import (
     TrackingStatus, ShipmentType
 )
 from models.commerce.carriers import Carrier
+from services.commerce.carrier_integrations import (
+    UPSIntegration, CanadaExpressIntegration, RoyalMailIntegration, FedExIntegration,
+    DHLIntegration, USPSIntegration, CanadaPostIntegration, PurolatorIntegration,
+)
 from core.exceptions import APIException
 from core.config import settings
 from core.logging import get_structured_logger

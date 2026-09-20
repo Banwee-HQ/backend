@@ -88,7 +88,7 @@ update_cart_updated_at_function = DDL("""
 CREATE OR REPLACE FUNCTION update_cart_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-    UPDATE carts
+    UPDATE commerce.carts
     SET updated_at = NOW()
     WHERE id = NEW.cart_id;
     RETURN NEW;
