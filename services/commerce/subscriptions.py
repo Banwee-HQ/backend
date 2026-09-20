@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.commerce.subscriptions import Subscription
+from models.commerce.subscriptions import Subscription, SubscriptionStatus
 from models.catalog.product import ProductVariant
 from models.accounts.user import Address, User
 from models.commerce.promocode import Promocode
@@ -639,10 +639,53 @@ class SubscriptionService:
         subscription.current_shipping_amount = pricing["shipping"]
         subscription.current_tax_amount = pricing["tax"]
         subscription.current_tax_rate = pricing["tax_rate"]
-        
+
         await self.db.commit()
-        
+
         return pricing
+
+    async def apply_discount(self, subscription_id: UUID, user_id: UUID, discount_code: str) -> Subscription:
+        """Apply a promocode to an existing subscription, reusing the same
+        Promocode lookup _calculate_pricing already does at creation time."""
+        subscription = await self.get(subscription_id, user_id=user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        if subscription.status not in (SubscriptionStatus.ACTIVE.value, SubscriptionStatus.PAUSED.value):
+            raise HTTPException(status_code=400, detail="Cannot apply a discount to a subscription in this status")
+
+        previous_code = subscription.discount_code
+        subscription.discount_code = discount_code
+        pricing = await self.recalc_pricing(subscription)
+
+        if not pricing.get("discount_id"):
+            subscription.discount_code = previous_code
+            await self.db.commit()
+            raise HTTPException(status_code=400, detail="Invalid or inactive discount code")
+
+        subscription.discount_id = pricing["discount_id"]
+        subscription.discount_type = pricing["discount_type"]
+        subscription.discount_value = pricing["discount_value"]
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+
+    async def remove_discount(self, subscription_id: UUID, user_id: UUID, discount_id: UUID) -> Subscription:
+        """Remove the currently-applied discount from a subscription."""
+        subscription = await self.get(subscription_id, user_id=user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        if subscription.discount_id != discount_id:
+            raise HTTPException(status_code=404, detail="This discount is not applied to the subscription")
+
+        subscription.discount_code = None
+        subscription.discount_id = None
+        subscription.discount_type = None
+        subscription.discount_value = None
+        await self.recalc_pricing(subscription)
+        await self.db.refresh(subscription)
+        return subscription
 
     # -------------------------------------------------------------------------
 

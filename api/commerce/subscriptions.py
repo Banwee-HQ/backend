@@ -750,10 +750,13 @@ async def apply_discount(
 ):
     """Apply a discount code to a subscription."""
     try:
-        raise APIException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            message="Discount application for subscriptions is not yet implemented"
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.apply_discount(
+            subscription_id=subscription_id,
+            user_id=current_user.id,
+            discount_code=discount_request.discount_code
         )
+        return Response.success(data=subscription.to_dict(), message="Discount applied successfully")
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
@@ -774,10 +777,13 @@ async def remove_discount(
 ):
     """Remove a discount from a subscription."""
     try:
-        raise APIException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            message="Discount removal for subscriptions is not yet implemented"
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.remove_discount(
+            subscription_id=subscription_id,
+            user_id=current_user.id,
+            discount_id=discount_id
         )
+        return Response.success(data=subscription.to_dict(), message="Discount removed successfully")
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
@@ -810,7 +816,7 @@ async def details(
                 message="Subscription not found"
             )
         # Get subscription products/variants
-        variant_quantities = subscription.variant_quantities or {}
+        variant_quantities = (subscription.subscription_metadata or {}).get("variant_quantities", {})
         products = []
         if variant_quantities:
             # Fetch variant details
@@ -829,31 +835,49 @@ async def details(
                     "product_id": str(variant.product_id),
                     "name": variant.product.name,
                     "quantity": quantity,
-                    "unit_price": float(variant.price),
-                    "total_price": float(variant.price * quantity),
+                    "unit_price": float(variant.current_price),
+                    "total_price": float(variant.current_price * quantity),
                     "image": variant.product.images[0].image_url if variant.product.images else None,
                     "added_at": subscription.created_at.isoformat()
                 })
+
+        subtotal = sum(p["total_price"] for p in products)
+        shipping_cost = float(subscription.current_shipping_amount or subscription.shipping_amount_at_creation or 0.0)
+        tax_amount = float(subscription.current_tax_amount or subscription.tax_amount_at_creation or 0.0)
+        discount_amount = 0.0
+        if subscription.discount_value:
+            if subscription.discount_type == "percentage":
+                discount_amount = subtotal * (float(subscription.discount_value) / 100)
+            else:
+                discount_amount = float(subscription.discount_value)
+        total = max(0.0, subtotal + shipping_cost + tax_amount - discount_amount)
+
         # Build response
         details = {
             "subscription": {
                 "id": str(subscription.id),
                 "name": subscription.name,
                 "status": subscription.status,
-                "price": float(subscription.price),
                 "currency": subscription.currency,
                 "billing_cycle": subscription.billing_cycle,
                 "auto_renew": subscription.auto_renew,
                 "next_billing_date": subscription.next_billing_date.isoformat() if subscription.next_billing_date else None,
                 "created_at": subscription.created_at.isoformat(),
                 "updated_at": subscription.updated_at.isoformat() if subscription.updated_at else None,
-                "subtotal": float(subscription.subtotal) if subscription.subtotal else 0.0,
-                "shipping_cost": float(subscription.shipping_cost) if subscription.shipping_cost else 0.0,
-                "tax_amount": float(subscription.tax_amount) if subscription.tax_amount else 0.0,
-                "total": float(subscription.total) if subscription.total else 0.0,
+                "subtotal": subtotal,
+                "shipping_cost": shipping_cost,
+                "tax_amount": tax_amount,
+                "discount_amount": discount_amount,
+                "total": total,
             },
             "products": products,
-            "discounts": []
+            "discounts": [{
+                "id": str(subscription.discount_id),
+                "code": subscription.discount_code,
+                "type": subscription.discount_type,
+                "value": subscription.discount_value,
+                "amount": discount_amount,
+            }] if subscription.discount_id else []
         }
         return Response.success(
             data=details,
