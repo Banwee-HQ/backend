@@ -24,6 +24,7 @@ from services.catalog.inventory import InventoryService
 from services.commerce.tax import TaxService
 from services.commerce.shipping import ShippingService
 from services.commerce.discounts import DiscountEngine
+from services.commerce.promocode import PromocodeService
 from models.catalog.inventories import Inventory
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
@@ -1324,7 +1325,6 @@ class OrderService:
 
                 # Record promocode usage, then clear cart after successful order (validated cart)
                 if cart.promocode_id:
-                    from services.commerce.promocode import PromocodeService
                     await PromocodeService(self.db).inc_usage(cart.promocode_id)
 
                 await cart_service.clear_cart(user_id=user_id)

@@ -3,7 +3,7 @@ Business Analytics Service
 Tracks and calculates key e-commerce metrics including conversion rates,
 cart abandonment, time to first purchase, refund rates, and repeat customers
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from typing import Dict, Any, List, Optional, Tuple
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
@@ -14,9 +14,13 @@ from fastapi import HTTPException
 
 from models.accounts import UserSession, CustomerLifecycleMetrics, TrafficSource
 from models.system import AnalyticsEvent, ConversionFunnel, EventType
-from models.commerce.orders import Order
+from models.commerce.orders import Order, OrderItem
 from models.accounts.user import User
 from models.commerce.refunds import Refund, RefundStatus
+from models.commerce.subscriptions import Subscription
+from models.catalog.product import Product, ProductVariant
+from models.catalog.category import Category
+from models.catalog.inventories import Inventory
 from core.config import settings
 from core.logging import get_structured_logger
 
@@ -658,10 +662,6 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get comprehensive sales overview data for dashboard"""
         try:
-            from models.catalog.product import Product
-            from models.catalog.category import Category
-            from models.commerce.orders import OrderItem
-
             # Base query for orders
             base_query = select(Order).where(
                 and_(
@@ -878,12 +878,6 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get admin dashboard statistics with optional filters"""
         try:
-            from models.catalog.product import Product, ProductVariant
-            from models.catalog.category import Category
-            from models.catalog.inventories import Inventory
-            from models.commerce.subscriptions import Subscription
-            from datetime import date
-
             logger.info(f"📊 Dashboard stats request: date_from={date_from}, date_to={date_to}, status={status}, category={category}")
 
             # Parse date filters
@@ -1061,10 +1055,6 @@ class AnalyticsService:
     async def get_admin_overview(self) -> Dict[str, Any]:
         """Get platform overview statistics for admin dashboard"""
         try:
-            from models.catalog.product import Product
-            from models.commerce.subscriptions import Subscription
-            from datetime import date
-
             today = date.today()
             last_30_days = today - timedelta(days=30)
 

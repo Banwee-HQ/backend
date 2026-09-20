@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from decimal import Decimal
 from enum import Enum
 from core.logging import get_structured_logger
+from core.utils.messages.email import send_email_mailjet_legacy
 
 logger = get_structured_logger(__name__)
 
@@ -450,17 +451,12 @@ class DiscountEngine:
                 )
                 affected_emails = [row[0] for row in affected_emails_result.fetchall()]
 
-                from core.utils.messages.email import send_email_brevo
                 for email in affected_emails:
                     try:
-                        await send_email_brevo(
+                        await send_email_mailjet_legacy(
                             to_email=email,
-                            subject="Your subscription discount has expired",
-                            html_content=(
-                                "<p>Hi,</p>"
-                                "<p>A discount applied to your Banwee subscription has expired. "
-                                "Your subscription will now renew at its regular price.</p>"
-                            )
+                            mail_type="discount_expired",
+                            context={"company_name": "Banwee"}
                         )
                         notifications_sent += 1
                     except Exception as email_error:

@@ -38,6 +38,7 @@ template_map: Dict[str, str] = {
     "subscription_payment_failed": "system/subscription_payment_failed.html",
     "subscription_update": "system/subscription_update.html",
     "invoice": "system/invoice.html",
+    "discount_expired": "system/discount_expired.html",
 }
 
 # Jinja2 template environment
@@ -181,6 +182,7 @@ async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict =
         "subscription_payment_failed": "⚠️ Subscription Payment Failed",
         "subscription_update": "🔄 Subscription Update",
         "invoice": "📄 Your Invoice - Banwee",
+        "discount_expired": "Your Subscription Discount Has Expired",
     }
 
     subject = subject_map.get(mail_type, "Notification from Banwee")

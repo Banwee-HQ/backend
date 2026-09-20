@@ -17,6 +17,7 @@ from models.commerce.cart import Cart, CartItem
 from models.catalog.product import ProductVariant, Product
 from models.accounts.user import User
 from services.commerce.tax import TaxService
+from services.commerce.promocode import PromocodeService
 from core.config import settings
 from schemas.common.service_types import CartValidationResult
 
@@ -705,8 +706,6 @@ class CartService:
         """Validate a promocode and apply it to the user's cart."""
         if not code:
             raise HTTPException(status_code=400, detail="Promocode is required")
-
-        from services.commerce.promocode import PromocodeService
 
         cart = await self.get_or_create(user_id)
         if not cart.items:

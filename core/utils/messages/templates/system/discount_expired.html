@@ -1,0 +1,30 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}Your Subscription Discount Has Expired - Banwee{% endblock %}
+
+{% block content %}
+<tr>
+  <td align="center" style="padding: 50px 40px;">
+    <div style="text-align: center; margin-bottom: 30px;">
+      <h1 class="heading" style="font-size: 24px; margin-bottom: 20px; color: #253d4e;">Your Discount Has Expired</h1>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 25px; font-size: 16px;">
+      Hi {{ customer_name | default("there") }},
+    </p>
+
+    <p style="color: #64748b; line-height: 1.6; margin-bottom: 30px; font-size: 16px;">
+      A discount applied to your {{ company_name | default("Banwee") }} subscription has expired.
+      Your subscription will now renew at its regular price starting with your next billing cycle.
+    </p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="{{ manage_subscription_url | default('#') }}" style="display:inline-block; background-color:#61b482; color:#ffffff; padding:10px 35px; text-decoration:none; font-weight:bold;">Manage Your Subscription</a>
+    </div>
+
+    <p style="color: #64748b; line-height: 1.6; font-size: 14px;">
+      If you have any questions, please contact our support team.
+    </p>
+  </td>
+</tr>
+{% endblock %}
