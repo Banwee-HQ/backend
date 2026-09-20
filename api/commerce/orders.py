@@ -13,7 +13,7 @@ from core.utils.response import Response
 from services.commerce.orders import OrderService
 from models.accounts.user import User, UserRole
 from models.commerce.orders import Order as OrderModel
-from schemas.commerce.orders import Create, Checkout, Note
+from schemas.commerce.orders import Checkout, Note
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 logger = get_structured_logger(__name__)
@@ -23,12 +23,13 @@ logger = get_structured_logger(__name__)
 # ==========================================================
 @router.post("/")
 async def create(
-    request: Create,
+    request: Checkout,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new order."""
+    """Create a new order. Alias of POST /orders/checkout/ - both place an
+    order from the user's cart using OrderService.create()."""
     try:
         order_service = OrderService(db)
         order = await order_service.create(current_user.id, request, background_tasks)
@@ -191,7 +192,7 @@ async def checkout(
     """Place order with comprehensive validation."""
     try:
         order_service = OrderService(db)
-        order = await order_service.place(current_user.id, request, background_tasks)
+        order = await order_service.create(current_user.id, request, background_tasks)
         return Response.success(data=order, message="Order placed successfully")
     except Exception as e:
         raise APIException(status_code=500, message=f"Order placement failed: {str(e)}")

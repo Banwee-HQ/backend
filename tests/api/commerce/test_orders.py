@@ -75,7 +75,7 @@ class TestCheckout:
     async def test_checkout_success(self, async_client: AsyncClient, auth_headers, checkout_ready_cart, mocker):
         """POST /v1/orders/checkout - Full checkout with cart, address, shipping, and payment.
 
-        Regression test: OrderService._perform_order_placement previously called
+        Regression test: OrderService.create() (then named place()) previously called
         self.db.begin() on a session with an already-open transaction (always raised
         "A transaction is already begun") and constructed Order() with several
         keyword arguments that aren't columns on the model (status, shipping_address_id,
@@ -97,6 +97,18 @@ class TestCheckout:
 
         cart = await async_client.get("/v1/cart/", headers=auth_headers)
         assert cart.json()["data"]["items"] == []
+
+    async def test_create_endpoint_is_checkout_alias(self, async_client: AsyncClient, auth_headers, checkout_ready_cart, mocker):
+        """POST /v1/orders - Same underlying OrderService.create() as /orders/checkout/."""
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded", "payment_intent_id": str(uuid4())},
+        )
+        mocker.patch("services.accounts.email.EmailService.send_order_confirmation_email", return_value=None)
+
+        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
+        assert response.status_code == 200
+        assert response.json()["data"]["order_status"] == "confirmed"
 
     async def test_checkout_unknown_payment_method(self, async_client: AsyncClient, auth_headers, checkout_ready_cart):
         """POST /v1/orders/checkout - A payment method that doesn't exist is rejected."""

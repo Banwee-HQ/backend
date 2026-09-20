@@ -6,19 +6,6 @@ from uuid import UUID
 from models.commerce.orders import OrderStatus, PaymentStatus, FulfillmentStatus
 
 
-class ItemCreate(BaseModel):
-    variant_id: UUID
-    quantity: int
-
-
-class Address(BaseModel):
-    street: str
-    city: str
-    state: str
-    country: str
-    post_code: str
-
-
 class Checkout(BaseModel):
     shipping_address_id: UUID
     shipping_method_id: UUID  # Reverted back to UUID since we're using database shipping methods
@@ -28,14 +15,6 @@ class Checkout(BaseModel):
     country_code: Optional[str] = "US"  # User's detected country
     frontend_calculated_total: Optional[float] = None  # For validation
     idempotency_key: Optional[str] = None  # For duplicate prevention
-
-
-class Create(BaseModel):
-    items: List[ItemCreate]
-    shipping_address: Address
-    billing_address: Optional[Address] = None
-    payment_method: str
-    notes: Optional[str] = None
 
 
 class Update(BaseModel):
