@@ -1,7 +1,7 @@
 from .accounts import AuthService, UserService, AddressService, EmailService
-from .catalog import ProductService, ReviewService, InventoryService, VariantTrackingService, RecommendationService
-from .commerce import CartService, OrderService, PaymentService, RefundService, ShippingService, ShippingTrackingService, TaxService, PromocodeService, DiscountEngine, SubscriptionService, WebhookService, TransactionService
-from .system import JinjaTemplateService, ValidationService, ContactMessageService
+from .catalog import ProductService, ReviewService, InventoryService, RecommendationService
+from .commerce import CartService, OrderService, PaymentService, RefundService, ShippingService, ShippingTrackingService, TaxService, PromocodeService, DiscountEngine, SubscriptionService, WebhookService
+from .system import JinjaTemplateService, ContactMessageService
 
 # Admin service functionality has been distributed to domain-specific services:
 # - User management -> services/accounts/user.py (UserService)

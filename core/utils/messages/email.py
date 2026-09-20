@@ -153,12 +153,6 @@ async def send_email_brevo(
                 raise Exception(f"Brevo API error {response.status}: {error_text}")
 
 
-# ---------------------------------------------------------------------------
-# Legacy alias — keeps all existing callers working unchanged
-# ---------------------------------------------------------------------------
-send_email_mailjet = send_email_brevo
-
-
 async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict = {}):
     """Send email by mail_type key (legacy interface)."""
     subject_map = {
@@ -200,10 +194,6 @@ async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict =
     )
 
 
-# Legacy alias
-send_email_mailjet_legacy = send_email_brevo_legacy
-
-
 def send_email_brevo_sync(to_email: str, mail_type: str, context: dict = {}):
     """Synchronous wrapper for send_email_brevo_legacy."""
     loop = asyncio.new_event_loop()
@@ -214,6 +204,4 @@ def send_email_brevo_sync(to_email: str, mail_type: str, context: dict = {}):
         loop.close()
 
 
-# Legacy aliases
-send_email_mailjet_sync = send_email_brevo_sync
 send_email = send_email_brevo_sync

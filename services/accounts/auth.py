@@ -15,7 +15,7 @@ from schemas.accounts.user import Create as UserCreate, Response as UserResponse
 from schemas.accounts.auth import Token, Auth as AuthResponse
 from services.accounts.user import UserService
 from core.db import get_db
-from core.utils.messages.email import send_email
+from core.utils.messages.email import send_email_brevo_legacy
 from core.utils.encryption import PasswordManager
 
 logger = get_structured_logger(__name__)
@@ -366,9 +366,8 @@ class AuthService:
         }
         
         try:
-            from core.utils.messages.email import send_email_mailjet_legacy
             background_tasks.add_task(
-                send_email_mailjet_legacy,
+                send_email_brevo_legacy,
                 to_email=user.email,
                 mail_type='password_reset',
                 context=context

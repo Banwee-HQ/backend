@@ -9,4 +9,3 @@ from .promocode import Promocode
 from .discounts import Discount, SubscriptionDiscount, ProductRemovalAudit
 from .subscriptions import Subscription, SubscriptionProduct, SubscriptionCostHistory, SubscriptionAnalytics
 from .validation_rules import TaxValidationRule, ShippingValidationRule
-from .pricing import PricingConfig

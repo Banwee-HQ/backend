@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from decimal import Decimal
 from enum import Enum
 from core.logging import get_structured_logger
-from core.utils.messages.email import send_email_mailjet_legacy
+from core.utils.messages.email import send_email_brevo_legacy
 
 logger = get_structured_logger(__name__)
 
@@ -453,7 +453,7 @@ class DiscountEngine:
 
                 for email in affected_emails:
                     try:
-                        await send_email_mailjet_legacy(
+                        await send_email_brevo_legacy(
                             to_email=email,
                             mail_type="discount_expired",
                             context={"company_name": "Banwee"}

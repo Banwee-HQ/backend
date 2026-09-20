@@ -17,7 +17,6 @@ from .commerce import (
     Discount, SubscriptionDiscount, ProductRemovalAudit,
     Subscription, SubscriptionProduct, SubscriptionCostHistory, SubscriptionAnalytics,
     TaxValidationRule, ShippingValidationRule,
-    PricingConfig,
 )
 from .system import (
     ContactMessage, MessageStatus, MessagePriority,
