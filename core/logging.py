@@ -2,6 +2,7 @@
 Colored print-based logger — drop-in replacement for structured logging.
 All files using get_structured_logger() continue to work unchanged.
 """
+import traceback
 from datetime import datetime
 
 # ANSI color codes
@@ -28,43 +29,33 @@ class StructuredLogger:
         self.name = name
 
     def debug(self, message: str, *args, **kwargs) -> None:
-        pass
-        # _print("DEBUG", self.name, message % args if args else message)
+        _print("DEBUG", self.name, message % args if args else message)
 
     def info(self, message: str, *args, **kwargs) -> None:
-        pass
-        # _print("INFO", self.name, message % args if args else message)
+        _print("INFO", self.name, message % args if args else message)
 
     def warning(self, message: str, *args, **kwargs) -> None:
-        # _print("WARNING", self.name, message % args if args else message)
-        pass
+        _print("WARNING", self.name, message % args if args else message)
 
     def error(self, message: str, *args, **kwargs) -> None:
-        # _print("ERROR", self.name, message % args if args else message)
-        pass
+        _print("ERROR", self.name, message % args if args else message)
 
     def critical(self, message: str, *args, **kwargs) -> None:
-        # _print("CRITICAL", self.name, message % args if args else message)
-        pass
+        _print("CRITICAL", self.name, message % args if args else message)
 
     def exception(self, message: str, *args, **kwargs) -> None:
-        # import traceback
-        # _print("ERROR", self.name, message % args if args else message)
-        # traceback.print_exc()
-        pass
+        _print("ERROR", self.name, message % args if args else message)
+        traceback.print_exc()
 
     # Compat shims for any callers using extended methods
     def log_request(self, *args, **kwargs) -> None:
-        # _print("INFO", self.name, f"request: {args} {kwargs}")
-        pass
+        _print("INFO", self.name, f"request: {args} {kwargs}")
 
     def log_database_operation(self, *args, **kwargs) -> None:
-        # _print("DEBUG", self.name, f"db: {args} {kwargs}")
-        pass
+        _print("DEBUG", self.name, f"db: {args} {kwargs}")
 
     def log_business_event(self, *args, **kwargs) -> None:
-        # _print("INFO", self.name, f"event: {args} {kwargs}")
-        pass
+        _print("INFO", self.name, f"event: {args} {kwargs}")
 
 
 def get_structured_logger(name: str) -> StructuredLogger:

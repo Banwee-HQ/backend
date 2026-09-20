@@ -304,6 +304,25 @@ async def get_tracking(
         raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
 
 
+@router.get("/{order_id}/payments/")
+async def get_order_payments(
+    order_id: UUID,
+    current_user: User = Depends(get_current_auth_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get payment intents and transactions for an order (authenticated, owner only)."""
+    try:
+        order_service = OrderService(db)
+        payments = await order_service.payments(order_id, current_user.id)
+        return Response.success(data=payments, message="Payment information retrieved")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch payments: {str(e)}")
+
+
 @router.get("/{order_id}/shipments/")
 async def get_order_shipments(
     order_id: str,

@@ -2364,6 +2364,41 @@ class OrderService:
                 message="Failed to retrieve tracking information"
             )
 
+    async def payments(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
+        """Get payment intents and transactions for an order (authenticated, owner only)"""
+        from core.exceptions import APIException
+        from models.commerce.payments import PaymentIntent, Transaction
+        try:
+            query = select(Order).where(
+                and_(Order.id == order_id, Order.user_id == user_id)
+            ).options(
+                selectinload(Order.payment_intents),
+                selectinload(Order.transactions)
+            )
+
+            result = await self.db.execute(query)
+            order = result.scalar_one_or_none()
+
+            if not order:
+                raise APIException(status_code=404, message="Order not found")
+
+            return {
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "payment_status": order.payment_status,
+                "payment_intents": [intent.to_dict() for intent in order.payment_intents],
+                "transactions": [txn.to_dict() for txn in order.transactions],
+            }
+
+        except APIException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to get payments for order {order_id}: {e}")
+            raise APIException(
+                status_code=500,
+                message="Failed to retrieve payment information"
+            )
+
     async def tracking_public(self, order_id: str) -> Dict[str, Any]:
         """Get order tracking information without authentication (public endpoint)"""
         try:

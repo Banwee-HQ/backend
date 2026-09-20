@@ -337,9 +337,10 @@ async def create(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Error creating product")
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Failed to create product"
+            message=f"Failed to create product: {str(e)}"
         )
 
 
