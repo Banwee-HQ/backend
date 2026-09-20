@@ -11,6 +11,9 @@ from core.utils.uuid_utils import uuid7
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.orm import selectinload, load_only
+from core.logging import get_structured_logger
+
+logger = get_structured_logger(__name__)
 
 
 class ReviewService:
@@ -53,13 +56,9 @@ class ReviewService:
         
         # Update product rating - don't fail if this has an issue
         try:
-            print(f"DEBUG: About to update product rating for {review_data.product_id}")
             await self._update_product_rating(review_data.product_id)
-            print(f"DEBUG: Product rating updated successfully")
         except Exception as e:
-            print(f"WARNING: Could not update product rating: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Could not update product rating for {review_data.product_id}: {type(e).__name__}: {str(e)}")
 
         # Return plain dict to avoid serialization issues
         return {
@@ -176,30 +175,22 @@ class ReviewService:
         """Update product rating after review changes"""
         # Calculate new average rating and count
         try:
-            print(f"DEBUG: _update_product_rating called with product_id={product_id}")
             result = await self.db.execute(
                 select(func.avg(Review.rating), func.count(Review.id))
                 .where(Review.product_id == product_id)
             )
-            print(f"DEBUG: Query executed successfully")
             avg_rating, review_count = result.first()
-            print(f"DEBUG: Got avg_rating={avg_rating}, review_count={review_count}")
 
             product = await self.db.get(Product, product_id)
-            print(f"DEBUG: Got product, product={product}")
             if product:
                 product.rating_average = avg_rating if avg_rating is not None else 0.0
                 product.rating_count = review_count if review_count is not None else 0
                 product.review_count = review_count if review_count is not None else 0
                 product.updated_at = datetime.utcnow()
                 await self.db.commit()
-                print(f"DEBUG: About to call db.refresh on product")
                 await self.db.refresh(product)
-                print(f"DEBUG: refresh completed")
         except Exception as e:
-            print(f"ERROR in _update_product_rating: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Could not update product rating for {product_id}: {type(e).__name__}: {str(e)}")
             raise
 
     async def recalc_ratings(self):
