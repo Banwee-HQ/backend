@@ -10,26 +10,10 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate, ProductPatch, VariantStockUpdate, ProductModeration, ProductFeatureToggle
 from services.catalog.products import ProductService
+from services.catalog.category import CategoryService
 from models.accounts.user import UserRole, User
 
 logger = get_logger(__name__)
-
-router = APIRouter(prefix="/products", tags=["Products"])
-# /products?sort_by=created_at&sort_order=desc&page=1&limit=12
-
-# Hardcoded categories since we moved to string-based system
-CATEGORIES = [
-    {"name": "Grains, Cereals & Beans", "slug": "grains-pulses"},
-    {"name": "Fruits & Vegetables", "slug": "fruits-vegetables"},
-    {"name": "Meat, Poultry & Seafood", "slug": "meat-seafood"},
-    {"name": "Dairy, Eggs & Fats", "slug": "dairy-fats"},
-    {"name": "Spices, Herbs & Seasonings", "slug": "spices-herbs"},
-    {"name": "Pantry & Sweeteners", "slug": "pantry-sweeteners"},
-    {"name": "Nuts, Seeds & Snacks", "slug": "nuts-seeds-snacks"},
-    {"name": "Beverages, Tea & Coffee", "slug": "beverages"},
-    {"name": "Bakery & Prepared Foods", "slug": "bakery"},
-    {"name": "Fibers & Industrial Crops", "slug": "fibers"}
-]
 
 router = APIRouter(prefix="/products", tags=["Products"])
 # /products?sort_by=created_at&sort_order=desc&page=1&limit=12
@@ -42,7 +26,10 @@ async def get_home_data(
     """Get all data needed for the home page in one request."""
     try:
         product_service = ProductService(db)
-        
+
+        categories, _ = await CategoryService(db).list(limit=50, active_only=True)
+        categories = [c.to_dict() for c in categories]
+
         # Fetch featured products (4 items)
         featured = await product_service.featured(limit=4)
         
@@ -84,7 +71,7 @@ async def get_home_data(
         
         return Response.success(
             data={
-                "categories": CATEGORIES,
+                "categories": categories,
                 "featured": featured,
                 "popular": popular_products,
                 "deals": deals_products
@@ -239,50 +226,6 @@ async def recommended(
             message=f"Failed to fetch recommended products - {str(e)}"
         )
 
-
-@router.get("/{product_id}/variants/")
-async def variants(
-    product_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all variants for a product."""
-    try:
-        product_service = ProductService(db)
-        variants = await product_service.list_variants(product_id)
-        return Response.success(data=variants)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch product variants - {str(e)}"
-        )
-
-
-@router.get("/variants/{variant_id}/")
-async def get_variant(
-    variant_id: UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific product variant by ID."""
-    try:
-        product_service = ProductService(db)
-        variant = await product_service.get_variant(variant_id)
-        if not variant:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Product variant not found"
-            )
-        return Response.success(data=variant)
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch product variant - {str(e)}"
-        )
 
 @router.get("/{product_id}/")
 async def get_product(

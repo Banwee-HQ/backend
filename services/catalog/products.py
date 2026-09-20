@@ -692,10 +692,12 @@ class ProductService:
 
         # Create variants
         for v_idx, variant_data in enumerate(variants_to_create):
-            # Auto-generate SKU: PROD-{product_id[:8]}-{variant_index}
-            # Format: First 3 chars of product name + first 8 chars of product ID + variant index
+            # Auto-generate SKU: {name prefix}-{product_id entropy}-{variant_index}
+            # uuid7's leading bits are a millisecond timestamp shared by everything created in the
+            # same ~minute, so any two products would collide there - use the trailing (random) hex
+            # instead, which is what actually distinguishes IDs created close together.
             product_prefix = db_product.name[:3].upper().replace(' ', '')
-            auto_sku = f"{product_prefix}-{str(db_product.id)[:8]}-{v_idx}"
+            auto_sku = f"{product_prefix}-{str(db_product.id).replace('-', '')[-8:]}-{v_idx}"
             final_sku = variant_data.sku if variant_data.sku else auto_sku
             
             # Create variant first to get the ID
