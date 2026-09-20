@@ -24,6 +24,7 @@ from services.catalog.inventory import InventoryService
 from services.commerce.tax import TaxService
 from services.commerce.shipping import ShippingService
 from services.commerce.discounts import DiscountEngine
+from models.commerce.discounts import DiscountType
 from services.commerce.promocode import PromocodeService
 from models.catalog.inventories import Inventory
 from uuid import UUID
@@ -378,15 +379,15 @@ class OrderService:
                 )
                 if validation_result.is_valid:
                     discount = validation_result.discount
-                    if discount.type == "PERCENTAGE":
+                    if discount.type == DiscountType.PERCENTAGE.value:
                         discount_amount = (subtotal * Decimal(str(discount.value / 100))).quantize(
                             Decimal('0.01'), rounding=ROUND_HALF_UP
                         )
                         if discount.maximum_discount:
                             discount_amount = min(discount_amount, Decimal(str(discount.maximum_discount)))
-                    elif discount.type == "FIXED_AMOUNT":
+                    elif discount.type == DiscountType.FIXED_AMOUNT.value:
                         discount_amount = min(Decimal(str(discount.value)), subtotal)
-                    elif discount.type == "FREE_SHIPPING":
+                    elif discount.type == DiscountType.FREE_SHIPPING.value:
                         discount_amount = shipping_cost
                         shipping_cost = Decimal('0.00')
                     

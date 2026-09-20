@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
 from enum import Enum
@@ -75,40 +75,6 @@ class Discount(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
-
-    def is_valid(self) -> bool:
-        """Check if discount is currently valid"""
-        now = datetime.now(timezone.utc)
-        return (
-            self.is_active and
-            self.valid_from <= now <= self.valid_until and
-            (self.usage_limit is None or self.used_count < self.usage_limit)
-        )
-
-    def calculate_discount_amount(self, subtotal: float) -> float:
-        """Calculate discount amount for given subtotal"""
-        if not self.is_valid():
-            return 0.0
-        
-        if self.minimum_amount and subtotal < self.minimum_amount:
-            return 0.0
-        
-        if self.type == "PERCENTAGE":
-            discount_amount = subtotal * (self.value / 100)
-        elif self.type == "FIXED_AMOUNT":
-            discount_amount = self.value
-        elif self.type == "FREE_SHIPPING":
-            return 0.0  # Handled separately in shipping calculation
-        else:
-            return 0.0
-        
-        # Apply maximum discount limit if set
-        if self.maximum_discount and discount_amount > self.maximum_discount:
-            discount_amount = self.maximum_discount
-        
-        # Ensure discount doesn't exceed subtotal
-        return min(discount_amount, subtotal)
-
 
 class SubscriptionDiscount(Base):
     """Applied discounts tracking for subscriptions"""

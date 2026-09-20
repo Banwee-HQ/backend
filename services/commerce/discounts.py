@@ -4,7 +4,7 @@ Implements discount code validation, calculation logic, and optimal discount sel
 Requirements: 3.1, 3.2, 3.5
 """
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, desc
+from sqlalchemy import select, and_, or_, func, desc, delete
 from models.commerce.discounts import Discount, SubscriptionDiscount
 from models.commerce.subscriptions import Subscription
 from models.accounts.user import User
@@ -28,7 +28,7 @@ class DiscountEngine:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_discount(
+    async def validate_discount_code(
         self,
         discount_code: str,
         subscription_id: Optional[str] = None,
@@ -232,8 +232,8 @@ class DiscountEngine:
                 )
                 
                 # Check if this discount provides better savings
-                if calculation.discount_amount > max_savings:
-                    max_savings = calculation.discount_amount
+                if calculation["discount_amount"] > max_savings:
+                    max_savings = calculation["discount_amount"]
                     best_discount = discount
                     best_calculation = calculation
             
@@ -247,145 +247,6 @@ class DiscountEngine:
         except Exception as e:
             logger.error(f"Error selecting optimal discount: {str(e)}")
             return None, None
-
-    async def apply_discount_to_subscription(
-        self,
-        subscription_id: str,
-        discount_code: str,
-        user_id: str
-    ) -> Dict[str, Any]:
-        """
-        Apply a discount to a subscription with full validation and optimization
-        Requirements: 3.1, 3.2, 3.5
-        
-        Args:
-            subscription_id: ID of the subscription
-            discount_code: Discount code to apply
-            user_id: ID of the user (for authorization)
-            
-        Returns:
-            Dictionary with application result and details
-        """
-        try:
-            # Get subscription details
-            subscription_result = await self.db.execute(
-                select(Subscription).where(
-                    and_(
-                        Subscription.id == subscription_id,
-                        Subscription.user_id == user_id
-                    )
-                )
-            )
-            subscription = subscription_result.scalar_one_or_none()
-            
-            if not subscription:
-                return {
-                    'success': False,
-                    'error': 'Subscription not found or access denied'
-                }
-            
-            if subscription.status not in ['active', 'paused']:
-                return {
-                    'success': False,
-                    'error': 'Cannot apply discount to inactive subscription'
-                }
-            
-            # Validate discount code
-            validation_result = await self.validate_discount_code(
-                discount_code=discount_code,
-                subscription_id=subscription_id,
-                subtotal=Decimal(str(subscription.subtotal or 0))
-            )
-            
-            if not validation_result.is_valid:
-                return {
-                    'success': False,
-                    'error': validation_result.error_message
-                }
-            
-            discount = validation_result.discount
-            
-            # Get current subscription amounts
-            subtotal = Decimal(str(subscription.subtotal or 0))
-            shipping_cost = Decimal(str(subscription.shipping_cost or 0))
-            tax_amount = Decimal(str(subscription.tax_amount or 0))
-            
-            # Check for existing discounts and determine if we should replace them
-            existing_discounts_result = await self.db.execute(
-                select(SubscriptionDiscount).where(
-                    SubscriptionDiscount.subscription_id == subscription_id
-                ).join(Discount)
-            )
-            existing_discounts = existing_discounts_result.scalars().all()
-            
-            # Calculate new discount
-            new_calculation = await self.calculate_discount_amount(
-                discount=discount,
-                subtotal=subtotal,
-                shipping_cost=shipping_cost,
-                tax_amount=tax_amount
-            )
-            
-            # If there are existing discounts, compare and select optimal
-            if existing_discounts:
-                current_discount_amount = sum(
-                    Decimal(str(ed.discount_amount)) for ed in existing_discounts
-                )
-                
-                if new_calculation.discount_amount <= current_discount_amount:
-                    return {
-                        'success': False,
-                        'error': 'A better discount is already applied to this subscription'
-                    }
-                
-                # Remove existing discounts as the new one is better
-                for existing_discount in existing_discounts:
-                    await self.db.delete(existing_discount)
-                    
-                    # Decrement usage count of removed discount
-                    removed_discount_result = await self.db.execute(
-                        select(Discount).where(Discount.id == existing_discount.discount_id)
-                    )
-                    removed_discount = removed_discount_result.scalar_one_or_none()
-                    if removed_discount:
-                        removed_discount.used_count = max(0, removed_discount.used_count - 1)
-            
-            # Apply the new discount
-            subscription_discount = SubscriptionDiscount(
-                subscription_id=subscription_id,
-                discount_id=discount.id,
-                discount_amount=float(new_calculation.discount_amount)
-            )
-            self.db.add(subscription_discount)
-            
-            # Update discount usage count
-            discount.used_count += 1
-            
-            # Update subscription totals
-            subscription.discount_amount = float(new_calculation.discount_amount)
-            subscription.total = float(new_calculation.final_total)
-            
-            await self.db.commit()
-            
-            logger.info(f"Successfully applied discount {discount_code} to subscription {subscription_id}")
-            
-            return {
-                'success': True,
-                'discount_code': discount_code,
-                'discount_type': discount.type,
-                'discount_amount': float(new_calculation.discount_amount),
-                'new_total': float(new_calculation.final_total),
-                'savings': float(new_calculation.discount_amount),
-                'applied_at': datetime.now(timezone.utc).isoformat()
-            }
-            
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error applying discount {discount_code} to subscription {subscription_id}: {str(e)}")
-            return {
-                'success': False,
-                'error': 'Internal error applying discount'
-            }
 
     async def remove_expired_discounts(self) -> Dict[str, Any]:
         """
@@ -429,9 +290,9 @@ class DiscountEngine:
             
             # Remove expired discount applications
             await self.db.execute(
-                select(SubscriptionDiscount).where(
+                delete(SubscriptionDiscount).where(
                     SubscriptionDiscount.discount_id.in_(expired_discount_ids)
-                ).delete()
+                )
             )
             
             # Mark discounts as inactive
