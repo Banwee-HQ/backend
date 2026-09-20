@@ -9,7 +9,7 @@ from schemas.commerce.promos import Create, Update, ValidateRequest, ValidateRes
 from services.commerce.promocode import PromocodeService
 from services.commerce.promocode_scheduler import PromoCodeScheduler
 from models.accounts.user import User
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin, require_auth
 from fastapi.security import OAuth2PasswordBearer
 from core.logging import get_structured_logger
 
@@ -24,7 +24,7 @@ async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     is_active: Optional[bool] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all promocodes. Returns only active promocodes for regular users, all for admins."""
@@ -78,7 +78,7 @@ async def list(
 @router.post("/validate/")
 async def validate(
     request: ValidateRequest,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Validate a promocode."""
@@ -112,7 +112,7 @@ async def validate(
 @router.get("/{promocode_id}/")
 async def get(
     promocode_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get promocode by ID."""

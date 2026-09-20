@@ -13,7 +13,7 @@ from uuid import UUID
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import get_current_auth_user, require_admin, require_auth
 from core.utils.response import Response
 from models.accounts.user import User
 from models.accounts.user import User as UserModel
@@ -246,7 +246,7 @@ async def repeat_customers(
 
 @router.get("/simple-dashboard/")
 async def simple_dashboard(
-    current_user: User = Depends(get_current_auth_user)
+    current_user: User = Depends(require_auth)
 ):
     """Get simple dashboard data (no admin required for testing)"""
     return Response.success(data={
@@ -365,7 +365,7 @@ async def sales_overview(
     categories: Optional[str] = Query(None),
     regions: Optional[str] = Query(None),
     sales_channels: Optional[str] = Query("online,instore"),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """

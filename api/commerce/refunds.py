@@ -7,7 +7,7 @@ from typing import Optional
 from uuid import UUID
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin, require_auth
 from core.utils.response import Response
 from models.commerce.refunds import RefundStatus
 from models.accounts.user import UserRole
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/refunds", tags=["refunds"])
 @router.post("/")
 async def create(
     refund_data: dict,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a refund request."""
@@ -51,7 +51,7 @@ async def list(
     limit: int = Query(20, ge=1, le=100),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List refunds. Returns all refunds for admin, user's refunds for regular users."""
@@ -98,7 +98,7 @@ async def list(
 @router.get("/{refund_id}/")
 async def get(
     refund_id: UUID,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get refund by ID. Admins can view any refund, users can only view their own."""
@@ -132,7 +132,7 @@ async def get(
 async def request(
     order_id: UUID,
     refund_request: Request,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Request refund for an order."""

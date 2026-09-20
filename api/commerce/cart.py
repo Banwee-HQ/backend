@@ -8,7 +8,7 @@ from services.commerce.cart import CartService
 from models.accounts.user import User
 from core.utils.response import Response
 from schemas.commerce.cart import Add, UpdateItem
-from core.dependencies import get_current_auth_user
+from core.dependencies import require_auth
 from typing import Optional
 
 logger = get_logger(__name__)
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/cart", tags=["Cart"])
 @router.post("/")
 async def create(
     request: Add,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Add item to cart (create cart item)."""
@@ -43,7 +43,7 @@ async def create(
 @router.post("/add/")
 async def add_item(
     payload: Add,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Add item to cart - this is the route the frontend actually calls."""
@@ -55,7 +55,7 @@ async def get(
     request: Request,
     country: Optional[str] = None,
     province: Optional[str] = None,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's cart (includes items list)."""
@@ -79,7 +79,7 @@ async def get(
 async def patch(
     item_id: UUID,
     request: UpdateItem,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update cart item quantity (partial update)."""
@@ -99,7 +99,7 @@ async def patch(
 
 
 @router.patch("/items/{item_id}/")
-async def patch_item(item_id: UUID, request: UpdateItem, current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
+async def patch_item(item_id: UUID, request: UpdateItem, current_user: User = Depends(require_auth), db: AsyncSession = Depends(get_db)):
     """Compatibility: support PATCH /cart/items/{id}"""
     return await patch(item_id=item_id, request=request, current_user=current_user, db=db)
 
@@ -107,7 +107,7 @@ async def patch_item(item_id: UUID, request: UpdateItem, current_user: User = De
 @router.delete("/{item_id}/")
 async def delete(
     item_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Remove item from cart."""
@@ -125,7 +125,7 @@ async def delete(
 
 
 @router.delete("/items/{item_id}/")
-async def delete_item(item_id: UUID, current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
+async def delete_item(item_id: UUID, current_user: User = Depends(require_auth), db: AsyncSession = Depends(get_db)):
     """Compatibility: DELETE /cart/items/{id}"""
     return await delete(item_id=item_id, current_user=current_user, db=db)
 
@@ -133,7 +133,7 @@ async def delete_item(item_id: UUID, current_user: User = Depends(get_current_au
 @router.get("/count/")
 async def count(
     request: Request,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -154,7 +154,7 @@ async def validate(
     request: Request,
     country: Optional[str] = None,
     province: Optional[str] = None,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -216,7 +216,7 @@ async def validate(
 async def calculate(
     data: dict,
     request: Request,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -237,7 +237,7 @@ async def calculate(
 @router.post("/clear/")
 async def clear(
     request: Request,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Clear all items from the cart"""
@@ -259,7 +259,7 @@ async def clear(
 @router.get("/checkout-summary/")
 async def summary(
     request: Request,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     try:

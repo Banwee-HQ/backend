@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin, require_auth
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from core.utils.response import Response
@@ -25,7 +25,7 @@ logger = get_structured_logger(__name__)
 async def create(
     request: Create,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new order."""
@@ -44,7 +44,7 @@ async def create(
 @router.get("/{order_id}/")
 async def get(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific order. Admins can view any order, users can only view their own."""
@@ -96,7 +96,7 @@ async def list(
     date_to: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List orders. Returns all orders for admin, user's orders for regular users."""
@@ -145,7 +145,7 @@ async def list(
 @router.post("/checkout/validate/")
 async def validate(
     request: Checkout,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Comprehensive checkout validation."""
@@ -164,7 +164,7 @@ async def validate(
 async def checkout(
     request: Checkout,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Place order with comprehensive validation."""
@@ -179,7 +179,7 @@ async def checkout(
 @router.patch("/{order_id}/cancel/")
 async def cancel(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel an order."""
@@ -194,7 +194,7 @@ async def cancel(
 @router.post("/{order_id}/cancel/")
 async def cancel_post(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Compatibility: allow POST to cancel an order."""
@@ -205,7 +205,7 @@ async def cancel_post(
 @router.get("/{order_id}/invoice/")
 async def get_invoice(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order invoice (PDF)."""
@@ -231,7 +231,7 @@ async def get_invoice(
 async def create_note(
     order_id: UUID,
     request: Note,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Add note to order."""
@@ -247,7 +247,7 @@ async def create_note(
 async def get_note(
     order_id: UUID,
     note_index: int,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific note by index."""
@@ -268,7 +268,7 @@ async def get_note(
 @router.get("/{order_id}/notes/")
 async def list_notes(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List all notes for an order."""
@@ -286,7 +286,7 @@ async def list_notes(
 @router.get("/{order_id}/tracking/")
 async def get_tracking(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get order tracking information (authenticated)."""
@@ -307,7 +307,7 @@ async def get_tracking(
 @router.get("/{order_id}/payments/")
 async def get_order_payments(
     order_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get payment intents and transactions for an order (authenticated, owner only)."""
@@ -326,7 +326,7 @@ async def get_order_payments(
 @router.get("/{order_id}/shipments/")
 async def get_order_shipments(
     order_id: str,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all shipments for an order."""

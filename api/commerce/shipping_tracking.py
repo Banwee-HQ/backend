@@ -13,7 +13,7 @@ from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
 from core.logging import get_structured_logger
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin, require_auth
 from models.accounts.user import User
 from models.commerce.shipping_tracking import ShippingProvider, ShipmentTracking
 
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/shipping-tracking", tags=["shipping-tracking"])
 async def create_shipment(
     shipment_data: Create,
     background_tasks: BackgroundTasks,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new shipment tracking record"""
@@ -75,7 +75,7 @@ async def create_shipment(
 @router.get("/shipments/{shipment_id}/")
 async def get_shipment(
     shipment_id: str,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get detailed tracking information for a shipment"""
@@ -99,7 +99,7 @@ async def get_shipment(
 @router.post("/track/")
 async def track(
     tracking_request: Track,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Track a shipment using carrier-specific integration"""
@@ -129,7 +129,7 @@ async def track(
 async def update_shipment_status(
     shipment_id: str,
     update_data: Update,
-    current_user = Depends(get_current_auth_user),
+    current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update shipment status and create tracking event"""
@@ -214,7 +214,7 @@ async def delete_carrier(
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List shipments visible to the current user"""

@@ -8,7 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin, get_current_auth_user
+from core.dependencies import require_admin, require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from models.accounts.user import User
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 @router.get("/")
-async def overview(current_user: User = Depends(get_current_auth_user), db: AsyncSession = Depends(get_db)):
+async def overview(current_user: User = Depends(require_auth), db: AsyncSession = Depends(get_db)):
     """Overview endpoint for payments - kept for compatibility with older clients/tests."""
     try:
         service = PaymentService(db)
@@ -49,7 +49,7 @@ async def overview(current_user: User = Depends(get_current_auth_user), db: Asyn
 @router.post("/methods/")
 async def create_method(
     payment_method_data: MethodCreate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new payment method"""
@@ -83,7 +83,7 @@ async def create_method(
 @router.get("/methods/{payment_method_id}/")
 async def get_method(
     payment_method_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific payment method"""
@@ -106,7 +106,7 @@ async def list_methods(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     search: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List all payment methods for user with pagination and search"""
@@ -128,7 +128,7 @@ async def list_methods(
 async def patch_method(
     payment_method_id: UUID,
     payment_method_data: MethodUpdate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a payment method (partial)"""
@@ -153,7 +153,7 @@ async def patch_method(
 @router.delete("/methods/{payment_method_id}/")
 async def delete_method(
     payment_method_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a payment method"""
@@ -177,7 +177,7 @@ async def delete_method(
 @router.post("/intents/")
 async def create_intent(
     payment_intent_data: IntentCreate,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a payment intent"""
@@ -203,7 +203,7 @@ async def create_intent(
 @router.get("/intents/{payment_intent_id}/")
 async def get_intent(
     payment_intent_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific payment intent"""
@@ -225,7 +225,7 @@ async def get_intent(
 async def list_intents(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List payment intents for user"""
@@ -255,7 +255,7 @@ async def list_intents(
 @router.get("/transactions/{transaction_id}/")
 async def get_transaction(
     transaction_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific transaction"""
@@ -277,7 +277,7 @@ async def get_transaction(
 async def list_transactions(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List transactions for user"""
@@ -355,7 +355,7 @@ async def create_refund(
 @router.get("/refunds/{refund_id}/")
 async def get_refund(
     refund_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific refund"""
@@ -377,7 +377,7 @@ async def get_refund(
 async def list_refunds(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List refunds for user"""
@@ -408,7 +408,7 @@ async def list_refunds(
 async def confirm_intent(
     payment_intent_id: UUID,
     payment_method_id: str,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Confirm a payment intent"""
@@ -430,7 +430,7 @@ async def confirm_intent(
 @router.post("/methods/{payment_method_id}/default/")
 async def set_default_method(
     payment_method_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Set a payment method as default"""
@@ -454,7 +454,7 @@ async def process_payment(
     payment_method_id: UUID,
     order_id: Optional[UUID] = None,
     subscription_id: Optional[UUID] = None,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Process a payment"""
@@ -482,7 +482,7 @@ async def process_payment(
 @router.get("/failures/{payment_intent_id}/status/")
 async def failure_status(
     payment_intent_id: UUID,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Get detailed status of a failed payment"""
@@ -500,7 +500,7 @@ async def failure_status(
 async def retry_payment(
     payment_intent_id: UUID,
     new_payment_method_id: Optional[UUID] = None,
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Retry a failed payment"""
@@ -518,7 +518,7 @@ async def retry_payment(
 async def list_failures(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    current_user: User = Depends(get_current_auth_user),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """List user's failed payments"""
