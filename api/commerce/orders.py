@@ -41,6 +41,27 @@ async def create(
         raise APIException(status_code=400, message=f"Failed to create order: {str(e)}")
 
 
+@router.get("/statistics/")
+async def statistics(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get order statistics (admin only). Must be registered before /{order_id}/ -
+    otherwise "statistics" gets captured as order_id and fails UUID validation."""
+    try:
+        order_service = OrderService(db)
+        stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
+        return Response.success(data=stats, message="Order statistics retrieved")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to fetch statistics: {str(e)}")
+
+
 @router.get("/{order_id}/")
 async def get(
     order_id: UUID,
@@ -423,23 +444,3 @@ async def ship(
         raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to ship order: {str(e)}")
-
-
-@router.get("/statistics/")
-async def statistics(
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get order statistics (admin only)."""
-    try:
-        order_service = OrderService(db)
-        stats = await order_service.get_statistics(date_from=date_from, date_to=date_to)
-        return Response.success(data=stats, message="Order statistics retrieved")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to fetch statistics: {str(e)}")

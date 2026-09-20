@@ -54,6 +54,18 @@ test_engine = create_async_engine(
     echo=False,
 )
 
+# Match core.db.DatabaseManager's connection setup: without this, enum types and
+# anything else that isn't in the "public" schema resolve inconsistently depending
+# on where a given object happened to land at creation time.
+from sqlalchemy import event as _sa_event
+
+
+@_sa_event.listens_for(test_engine.sync_engine, "connect")
+def _set_test_search_path(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("SET search_path TO accounts, catalog, commerce, admin, system, public")
+    cursor.close()
+
 # Test session factory
 TestingSessionLocal = async_sessionmaker(
     test_engine,

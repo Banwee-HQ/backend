@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, delete, String
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
-from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus
+from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus, OrderSource
 from models.accounts.user import User
 from services.accounts.email import EmailService
 from models.commerce.cart import Cart, CartItem
@@ -961,8 +961,10 @@ class OrderService:
             logger.info(f"Returning existing order for idempotency key: {idempotency_key}")
             return await self._convert_order_to_response(existing)
         
-        # Start atomic transaction for entire checkout process
-        async with self.db.begin():
+        # self.db already has an auto-begun transaction from the SELECT above, so
+        # self.db.begin() would raise "A transaction is already begun" - use a
+        # SAVEPOINT instead, which nests fine inside an open transaction.
+        async with self.db.begin_nested():
             try:
                 # STEP 1: MANDATORY CART VALIDATION - Never skip this step
                 cart_service = CartService(self.db)
@@ -1120,8 +1122,8 @@ class OrderService:
 
         # STEP 5: ATOMIC TRANSACTION FOR ORDER CREATION
         try:
-            # Begin transaction - all operations below must succeed or all will be rolled back
-            async with self.db.begin():
+            # SAVEPOINT, not a new transaction - see the begin_nested() note above.
+            async with self.db.begin_nested():
                 # Generate order number
                 order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid7())[:8].upper()}"
                 
@@ -1147,10 +1149,14 @@ class OrderService:
                 # Determine currency from shipping address
                 order_currency = get_currency_from_address(shipping_address_dict)
                 
-                # Create order with backend-calculated prices and idempotency key
+                # Create order with backend-calculated prices and idempotency key.
+                # shipping/payment method and promocode are intentionally not stored as
+                # FKs here - the shipping method name and full address are snapshotted
+                # below, and the payment/promocode usage are recorded on their own
+                # records (PaymentIntent/Transaction, PromocodeService.inc_usage) which
+                # already carry order_id.
                 order = Order(
                     user_id=user_id,
-                    status="pending",
                     order_number=order_number,
                     subtotal=subtotal,
                     tax_amount=tax_amount,
@@ -1163,16 +1169,12 @@ class OrderService:
                     carrier=None,
                     billing_address=billing_address_dict,
                     shipping_address=shipping_address_dict,
-                    shipping_address_id=request.shipping_address_id,
-                    shipping_method_id=request.shipping_method_id,
-                    payment_method_id=request.payment_method_id,
-                    promocode_id=getattr(cart, 'promocode_id', None),
-                    notes=request.notes,
+                    customer_notes=request.notes,
                     idempotency_key=idempotency_key,
-                    payment_status="pending",
-                    fulfillment_status="unfulfilled",
-                    order_status="pending",
-                    source="web"
+                    payment_status=PaymentStatus.PENDING,
+                    fulfillment_status=FulfillmentStatus.UNFULFILLED,
+                    order_status=OrderStatus.PENDING,
+                    source=OrderSource.WEB
                 )
                 
                 # CRITICAL VALIDATION: Ensure order total is correct before saving
@@ -1196,26 +1198,13 @@ class OrderService:
                     logger.error(f"  Tax:        ${order.tax_amount:.2f}")
                     logger.error(f"  Discount:   ${order.discount_amount:.2f}")
                     logger.error(f"  Difference: ${abs(order_calculated_total - order.total_amount):.2f}")
-                    
-                    # Write to a debug file as well
-                    with open("/tmp/order_validation_errors.log", "a") as f:
-                        f.write(f"{datetime.utcnow()}: ORDER VALIDATION FAILED\n")
-                        f.write(f"  User: {user_id}\n")
-                        f.write(f"  Calculated: ${order_calculated_total:.2f}\n")
-                        f.write(f"  Set total:  ${order.total_amount:.2f}\n")
-                        f.write(f"  Difference: ${abs(order_calculated_total - order.total_amount):.2f}\n\n")
-                    
+
                     raise HTTPException(
-                        status_code=500, 
+                        status_code=500,
                         detail="Order total calculation validation failed. Please try again."
                     )
                 else:
                     logger.info(f"✅ Order total validation PASSED")
-                    # Write success to debug file too
-                    with open("/tmp/order_validation_success.log", "a") as f:
-                        f.write(f"{datetime.utcnow()}: ORDER VALIDATION PASSED\n")
-                        f.write(f"  User: {user_id}\n")
-                        f.write(f"  Total: ${order.total_amount:.2f}\n\n")
                 
                 self.db.add(order)
                 await self.db.flush()  # Get order ID without committing
@@ -1330,9 +1319,10 @@ class OrderService:
 
                 await cart_service.clear_cart(user_id=user_id)
 
-                # Transaction will auto-commit here if no exceptions occurred
-                
-            # Refresh order after transaction commit
+                # Savepoint releases here; nothing is durable yet since this isn't
+                # a real transaction boundary - commit explicitly below.
+
+            await self.db.commit()
             await self.db.refresh(order)
             
             # POST-COMMIT VALIDATION: Verify order total is still correct after database commit
@@ -1356,30 +1346,17 @@ class OrderService:
                 logger.error(f"  Tax:      ${order.tax_amount:.2f}")
                 logger.error(f"  Discount: ${order.discount_amount:.2f}")
                 logger.error(f"  Difference: ${abs(post_commit_calculated_total - order.total_amount):.2f}")
-                
-                # Write to debug file
-                with open("/tmp/order_post_commit_errors.log", "a") as f:
-                    f.write(f"{datetime.utcnow()}: POST-COMMIT ERROR\n")
-                    f.write(f"  Order: {order.id}\n")
-                    f.write(f"  Expected: ${post_commit_calculated_total:.2f}\n")
-                    f.write(f"  Actual:   ${order.total_amount:.2f}\n")
-                    f.write(f"  Difference: ${abs(post_commit_calculated_total - order.total_amount):.2f}\n\n")
-                
+
                 # This indicates a database trigger, constraint, or other process is modifying the order
                 # For now, we'll fix it by updating the order with the correct total
                 logger.warning(f"🛠️ Correcting order total from ${order.total_amount:.2f} to ${post_commit_calculated_total:.2f}")
                 order.total_amount = post_commit_calculated_total
                 await self.db.commit()
                 await self.db.refresh(order)
-                
+
                 logger.info(f"✅ Order total corrected to ${order.total_amount:.2f}")
             else:
                 logger.info(f"✅ Post-commit validation PASSED")
-                # Write success to debug file
-                with open("/tmp/order_post_commit_success.log", "a") as f:
-                    f.write(f"{datetime.utcnow()}: POST-COMMIT SUCCESS\n")
-                    f.write(f"  Order: {order.id}\n")
-                    f.write(f"  Total: ${order.total_amount:.2f}\n\n")
             
             
             # Send ARQ events with idempotency after successful transaction commit
@@ -1566,49 +1543,48 @@ class OrderService:
         if order.order_status not in [OrderStatus.PENDING, OrderStatus.CONFIRMED]:
             raise HTTPException(status_code=400, detail="Order cannot be cancelled")
 
-        # Use transaction for order cancellation
+        # self.db already has an auto-begun transaction from the SELECT above - an
+        # explicit self.db.begin() here raises "A transaction is already begun".
         try:
-            async with self.db.begin():
-                now = datetime.now(tz=timezone.utc)
-                order.order_status = OrderStatus.CANCELLED
-                order.fulfillment_status = FulfillmentStatus.CANCELLED
-                order.cancelled_at = now
+            now = datetime.now(tz=timezone.utc)
+            order.order_status = OrderStatus.CANCELLED
+            order.fulfillment_status = FulfillmentStatus.CANCELLED
+            order.cancelled_at = now
 
-                # Increment stock for cancelled order items
-                query_items = select(OrderItem).where(OrderItem.order_id == order.id).options(
-                    selectinload(OrderItem.variant).selectinload(ProductVariant.inventory)
-                )
-                order_items_with_inventory = (await self.db.execute(query_items)).scalars().all()
+            # Increment stock for cancelled order items
+            query_items = select(OrderItem).where(OrderItem.order_id == order.id).options(
+                selectinload(OrderItem.variant).selectinload(ProductVariant.inventory)
+            )
+            order_items_with_inventory = (await self.db.execute(query_items)).scalars().all()
 
-                for item in order_items_with_inventory:
-                    if not item.variant or not item.variant.inventory:
-                        print(f"Warning: No inventory found for variant {item.variant_id} during order cancellation.")
-                        continue
-                    
-                    # Use new increment stock method for cancellations
-                    await self.inventory_service.increment(
-                        variant_id=item.variant.id,
-                        quantity=item.quantity,
-                        location_id=item.variant.inventory.location_id,
-                        order_id=order.id,
-                        user_id=user_id
-                    )
+            for item in order_items_with_inventory:
+                if not item.variant or not item.variant.inventory:
+                    logger.warning(f"No inventory found for variant {item.variant_id} during order cancellation.")
+                    continue
 
-                # Add tracking event
-                tracking_event = TrackingEvent(
+                # Use new increment stock method for cancellations
+                await self.inventory_service.increment(
+                    variant_id=item.variant.id,
+                    quantity=item.quantity,
+                    location_id=item.variant.inventory.location_id,
                     order_id=order.id,
-                    status="cancelled",
-                    description="Order cancelled by customer",
-                    location="System"
+                    user_id=user_id
                 )
-                self.db.add(tracking_event)
 
-                # Transaction will auto-commit here
-                
-            # Refresh order after transaction commit
+            # Add tracking event
+            tracking_event = TrackingEvent(
+                order_id=order.id,
+                status="cancelled",
+                description="Order cancelled by customer",
+                location="System"
+            )
+            self.db.add(tracking_event)
+
+            await self.db.commit()
             await self.db.refresh(order)
 
         except Exception as e:
+            await self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Order cancellation failed: {str(e)}")
 
         return await self._format_order_response(order)
