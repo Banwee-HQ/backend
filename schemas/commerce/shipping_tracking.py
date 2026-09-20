@@ -5,13 +5,13 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
-from models.commerce.shipping_tracking import ShippingCarrier, TrackingStatus, ShipmentType
+from models.commerce.shipping_tracking import TrackingStatus, ShipmentType
 
 
 class Create(BaseModel):
     order_id: str = Field(..., description="Order ID")
     order_item_id: Optional[str] = Field(None, description="Order item ID for multi-item shipments")
-    carrier: ShippingCarrier = Field(..., description="Shipping carrier")
+    carrier: str = Field(..., description="Shipping carrier code (e.g. 'ups')")
     tracking_number: str = Field(..., description="Tracking number")
     shipment_type: ShipmentType = Field(ShipmentType.STANDARD, description="Shipment type")
     origin_address: Optional[dict] = Field(None, description="Origin address")
@@ -39,4 +39,4 @@ class Update(BaseModel):
 
 class Track(BaseModel):
     tracking_number: str = Field(..., description="Tracking number")
-    carrier: ShippingCarrier = Field(..., description="Shipping carrier")
+    carrier: str = Field(..., description="Shipping carrier code (e.g. 'ups')")

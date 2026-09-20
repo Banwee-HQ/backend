@@ -12,7 +12,7 @@ from .commerce import (
     Order, OrderItem, TrackingEvent,
     PaymentMethod, PaymentIntent, Transaction, PaymentAnalytics,
     Refund, RefundItem,
-    ShippingMethod, ShipmentTracking, ShippingCarrier, ShipmentTrackingEvent,
+    ShippingMethod, Carrier, ShippingProvider, ShipmentTracking, ShipmentTrackingEvent,
     TaxRate, Promocode,
     Discount, SubscriptionDiscount, ProductRemovalAudit,
     Subscription, SubscriptionProduct, SubscriptionCostHistory, SubscriptionAnalytics,

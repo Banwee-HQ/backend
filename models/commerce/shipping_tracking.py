@@ -13,52 +13,6 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import uuid
 
-class ShippingCarrier(str, Enum):
-    """Supported shipping carriers"""
-    UPS = "ups"
-    CANADA_EXPRESS = "canada_express"
-    ROYAL_MAIL = "royal_mail"
-    FEDEX = "fedex"
-    DHL = "dhl"
-    USPS = "usps"
-    CANADA_POST = "canada_post"
-    PUROLATOR = "purolator"
-    TNT = "tnt"
-    ARAMEX = "aramex"
-
-    # Added carriers
-    LASERSHIP = "lasership"
-    ONTRAC = "ontrac"
-    HERMES = "hermes"
-    EVRI = "evri"              # UK (formerly Hermes)
-    DPD = "dpd"
-    DPD_LOCAL = "dpd_local"
-    GLS = "gls"
-    POSTNL = "postnl"
-    BPOST = "bpost"
-    SWISS_POST = "swiss_post"
-    AUSTRALIA_POST = "australia_post"
-    NZ_POST = "nz_post"
-    JAPAN_POST = "japan_post"
-    KOREA_POST = "korea_post"
-    CHINA_POST = "china_post"
-    SF_EXPRESS = "sf_express"
-    YANWEN = "yanwen"
-    CAINIAO = "cainiao"
-    LAPOSTE = "laposte"
-    COLISSIMO = "colissimo"
-    CORREOS = "correos"
-    POSTE_ITALIANE = "poste_italiane"
-    POSTNORD = "postnord"
-    BRING = "bring"
-    BLUE_DART = "blue_dart"
-    DELHIVERY = "delhivery"
-    DTDC = "dtdc"
-    XPRESSBEES = "xpressbees"
-
-    OTHER = "other"
-
-
 class TrackingStatus(str, Enum):
     """Tracking status levels"""
     PENDING = "pending"
@@ -108,7 +62,7 @@ class ShippingProvider(Base):
     """Shipping provider configuration"""
     __tablename__ = "shipping_providers"
     __table_args__ = (
-        Index('idx_shipping_providers_carrier', 'carrier'),
+        Index('idx_shipping_providers_carrier', 'carrier_id'),
         Index('idx_shipping_providers_active', 'is_active'),
         {'schema': 'commerce'}
     )
@@ -119,7 +73,7 @@ class ShippingProvider(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     name: Mapped[str] = mapped_column(String(100))
-    carrier: Mapped[ShippingCarrier] = mapped_column(PG_ENUM(ShippingCarrier, name="shipping_carrier"))
+    carrier_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.carriers.id"))
     api_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Encrypted in production
     api_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Encrypted in production
     api_url: Mapped[str] = mapped_column(String(255))
@@ -130,13 +84,15 @@ class ShippingProvider(Base):
     rate_limits: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
+    carrier = relationship("Carrier", back_populates="providers", lazy="selectin")
     shipments = relationship("ShipmentTracking", back_populates="provider")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": str(self.id),
             "name": self.name,
-            "carrier": self.carrier.value,
+            "carrier_id": str(self.carrier_id),
+            "carrier": self.carrier.code if self.carrier else None,
             "api_url": self.api_url,
             "tracking_url_template": self.tracking_url_template,
             "is_active": self.is_active,
@@ -149,7 +105,7 @@ class ShipmentTracking(Base):
     __tablename__ = "shipment_tracking"
     __table_args__ = (
         Index('idx_shipment_tracking_order_id', 'order_id'),
-        Index('idx_shipment_tracking_carrier', 'carrier'),
+        Index('idx_shipment_tracking_carrier', 'carrier_id'),
         Index('idx_shipment_tracking_tracking_number', 'tracking_number'),
         Index('idx_shipment_tracking_status', 'status'),
         Index('idx_shipment_tracking_created_at', 'created_at'),
@@ -169,7 +125,7 @@ class ShipmentTracking(Base):
 
     # Tracking details
     tracking_number: Mapped[str] = mapped_column(String(100), unique=True)
-    carrier: Mapped[ShippingCarrier] = mapped_column(PG_ENUM(ShippingCarrier, name="shipment_carrier"))
+    carrier_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.carriers.id"))
     status: Mapped[TrackingStatus] = mapped_column(PG_ENUM(TrackingStatus, name="tracking_status"), default=TrackingStatus.PENDING)
     shipment_type: Mapped[ShipmentType] = mapped_column(PG_ENUM(ShipmentType, name="shipment_type"), default=ShipmentType.STANDARD)
 
@@ -212,6 +168,7 @@ class ShipmentTracking(Base):
     order = relationship("Order", back_populates="shipments")
     order_item = relationship("OrderItem", back_populates="shipment")
     provider = relationship("ShippingProvider", back_populates="shipments")
+    carrier = relationship("Carrier", lazy="selectin")
     tracking_events = relationship("ShipmentTrackingEvent", back_populates="shipment", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict[str, Any]:
@@ -219,7 +176,8 @@ class ShipmentTracking(Base):
             "id": str(self.id),
             "order_id": str(self.order_id),
             "tracking_number": self.tracking_number,
-            "carrier": self.carrier.value,
+            "carrier_id": str(self.carrier_id),
+            "carrier": self.carrier.code if self.carrier else None,
             "status": self.status.value,
             "shipment_type": self.shipment_type.value,
             "shipped_at": self.shipped_at.isoformat() if self.shipped_at else None,

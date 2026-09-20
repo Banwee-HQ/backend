@@ -15,42 +15,59 @@ from sqlalchemy import select, update, and_
 from sqlalchemy.orm import selectinload
 
 from models.commerce.shipping_tracking import (
-    ShipmentTracking, ShipmentTrackingEvent as TrackingEvent, ShippingProvider, 
-    ShippingCarrier, TrackingStatus, ShipmentType
+    ShipmentTracking, ShipmentTrackingEvent as TrackingEvent, ShippingProvider,
+    TrackingStatus, ShipmentType
 )
+from models.commerce.carriers import Carrier
 from core.exceptions import APIException
 from core.config import settings
+from core.logging import get_structured_logger
+
+logger = get_structured_logger(__name__)
+
 
 class ShippingTrackingService:
     """Service for managing shipping tracking across multiple carriers"""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.carrier_integrations = {
-            ShippingCarrier.UPS: UPSIntegration(),
-            ShippingCarrier.CANADA_EXPRESS: CanadaExpressIntegration(),
-            ShippingCarrier.ROYAL_MAIL: RoyalMailIntegration(),
-            ShippingCarrier.FEDEX: FedExIntegration(),
-            ShippingCarrier.DHL: DHLIntegration(),
-            ShippingCarrier.USPS: USPSIntegration(),
-            ShippingCarrier.CANADA_POST: CanadaPostIntegration(),
-            ShippingCarrier.PUROLATOR: PurolatorIntegration(),
+            "ups": UPSIntegration(),
+            "canada_express": CanadaExpressIntegration(),
+            "royal_mail": RoyalMailIntegration(),
+            "fedex": FedExIntegration(),
+            "dhl": DHLIntegration(),
+            "usps": USPSIntegration(),
+            "canada_post": CanadaPostIntegration(),
+            "purolator": PurolatorIntegration(),
         }
+
+    async def _get_active_carrier(self, code: str) -> Carrier:
+        """Resolve a carrier code (e.g. "ups") to its active Carrier row."""
+        result = await self.db.execute(
+            select(Carrier).where(and_(Carrier.code == code, Carrier.is_active == True))
+        )
+        carrier = result.scalar_one_or_none()
+        if not carrier:
+            raise APIException(status_code=400, message=f"Carrier '{code}' not found or inactive")
+        return carrier
 
     async def create(self, shipment_data: Dict[str, Any]) -> ShipmentTracking:
         """Create a new shipment tracking record"""
         try:
+            carrier = await self._get_active_carrier(shipment_data['carrier'])
+
             # Get provider
             provider_result = await self.db.execute(
                 select(ShippingProvider).where(
                     and_(
-                        ShippingProvider.carrier == shipment_data['carrier'],
+                        ShippingProvider.carrier_id == carrier.id,
                         ShippingProvider.is_active == True
                     )
                 )
             )
             provider = provider_result.scalar_one_or_none()
-            
+
             if not provider:
                 raise APIException(
                     message=f"Shipping provider {shipment_data['carrier']} not found or inactive"
@@ -62,7 +79,7 @@ class ShippingTrackingService:
                 order_item_id=shipment_data.get('order_item_id'),
                 provider_id=provider.id,
                 tracking_number=shipment_data['tracking_number'],
-                carrier=shipment_data['carrier'],
+                carrier_id=carrier.id,
                 shipment_type=shipment_data.get('shipment_type', ShipmentType.STANDARD),
                 origin_address=shipment_data.get('origin_address'),
                 destination_address=shipment_data.get('destination_address'),
@@ -99,15 +116,17 @@ class ShippingTrackingService:
             await self.db.rollback()
             raise APIException(status_code=500, message=f"Failed to create shipment: {str(e)}")
 
-    async def track_shipment(self, tracking_number: str, carrier: ShippingCarrier) -> Dict[str, Any]:
+    async def track_shipment(self, tracking_number: str, carrier: str) -> Dict[str, Any]:
         """Track a shipment using carrier-specific integration"""
         try:
+            carrier_row = await self._get_active_carrier(carrier)
+
             # Get shipment record
             shipment_result = await self.db.execute(
                 select(ShipmentTracking).where(
                     and_(
                         ShipmentTracking.tracking_number == tracking_number,
-                        ShipmentTracking.carrier == carrier
+                        ShipmentTracking.carrier_id == carrier_row.id
                     )
                 ).options(selectinload(ShipmentTracking.tracking_events))
             )
@@ -280,7 +299,7 @@ class ShippingTrackingService:
                 )
 
             except (ValueError, KeyError) as e:
-                print(f"Error processing tracking event: {e}")
+                logger.error(f"Error processing tracking event: {e}")
                 continue
 
     async def _create_tracking_event(self, shipment_id: str, event_type: str, 
@@ -305,27 +324,3 @@ class ShippingTrackingService:
         )
 
         self.db.add(event)
-        
-        # Make API call to UPS
-        # This is a mock implementation
-        return {
-            "status": "in_transit",
-            "current_location": {
-                "city": "Louisville",
-                "state": "KY",
-                "country": "US"
-            },
-            "estimated_delivery": "2024-01-15T17:00:00Z",
-            "events": [
-                {
-                    "timestamp": "2024-01-13T10:00:00Z",
-                    "event_type": "picked_up",
-                    "description": "Package picked up by UPS",
-                    "location": {
-                        "city": "Origin City",
-                        "state": "ST",
-                        "country": "US"
-                    }
-                }
-            ]
-        }

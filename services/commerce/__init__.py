@@ -3,6 +3,7 @@ from .orders import OrderService
 from .payments import PaymentService
 from .refunds import RefundService
 from .shipping import ShippingService
+from .carriers import CarrierService
 from .shipping_tracking import ShippingTrackingService
 from .tax import TaxService
 from .promocode import PromocodeService

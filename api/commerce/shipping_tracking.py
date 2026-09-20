@@ -12,11 +12,13 @@ from uuid import UUID
 from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
+from core.logging import get_structured_logger
 from core.dependencies import get_current_auth_user, require_admin
-from sqlalchemy.ext.asyncio import AsyncSession
 from models.accounts.user import User
+from models.commerce.shipping_tracking import ShippingProvider, ShipmentTracking
 
 from services.commerce.shipping_tracking import ShippingTrackingService
+from services.commerce.carriers import CarrierService
 from datetime import datetime
 
 from schemas.commerce.shipping_tracking import (
@@ -24,7 +26,9 @@ from schemas.commerce.shipping_tracking import (
     Update,
     Track
 )
-from models.commerce.shipping_tracking import ShippingCarrier
+from schemas.commerce.carrier import Create as CarrierCreate, Update as CarrierUpdate
+
+logger = get_structured_logger(__name__)
 
 router = APIRouter(prefix="/shipping-tracking", tags=["shipping-tracking"])
 
@@ -50,7 +54,7 @@ async def create_shipment(
         background_tasks.add_task(
             track_shipment_background,
             shipment.tracking_number,
-            shipment.carrier
+            shipment_dict['carrier']
         )
         
         return APIResponse.success(
@@ -154,31 +158,56 @@ async def update_shipment_status(
 
 @router.get("/carriers/")
 async def list_carriers(
+    active_only: bool = Query(True),
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of supported shipping carriers (public)"""
     try:
-        result = await db.execute(
-            select(ShippingProvider).where(ShippingProvider.is_active == True)
-        )
-        providers = result.scalars().all()
-
-        carriers = []
-        for provider in providers:
-            carriers.append({
-                "carrier": provider.carrier.value,
-                "name": provider.name,
-                "api_url": provider.api_url,
-                "tracking_url_template": provider.tracking_url_template
-            })
-
-        return APIResponse.success(data=carriers)
-
+        carriers, total = await CarrierService(db).list(limit=200, active_only=active_only)
+        return APIResponse.success(data=[c.to_dict() for c in carriers], pagination={"total": total})
     except Exception as e:
         raise APIException(
             status_code=500,
             message=f"Failed to get supported carriers: {str(e)}"
         )
+
+
+@router.post("/carriers/")
+async def create_carrier(
+    carrier_data: CarrierCreate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new carrier (Admin only)"""
+    carrier = await CarrierService(db).create(carrier_data)
+    return APIResponse.success(data=carrier.to_dict(), message="Carrier created successfully")
+
+
+@router.patch("/carriers/{carrier_id}/")
+async def update_carrier(
+    carrier_id: UUID,
+    carrier_data: CarrierUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a carrier (Admin only)"""
+    carrier = await CarrierService(db).update(carrier_id, carrier_data)
+    if not carrier:
+        raise HTTPException(status_code=404, detail="Carrier not found")
+    return APIResponse.success(data=carrier.to_dict(), message="Carrier updated successfully")
+
+
+@router.delete("/carriers/{carrier_id}/")
+async def delete_carrier(
+    carrier_id: UUID,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a carrier (Admin only). Fails if any provider still references it."""
+    deleted = await CarrierService(db).delete(carrier_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Carrier not found")
+    return APIResponse.success(message="Carrier deleted successfully")
 
 
 @router.get("/shipments/")
@@ -231,9 +260,13 @@ async def create_provider(
 ):
     """Create a new shipping provider (Admin only)"""
     try:
+        carrier = await CarrierService(db).get_by_code(provider_data['carrier'])
+        if not carrier:
+            raise HTTPException(status_code=404, detail=f"Carrier '{provider_data['carrier']}' not found")
+
         provider = ShippingProvider(
             name=provider_data['name'],
-            carrier=provider_data['carrier'],
+            carrier_id=carrier.id,
             api_key=provider_data.get('api_key'),
             api_secret=provider_data.get('api_secret'),
             api_url=provider_data['api_url'],
@@ -251,7 +284,9 @@ async def create_provider(
             data=provider.to_dict(),
             message="Shipping provider created successfully"
         )
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
         raise APIException(
@@ -295,12 +330,19 @@ async def patch_provider(
         
         if not provider:
             raise HTTPException(status_code=404, detail="Shipping provider not found")
-        
-        # Update provider fields
+
+        # Carrier is passed as a code (e.g. "ups") and resolved to its id
+        if 'carrier' in provider_data:
+            carrier = await CarrierService(db).get_by_code(provider_data.pop('carrier'))
+            if not carrier:
+                raise HTTPException(status_code=404, detail="Carrier not found")
+            provider.carrier_id = carrier.id
+
+        # Update remaining provider fields
         for field, value in provider_data.items():
-            if hasattr(provider, field):
+            if field != 'id' and hasattr(provider, field):
                 setattr(provider, field, value)
-        
+
         await db.commit()
         
         return APIResponse.success(
@@ -350,25 +392,25 @@ async def delete_provider(
         )
 
 # Background task for tracking shipments
-async def track_shipment_background(tracking_number: str, carrier: ShippingCarrier):
+async def track_shipment_background(tracking_number: str, carrier: str):
     """Background task to track shipments"""
     from core.db import AsyncSessionDB
     
     if not AsyncSessionDB:
-        print(f"Background tracking skipped for {tracking_number}: DB not initialized")
+        logger.warning(f"Background tracking skipped for {tracking_number}: DB not initialized")
         return
-    
+
     async with AsyncSessionDB() as db:
         try:
             shipping_service = ShippingTrackingService(db)
             await shipping_service.track_shipment(tracking_number, carrier)
         except Exception as e:
-            print(f"Background tracking failed for {tracking_number}: {e}")
+            logger.error(f"Background tracking failed for {tracking_number}: {e}")
 
 # Webhook endpoints for carrier notifications
 @router.post("/webhooks/{carrier}/")
 async def handle_carrier_webhook(
-    carrier: ShippingCarrier,
+    carrier: str,
     webhook_data: dict,
     db: AsyncSession = Depends(get_db)
 ):

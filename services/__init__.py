@@ -1,6 +1,6 @@
 from .accounts import AuthService, UserService, AddressService, EmailService
 from .catalog import ProductService, ReviewService, InventoryService, RecommendationService
-from .commerce import CartService, OrderService, PaymentService, RefundService, ShippingService, ShippingTrackingService, TaxService, PromocodeService, DiscountEngine, SubscriptionService, WebhookService
+from .commerce import CartService, OrderService, PaymentService, RefundService, ShippingService, CarrierService, ShippingTrackingService, TaxService, PromocodeService, DiscountEngine, SubscriptionService, WebhookService
 from .system import JinjaTemplateService, ContactMessageService
 
 # Admin service functionality has been distributed to domain-specific services:

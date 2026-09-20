@@ -3,7 +3,8 @@ from .orders import Order, OrderItem, TrackingEvent
 from .payments import PaymentMethod, PaymentIntent, Transaction, PaymentAnalytics
 from .refunds import Refund, RefundItem
 from .shipping import ShippingMethod
-from .shipping_tracking import ShipmentTracking, ShippingCarrier, ShipmentTrackingEvent
+from .carriers import Carrier
+from .shipping_tracking import ShipmentTracking, ShippingProvider, ShipmentTrackingEvent
 from .tax_rates import TaxRate
 from .promocode import Promocode
 from .discounts import Discount, SubscriptionDiscount, ProductRemovalAudit
