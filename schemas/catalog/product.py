@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from models.catalog.product import ProductStatus, AvailabilityStatus
+from schemas.catalog.category import CategoryBrief
 
 def normalize_dietary_tags(value):
     """Normalize dietary_tags to always be a dict, handling both list and dict inputs."""
@@ -56,7 +57,7 @@ class Create(BaseModel):
     slug: str
     description: Optional[str] = None
     short_description: Optional[str] = None
-    category: str
+    category_id: UUID
     variants: Optional[List[VariantCreate]] = None
     origin: Optional[str] = None
     is_featured: bool = False
@@ -99,7 +100,7 @@ class Update(BaseModel):
     slug: Optional[str] = None
     description: Optional[str] = None
     short_description: Optional[str] = None
-    category: Optional[str] = None
+    category_id: Optional[UUID] = None
     origin: Optional[str] = None
     product_status: Optional[ProductStatus] = None
     is_featured: Optional[bool] = None
@@ -165,7 +166,8 @@ class Response(BaseModel):
     name: str
     slug: Optional[str] = None
     description: Optional[str]
-    category: Optional[str] = None
+    category_id: Optional[UUID] = None
+    category: Optional[CategoryBrief] = None
     is_featured: bool = False
     is_bestseller: bool = False
     rating: float
@@ -223,7 +225,7 @@ class ProductPatch(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     compare_at_price: Optional[float] = None
-    category: Optional[str] = None
+    category_id: Optional[UUID] = None
     status: Optional[str] = None
     is_active: Optional[bool] = None
     is_featured: Optional[bool] = None

@@ -213,7 +213,6 @@ def sample_product_data():
         "sale_price": 19.99,
         "cost_price": 15.00,
         "quantity": 100,
-        "category": "grains-pulses",
         "origin_country": "Nigeria",
         "is_active": True,
         "is_featured": False,

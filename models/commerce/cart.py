@@ -20,13 +20,29 @@ class Cart(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey('accounts.users.id'))
-    
+    promocode_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey('commerce.promocodes.id'), nullable=True)
+
     items = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
     user = relationship("User", back_populates="cart")
+    promocode = relationship("Promocode", lazy="selectin")
 
     @property
     def subtotal(self) -> Decimal:
         return sum(item.total_price for item in self.items)
+
+    @property
+    def discount_amount(self) -> Decimal:
+        """Discount from the applied promocode, capped at the cart subtotal."""
+        if not self.promocode or not self.promocode.is_active:
+            return Decimal("0")
+        subtotal = self.subtotal
+        if self.promocode.discount_type == "percentage":
+            amount = subtotal * Decimal(str(self.promocode.value)) / Decimal("100")
+        else:
+            amount = Decimal(str(self.promocode.value))
+        if self.promocode.maximum_discount_amount is not None:
+            amount = min(amount, Decimal(str(self.promocode.maximum_discount_amount)))
+        return min(amount, subtotal)
 
     @property
     def total_items(self) -> int:

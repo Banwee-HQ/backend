@@ -73,6 +73,13 @@ class CartService:
         # Calculate comprehensive pricing
         pricing_result = await self._calculate_cart_pricing(cart.items, country_code, province_code)
         
+        # Auto-clear a promocode that has expired or been deactivated since it was applied
+        if cart.promocode and not cart.promocode.is_active:
+            cart.promocode_id = None
+            await self.db.commit()
+
+        discount_amount = float(cart.discount_amount)
+
         # Build cart response with detailed pricing
         cart_response = {
             "id": str(cart.id),
@@ -82,7 +89,9 @@ class CartService:
             "subtotal": pricing_result['subtotal'],
             "tax_amount": pricing_result['tax_amount'],
             "shipping_amount": 0.0,  # Calculated at checkout
-            "total_amount": pricing_result['subtotal'] + pricing_result['tax_amount'],
+            "discount_amount": discount_amount,
+            "promocode": cart.promocode.code if cart.promocode else None,
+            "total_amount": pricing_result['subtotal'] + pricing_result['tax_amount'] - discount_amount,
             "created_at": cart.created_at.isoformat() if cart.created_at else None,
             "updated_at": cart.updated_at.isoformat() if cart.updated_at else None,
             "country_code": country_code,
@@ -156,7 +165,7 @@ class CartService:
                         "name": product.name,
                         "slug": product.slug,
                         "short_description": product.short_description,
-                        "category": product.category,
+                        "category": product.category.name if product.category else None,
                         "is_featured": product.is_featured,
                         "rating_average": product.rating_average,
                         "availability_status": variant.availability_status
@@ -645,7 +654,12 @@ class CartService:
                 )
             )
         )
-        
+
+        # Clear any applied promocode along with the items
+        await self.db.execute(
+            update(Cart).where(Cart.user_id == user_id).values(promocode_id=None)
+        )
+
         await self.db.commit()
         
         # Return empty cart
@@ -688,21 +702,44 @@ class CartService:
         return checkout_summary
 
     async def apply_promo(self, user_id: UUID, code: Optional[str] = None) -> Dict[str, Any]:
-        """Apply promocode to cart (placeholder implementation)"""
-        # This would integrate with a promocode service
-        # For now, return cart without changes
+        """Validate a promocode and apply it to the user's cart."""
+        if not code:
+            raise HTTPException(status_code=400, detail="Promocode is required")
+
+        from services.commerce.promocode import PromocodeService
+
+        cart = await self.get_or_create(user_id)
+        if not cart.items:
+            raise HTTPException(status_code=400, detail="Cannot apply a promocode to an empty cart")
+
+        is_valid, error_message, promocode = await PromocodeService(self.db).validate(code)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_message)
+
+        subtotal = cart.subtotal
+        if promocode.minimum_order_amount and subtotal < promocode.minimum_order_amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This promocode requires a minimum order amount of {promocode.minimum_order_amount}"
+            )
+
+        cart.promocode_id = promocode.id
+        await self.db.commit()
+
         cart_data = await self.get_cart(user_id=user_id)
-        
         return {
             **cart_data,
-            "promocode_applied": False,
-            "message": "Promocode functionality not yet implemented"
+            "promocode_applied": True,
+            "message": "Promocode applied successfully"
         }
 
     async def remove_promo(self, user_id: UUID) -> Dict[str, Any]:
-        """Remove promocode from cart (placeholder implementation)"""
+        """Remove any promocode applied to the user's cart."""
+        cart = await self.get_or_create(user_id)
+        cart.promocode_id = None
+        await self.db.commit()
+
         cart_data = await self.get_cart(user_id=user_id)
-        
         return {
             **cart_data,
             "promocode_removed": True,

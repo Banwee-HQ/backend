@@ -31,7 +31,7 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         # Optimized indexes for product queries
-        Index('idx_products_category_status', 'category', 'product_status'),
+        Index('idx_products_category_status', 'category_id', 'product_status'),
         Index('idx_products_published', 'published_at', 'product_status'),
         Index('idx_products_slug', 'slug'),
         {'schema': 'catalog'}
@@ -48,8 +48,7 @@ class Product(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     short_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
-    # Category as string field
-    category: Mapped[str] = mapped_column(String(100))
+    category_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("catalog.categories.id"), nullable=True)
 
     # Status fields as columns for indexing and fast filtering
     product_status: Mapped[ProductStatus] = mapped_column(SQLEnum(ProductStatus), default=ProductStatus.ACTIVE)
@@ -70,6 +69,7 @@ class Product(Base):
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="select")
     reviews = relationship("Review", back_populates="product", lazy="select")
     cart_items = relationship("CartItem", back_populates="product", lazy="select")
+    category = relationship("Category", back_populates="products", lazy="selectin")
 
     # Product metadata as JSON columns for querying (cross-platform compatible)
     product_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
@@ -130,7 +130,8 @@ class Product(Base):
             "slug": self.slug,
             "description": self.description,
             "short_description": self.short_description,
-            "category": self.category,
+            "category_id": str(self.category_id) if self.category_id else None,
+            "category": self.category.to_dict() if self.category else None,
             "product_status": self.product_status,
             "rating_average": self.rating_average,
             "rating_count": self.rating_count,

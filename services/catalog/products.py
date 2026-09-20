@@ -6,6 +6,7 @@ from uuid import UUID
 import uuid
 from core.utils.uuid_utils import uuid7
 from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage, AvailabilityStatus
+from models.catalog.category import Category
 from models.catalog.inventories import Inventory, StockAdjustment
 from models.commerce.cart import CartItem
 from models.commerce.orders import OrderItem
@@ -15,6 +16,7 @@ from schemas.catalog.product import (
     VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse,
     PriceRange, ListResponse as ProductListResponse
 )
+from schemas.catalog.category import CategoryBrief
 from schemas.catalog.inventory import Response as InventoryResponse
 from core.exceptions import APIException
 from core.logging import get_structured_logger
@@ -179,7 +181,8 @@ class ProductService:
                 in_stock=product.in_stock,
                 created_at=product.created_at.isoformat() if isinstance(product.created_at, (datetime, date)) else (product.created_at or ""),
                 updated_at=product.updated_at.isoformat() if isinstance(product.updated_at, (datetime, date)) else product.updated_at,
-                category=product.category,
+                category_id=product.category_id,
+                category=CategoryBrief.model_validate(product.category) if product.category else None,
                 variants=variants,
                 primary_variant=primary_variant
             )
@@ -201,7 +204,7 @@ class ProductService:
                 in_stock=False,
                 created_at=product.created_at.isoformat() if isinstance(product.created_at, (datetime, date)) else (product.created_at or ""),
                 updated_at=product.updated_at.isoformat() if isinstance(product.updated_at, (datetime, date)) else product.updated_at,
-                category=getattr(product, 'category', ''),
+                category_id=getattr(product, 'category_id', None),
                 variants=[],
                 primary_variant=None
             )
@@ -247,9 +250,13 @@ class ProductService:
             if filters.get("is_bestseller") is not None:
                 base_conditions.append(Product.is_bestseller.is_(filters["is_bestseller"]))
         
-            # Build subquery for filtering by category (now it's a string)
+            # Filter by category slug, resolved to the category's id
             if filters.get("category"):
-                base_conditions.append(Product.category == filters['category'])
+                base_conditions.append(
+                    Product.category_id.in_(
+                        select(Category.id).where(Category.slug == filters['category'])
+                    )
+                )
         
             # Build subquery for filtering by variant properties
             price_filters = []
@@ -440,7 +447,8 @@ class ProductService:
                 selectinload(Product.variants).selectinload(
                     ProductVariant.inventory)
             )
-            .where(Product.category == slug)
+            .join(Category, Product.category_id == Category.id)
+            .where(Category.slug == slug)
             .where(Product.product_status == ProductStatus.ACTIVE)
         )
         result = await self.db.execute(query)
@@ -661,7 +669,7 @@ class ProductService:
             slug=product_data.slug,
             description=product_data.description,
             short_description=product_data.short_description,
-            category=product_data.category,
+            category_id=product_data.category_id,
             product_metadata=product_metadata if product_metadata else None,
             is_featured=product_data.is_featured,
             is_bestseller=product_data.is_bestseller

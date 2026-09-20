@@ -377,6 +377,26 @@ class UserService:
     # ADMIN USER MANAGEMENT METHODS
     # ============================================================================
 
+    async def log_activity(
+        self,
+        user_id: UUID,
+        action: str,
+        description: Optional[str] = None,
+        performed_by: Optional[UUID] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record an entry in the user's activity/audit log."""
+        from models.accounts.activity import UserActivityLog
+
+        self.db.add(UserActivityLog(
+            user_id=user_id,
+            action=action,
+            description=description,
+            performed_by=performed_by,
+            activity_metadata=metadata,
+        ))
+        await self.db.commit()
+
     async def update_status(self, user_id: UUID, is_active: bool) -> Optional[User]:
         """Update user active status (admin only)."""
         query = select(User).where(User.id == user_id)
@@ -389,28 +409,8 @@ class UserService:
         user.is_active = is_active
         await self.db.commit()
         await self.db.refresh(user)
+        await self.log_activity(user_id, "status_changed", f"Active status set to {is_active}")
         return user
-
-    async def initiate_password_reset(self, user_id: UUID) -> bool:
-        """Initiate password reset for a user (admin only)."""
-        query = select(User).where(User.id == user_id)
-        result = await self.db.execute(query)
-        user = result.scalar_one_or_none()
-
-        if not user:
-            raise APIException(status_code=404, message="User not found")
-
-        # Generate password reset token
-        reset_token = secrets.token_urlsafe(32)
-        user.password_reset_token = reset_token
-        user.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=24)
-
-        await self.db.commit()
-        await self.db.refresh(user)
-
-        # TODO: Send password reset email
-        # For now, just return success
-        return True
 
     async def verify_user_account(self, user_id: UUID) -> Optional[User]:
         """Verify user account (admin only)."""
@@ -425,20 +425,37 @@ class UserService:
         user.verified = True
         await self.db.commit()
         await self.db.refresh(user)
+        await self.log_activity(user_id, "account_verified", "Account verified by admin")
         return user
 
     async def get_activity_log(self, user_id: UUID, page: int = 1, limit: int = 10) -> dict:
         """Get user activity log (admin only)."""
-        # For now, return a placeholder. In a real implementation,
-        # this would query an activity/audit log table
+        from models.accounts.activity import UserActivityLog
+
+        offset = (page - 1) * limit
+
+        count_result = await self.db.execute(
+            select(func.count(UserActivityLog.id)).where(UserActivityLog.user_id == user_id)
+        )
+        total = count_result.scalar() or 0
+
+        result = await self.db.execute(
+            select(UserActivityLog)
+            .where(UserActivityLog.user_id == user_id)
+            .order_by(UserActivityLog.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        activities = result.scalars().all()
+
         return {
             "user_id": str(user_id),
-            "activities": [],
+            "activities": [activity.to_dict() for activity in activities],
             "pagination": {
                 "page": page,
                 "limit": limit,
-                "total": 0,
-                "pages": 0
+                "total": total,
+                "pages": (total + limit - 1) // limit if total > 0 else 0
             }
         }
 
@@ -451,10 +468,10 @@ class UserService:
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            # Generate reset token
+            # Generate reset token (stored in the same field the reset-confirmation flow reads from)
             reset_token = secrets.token_urlsafe(32)
-            user.password_reset_token = reset_token
-            user.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+            user.reset_token = reset_token
+            user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
 
             await self.db.commit()
             await self.db.refresh(user)
@@ -467,6 +484,8 @@ class UserService:
                 reset_token=reset_token,
                 reset_link=""  # EmailService will generate the link
             )
+
+            await self.log_activity(user_id, "password_reset_initiated", "Password reset email sent by admin")
 
             return {
                 "success": True,
@@ -495,6 +514,7 @@ class UserService:
             user.is_active = False
             await self.db.commit()
             await self.db.refresh(user)
+            await self.log_activity(user_id, "account_deactivated", "Account deactivated by admin")
 
             return {
                 "success": True,
@@ -523,6 +543,7 @@ class UserService:
             user.is_active = True
             await self.db.commit()
             await self.db.refresh(user)
+            await self.log_activity(user_id, "account_activated", "Account activated by admin")
 
             return {
                 "success": True,
@@ -548,7 +569,9 @@ class UserService:
         if not user:
             return None
 
+        old_role = user.role
         user.role = new_role
         await self.db.commit()
         await self.db.refresh(user)
+        await self.log_activity(user_id, "role_changed", f"Role changed from {old_role} to {new_role}")
         return user

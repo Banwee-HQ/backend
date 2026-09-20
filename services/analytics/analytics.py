@@ -659,8 +659,9 @@ class AnalyticsService:
         """Get comprehensive sales overview data for dashboard"""
         try:
             from models.catalog.product import Product
+            from models.catalog.category import Category
             from models.commerce.orders import OrderItem
-            
+
             # Base query for orders
             base_query = select(Order).where(
                 and_(
@@ -675,7 +676,11 @@ class AnalyticsService:
                 # Filter by product categories through order items
                 category_filter = select(Order.id).join(OrderItem).join(
                     Product, OrderItem.variant_id == Product.id
-                ).where(Product.category.in_(categories))
+                ).where(
+                    Product.category_id.in_(
+                        select(Category.id).where(Category.slug.in_(categories))
+                    )
+                )
                 base_query = base_query.where(Order.id.in_(category_filter))
             
             # Generate time series data based on granularity
@@ -874,6 +879,7 @@ class AnalyticsService:
         """Get admin dashboard statistics with optional filters"""
         try:
             from models.catalog.product import Product
+            from models.catalog.category import Category
             from models.commerce.subscriptions import Subscription
             from datetime import date
 
@@ -946,7 +952,11 @@ class AnalyticsService:
             # Get total products with optional category filter
             product_conditions = []
             if category:
-                product_conditions.append(Product.category == category)
+                product_conditions.append(
+                    Product.category_id.in_(
+                        select(Category.id).where(Category.slug == category)
+                    )
+                )
 
             total_products = await self.db.scalar(
                 select(func.count(Product.id)).where(and_(*product_conditions)) if product_conditions else select(func.count(Product.id))

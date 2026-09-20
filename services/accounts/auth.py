@@ -20,6 +20,9 @@ from core.utils.encryption import PasswordManager
 
 logger = get_structured_logger(__name__)
 
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+ACCOUNT_LOCKOUT_MINUTES = 15
+
 
 class AuthService:
     def __init__(self, db: AsyncSession):
@@ -179,29 +182,49 @@ class AuthService:
             )
 
         user_service = UserService(self.db)
-        print(user_data, '---')
         new_user = await user_service.create(user_data, background_tasks)
-
-
 
         return UserResponse.from_orm(new_user)
 
     async def authenticate(self, email: str, password: str, background_tasks: BackgroundTasks) -> AuthResponse:
         """Authenticate user and return JWT tokens."""
-        print(f"Attempting to authenticate user: {email}")
         user = await self.get(email=email)
         if not user:
-            print(f"User {email} not found.")
+            logger.info(f"Login failed: no account for {email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        now = datetime.now(timezone.utc)
+        if user.locked_until and user.locked_until > now:
+            retry_after_minutes = max(1, int((user.locked_until - now).total_seconds() // 60) + 1)
+            logger.warning(f"Login blocked for {email}: account locked for {retry_after_minutes} more minute(s)")
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail=f"Account temporarily locked due to too many failed login attempts. Try again in {retry_after_minutes} minute(s).",
+            )
+
         password_verified = self.verify_password(password, user.hashed_password)
-        print(f"Password verification for {email}: {password_verified}")
 
         if not password_verified:
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            just_locked = False
+            if user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+                user.locked_until = now + timedelta(minutes=ACCOUNT_LOCKOUT_MINUTES)
+                just_locked = True
+                logger.warning(
+                    f"Account locked for {email} after {user.failed_login_attempts} failed login attempts"
+                )
+            self.db.add(user)
+            await self.db.commit()
+            logger.info(f"Login failed: incorrect password for {email}")
+            if just_locked:
+                await UserService(self.db).log_activity(
+                    user.id, "account_locked",
+                    f"Account locked after {user.failed_login_attempts} failed login attempts"
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -216,13 +239,16 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Update last_login timestamp
+        # Successful login - reset failed-attempt tracking and update last_login
+        user.failed_login_attempts = 0
+        user.locked_until = None
         user.last_login = func.now()
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
 
-        print(f"Password verified for {email}. Proceeding to token creation.")
+        logger.info(f"Login successful for {email}")
+        await UserService(self.db).log_activity(user.id, "login_success", "Logged in successfully")
 
         # Create token data
         token_data = {
@@ -235,8 +261,6 @@ class AuthService:
         # Create access and refresh tokens
         access_token = self.make_access_token(token_data)
         refresh_token = await self.make_refresh_token(token_data)
-        
-        print(f"Generated tokens for user {user.email}")
 
         auth_response = AuthResponse(
             access_token=access_token,

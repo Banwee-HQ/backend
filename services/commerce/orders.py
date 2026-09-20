@@ -1093,9 +1093,10 @@ class OrderService:
 
         # STEP 4: CALCULATE FINAL TOTAL (backend calculation only)
         final_total = await self._calculate_final_order_total(
-            validated_cart_items, 
-            shipping_method, 
-            shipping_address
+            validated_cart_items,
+            shipping_method,
+            shipping_address,
+            promocode=cart.promocode
         )
 
         # VALIDATION: Ensure total calculation is correct
@@ -1321,7 +1322,11 @@ class OrderService:
                 )
                 self.db.add(tracking_event)
 
-                # Clear cart after successful order (validated cart)
+                # Record promocode usage, then clear cart after successful order (validated cart)
+                if cart.promocode_id:
+                    from services.commerce.promocode import PromocodeService
+                    await PromocodeService(self.db).inc_usage(cart.promocode_id)
+
                 await cart_service.clear_cart(user_id=user_id)
 
                 # Transaction will auto-commit here if no exceptions occurred
@@ -1980,10 +1985,11 @@ class OrderService:
             }
 
     async def _calculate_final_order_total(
-        self, 
-        validated_items: List[Dict], 
-        shipping_method, 
-        shipping_address
+        self,
+        validated_items: List[Dict],
+        shipping_method,
+        shipping_address,
+        promocode=None
     ) -> Dict[str, float]:
         """
         Calculate final order total with shipping, taxes, and discounts
@@ -2020,7 +2026,7 @@ class OrderService:
             tax_amount = taxable_amount * tax_rate
             
             # Apply any discounts (from promocodes, etc.)
-            discount_amount = await self._calculate_discount_amount(validated_items, subtotal)
+            discount_amount = self._calculate_discount_amount(subtotal, promocode)
             
             # Calculate final total
             total_amount = subtotal + shipping_cost + tax_amount - discount_amount
@@ -2037,46 +2043,20 @@ class OrderService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to calculate order total: {str(e)}")
 
-    async def _calculate_discount_amount(self, cart_items: List, subtotal: float) -> float:
-        """Calculate discount amount from applied promocodes"""
-        try:
-            discount_amount = 0.0
-            
-            # Check if any cart items have promocodes applied
-            for item in cart_items:
-                if hasattr(item, 'promocode') and item.promocode:
-                    # Get promocode details
-                    from models.commerce.promocode import Promocode
-                    result = await self.db.execute(
-                        select(Promocode).where(
-                            and_(
-                                Promocode.code == item.promocode,
-                                Promocode.is_active == True,
-                                Promocode.valid_from <= datetime.utcnow(),
-                                Promocode.valid_until >= datetime.utcnow()
-                            )
-                        )
-                    )
-                    promocode = result.scalar_one_or_none()
-                    
-                    if promocode:
-                        if promocode.discount_type == "percentage":
-                            item_discount = (item.total_price * promocode.discount_value) / 100
-                            # Apply maximum discount limit if set
-                            if promocode.max_discount_amount:
-                                item_discount = min(item_discount, promocode.max_discount_amount)
-                            discount_amount += item_discount
-                        elif promocode.discount_type == "fixed":
-                            discount_amount += min(promocode.discount_value, item.total_price)
-            
-            # Apply cart-level promocodes (if any)
-            # This would be implemented based on your cart structure
-            
-            return discount_amount
-            
-        except Exception as e:
-            logger.error(f"Error calculating discount amount: {e}")
+    def _calculate_discount_amount(self, subtotal: float, promocode=None) -> float:
+        """Calculate discount amount from the cart's applied promocode, if any and still active."""
+        if not promocode or not promocode.is_active:
             return 0.0
+
+        if promocode.discount_type == "percentage":
+            discount = (subtotal * float(promocode.value)) / 100
+        else:
+            discount = float(promocode.value)
+
+        if promocode.maximum_discount_amount is not None:
+            discount = min(discount, float(promocode.maximum_discount_amount))
+
+        return min(discount, subtotal)
 
     async def _get_tax_rate(self, shipping_address) -> float:
         """

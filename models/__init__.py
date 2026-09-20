@@ -1,7 +1,8 @@
 from core.db import Base
 
-from .accounts import User, Address, UserSession, CustomerLifecycleMetrics, TrafficSource
+from .accounts import User, Address, UserSession, CustomerLifecycleMetrics, TrafficSource, UserActivityLog
 from .catalog import (
+    Category,
     Product, ProductVariant, ProductImage,
     Review, Inventory, WarehouseLocation, StockAdjustment,
     VariantTrackingEntry, VariantPriceHistory, VariantAnalytics, VariantSubstitution,
