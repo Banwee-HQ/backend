@@ -6,6 +6,7 @@ Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, et
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from uuid import UUID
 
@@ -226,6 +227,11 @@ async def list(
             sa_select(ShipmentTracking)
             .join(Order, ShipmentTracking.order_id == Order.id)
             .where(Order.user_id == current_user.id)
+            .options(
+                selectinload(ShipmentTracking.tracking_events),
+                selectinload(ShipmentTracking.carrier),
+                selectinload(ShipmentTracking.provider),
+            )
         )
         count_query = (
             sa_select(func.count())
@@ -301,7 +307,7 @@ async def list_providers(
 ):
     """Get all shipping providers (Admin only)"""
     try:
-        result = await db.execute(select(ShippingProvider))
+        result = await db.execute(select(ShippingProvider).options(selectinload(ShippingProvider.carrier)))
         providers = result.scalars().all()
         
         return APIResponse.success(
@@ -324,10 +330,12 @@ async def patch_provider(
     """Update a shipping provider (Admin only)"""
     try:
         result = await db.execute(
-            select(ShippingProvider).where(ShippingProvider.id == UUID(provider_id))
+            select(ShippingProvider)
+            .where(ShippingProvider.id == UUID(provider_id))
+            .options(selectinload(ShippingProvider.carrier))
         )
         provider = result.scalar_one_or_none()
-        
+
         if not provider:
             raise HTTPException(status_code=404, detail="Shipping provider not found")
 
@@ -344,7 +352,18 @@ async def patch_provider(
                 setattr(provider, field, value)
 
         await db.commit()
-        
+
+        # Re-fetch with carrier eager-loaded: committing a dirty object appears to
+        # expire its already-loaded relationships even with expire_on_commit=False,
+        # so provider.to_dict() (a plain sync method, no greenlet context) would
+        # otherwise trigger an implicit lazy load and crash with MissingGreenlet.
+        result = await db.execute(
+            select(ShippingProvider)
+            .where(ShippingProvider.id == provider.id)
+            .options(selectinload(ShippingProvider.carrier))
+        )
+        provider = result.scalar_one()
+
         return APIResponse.success(
             data=provider.to_dict(),
             message="Shipping provider updated successfully"

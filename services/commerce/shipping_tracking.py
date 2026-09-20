@@ -123,6 +123,9 @@ class ShippingTrackingService:
             await self.db.commit()
             return shipment
 
+        except APIException:
+            await self.db.rollback()
+            raise
         except Exception as e:
             await self.db.rollback()
             raise APIException(status_code=500, message=f"Failed to create shipment: {str(e)}")
@@ -139,7 +142,11 @@ class ShippingTrackingService:
                         ShipmentTracking.tracking_number == tracking_number,
                         ShipmentTracking.carrier_id == carrier_row.id
                     )
-                ).options(selectinload(ShipmentTracking.tracking_events))
+                ).options(
+                    selectinload(ShipmentTracking.tracking_events),
+                    selectinload(ShipmentTracking.carrier),
+                    selectinload(ShipmentTracking.provider),
+                )
             )
             shipment = shipment_result.scalar_one_or_none()
 
@@ -197,7 +204,11 @@ class ShippingTrackingService:
             shipment_result = await self.db.execute(
                 select(ShipmentTracking).where(
                     ShipmentTracking.id == shipment_id
-                ).options(selectinload(ShipmentTracking.tracking_events))
+                ).options(
+                    selectinload(ShipmentTracking.tracking_events),
+                    selectinload(ShipmentTracking.carrier),
+                    selectinload(ShipmentTracking.provider),
+                )
             )
             shipment = shipment_result.scalar_one_or_none()
             return shipment.to_dict() if shipment else None
@@ -210,7 +221,11 @@ class ShippingTrackingService:
             shipments_result = await self.db.execute(
                 select(ShipmentTracking).where(
                     ShipmentTracking.order_id == order_id
-                ).options(selectinload(ShipmentTracking.tracking_events))
+                ).options(
+                    selectinload(ShipmentTracking.tracking_events),
+                    selectinload(ShipmentTracking.carrier),
+                    selectinload(ShipmentTracking.provider),
+                )
             )
             shipments = shipments_result.scalars().all()
             return [shipment.to_dict() for shipment in shipments]
@@ -247,7 +262,17 @@ class ShippingTrackingService:
             )
 
             await self.db.commit()
-            return shipment
+
+            # Re-fetch with eager-loading: relationships accessed by to_dict() are
+            # not safely readable off the pre-commit object after a mutate+commit.
+            result = await self.db.execute(
+                select(ShipmentTracking).where(ShipmentTracking.id == shipment.id).options(
+                    selectinload(ShipmentTracking.tracking_events),
+                    selectinload(ShipmentTracking.carrier),
+                    selectinload(ShipmentTracking.provider),
+                )
+            )
+            return result.scalar_one()
 
         except Exception as e:
             await self.db.rollback()
