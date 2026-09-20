@@ -11,7 +11,6 @@ from core.exceptions import APIException
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
 from datetime import datetime, timedelta, timezone
 import secrets
-from core.utils.messages.email import send_email
 import httpx
 from core.config import settings
 from core.utils.encryption import PasswordManager

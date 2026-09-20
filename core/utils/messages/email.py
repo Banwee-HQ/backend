@@ -2,7 +2,6 @@
 Brevo (formerly Sendinblue) email service
 """
 import aiohttp
-import asyncio
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from core.config import settings
 from pathlib import Path
@@ -192,16 +191,3 @@ async def send_email_brevo_legacy(to_email: str, mail_type: str, context: dict =
         template_name=template_name,
         context=context
     )
-
-
-def send_email_brevo_sync(to_email: str, mail_type: str, context: dict = {}):
-    """Synchronous wrapper for send_email_brevo_legacy."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(send_email_brevo_legacy(to_email, mail_type, context))
-    finally:
-        loop.close()
-
-
-send_email = send_email_brevo_sync

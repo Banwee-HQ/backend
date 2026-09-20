@@ -8,15 +8,23 @@
 
     <title>{% block title %}Banwee - Authentic African Products{% endblock %}</title>
 
+    <!-- Matches the fonts used on banwee.com; falls back to system sans-serif in clients (e.g. Outlook desktop) that strip web fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+
     <style>
         /* Email-safe styles for maximum client compatibility */
         :root {
             --color-main: #253d4e;
             --color-primary: #61b482;
+            --color-primary-dark: #4c9066;
+            --color-secondary: #f2c94c;
             --color-background: #f8fafc;
             --color-copy: #1e293b;
             --color-copy-light: #64748b;
+            --color-copy-muted: #94a3b8;
             --color-border: #e2e8f0;
+            --font-heading: 'Montserrat', Arial, Helvetica, sans-serif;
+            --font-body: 'Roboto', Arial, Helvetica, sans-serif;
         }
 
         body {
@@ -24,7 +32,8 @@
             padding: 0;
             background-color: #f8fafc;
             color: #1e293b;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: 'Roboto', Arial, Helvetica, sans-serif;
+            font-weight: 400;
             font-size: 16px;
             line-height: 1.5;
             -webkit-text-size-adjust: 100%;
@@ -66,19 +75,21 @@
             color: #ffffff;
             text-decoration: none;
             border-radius: 6px;
-            font-weight: bold;
+            font-family: 'Roboto', Arial, Helvetica, sans-serif;
+            font-weight: 500;
             text-align: center;
         }
 
         .btn:hover {
-            background-color: #4a8f69;
+            background-color: #4c9066;
         }
 
         /* Heading styles */
         h1, h2, h3, h4, h5, h6 {
             color: #253d4e;
             margin: 0 0 16px 0;
-            font-weight: bold;
+            font-family: 'Montserrat', Arial, Helvetica, sans-serif;
+            font-weight: 700;
         }
 
         h1 { font-size: 24px; }
