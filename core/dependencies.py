@@ -36,8 +36,10 @@ async def require_auth(
     return current_user
 
 
-def require_admin(current_user: User = Depends(get_current_auth_user)) -> User:
+def require_admin(current_user: Optional[User] = Depends(get_current_auth_user)) -> User:
     from models.accounts.user import UserRole
+    if current_user is None:
+        raise APIException(status_code=401, message="Authentication required")
     # Convert role to string for comparison since database stores it as string
     user_role_str = str(current_user.role).lower() if current_user.role else ""
     # Get the actual enum values, not the string representation
