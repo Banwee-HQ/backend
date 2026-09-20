@@ -210,21 +210,14 @@ class AuthService:
 
         if not password_verified:
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
-            just_locked = False
             if user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
                 user.locked_until = now + timedelta(minutes=ACCOUNT_LOCKOUT_MINUTES)
-                just_locked = True
                 logger.warning(
                     f"Account locked for {email} after {user.failed_login_attempts} failed login attempts"
                 )
             self.db.add(user)
             await self.db.commit()
             logger.info(f"Login failed: incorrect password for {email}")
-            if just_locked:
-                await UserService(self.db).log_activity(
-                    user.id, "account_locked",
-                    f"Account locked after {user.failed_login_attempts} failed login attempts"
-                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -248,7 +241,6 @@ class AuthService:
         await self.db.refresh(user)
 
         logger.info(f"Login successful for {email}")
-        await UserService(self.db).log_activity(user.id, "login_success", "Logged in successfully")
 
         # Create token data
         token_data = {

@@ -1,4 +1,4 @@
-"""Add login lockout fields, user activity log table, and cart promocode
+"""Add login lockout fields and cart promocode
 
 Revision ID: 2026_04_20_lockout
 Revises: 2026_04_13_1353
@@ -29,21 +29,6 @@ def upgrade() -> None:
         schema='accounts'
     )
 
-    # --- User activity/audit log ---
-    op.create_table(
-        'user_activity_logs',
-        sa.Column('id', GUID(), primary_key=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column('user_id', GUID(), sa.ForeignKey('accounts.users.id'), nullable=False),
-        sa.Column('action', sa.String(length=100), nullable=False),
-        sa.Column('description', sa.String(length=500), nullable=True),
-        sa.Column('performed_by', GUID(), sa.ForeignKey('accounts.users.id'), nullable=True),
-        sa.Column('activity_metadata', sa.JSON(), nullable=True),
-        schema='accounts'
-    )
-    op.create_index('idx_user_activity_user_id', 'user_activity_logs', ['user_id'], schema='accounts')
-    op.create_index('idx_user_activity_created_at', 'user_activity_logs', ['created_at'], schema='accounts')
-
     # --- Cart promocode ---
     op.add_column(
         'carts',
@@ -54,10 +39,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column('carts', 'promocode_id', schema='commerce')
-
-    op.drop_index('idx_user_activity_created_at', table_name='user_activity_logs', schema='accounts')
-    op.drop_index('idx_user_activity_user_id', table_name='user_activity_logs', schema='accounts')
-    op.drop_table('user_activity_logs', schema='accounts')
-
     op.drop_column('users', 'locked_until', schema='accounts')
     op.drop_column('users', 'failed_login_attempts', schema='accounts')

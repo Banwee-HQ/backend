@@ -878,8 +878,9 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get admin dashboard statistics with optional filters"""
         try:
-            from models.catalog.product import Product
+            from models.catalog.product import Product, ProductVariant
             from models.catalog.category import Category
+            from models.catalog.inventories import Inventory
             from models.commerce.subscriptions import Subscription
             from datetime import date
 
@@ -1024,8 +1025,16 @@ class AnalyticsService:
                     "total": total_products or 0,
                     "active": active_products or 0,
                     "low_stock": await self.db.scalar(
-                        select(func.count(Product.id)).where(Product.is_active == True)
-                    ) or 0  # Placeholder - would need inventory data
+                        select(func.count(func.distinct(Product.id)))
+                        .join(ProductVariant, ProductVariant.product_id == Product.id)
+                        .join(Inventory, Inventory.variant_id == ProductVariant.id)
+                        .where(
+                            and_(
+                                Inventory.quantity_available > 0,
+                                Inventory.quantity_available <= Inventory.low_stock_threshold
+                            )
+                        )
+                    ) or 0
                 },
                 "revenue": {
                     "total": float(total_revenue),

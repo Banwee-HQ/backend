@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, desc
 from models.commerce.discounts import Discount, SubscriptionDiscount
 from models.commerce.subscriptions import Subscription
+from models.accounts.user import User
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from decimal import Decimal
@@ -437,10 +438,33 @@ class DiscountEngine:
                 discount.is_active = False
             
             await self.db.commit()
-            
-            # TODO: Send notifications to affected users
-            # This would typically integrate with a notification service
-            notifications_sent = len(affected_subscription_ids)
+
+            # Notify affected users that their subscription discount(s) expired
+            notifications_sent = 0
+            if affected_subscription_ids:
+                affected_emails_result = await self.db.execute(
+                    select(User.email)
+                    .join(Subscription, Subscription.user_id == User.id)
+                    .where(Subscription.id.in_(affected_subscription_ids))
+                    .distinct()
+                )
+                affected_emails = [row[0] for row in affected_emails_result.fetchall()]
+
+                from core.utils.messages.email import send_email_brevo
+                for email in affected_emails:
+                    try:
+                        await send_email_brevo(
+                            to_email=email,
+                            subject="Your subscription discount has expired",
+                            html_content=(
+                                "<p>Hi,</p>"
+                                "<p>A discount applied to your Banwee subscription has expired. "
+                                "Your subscription will now renew at its regular price.</p>"
+                            )
+                        )
+                        notifications_sent += 1
+                    except Exception as email_error:
+                        logger.error(f"Failed to send discount-expiry notification to {email}: {email_error}")
             
             logger.info(f"Removed {len(expired_discounts)} expired discounts affecting {len(affected_subscription_ids)} subscriptions")
             

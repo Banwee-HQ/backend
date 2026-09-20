@@ -1,6 +1,6 @@
 from core.db import Base
 
-from .accounts import User, Address, UserSession, CustomerLifecycleMetrics, TrafficSource, UserActivityLog
+from .accounts import User, Address, UserSession, CustomerLifecycleMetrics, TrafficSource
 from .catalog import (
     Category,
     Product, ProductVariant, ProductImage,

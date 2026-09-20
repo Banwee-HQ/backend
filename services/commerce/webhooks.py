@@ -62,8 +62,8 @@ class WebhookService:
             # Process the verified event
             result = await self._process_webhook_event(event)
             
-            # Publish secure event update
-            await self._publish_webhook_event(event, result, security_metadata)
+            # Log the processed event for monitoring/audit
+            await self._log_webhook_event(event, result, security_metadata)
             
             # Log processing completion
             processing_time = (datetime.utcnow() - start_time).total_seconds()
@@ -286,28 +286,19 @@ class WebhookService:
         
         return {"action": "refund_processed", "charge_id": charge_data["id"]}
 
-    async def _publish_webhook_event(
+    async def _log_webhook_event(
         self,
         event: Dict[str, Any],
         processing_result: Dict[str, Any],
         security_metadata: Dict[str, Any]
     ):
-        """Publish webhook event through secure message broker"""
+        """Log a processed webhook event for monitoring/audit purposes."""
         try:
-            event_type = event.get("type", "unknown")
-            
-            # Log the webhook event processing for monitoring
-            logger.info(f"Webhook event processed: {event.get('id')} - {event_type}")
-            logger.info(f"Processing result: {processing_result}")
-            
-            # TODO: Implement actual message broker publishing when needed
-            # For now, we just log the events for monitoring
-            
-            if processing_result.get("order_id"):
-                logger.info(f"Order affected by webhook: {processing_result['order_id']}")
-            
-            logger.info(f"Webhook event logged successfully: {event.get('id')}")
-            
+            logger.info(
+                f"Webhook event processed: {event.get('id')} - {event.get('type', 'unknown')} "
+                f"(signature_verified={security_metadata.get('signature_verified')}), "
+                f"result={processing_result}"
+            )
         except Exception as e:
             logger.error(f"Failed to log webhook event: {e}")
             # Don't fail the webhook processing if logging fails
