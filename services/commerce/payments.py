@@ -19,6 +19,7 @@ from core.logging import get_structured_logger
 import stripe
 import json
 import time
+import asyncio
 from sqlalchemy import exc as sa_exc
 from models.commerce.payments import CardBrand
 
@@ -69,7 +70,7 @@ class PaymentService:
             # Handle modern payment method API
             if stripe_payment_method_id:
                 # Get payment method details from Stripe
-                stripe_pm = stripe.PaymentMethod.retrieve(stripe_payment_method_id)
+                stripe_pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, stripe_payment_method_id)
 
                 # Ensure user has a Stripe customer and attach payment method
                 user_result = await self.db.execute(select(User).where(User.id == user_id))
@@ -79,10 +80,11 @@ class PaymentService:
 
                 if user.stripe_customer_id:
                     try:
-                        stripe.Customer.retrieve(user.stripe_customer_id)
+                        await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)
                     except stripe.error.InvalidRequestError as retrieve_error:
                         if "No such customer" in str(retrieve_error):
-                            customer = stripe.Customer.create(
+                            customer = await asyncio.to_thread(
+                                stripe.Customer.create,
                                 email=getattr(user, "email", None),
                                 name=getattr(user, "full_name", None)
                             )
@@ -91,7 +93,8 @@ class PaymentService:
                         else:
                             raise
                 else:
-                    customer = stripe.Customer.create(
+                    customer = await asyncio.to_thread(
+                        stripe.Customer.create,
                         email=getattr(user, "email", None),
                         name=getattr(user, "full_name", None)
                     )
@@ -99,7 +102,8 @@ class PaymentService:
                     await self.db.commit()
 
                 try:
-                    stripe.PaymentMethod.attach(
+                    await asyncio.to_thread(
+                        stripe.PaymentMethod.attach,
                         stripe_payment_method_id,
                         customer=user.stripe_customer_id
                     )
@@ -151,10 +155,11 @@ class PaymentService:
             # Handle legacy token API (deprecated but supported for backward compatibility)
             elif stripe_token:
                 # Get token details from Stripe
-                stripe_token_obj = stripe.Token.retrieve(stripe_token)
-                
+                stripe_token_obj = await asyncio.to_thread(stripe.Token.retrieve, stripe_token)
+
                 # Create payment method from token (this is the old way)
-                stripe_pm = stripe.PaymentMethod.create(
+                stripe_pm = await asyncio.to_thread(
+                    stripe.PaymentMethod.create,
                     type="card",
                     card={"token": stripe_token}
                 )
@@ -167,10 +172,11 @@ class PaymentService:
 
                 if user.stripe_customer_id:
                     try:
-                        stripe.Customer.retrieve(user.stripe_customer_id)
+                        await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)
                     except stripe.error.InvalidRequestError as retrieve_error:
                         if "No such customer" in str(retrieve_error):
-                            customer = stripe.Customer.create(
+                            customer = await asyncio.to_thread(
+                                stripe.Customer.create,
                                 email=getattr(user, "email", None),
                                 name=getattr(user, "full_name", None)
                             )
@@ -179,7 +185,8 @@ class PaymentService:
                         else:
                             raise
                 else:
-                    customer = stripe.Customer.create(
+                    customer = await asyncio.to_thread(
+                        stripe.Customer.create,
                         email=getattr(user, "email", None),
                         name=getattr(user, "full_name", None)
                     )
@@ -187,7 +194,8 @@ class PaymentService:
                     await self.db.commit()
 
                 try:
-                    stripe.PaymentMethod.attach(
+                    await asyncio.to_thread(
+                        stripe.PaymentMethod.attach,
                         stripe_pm.id,
                         customer=user.stripe_customer_id
                     )
@@ -432,9 +440,9 @@ class PaymentService:
         try:
             if payment_method.stripe_payment_method_id:
                 try:
-                    stripe_pm = stripe.PaymentMethod.retrieve(payment_method.stripe_payment_method_id)
+                    stripe_pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, payment_method.stripe_payment_method_id)
                     if getattr(stripe_pm, "customer", None):
-                        stripe.PaymentMethod.detach(payment_method.stripe_payment_method_id)
+                        await asyncio.to_thread(stripe.PaymentMethod.detach, payment_method.stripe_payment_method_id)
                 except stripe.error.InvalidRequestError as detach_error:
                     message = str(detach_error).lower()
                     if "not attached" not in message:
@@ -517,8 +525,8 @@ class PaymentService:
             if customer_id:
                 stripe_create_kwargs['customer'] = customer_id
 
-            stripe_intent = stripe.PaymentIntent.create(**stripe_create_kwargs)
-            
+            stripe_intent = await asyncio.to_thread(stripe.PaymentIntent.create, **stripe_create_kwargs)
+
             # Create our payment intent record
             payment_intent = PaymentIntent(
                 id=uuid7(),
@@ -560,7 +568,8 @@ class PaymentService:
         
         try:
             # Confirm with Stripe
-            stripe_intent = stripe.PaymentIntent.confirm(
+            stripe_intent = await asyncio.to_thread(
+                stripe.PaymentIntent.confirm,
                 payment_intent.stripe_payment_intent_id,
                 payment_method=payment_method_id
             )
@@ -981,10 +990,11 @@ class PaymentService:
 
             if user.stripe_customer_id:
                 try:
-                    stripe.Customer.retrieve(user.stripe_customer_id)
+                    await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)
                 except stripe.error.InvalidRequestError as retrieve_error:
                     if "No such customer" in str(retrieve_error):
-                        customer = stripe.Customer.create(
+                        customer = await asyncio.to_thread(
+                            stripe.Customer.create,
                             email=getattr(user, "email", None),
                             name=getattr(user, "full_name", None)
                         )
@@ -993,7 +1003,8 @@ class PaymentService:
                     else:
                         raise
             else:
-                customer = stripe.Customer.create(
+                customer = await asyncio.to_thread(
+                    stripe.Customer.create,
                     email=getattr(user, "email", None),
                     name=getattr(user, "full_name", None)
                 )
@@ -1002,7 +1013,8 @@ class PaymentService:
 
             # Attach payment method to customer if needed
             try:
-                stripe.PaymentMethod.attach(
+                await asyncio.to_thread(
+                    stripe.PaymentMethod.attach,
                     payment_method.stripe_payment_method_id,
                     customer=user.stripe_customer_id
                 )
@@ -1010,21 +1022,24 @@ class PaymentService:
                 # If already attached, Stripe returns an error; safe to ignore
                 message = str(attach_error).lower()
                 if "no such customer" in message:
-                    customer = stripe.Customer.create(
+                    customer = await asyncio.to_thread(
+                        stripe.Customer.create,
                         email=getattr(user, "email", None),
                         name=getattr(user, "full_name", None)
                     )
                     user.stripe_customer_id = customer.id
                     await self.db.commit()
-                    stripe.PaymentMethod.attach(
+                    await asyncio.to_thread(
+                        stripe.PaymentMethod.attach,
                         payment_method.stripe_payment_method_id,
                         customer=user.stripe_customer_id
                     )
                 elif "already" not in message:
                     raise
-            
+
             # Create Stripe payment intent with idempotency key
-            stripe_intent = stripe.PaymentIntent.create(
+            stripe_intent = await asyncio.to_thread(
+                stripe.PaymentIntent.create,
                 amount=int(amount * 100),  # Convert to cents
                 currency="USD",
                 idempotency_key=idempotency_key,  # Stripe-level deduplication
@@ -1062,7 +1077,8 @@ class PaymentService:
             
             # Confirm payment
             try:
-                confirmed = stripe.PaymentIntent.confirm(
+                confirmed = await asyncio.to_thread(
+                    stripe.PaymentIntent.confirm,
                     stripe_intent.id,
                     payment_method=payment_method.stripe_payment_method_id,
                     idempotency_key=f"{idempotency_key}:confirm"  # Separate idempotency for confirm
@@ -1467,7 +1483,8 @@ class PaymentService:
         try:
             # Create refund in Stripe
             refund_amount = amount or payment_intent.amount_breakdown.get("total", 0)
-            stripe_refund = stripe.Refund.create(
+            stripe_refund = await asyncio.to_thread(
+                stripe.Refund.create,
                 payment_intent=payment_intent.stripe_payment_intent_id,
                 amount=int(refund_amount * 100),  # Convert to cents
                 reason=reason
