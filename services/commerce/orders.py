@@ -373,11 +373,11 @@ class OrderService:
         if discount_code:
             try:
                 validation_result = await self.discount_engine.validate_discount_code(
-                    discount_code, 
+                    discount_code,
                     subtotal=float(subtotal)
                 )
-                if validation_result.is_valid:
-                    discount = validation_result.discount
+                if validation_result["is_valid"]:
+                    discount = validation_result["discount"]
                     if discount.type == DiscountType.PERCENTAGE.value:
                         discount_amount = (subtotal * Decimal(str(discount.value / 100))).quantize(
                             Decimal('0.01'), rounding=ROUND_HALF_UP
@@ -832,6 +832,10 @@ class OrderService:
                 updated_at=None
             )
             
+        except HTTPException:
+            # Preserve intentional status codes raised above (e.g. 400 on a
+            # declined payment) instead of masking them as a 500 below.
+            raise
         except Exception as e:
             import traceback
             logger.exception(f"Order creation failed for user {user_id}: {e}\nTraceback: {traceback.format_exc()}")
@@ -843,7 +847,7 @@ class OrderService:
                     "traceback": traceback.format_exc()
                 }
             )
-        
+
     async def list(
         self,
         user_id: Optional[UUID] = None,
@@ -1120,7 +1124,9 @@ class OrderService:
             shipping_method_result = await self.db.execute(
                 select(ShippingMethod).where(ShippingMethod.name == order.shipping_method)
             )
-            shipping_method = shipping_method_result.scalar_one_or_none()
+            # name isn't unique - several methods can share one (e.g. admin-recreated
+            # "Standard"), so take the first match instead of scalar_one_or_none().
+            shipping_method = shipping_method_result.scalars().first()
             if shipping_method and shipping_method.carrier:
                 carrier_name = shipping_method.carrier
 
@@ -1273,6 +1279,10 @@ class OrderService:
             try:
                 order.total_amount = corrected_total
                 await self.db.commit()
+                # updated_at is DB-computed (onupdate=func.now()), so it's always
+                # marked stale after this UPDATE regardless of expire_on_commit -
+                # refresh now, before the plain attribute reads below.
+                await self.db.refresh(order)
                 logger.info(f"✅ Updated order {order.id} total in database to ${corrected_total:.2f}")
             except Exception as e:
                 logger.error(f"Failed to update order total in database: {e}")
@@ -1294,7 +1304,8 @@ class OrderService:
             shipping_method_result = await self.db.execute(
                 select(ShippingMethod).where(ShippingMethod.name == order.shipping_method)
             )
-            shipping_method = shipping_method_result.scalar_one_or_none()
+            # name isn't unique - take the first match instead of scalar_one_or_none().
+            shipping_method = shipping_method_result.scalars().first()
             if shipping_method and shipping_method.tracking_url_template:
                 tracking_url = shipping_method.tracking_url_template.replace('{tracking_number}', order.tracking_number)
 
@@ -1405,9 +1416,8 @@ class OrderService:
             # For security, we'll log discrepancies but use backend prices
             
             if total_discrepancies:
-                from core.logging import structured_logger
-                structured_logger.warning(
-                    message="Price discrepancies detected during checkout",
+                logger.warning(
+                    "Price discrepancies detected during checkout",
                     metadata={
                         "discrepancies": total_discrepancies,
                         "total_items": len(validated_items)
@@ -1530,14 +1540,16 @@ class OrderService:
                         )
                     )
                 )
-                tax_rate_record = tax_rate_result.scalar_one_or_none()
-                
+                # country_code+province_code isn't unique-constrained - take the
+                # first match instead of scalar_one_or_none().
+                tax_rate_record = tax_rate_result.scalars().first()
+
                 if tax_rate_record:
                     logger.info(f"Found state/province tax rate for {country}-{state}: {tax_rate_record.tax_rate} ({tax_rate_record.tax_name})")
-                    return tax_rate_record.tax_rate
+                    return float(tax_rate_record.tax_rate)
                 else:
                     logger.info(f"No state/province tax rate found for {country}-{state}")
-            
+
             # If no state-specific rate found, try country-level rate
             tax_rate_result = await self.db.execute(
                 select(TaxRate).where(
@@ -1548,11 +1560,11 @@ class OrderService:
                     )
                 )
             )
-            tax_rate_record = tax_rate_result.scalar_one_or_none()
-            
+            tax_rate_record = tax_rate_result.scalars().first()
+
             if tax_rate_record:
                 logger.info(f"Found country tax rate for {country}: {tax_rate_record.tax_rate} ({tax_rate_record.tax_name})")
-                return tax_rate_record.tax_rate
+                return float(tax_rate_record.tax_rate)
             
             # No tax rate found in database
             logger.info(f"No tax rate found in database for {country}-{state}, using 0.0")
@@ -1901,7 +1913,7 @@ class OrderService:
             }
             
             # Generate invoice
-            invoice_result = await invoice_generator.invoice(order_data)
+            invoice_result = await invoice_generator.generate_invoice(order_data)
             
             return invoice_result
             
