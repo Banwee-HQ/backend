@@ -15,7 +15,6 @@ class BaseCarrierIntegration:
                          params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Make API request with error handling"""
         # Implementation for making HTTP requests
-        pass
 
 
 class UPSIntegration(BaseCarrierIntegration):

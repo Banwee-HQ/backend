@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, desc
-from typing import Optional, List
+from sqlalchemy import func
+from typing import Optional
 from models.catalog.review import Review
 from models.catalog.product import Product
 from models.accounts.user import User
@@ -10,7 +10,7 @@ from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7
 from uuid import UUID
 from datetime import datetime
-from sqlalchemy.orm import selectinload, load_only
+from sqlalchemy.orm import selectinload
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

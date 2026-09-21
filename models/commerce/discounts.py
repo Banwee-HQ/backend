@@ -2,7 +2,6 @@
 Discount management models for subscription product management
 """
 from sqlalchemy import String, Boolean, DateTime, Numeric, Text, Integer, func, Index, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7

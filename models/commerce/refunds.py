@@ -1,12 +1,12 @@
 """Refund models: Refund, RefundItem, RefundReason."""
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from enum import Enum
 from typing import Dict, Any, Optional
-from datetime import datetime, timezone, datetime as dt
+from datetime import datetime, timezone
 import uuid
 
 

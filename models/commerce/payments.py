@@ -1,6 +1,6 @@
 """Consolidated payment models: PaymentMethod, PaymentIntent, Transaction."""
 from sqlalchemy import String, Boolean, ForeignKey, Numeric, Text, Integer, Date, DateTime, func, Index
-from sqlalchemy.dialects.postgresql import UUID, JSON, ENUM as PG_ENUM
+from sqlalchemy.dialects.postgresql import JSON, ENUM as PG_ENUM
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7

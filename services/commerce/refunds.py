@@ -1,21 +1,19 @@
 """
 Painless refund service with automatic processing and intelligent approval
 """
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc, func
+from sqlalchemy import select, and_, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
-from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason, RefundType
-from models.commerce.orders import Order, OrderItem
+from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason
+from models.commerce.orders import Order
 from models.commerce.payments import Transaction
-from models.accounts.user import User
 from schemas.commerce.refunds import Request as RefundRequest, Response as RefundResponse, ItemRequest as RefundItemRequest
-from core.config import settings
 from core.logging import get_structured_logger
 import stripe
 import asyncio
@@ -628,7 +626,6 @@ class RefundService:
     
     async def _send_refund_notifications(self, refund: Refund, event_type: str):
         """Send refund notifications to customer. Not yet implemented (ARQ notification integration was removed)."""
-        pass
     
     async def _format_refund_response(self, refund: Refund) -> RefundResponse:
         """Format refund for API response"""

@@ -1,21 +1,15 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query, Header
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
 from core.db import get_db
 from core.dependencies import require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
-from core.config import settings
 from core.logging import get_structured_logger as get_logger
-from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword, ChangePassword
-from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
+from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword
 from services.accounts.auth import AuthService
 from services.accounts.user import UserService
-from services.accounts.address import AddressService
 from models.accounts.user import User
-from uuid import UUID
 import time
 
 logger = get_logger(__name__)

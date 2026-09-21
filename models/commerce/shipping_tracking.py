@@ -1,12 +1,12 @@
 """Shipping tracking models; integrates with multiple carriers (UPS, Royal Mail, etc.)."""
 
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Numeric, Index
-from sqlalchemy.dialects.postgresql import UUID, ENUM as PG_ENUM, JSON
+from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from enum import Enum
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
 

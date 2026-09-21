@@ -7,7 +7,6 @@ from models.accounts.user import User
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from decimal import Decimal
-from enum import Enum
 from core.logging import get_structured_logger
 from core.utils.messages.email import send_email_by_type
 

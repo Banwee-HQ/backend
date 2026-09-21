@@ -1,6 +1,5 @@
 """Background task worker (ARQ/Redis removed): asyncio for scheduled jobs, BackgroundTasks for one-off tasks."""
 import asyncio
-from typing import Dict, Any
 from datetime import datetime
 from core.logging import get_structured_logger
 

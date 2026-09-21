@@ -2,10 +2,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional, Dict, Any
+from typing import Optional
 from uuid import UUID
-from datetime import datetime
-from pydantic import BaseModel
 
 from core.db import get_db
 from core.dependencies import require_admin, require_auth

@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, func
+from sqlalchemy import select, func
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7

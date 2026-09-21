@@ -1,6 +1,6 @@
 """Complete OAuth implementation (what's missing to make OAuth fully functional)."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import httpx
@@ -9,7 +9,6 @@ from core.config import settings
 from services.accounts.auth import AuthService
 from models.accounts.user import User
 from schemas.accounts.user import Create as UserCreate
-import secrets
 from datetime import datetime, timezone
 from core.utils.response import Response
 

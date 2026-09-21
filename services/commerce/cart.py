@@ -1,7 +1,7 @@
 """PostgreSQL-based cart service with backend-only, real-time tax and pricing."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, func, update
-from sqlalchemy.orm import selectinload, noload, lazyload, joinedload
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -11,11 +11,9 @@ from datetime import datetime
 from core.logging import get_structured_logger
 
 from models.commerce.cart import Cart, CartItem
-from models.catalog.product import ProductVariant, Product
-from models.accounts.user import User
+from models.catalog.product import ProductVariant
 from services.commerce.tax import TaxService
 from services.commerce.promocode import PromocodeService
-from core.config import settings
 from schemas.common.service_types import CartValidationResult
 
 logger = get_structured_logger(__name__)

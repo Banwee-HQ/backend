@@ -12,7 +12,7 @@ from core.db import get_db
 from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
-from models.accounts.user import User, UserRole
+from models.accounts.user import User
 from services.commerce.shipping import ShippingService
 from schemas.commerce.shipping import (
     MethodCreate,

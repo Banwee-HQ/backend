@@ -1,19 +1,9 @@
-from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, and_, or_, func, text
-from sqlalchemy.orm import selectinload
-from typing import List, Optional, Dict, Any
+from sqlalchemy import select, update, delete, and_, or_, func
+from typing import Optional, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from models.accounts.user import Address, User
-from models.commerce.orders import Order
-from core.exceptions import APIException
-from schemas.accounts.user import Create as UserCreate, Update as UserUpdate
-from datetime import datetime, timedelta, timezone
-import secrets
-import httpx
-from core.config import settings
-from core.utils.encryption import PasswordManager
+from models.accounts.user import Address
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

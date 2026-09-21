@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 import uuid
 
 

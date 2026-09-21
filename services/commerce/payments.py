@@ -2,13 +2,10 @@
 # This file includes all payment-related functionality including failure handling
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text, String
+from sqlalchemy import select, and_, or_, func, String
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction, PaymentFailureReason
-from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus
-from models.commerce.subscriptions import Subscription
-from models.catalog.inventories import Inventory
 from models.accounts.user import User
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
@@ -20,7 +17,6 @@ import stripe
 import json
 import time
 import asyncio
-from sqlalchemy import exc as sa_exc
 from models.commerce.payments import CardBrand
 
 # Configure Stripe
@@ -1117,7 +1113,6 @@ class PaymentService:
         """Get user transaction history"""
         offset = (page - 1) * limit
 
-        from models.accounts.user import User
 
         query = select(Transaction).where(Transaction.user_id == user_id).options(
             selectinload(Transaction.user)

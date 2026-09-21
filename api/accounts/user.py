@@ -7,7 +7,7 @@ from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
-from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, AdminUserUpdate, UserStatusUpdate
+from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, UserStatusUpdate
 from core.dependencies import require_admin, require_auth
 from models.accounts.user import User as AuthUser, UserRole
 

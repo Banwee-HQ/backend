@@ -7,10 +7,9 @@ from sqlalchemy.orm import selectinload, joinedload
 from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
-from models.catalog.product import ProductVariant, Product, ProductImage
-from models.accounts.user import User
+from models.catalog.product import ProductVariant, Product
 from schemas.catalog.inventory import (
     LocationCreate as WarehouseLocationCreate,
     LocationUpdate as WarehouseLocationUpdate,
@@ -22,7 +21,6 @@ from schemas.catalog.inventory import (
     AdjustmentResponse as StockAdjustmentResponse
 )
 from core.exceptions import APIException
-import asyncio
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

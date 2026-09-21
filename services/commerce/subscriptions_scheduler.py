@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from core.logging import get_structured_logger

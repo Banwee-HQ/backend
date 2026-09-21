@@ -1,12 +1,10 @@
 """
 Jinja Template Service for rendering emails and exports
 """
-import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape, Template, TemplateError
-from pydantic import BaseModel
+from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateError
 from core.logging import get_structured_logger
 from core.config import settings
 

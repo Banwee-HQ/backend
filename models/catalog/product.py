@@ -1,7 +1,7 @@
 """
 Optimized product models with strategic JSON usage
 """
-from sqlalchemy import Column, String, ForeignKey, DateTime, Numeric, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
+from sqlalchemy import String, ForeignKey, DateTime, Numeric, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7

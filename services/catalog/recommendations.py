@@ -1,15 +1,14 @@
 """Recommendations: complementary (cross-sell), similar (alternative), behavioral (social proof)."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, desc
+from sqlalchemy import select, and_, func, desc
 from sqlalchemy.orm import selectinload
-from typing import List, Dict, Any, Tuple
+from typing import List, Tuple
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from core.logging import get_structured_logger
 
 from models.catalog.product import Product, ProductVariant, ProductStatus
 from models.commerce.orders import Order, OrderItem
-from models.commerce.cart import CartItem
 from models.catalog.review import Review
 from schemas.catalog.product import Response as ProductResponse
 

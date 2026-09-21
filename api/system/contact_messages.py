@@ -7,11 +7,10 @@ from uuid import UUID
 import math
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin
 from schemas.system.contact_message import (
     Create,
     Update,
-    ListResponse,
     MessageStatus,
     MessagePriority
 )

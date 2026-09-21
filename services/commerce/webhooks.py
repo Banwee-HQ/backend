@@ -1,6 +1,6 @@
 """Secure Stripe webhook handling: signature verification, rate limiting, secure publishing."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from fastapi import HTTPException, Request
 import json
 import stripe
@@ -8,9 +8,8 @@ from models.commerce.payments import Transaction, PaymentIntent
 from models.commerce.orders import Order, OrderStatus, PaymentStatus
 from services.commerce.payments import PaymentService
 from services.catalog.inventory import InventoryService
-from uuid import UUID
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from core.config import settings
 from core.logging import get_structured_logger
 
@@ -19,7 +18,6 @@ logger = get_structured_logger(__name__)
 
 class WebhookSecurityError(Exception):
     """Raised when a Stripe webhook request fails signature verification."""
-    pass
 
 
 def _merge_transaction_metadata(transaction: "Transaction", updates: Dict[str, Any]) -> str:

@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List, Optional
 from uuid import UUID
 
 from core.db import get_db
@@ -17,7 +16,6 @@ from models.commerce.shipping_tracking import ShippingProvider, ShipmentTracking
 
 from services.commerce.shipping_tracking import ShippingTrackingService
 from services.commerce.carriers import CarrierService
-from datetime import datetime
 
 from schemas.commerce.shipping_tracking import (
     Create,

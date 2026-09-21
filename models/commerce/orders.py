@@ -1,6 +1,6 @@
 """Order models (hard delete only): Order, OrderItem, TrackingEvent."""
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Enum as SQLEnum, Index
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7

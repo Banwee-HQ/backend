@@ -1,11 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text, desc, update, delete
+from sqlalchemy import select, and_, or_, func, desc, update, delete
 from sqlalchemy.orm import selectinload
-from typing import Optional, List, Dict, Any, TypeVar
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 import uuid
 from core.utils.uuid_utils import uuid7
-from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage, AvailabilityStatus
+from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage
 from models.catalog.category import Category
 from models.catalog.inventories import Inventory, StockAdjustment
 from models.commerce.cart import CartItem
@@ -17,7 +17,6 @@ from schemas.catalog.product import (
     PriceRange, ListResponse as ProductListResponse
 )
 from schemas.catalog.category import CategoryBrief
-from schemas.catalog.inventory import Response as InventoryResponse
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from fastapi import HTTPException

@@ -1,9 +1,9 @@
 """Order service: complete order lifecycle with backend-only price calculations."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc, delete, String, text
+from sqlalchemy import select, and_, or_, delete, String, text
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
-from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus, OrderSource
+from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus, FulfillmentStatus
 from services.accounts.email import EmailService
 from models.commerce.cart import Cart, CartItem
 from models.accounts.user import User, Address
@@ -20,14 +20,11 @@ from services.commerce.tax import TaxService
 from services.commerce.shipping import ShippingService
 from services.commerce.discounts import DiscountEngine
 from models.commerce.discounts import DiscountType
-from services.commerce.promocode import PromocodeService
-from models.catalog.inventories import Inventory
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 from decimal import Decimal, ROUND_HALF_UP
-from core.config import settings
 from core.logging import get_structured_logger
 
 from schemas.common.service_types import PricingCalculationResult
@@ -1633,7 +1630,6 @@ class OrderService:
     async def payments(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get payment intents and transactions for an order (authenticated, owner only)"""
         from core.exceptions import APIException
-        from models.commerce.payments import PaymentIntent, Transaction
         try:
             query = select(Order).where(
                 and_(Order.id == order_id, Order.user_id == user_id)

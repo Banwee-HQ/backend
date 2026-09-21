@@ -1,14 +1,9 @@
 """Shipping tracking service; integrates with multiple carriers (UPS, Royal Mail, etc.)."""
 
-import asyncio
-import aiohttp
-import json
-import hashlib
-import hmac
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
 from models.commerce.shipping_tracking import (
@@ -21,7 +16,6 @@ from services.commerce.carrier_integrations import (
     DHLIntegration, USPSIntegration, CanadaPostIntegration, PurolatorIntegration,
 )
 from core.exceptions import APIException
-from core.config import settings
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

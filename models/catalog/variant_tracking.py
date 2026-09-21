@@ -1,9 +1,8 @@
-from sqlalchemy import String, Integer, Numeric, DateTime, ForeignKey, JSON, Text, Boolean, func, Index, Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, Integer, Numeric, DateTime, ForeignKey, JSON, Boolean, func, Index, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from enum import Enum
 import uuid

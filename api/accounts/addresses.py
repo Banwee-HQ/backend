@@ -4,14 +4,14 @@ Standalone address endpoints at /v1/addresses
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
-from typing import List, Optional
+from typing import Optional
 
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.dependencies import require_auth
 from models.accounts.user import User
-from schemas.accounts.user import AddressCreate, AddressUpdate, AddressResponse
+from schemas.accounts.user import AddressCreate, AddressUpdate
 from services.accounts.address import AddressService
 from core.logging import get_structured_logger as get_logger
 

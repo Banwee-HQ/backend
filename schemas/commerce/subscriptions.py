@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
 
-from models.commerce.subscriptions import SubscriptionStatus, BillingCycle, DeliveryType
+from models.commerce.subscriptions import SubscriptionStatus, BillingCycle
 
 
 class VariantItem(BaseModel):

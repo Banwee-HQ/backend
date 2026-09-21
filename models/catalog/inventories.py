@@ -1,11 +1,10 @@
 """Inventory models with atomic stock ops: WarehouseLocation, Inventory, StockAdjustment."""
-from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Boolean, func, Index, select, update
+from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, func, Index, select
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
 from core.logging import get_structured_logger

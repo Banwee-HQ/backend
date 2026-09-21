@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 from core.db import get_db
 from core.utils.response import Response
 from core.exceptions import APIException
-from schemas.commerce.promos import Create, Update, ValidateRequest, ValidateResponse
+from schemas.commerce.promos import Create, Update, ValidateRequest
 from services.commerce.promocode import PromocodeService
 from services.commerce.promocode_scheduler import PromoCodeScheduler
 from models.accounts.user import User

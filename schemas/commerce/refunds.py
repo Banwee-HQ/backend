@@ -2,10 +2,9 @@
 Refund schemas for API requests and responses
 """
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
-from enum import Enum
 
 from models.commerce.refunds import RefundStatus, RefundReason, RefundType
 

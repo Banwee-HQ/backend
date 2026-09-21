@@ -1,6 +1,5 @@
 """Consolidated subscription models, with partial indexes for active subscriptions/products."""
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, Table, JSON, Text, Integer, Date, func, Index, Column
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, JSON, Text, Integer, Date, func, Index, Column
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7

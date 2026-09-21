@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID, UUID as UUIDType
 
 from core.db import get_db
@@ -9,12 +9,11 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
 from schemas.catalog.inventory import (
-    LocationCreate, LocationUpdate, LocationResponse,
-    Create, Update, Response as InventoryResponse,
-    AdjustmentCreate, AdjustmentResponse
+    LocationCreate, LocationUpdate, Create,
+    Update, Response as InventoryResponse, AdjustmentCreate
 )
 from services.catalog.inventory import InventoryService
-from models.accounts.user import UserRole, User
+from models.accounts.user import User
 
 logger = get_logger(__name__)
 

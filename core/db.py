@@ -1,12 +1,12 @@
-from sqlalchemy.orm import sessionmaker, declarative_base, Mapped, mapped_column
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy import text, TypeDecorator, CHAR, Index, String, Boolean, Integer, Text
+from sqlalchemy import text, TypeDecorator, CHAR
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
 import asyncio
 import time
 import uuid
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError

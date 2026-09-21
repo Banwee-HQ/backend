@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
-from schemas.catalog.product import VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse, normalize_dietary_tags
+from schemas.catalog.product import VariantResponse as ProductVariantResponse, normalize_dietary_tags
 
 
 class Add(BaseModel):

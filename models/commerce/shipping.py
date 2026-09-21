@@ -1,5 +1,4 @@
 from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Integer, Index
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7

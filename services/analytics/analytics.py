@@ -1,14 +1,13 @@
 """Business analytics: conversion rates, cart abandonment, refund rates, repeat customers."""
 from datetime import datetime, timezone, timedelta, date
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, desc, asc, text, Integer
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func, and_
 from fastapi import HTTPException
 
-from models.accounts import UserSession, CustomerLifecycleMetrics, TrafficSource
+from models.accounts import UserSession, TrafficSource
 from models.system import AnalyticsEvent, ConversionFunnel, EventType
 from models.commerce.orders import Order, OrderItem
 from models.accounts.user import User
@@ -17,7 +16,6 @@ from models.commerce.subscriptions import Subscription
 from models.catalog.product import Product, ProductVariant, ProductStatus
 from models.catalog.category import Category
 from models.catalog.inventories import Inventory
-from core.config import settings
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)

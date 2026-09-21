@@ -1,8 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
-from fastapi import HTTPException, Depends, status, BackgroundTasks
+from sqlalchemy import select, func
+from fastapi import HTTPException, status, BackgroundTasks
 
-from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
@@ -12,9 +11,8 @@ from core.utils.uuid_utils import uuid7
 from core.config import settings
 from models.accounts.user import User
 from schemas.accounts.user import Create as UserCreate, Response as UserResponse
-from schemas.accounts.auth import Token, Auth as AuthResponse
+from schemas.accounts.auth import Auth as AuthResponse
 from services.accounts.user import UserService
-from core.db import get_db
 from core.utils.messages.email import send_email_by_type
 from core.utils.encryption import PasswordManager
 

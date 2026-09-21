@@ -4,15 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from uuid import UUID
-from typing import List, Optional
+from typing import Optional
 from core.db import get_db, logger
-from core.dependencies import get_current_auth_user, require_admin, require_auth
+from core.dependencies import require_admin, require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
     Create, 
     Update, 
-    Response as SubscriptionResponse,
     CostCalculation,
     AddProducts,
     RemoveProducts,
@@ -23,7 +22,7 @@ from schemas.commerce.subscriptions import (
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
 from models.accounts.user import User, UserRole
-from models.catalog.product import Product, ProductVariant, ProductImage
+from models.catalog.product import ProductVariant
 from models.commerce.subscriptions import Subscription
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])

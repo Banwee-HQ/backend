@@ -1,8 +1,7 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field, model_validator, AwareDatetime
+from pydantic import BaseModel, EmailStr, ConfigDict, model_validator, AwareDatetime
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from enum import Enum
 
 from models.accounts.user import UserRole, AccountStatus, VerificationStatus
 

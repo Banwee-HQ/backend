@@ -3,7 +3,7 @@ Tax-related Pydantic schemas for request/response validation
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 from enum import Enum
 
