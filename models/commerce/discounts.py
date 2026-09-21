@@ -96,7 +96,7 @@ class SubscriptionDiscount(Base):
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
     discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.discounts.id"))
     discount_amount: Mapped[float] = mapped_column(Numeric(10, 2))
-    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     subscription = relationship("Subscription", back_populates="applied_discounts", lazy="select")
@@ -139,7 +139,7 @@ class ProductRemovalAudit(Base):
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
-    removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

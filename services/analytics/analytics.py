@@ -930,13 +930,17 @@ class AnalyticsService:
             else:
                 end_date = today
 
+            # end_date is a bare date; compare against an exclusive next-day bound so
+            # created_at timestamps later "today" aren't excluded by casting to midnight.
+            end_date_exclusive = end_date + timedelta(days=1)
+
             # Get total users (excluding admin users, filtered by date range)
             total_users = await self.db.scalar(
                 select(func.count(User.id)).where(
                     and_(
                         User.role != 'admin',
                         User.created_at >= start_date,
-                        User.created_at <= end_date
+                        User.created_at < end_date_exclusive
                     )
                 )
             )
@@ -948,7 +952,7 @@ class AnalyticsService:
                         User.is_active == True,
                         User.role != 'admin',
                         User.created_at >= start_date,
-                        User.created_at <= end_date
+                        User.created_at < end_date_exclusive
                     )
                 )
             )
@@ -956,7 +960,7 @@ class AnalyticsService:
             # Get total orders with optional status filter (filtered by date range)
             order_conditions = [
                 Order.created_at >= start_date,
-                Order.created_at <= end_date
+                Order.created_at < end_date_exclusive
             ]
             if status:
                 order_conditions.append(Order.order_status == status)

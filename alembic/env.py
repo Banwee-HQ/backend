@@ -15,7 +15,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Only track our application schemas, not Supabase internals
-APP_SCHEMAS = {'users', 'catalog', 'commerce', 'admin', 'system', 'public'}
+APP_SCHEMAS = {'accounts', 'catalog', 'commerce', 'admin', 'system', 'public'}
 
 def include_object(object, name, type_, reflected, compare_to):
     if type_ == "table":

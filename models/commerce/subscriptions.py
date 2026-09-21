@@ -77,7 +77,7 @@ class SubscriptionProduct(Base):
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
     total_price: Mapped[float] = mapped_column(Numeric(10, 2))
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="NOW()")
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Removal tracking
     removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
