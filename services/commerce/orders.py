@@ -595,13 +595,12 @@ class OrderService:
         
         
         try:
-            # Step 3: PROCESS PAYMENT FIRST (before creating order)
             # Generate a temp order id and deterministic order number using it
             temp_order_id = uuid7()  # Temporary ID for payment processing
             order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[:12].upper()}"
-            
+
             temp_currency = get_currency_from_address(shipping_address.country) if shipping_address.country else "USD"
-            
+
             placeholder_order = Order(
                 id=temp_order_id,
                 order_number=order_number,
@@ -620,6 +619,38 @@ class OrderService:
             placeholder_order.shipping_address = {}
             self.db.add(placeholder_order)
             await self.db.flush()
+
+            # Step 3: Reserve inventory BEFORE charging payment. adjust_stock() takes a row
+            # lock (SELECT ... FOR UPDATE) and raises on insufficient stock - doing this first
+            # means a losing race for the last unit fails with a clean 400 before any money
+            # moves, instead of charging the card and then rolling back the DB (with no refund
+            # and no order/transaction record) if the decrement fails after payment.
+            order_items_list = []
+            for cart_item in cart.items:
+                variant_price = cart_item.variant.sale_price or cart_item.variant.base_price
+
+                order_item = OrderItem(
+                    id=uuid7(),
+                    order_id=temp_order_id,
+                    variant_id=cart_item.variant_id,
+                    quantity=cart_item.quantity,
+                    price_per_unit=variant_price,
+                    total_price=variant_price * cart_item.quantity
+                )
+                self.db.add(order_item)
+                order_items_list.append(order_item)
+
+                adjustment = StockAdjustmentCreate(
+                    variant_id=cart_item.variant_id,
+                    quantity_change=-cart_item.quantity,
+                    reason=f"Order placed: {order_number}",
+                    notes=f"Auto-adjusted inventory for order {order_number}"
+                )
+                await self.inventory_service.adjust_stock(
+                    adjustment,
+                    adjusted_by_user_id=user_id,
+                    commit=False
+                )
 
             # Process payment with Stripe using backend-calculated total
             payment_service = PaymentService(self.db)
@@ -671,35 +702,6 @@ class OrderService:
             order.shipping_address = order.billing_address.copy()
             order.customer_notes = request.notes
             await self.db.flush()
-            
-            # Step 5: Create order items and update inventory
-            order_items_list = []
-            for cart_item in cart.items:
-                variant_price = cart_item.variant.sale_price or cart_item.variant.base_price
-                
-                order_item = OrderItem(
-                    id=uuid7(),
-                    order_id=order.id,
-                    variant_id=cart_item.variant_id,
-                    quantity=cart_item.quantity,
-                    price_per_unit=variant_price,
-                    total_price=variant_price * cart_item.quantity
-                )
-                self.db.add(order_item)
-                order_items_list.append(order_item)
-                
-                # Update inventory
-                adjustment = StockAdjustmentCreate(
-                    variant_id=cart_item.variant_id,
-                    quantity_change=-cart_item.quantity,
-                    reason=f"Order placed: {order_number}",
-                    notes=f"Auto-adjusted inventory for order {order_number}"
-                )
-                await self.inventory_service.adjust_stock(
-                    adjustment,
-                    adjusted_by_user_id=user_id,
-                    commit=False
-                )
 
             # Send invoice/confirmation email in background
             try:

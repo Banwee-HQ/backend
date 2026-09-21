@@ -574,7 +574,11 @@ class InventoryService:
                     logger.warning("Failed to sync product availability after stock adjustment", exception=e)
             
             return inventory
-            
+
+        except APIException:
+            # Deliberate 4xx (e.g. 404 inventory not found, 400 insufficient stock) -
+            # propagate as-is instead of relabeling it as a 500 below.
+            raise
         except Exception as e:
             logger.error("Error in stock adjustment", exception=e)
             raise APIException(

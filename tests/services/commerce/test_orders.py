@@ -7,6 +7,7 @@ statistics, and the private pricing/tax helpers) that aren't reachable, or
 aren't reachable with enough branch coverage, from the HTTP layer alone.
 """
 
+import asyncio
 import pytest
 from types import SimpleNamespace
 from uuid import uuid4
@@ -18,6 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7
+from core.utils.encryption import PasswordManager
 from services.commerce.orders import OrderService, get_currency_from_address
 from services.commerce.discounts import DiscountEngine
 from schemas.commerce.orders import Checkout
@@ -26,11 +28,12 @@ from models.catalog.category import Category
 from models.catalog.product import Product, ProductVariant
 from models.catalog.inventories import Inventory
 from models.commerce.cart import Cart, CartItem
-from models.accounts.user import Address
+from models.accounts.user import Address, User, UserRole
 from models.commerce.shipping import ShippingMethod
 from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
 from models.commerce.tax_rates import TaxRate
 from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus, PaymentStatus, FulfillmentStatus
+from tests.conftest import TestingSessionLocal
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +277,110 @@ class TestCreate:
         with pytest.raises(HTTPException) as exc_info:
             await service.create(test_user.id, checkout_request, BackgroundTasks())
         assert exc_info.value.status_code == 400
+
+    async def test_insufficient_stock_fails_before_charging_payment(
+        self, db_session, test_user, variant, cart_with_item, checkout_request, mocker
+    ):
+        """Regression test: inventory must be locked/decremented before payment is
+        charged. Two requests racing for the same last unit must have the loser fail
+        cleanly (no charge, no orphaned order/transaction) instead of charging the
+        card and then rolling back the DB out from under it."""
+        inventory_result = await db_session.execute(
+            select(Inventory).where(Inventory.variant_id == variant.id)
+        )
+        inventory = inventory_result.scalar_one()
+        inventory.quantity_available = 1  # cart_with_item requests quantity=2
+        await db_session.commit()
+
+        mock_payment = mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+        service = OrderService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.create(test_user.id, checkout_request, BackgroundTasks())
+        assert exc_info.value.status_code == 400
+        assert "Insufficient stock" in exc_info.value.message
+        mock_payment.assert_not_called()
+
+        await db_session.refresh(inventory)
+        assert inventory.quantity_available == 1
+
+    async def test_concurrent_checkouts_for_the_last_unit_do_not_oversell(
+        self, db_session, variant, address, shipping_method, mocker
+    ):
+        """True concurrency test: two independent sessions race to buy the last unit
+        of stock at the same time. The row lock in adjust_stock() must serialize them -
+        exactly one order succeeds, the other fails cleanly, and stock never goes negative."""
+        inventory_result = await db_session.execute(
+            select(Inventory).where(Inventory.variant_id == variant.id)
+        )
+        inventory = inventory_result.scalar_one()
+        inventory.quantity_available = 1
+        await db_session.commit()
+
+        password_manager = PasswordManager()
+
+        async def make_racer(session):
+            user = User(
+                id=uuid7(), email=f"racer_{uuid4().hex[:8]}@example.com",
+                hashed_password=password_manager.hash_password("TestPassword123!"),
+                firstname="Racer", lastname="User", role=UserRole.CUSTOMER,
+                account_status="active", verification_status="verified",
+            )
+            session.add(user)
+            await session.flush()
+
+            racer_address = Address(
+                id=uuid7(), user_id=user.id, street="1 Race St", city="Lagos",
+                state="Lagos", country="NG", post_code="100001",
+            )
+            payment_method = PaymentMethod(
+                id=uuid7(), user_id=user.id, type=PaymentType.CARD, provider=PaymentProvider.STRIPE,
+                last_four="4242", expiry_month=12, expiry_year=2099, brand=CardBrand.VISA,
+                stripe_payment_method_id=f"pm_test_{uuid4().hex[:16]}", is_default=True, is_active=True,
+            )
+            cart = Cart(id=uuid7(), user_id=user.id)
+            session.add_all([racer_address, payment_method, cart])
+            await session.flush()
+
+            cart_item = CartItem(
+                id=uuid7(), cart_id=cart.id, product_id=variant.product_id, variant_id=variant.id,
+                quantity=1, price_per_unit=variant.base_price,
+            )
+            session.add(cart_item)
+            await session.commit()
+
+            checkout = Checkout(
+                shipping_address_id=racer_address.id,
+                shipping_method_id=shipping_method.id,
+                payment_method_id=payment_method.id,
+            )
+            return user, checkout
+
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+
+        async with TestingSessionLocal() as session_a, TestingSessionLocal() as session_b:
+            user_a, checkout_a = await make_racer(session_a)
+            user_b, checkout_b = await make_racer(session_b)
+
+            results = await asyncio.gather(
+                OrderService(session_a).create(user_a.id, checkout_a, BackgroundTasks()),
+                OrderService(session_b).create(user_b.id, checkout_b, BackgroundTasks()),
+                return_exceptions=True,
+            )
+
+        successes = [r for r in results if not isinstance(r, Exception)]
+        failures = [r for r in results if isinstance(r, Exception)]
+        assert len(successes) == 1, f"expected exactly one winner, got: {results}"
+        assert len(failures) == 1
+        assert "Insufficient stock" in str(getattr(failures[0], "message", failures[0]))
+
+        await db_session.refresh(inventory)
+        assert inventory.quantity_available == 0
 
 
 # ---------------------------------------------------------------------------

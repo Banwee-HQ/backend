@@ -90,9 +90,16 @@ class Inventory(Base):
     
     @classmethod
     async def get_with_lock(cls, db: AsyncSession, variant_id: UUIDType) -> Optional['Inventory']:
-        """Get inventory record with SELECT ... FOR UPDATE, to prevent concurrent modification."""
+        """Get inventory record with SELECT ... FOR UPDATE, to prevent concurrent modification.
+
+        populate_existing=True is required: if this row was already read (unlocked) earlier
+        in the same session - e.g. a stock pre-check - the row lock still blocks correctly at
+        the DB level, but without this, SQLAlchemy would hand back the already-in-memory
+        object with its stale pre-lock attribute values instead of the fresh post-lock ones,
+        silently defeating the lock.
+        """
         try:
-            query = select(cls).where(cls.variant_id == variant_id).with_for_update()
+            query = select(cls).where(cls.variant_id == variant_id).with_for_update().execution_options(populate_existing=True)
             result = await db.execute(query)
             return result.scalar_one_or_none()
         except Exception as e:
@@ -105,8 +112,8 @@ class Inventory(Base):
         try:
             query = select(cls).where(
                 cls.variant_id.in_(variant_ids)
-            ).order_by(cls.variant_id).with_for_update()
-            
+            ).order_by(cls.variant_id).with_for_update().execution_options(populate_existing=True)
+
             result = await db.execute(query)
             return result.scalars().all()
         except Exception as e:
