@@ -240,10 +240,6 @@ class DatabaseManager:
                     )
                     raise DatabaseException(
                         message=f"Database connection failed after {max_retries + 1} attempts: {str(e)}",
-                        metadata={
-                            "attempts": max_retries + 1,
-                            "error_type": type(e).__name__,
-                        }
                     )
 
                 # Calculate delay with exponential backoff
