@@ -4,6 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy import engine_from_config, create_engine, text
 from sqlalchemy import pool
 from core.db import Base
+from core.config import settings
 from alembic import context
 from models import *  # Import all models to register them with Alembic
 
@@ -25,7 +26,6 @@ def include_object(object, name, type_, reflected, compare_to):
 
 # Read DB URL from environment via core.config (overrides alembic.ini)
 def get_url():
-    from core.config import settings
     return settings.SQLALCHEMY_DATABASE_URI_SYNC
 
 

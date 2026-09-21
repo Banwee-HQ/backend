@@ -1,6 +1,6 @@
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, or_
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -9,6 +9,7 @@ from models.accounts.user import User, AccountStatus, VerificationStatus
 from models.commerce.orders import Order
 from core.exceptions import APIException
 from schemas.accounts.user import Create as UserCreate
+from services.accounts.email import EmailService
 from datetime import datetime, timedelta, timezone
 import secrets
 from core.utils.encryption import PasswordManager
@@ -52,7 +53,6 @@ class UserService:
         await self.db.refresh(new_user)
 
         # Send verification email in background
-        from services.accounts.email import EmailService
         email_service = EmailService(self.db)
         email_service.send_verification(
             background_tasks,
@@ -121,7 +121,6 @@ class UserService:
                 base_query = base_query.where(User.verification_status == status)
 
         # Apply search query if provided
-        from sqlalchemy import or_
         search_condition = None
         if query:
             search_term = f"%{query}%"
@@ -250,7 +249,6 @@ class UserService:
         role_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Simple LIKE-based user search fallback."""
-        from sqlalchemy import select, or_
         search_term = f"%{query}%"
         stmt = (
             select(User)
@@ -433,7 +431,6 @@ class UserService:
             await self.db.refresh(user)
 
             # Send password reset email
-            from services.accounts.email import EmailService
             email_service = EmailService(self.db)
             await email_service.send_password_reset_email(
                 recipient_email=user.email,

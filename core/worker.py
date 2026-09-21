@@ -1,7 +1,12 @@
 """Background task worker (ARQ/Redis removed): asyncio for scheduled jobs, BackgroundTasks for one-off tasks."""
 import asyncio
 from datetime import datetime
+from uuid import UUID
+import core.db as core_db
 from core.logging import get_structured_logger
+from services.accounts.email import EmailService
+from services.commerce.subscriptions_scheduler import SubscriptionScheduler
+from services.commerce.promocode_scheduler import PromoCodeScheduler
 
 logger = get_structured_logger(__name__)
 
@@ -9,7 +14,6 @@ logger = get_structured_logger(__name__)
 def _get_retrying_db_session():
     """Return the app's retry-wrapped DB session context manager, or None if the app isn't initialized."""
     try:
-        import core.db as core_db
         if hasattr(core_db, 'db_manager') and core_db.db_manager:
             return core_db.db_manager.get_session_with_retry()
     except Exception:
@@ -19,7 +23,6 @@ def _get_retrying_db_session():
 
 def _get_plain_session_factory():
     """Return the app's plain (non-retrying) session factory, or None if the app isn't initialized."""
-    import core.db as core_db
     if not hasattr(core_db, 'db_manager') or not core_db.db_manager:
         return None
     return core_db.db_manager.session_factory
@@ -34,7 +37,6 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
         return "failed"
 
     try:
-        from services.accounts.email import EmailService
         async with session as db:
             email_service = EmailService(db)
 
@@ -113,12 +115,8 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
 # --- Scheduled jobs (subscriptions, promocodes) ---
 
 async def _run_scheduled_job(job_name: str, run_job) -> str:
-    """Open a plain DB session and run one scheduled job, with a consistent failure message.
-
-    Scheduled jobs use a plain session rather than _get_retrying_db_session(): a job that
-    runs every few hours can just wait for the next tick if the DB is briefly down, so the
-    retry/backoff logic built for one-off, user-facing tasks isn't needed here.
-    """
+    """Open a plain DB session (not the retrying one - a job every few hours can just
+    wait for the next tick) and run one scheduled job, with a consistent failure message."""
     session_factory = _get_plain_session_factory()
     if session_factory is None:
         return "failed: db not initialized"
@@ -134,7 +132,6 @@ async def _run_scheduled_job(job_name: str, run_job) -> str:
 async def process_subscription_orders_task() -> str:
     """Process due subscription orders."""
     async def run(db):
-        from services.commerce.subscriptions_scheduler import SubscriptionScheduler
         result = await SubscriptionScheduler(db).process_due_subscriptions()
         return f"subscriptions: {result.get('processed_count', 0)} ok, {result.get('failed_count', 0)} failed"
 
@@ -144,7 +141,6 @@ async def process_subscription_orders_task() -> str:
 async def update_promocode_statuses_task() -> str:
     """Activate/deactivate promocodes whose validity window has started or ended."""
     async def run(db):
-        from services.commerce.promocode_scheduler import PromoCodeScheduler
         result = await PromoCodeScheduler(db).update_promocode_statuses()
         return f"promocodes: {result.get('activated_count', 0)} activated, {result.get('deactivated_count', 0)} deactivated"
 
@@ -207,8 +203,9 @@ async def enqueue_sync_product_availability(product_id: str = None):
         return
 
     try:
+        # Local: services.catalog.inventory imports enqueue_sync_product_availability
+        # from this module, so a top-level import here would be circular.
         from services.catalog.inventory import InventoryService
-        from uuid import UUID
         async with session as db:
             svc = InventoryService(db, None)
             await svc.sync(UUID(product_id) if product_id else None)

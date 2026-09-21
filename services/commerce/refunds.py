@@ -15,8 +15,11 @@ from models.commerce.orders import Order
 from models.commerce.payments import Transaction
 from schemas.commerce.refunds import Request as RefundRequest, Response as RefundResponse, ItemRequest as RefundItemRequest
 from core.logging import get_structured_logger
+from services.catalog.inventory import InventoryService
 import stripe
 import asyncio
+import random
+import string
 
 logger = get_structured_logger(__name__)
 
@@ -495,9 +498,6 @@ class RefundService:
     
     async def _generate_refund_number(self) -> str:
         """Generate unique refund number"""
-        import random
-        import string
-        
         while True:
             # Generate REF-XXXXXXXX format
             suffix = ''.join(random.choices(string.digits, k=8))
@@ -536,8 +536,6 @@ class RefundService:
     async def _restore_inventory_for_refund(self, refund: Refund):
         """Restore inventory when refund is confirmed"""
         try:
-            from services.catalog.inventory import InventoryService
-            
             inventory_service = InventoryService(self.db)
             
             # Get refund items with order item details

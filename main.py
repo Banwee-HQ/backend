@@ -38,6 +38,9 @@ from api import (
     analytics_router,
     health_router, contact_messages_router,
 )
+import models
+from core.worker import start_scheduler
+import uvicorn
 
 logger = get_structured_logger(__name__)
 
@@ -67,15 +70,12 @@ async def lifespan(app: FastAPI):
             settings.SQLALCHEMY_DATABASE_URI,
             settings.ENVIRONMENT == "local"
         )
-        # Import all models to ensure SQLAlchemy mappers are configured
-        import models
         logger.info("Database initialized ✅")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise RuntimeError(f"Database initialization failed: {e}")
 
     # Start background scheduler (subscriptions, promocodes)
-    from core.worker import start_scheduler
     start_scheduler()
 
     yield
@@ -152,7 +152,6 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

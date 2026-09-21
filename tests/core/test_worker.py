@@ -49,7 +49,7 @@ class TestSendEmailTask:
         mocker.patch("core.worker._get_retrying_db_session", return_value=mock_session)
 
         mock_email_service = mocker.AsyncMock()
-        mock_email_service_cls = mocker.patch("services.accounts.email.EmailService", return_value=mock_email_service)
+        mock_email_service_cls = mocker.patch("core.worker.EmailService", return_value=mock_email_service)
 
         result = await worker.send_email_task("verification", "a@example.com", firstname="Ada", verification_token="tok")
 
@@ -63,7 +63,7 @@ class TestSendEmailTask:
         mock_session.__aenter__ = mocker.AsyncMock(return_value=mock_db)
         mock_session.__aexit__ = mocker.AsyncMock(return_value=False)
         mocker.patch("core.worker._get_retrying_db_session", return_value=mock_session)
-        mocker.patch("services.accounts.email.EmailService", return_value=mocker.AsyncMock())
+        mocker.patch("core.worker.EmailService", return_value=mocker.AsyncMock())
 
         result = await worker.send_email_task("bogus_type", "a@example.com")
         assert result == "unknown: bogus_type"
@@ -95,7 +95,7 @@ class TestProcessSubscriptionOrdersTask:
 
         mock_scheduler = mocker.AsyncMock()
         mock_scheduler.process_due_subscriptions = mocker.AsyncMock(return_value={"processed_count": 3, "failed_count": 1})
-        mocker.patch("services.commerce.subscriptions_scheduler.SubscriptionScheduler", return_value=mock_scheduler)
+        mocker.patch("core.worker.SubscriptionScheduler", return_value=mock_scheduler)
 
         result = await worker.process_subscription_orders_task()
         assert result == "subscriptions: 3 ok, 1 failed"
@@ -120,7 +120,7 @@ class TestUpdatePromocodeStatusesTask:
 
         mock_scheduler = mocker.AsyncMock()
         mock_scheduler.update_promocode_statuses = mocker.AsyncMock(return_value={"activated_count": 2, "deactivated_count": 1})
-        mocker.patch("services.commerce.promocode_scheduler.PromoCodeScheduler", return_value=mock_scheduler)
+        mocker.patch("core.worker.PromoCodeScheduler", return_value=mock_scheduler)
 
         result = await worker.update_promocode_statuses_task()
         assert result == "promocodes: 2 activated, 1 deactivated"

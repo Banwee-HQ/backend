@@ -8,6 +8,7 @@ from models.commerce.payments import Transaction, PaymentIntent
 from models.commerce.orders import Order, OrderStatus, PaymentStatus
 from services.commerce.payments import PaymentService
 from services.catalog.inventory import InventoryService
+from services.commerce.payment_failure_handler import PaymentFailureHandler
 from datetime import datetime
 from typing import Dict, Any
 from core.config import settings
@@ -235,8 +236,6 @@ class WebhookService:
             
             # Use comprehensive failure handler if payment intent exists
             try:
-                from services.commerce.payment_failure_handler import PaymentFailureHandler
-                
                 # Find the payment intent
                 payment_intent_result = await self.db.execute(
                     select(PaymentIntent).where(

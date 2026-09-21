@@ -8,7 +8,8 @@ from typing import Optional
 from core.db import get_db
 from core.exceptions import APIException
 from core.logging import get_structured_logger
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
+from services.accounts.auth import AuthService
 
 logger = get_structured_logger(__name__)
 
@@ -23,7 +24,6 @@ async def get_current_auth_user(
     if not token:
         return None
     try:
-        from services.accounts.auth import AuthService
         auth_service = AuthService(db)
         return await auth_service.current_user(token)
     except HTTPException:
@@ -45,7 +45,6 @@ async def require_auth(
 
 
 def require_admin(current_user: Optional[User] = Depends(get_current_auth_user)) -> User:
-    from models.accounts.user import UserRole
     if current_user is None:
         raise APIException(status_code=401, message="Authentication required")
     # Convert role to string for comparison since database stores it as string

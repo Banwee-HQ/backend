@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from typing import Optional, List
 from uuid import UUID
+import traceback
 
 from core.db import get_db
 from core.dependencies import require_admin
@@ -61,7 +62,6 @@ async def calculate_tax(
         return Response.success(data=response_data)
         
     except Exception as e:
-        import traceback
         logger.error(f"Tax calculation error: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise APIException(

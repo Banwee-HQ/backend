@@ -21,7 +21,8 @@ from schemas.commerce.subscriptions import (
 )
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
-from models.accounts.user import User, UserRole
+from models.accounts.user import User, UserRole, Address
+from models.commerce.shipping import ShippingMethod
 from models.catalog.product import ProductVariant
 from models.commerce.subscriptions import Subscription
 
@@ -146,7 +147,6 @@ async def calculate(
         # Get customer address for tax calculation
         customer_address = None
         if cost_request.delivery_address_id:
-            from models.accounts.user import Address
             address_result = await db.execute(
                 select(Address).where(
                     and_(Address.id == cost_request.delivery_address_id, Address.user_id == current_user.id)
@@ -489,9 +489,6 @@ async def get(
 
         # Load variants based on variant_ids directly (more robust than relying on association table)
         # Also load delivery_address and shipping_method
-        from sqlalchemy.orm import selectinload
-        from models.catalog.products import ProductVariant
-
         if subscription.variant_ids and len(subscription.variant_ids) > 0:
             variant_uuids = [UUID(vid) for vid in subscription.variant_ids]
             variants_result = await db.execute(
@@ -504,7 +501,6 @@ async def get(
 
         # Load delivery_address and shipping_method if not already loaded
         if not hasattr(subscription, 'delivery_address') or subscription.delivery_address is None:
-            from models.accounts.user import Address
             if subscription.delivery_address_id:
                 address_result = await db.execute(
                     select(Address).where(Address.id == subscription.delivery_address_id)
@@ -512,7 +508,6 @@ async def get(
                 subscription.delivery_address = address_result.scalar_one_or_none()
 
         if not hasattr(subscription, 'shipping_method') or subscription.shipping_method is None:
-            from models.commerce.shipping import ShippingMethod
             if subscription.shipping_method_id:
                 method_result = await db.execute(
                     select(ShippingMethod).where(ShippingMethod.id == subscription.shipping_method_id)

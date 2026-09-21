@@ -1,4 +1,5 @@
 from uuid import UUID
+import traceback
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +11,7 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger
 from core.utils.response import Response
 from services.commerce.orders import OrderService
+from services.commerce.shipping_tracking import ShippingTrackingService
 from models.accounts.user import User, UserRole
 from models.commerce.orders import Order as OrderModel
 from schemas.commerce.orders import Checkout, Note
@@ -171,7 +173,6 @@ async def validate(
         validation_result = await order_service.validate_checkout(current_user.id, request)
         return Response.success(data=validation_result, message="Checkout validation completed")
     except Exception as e:
-        import traceback
         tb = traceback.format_exc()
         print(f"VALIDATE CHECKOUT ERROR: {e}\n{tb}")
         raise APIException(status_code=500, message=f"Checkout validation failed: {str(e)}")
@@ -230,6 +231,8 @@ async def get_invoice(
         order_service = OrderService(db)
         invoice_result = await order_service.invoice(order_id, current_user.id)
         if invoice_result.get('success') and invoice_result.get('pdf_bytes'):
+            # Local: shadows this file's core.utils.response.Response on purpose,
+            # for a raw binary PDF response instead of the app's JSON envelope.
             from fastapi.responses import Response
             return Response(
                 content=invoice_result['pdf_bytes'],
@@ -344,7 +347,6 @@ async def get_order_shipments(
 ):
     """Get all shipments for an order."""
     try:
-        from services.commerce.shipping_tracking import ShippingTrackingService
         shipping_service = ShippingTrackingService(db)
         shipments = await shipping_service.list_by_order(str(order_id))
         return Response.success(data=shipments, message="Shipments retrieved successfully")

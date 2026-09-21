@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta, timezone
+from dateutil.relativedelta import relativedelta
 from typing import Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
@@ -13,6 +14,11 @@ from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus,
 from models.catalog.product import ProductVariant
 from models.accounts.user import User, Address
 from models.commerce.payments import PaymentMethod
+from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
+from services.commerce.subscriptions import SubscriptionService
+from services.commerce.payments import PaymentService
+from services.accounts.email import EmailService
+from services.catalog.inventory import InventoryService
 from core.db import get_db
 
 logger = get_structured_logger(__name__)
@@ -160,15 +166,11 @@ class SubscriptionScheduler:
                 raise Exception(f"No valid variants found for subscription {subscription.id}")
             
             # Recalculate current pricing
-            # Subscription service lives under services.commerce.subscriptions
-            from services.commerce.subscriptions import SubscriptionService
             subscription_service = SubscriptionService(self.db)
             # Use the implemented method name to recalculate pricing
             pricing = await subscription_service.recalc_pricing(subscription)
             
             # --- STEP 1: PROCESS PAYMENT FIRST ---
-            from services.commerce.payments import PaymentService
-            
             # Get user's default payment method
             payment_method_result = await self.db.execute(
                 select(PaymentMethod).where(
@@ -260,7 +262,6 @@ class SubscriptionScheduler:
                     try:
                         # Note: This needs BackgroundTasks, but scheduler runs in background
                         # For now, send directly via EmailService (already handled)
-                        from services.accounts.email import EmailService
                         email_service = EmailService(self.db)
                         await email_service.send_subscription_payment_failed(
                             user_email=user.email,
@@ -318,9 +319,6 @@ class SubscriptionScheduler:
             await self.db.flush()
             
             # --- STEP 4: UPDATE INVENTORY ---
-            from services.catalog.inventory import InventoryService
-            from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
-            
             inventory_service = InventoryService(self.db, None)
             
             for variant_price in pricing["variant_prices"]:
@@ -402,8 +400,6 @@ class SubscriptionScheduler:
     
     async def _update_billing_dates(self, subscription: Subscription):
         """Update subscription billing dates with proper month-end handling"""
-        from dateutil.relativedelta import relativedelta
-        
         current_period_end = subscription.current_period_end or datetime.now(timezone.utc)
         
         if subscription.billing_cycle == "weekly":

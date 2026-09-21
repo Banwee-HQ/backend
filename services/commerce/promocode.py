@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional, Tuple
 from uuid import UUID
+from datetime import datetime, timezone
 from core.utils.uuid_utils import uuid7
 from models.commerce.promocode import Promocode
 from schemas.commerce.promos import Create as PromocodeCreate, Update as PromocodeUpdate
@@ -108,8 +109,6 @@ class PromocodeService:
         """
         Validate a promocode and return (is_valid, error_message, promocode)
         """
-        from datetime import datetime, timezone
-        
         promocode = await self.get(code=code, active_only=True)
         
         if not promocode:

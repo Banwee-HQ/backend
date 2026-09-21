@@ -1,12 +1,17 @@
 """Subscription service: creation, updates, and pricing calculations."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, or_, func, update
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.commerce.subscriptions import Subscription, SubscriptionStatus
+from models.commerce.subscriptions import Subscription, SubscriptionStatus, SubscriptionProductAssociation, SubscriptionProduct
+from models.commerce.discounts import SubscriptionDiscount, ProductRemovalAudit
+from models.commerce.orders import Order
+from models.commerce.shipping import ShippingMethod
 from models.catalog.product import ProductVariant
+from models.catalog.variant_tracking import VariantTrackingEntry
 from models.accounts.user import Address, User
 from models.commerce.promocode import Promocode
+from services.commerce.tax import TaxService
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
@@ -157,7 +162,6 @@ class SubscriptionService:
         await self.db.flush()
 
         # Add products to association table
-        from models.commerce.subscriptions import SubscriptionProductAssociation
         for variant in variants:
             association = SubscriptionProductAssociation(
                 subscription_id=subscription.id,
@@ -222,7 +226,6 @@ class SubscriptionService:
         
         if customer_address:
             try:
-                from services.commerce.tax import TaxService
                 tax_service = TaxService(self.db)
                 
                 country = customer_address.get('country', '')
@@ -287,7 +290,6 @@ class SubscriptionService:
 
     async def _get_shipping_cost(self, shipping_method_id: Optional[UUID] = None) -> Decimal:
         """Get shipping cost from database"""
-        from models.commerce.shipping import ShippingMethod
 
         # If shipping_method_id is provided, get that specific method
         if shipping_method_id:
@@ -339,7 +341,6 @@ class SubscriptionService:
         limit: int = 10
     ) -> Dict[str, Any]:
         """Get paginated subscriptions. If user_id is None, returns all subscriptions (admin)."""
-        from sqlalchemy import func as sqlfunc
 
         offset = (page - 1) * limit
 
@@ -352,7 +353,7 @@ class SubscriptionService:
                 selectinload(Subscription.delivery_address),
                 selectinload(Subscription.shipping_method),
             )
-            count_query = select(sqlfunc.count()).select_from(Subscription).where(Subscription.user_id == user_id)
+            count_query = select(func.count()).select_from(Subscription).where(Subscription.user_id == user_id)
         else:
             # Admin query — fetch subscriptions first, then join user info separately
             base_query = select(Subscription).options(
@@ -362,7 +363,7 @@ class SubscriptionService:
                 selectinload(Subscription.delivery_address),
                 selectinload(Subscription.shipping_method),
             )
-            count_query = select(sqlfunc.count()).select_from(Subscription)
+            count_query = select(func.count()).select_from(Subscription)
 
         # Apply filters
         if status:
@@ -372,7 +373,6 @@ class SubscriptionService:
         # Apply search filter
         if search:
             search_term = f"%{search}%"
-            from sqlalchemy import or_
             if user_id:
                 # User-specific search - search subscription fields
                 search_condition = or_(
@@ -392,7 +392,7 @@ class SubscriptionService:
                     Subscription.payment_reference.ilike(search_term),
                 )
                 base_query = base_query.join(User, Subscription.user_id == User.id).where(search_condition)
-                count_query = select(sqlfunc.count(Subscription.id)).select_from(Subscription).join(User, Subscription.user_id == User.id).where(search_condition)
+                count_query = select(func.count(Subscription.id)).select_from(Subscription).join(User, Subscription.user_id == User.id).where(search_condition)
 
         # Apply date filters
         if date_from:
@@ -488,7 +488,6 @@ class SubscriptionService:
             subscription.auto_renew = auto_renew
 
         if current_period_start:
-            from datetime import timezone
             new_period_start = datetime.fromisoformat(current_period_start).replace(tzinfo=timezone.utc)
             subscription.current_period_start = new_period_start
 
@@ -509,7 +508,6 @@ class SubscriptionService:
             subscription.variant_ids = variant_ids
 
             # Update association table
-            from models.commerce.subscriptions import SubscriptionProductAssociation
             await self.db.execute(
                 delete(SubscriptionProductAssociation).where(
                     SubscriptionProductAssociation.subscription_id == subscription.id
@@ -698,11 +696,6 @@ class SubscriptionService:
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
 
-        from models.commerce.subscriptions import SubscriptionProductAssociation, SubscriptionProduct
-        from models.commerce.discounts import SubscriptionDiscount, ProductRemovalAudit
-        from models.catalog.variant_tracking import VariantTrackingEntry
-        from models.commerce.orders import Order
-        from sqlalchemy import update
 
         # Delete all child rows that lack DB-level CASCADE
         await self.db.execute(
@@ -747,7 +740,6 @@ class SubscriptionService:
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
 
-        from models.commerce.subscriptions import SubscriptionProductAssociation
 
         existing_ids = {str(v.id) for v in subscription.products}
         for vid in variant_ids:
@@ -772,7 +764,6 @@ class SubscriptionService:
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
 
-        from models.commerce.subscriptions import SubscriptionProductAssociation
 
         for vid in variant_ids:
             await self.db.execute(
@@ -821,13 +812,11 @@ class SubscriptionService:
         return {}
 
     async def get_orders(self, subscription_id: UUID, user_id: UUID, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        from models.commerce.orders import Order
-        from sqlalchemy import func as sqlfunc
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
         total = await self.db.scalar(
-            select(sqlfunc.count()).select_from(Order).where(Order.subscription_id == subscription_id)
+            select(func.count()).select_from(Order).where(Order.subscription_id == subscription_id)
         ) or 0
         result = await self.db.execute(
             select(Order).where(Order.subscription_id == subscription_id)

@@ -8,7 +8,7 @@ from core.exceptions import APIException
 from schemas.commerce.promos import Create, Update, ValidateRequest
 from services.commerce.promocode import PromocodeService
 from services.commerce.promocode_scheduler import PromoCodeScheduler
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from core.dependencies import require_admin, require_auth
 from core.logging import get_structured_logger
 
@@ -27,7 +27,6 @@ async def list(
 ):
     """Get all promocodes. Returns only active promocodes for regular users, all for admins."""
     try:
-        from models.accounts.user import UserRole
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         promocode_service = PromocodeService(db)
@@ -115,7 +114,6 @@ async def get(
 ):
     """Get promocode by ID."""
     try:
-        from models.accounts.user import UserRole
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
         
         promocode_service = PromocodeService(db)

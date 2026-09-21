@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import httpx
+import google.auth.transport.requests
+import google.oauth2.id_token
 from core.db import get_db
 from core.config import settings
 from services.accounts.auth import AuthService
@@ -138,9 +140,6 @@ async def facebook_oauth_credential(
 
 async def verify_google_credential(credential: str) -> dict:
     """Verify Google ID token and get user info"""
-    import google.auth.transport.requests
-    import google.oauth2.id_token
-
     try:
         # Verify the ID token
         id_info = google.oauth2.id_token.verify_oauth2_token(

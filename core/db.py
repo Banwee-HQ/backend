@@ -1,6 +1,6 @@
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy import text, TypeDecorator, CHAR
+from sqlalchemy import text, TypeDecorator, CHAR, event
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
 import asyncio
@@ -80,7 +80,6 @@ class DatabaseManager:
         )
 
         # Set search_path on every new connection so all schemas are visible
-        from sqlalchemy import event
         @event.listens_for(engine_db.sync_engine, "connect")
         def set_search_path(dbapi_conn, connection_record):
             cursor = dbapi_conn.cursor()

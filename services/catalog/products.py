@@ -7,7 +7,8 @@ import uuid
 from core.utils.uuid_utils import uuid7
 from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage
 from models.catalog.category import Category
-from models.catalog.inventories import Inventory, StockAdjustment
+from models.catalog.inventories import Inventory, StockAdjustment, WarehouseLocation
+from models.catalog.review import Review
 from models.commerce.cart import CartItem
 from models.commerce.orders import OrderItem
 from schemas.catalog.product import (
@@ -406,6 +407,7 @@ class ProductService:
 
     async def recommended(self, product_id: UUID, limit: int = 4) -> List[ProductResponse]:
         """Get smart recommendations (complementary, similar, behavioral); see RecommendationService."""
+        # Local: recommendations.py imports ProductService, so this would be circular at top level.
         from services.catalog.recommendations import RecommendationService
         
         recommendation_service = RecommendationService(self.db)
@@ -666,8 +668,7 @@ class ProductService:
         # Build variants list - support flat product data (auto-create default variant)
         variants_to_create = product_data.variants or []
         if not variants_to_create and product_data.base_price is not None:
-            from schemas.catalog.product import VariantCreate as PVC
-            variants_to_create = [PVC(
+            variants_to_create = [ProductVariantCreate(
                 name=product_data.name,
                 base_price=product_data.base_price,
                 sale_price=product_data.sale_price,
@@ -703,8 +704,6 @@ class ProductService:
             await self.db.flush()  # Get variant ID
             
             # ALWAYS create inventory record for the variant (even if stock is 0)
-            from models.catalog.inventories import WarehouseLocation
-            
             # Get warehouse location from variant data if provided, otherwise use default
             warehouse_location_id = None
             if hasattr(variant_data, 'warehouse_location_id') and variant_data.warehouse_location_id:
@@ -744,7 +743,6 @@ class ProductService:
             
             # Create variant images from CDN URLs
             if variant_data.image_urls:
-                from models.catalog.product import ProductImage
                 for img_idx, image_url in enumerate(variant_data.image_urls):
                     db_image = ProductImage(
                         id=uuid7(),
@@ -768,8 +766,6 @@ class ProductService:
         is_admin: bool = False
     ) -> ProductResponse:
         """Update a product and its variants."""
-        from models.catalog.inventories import Inventory
-        
         logger.info(f"Updating product {product_id} with data: {product_data.dict(exclude_unset=True)}")
         
         query = select(Product).options(
@@ -1054,9 +1050,6 @@ class ProductService:
 
     async def delete(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
         """Delete a product and all its associated data (variants, inventory, reviews, cart item)."""
-        from models.commerce.orders import OrderItem
-        from models.catalog.review import Review
-
         query = select(Product).where(Product.id == product_id)
         result = await self.db.execute(query)
         product = result.scalar_one_or_none()

@@ -3,6 +3,7 @@ Jinja Template Service for rendering emails and exports
 """
 from typing import Dict, Any
 from pathlib import Path
+from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateError
 from core.logging import get_structured_logger
@@ -72,7 +73,6 @@ class JinjaTemplateService:
             }
             rendered_content = template.render(**email_context)
             
-            from datetime import datetime
             return RenderedTemplate(
                 content=rendered_content,
                 template_name=template_name,
@@ -102,7 +102,6 @@ class JinjaTemplateService:
             }
             rendered_content = template.render(**export_context)
             
-            from datetime import datetime
             return RenderedExport(
                 content=rendered_content,
                 format_type=format_type,

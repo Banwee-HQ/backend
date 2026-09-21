@@ -239,8 +239,7 @@ async def get_product(
         product = None
         # Try UUID first
         try:
-            from uuid import UUID as _UUID
-            uid = _UUID(product_id)
+            uid = UUID(product_id)
             product = await product_service.get(uid)
         except (ValueError, AttributeError):
             # Try slug

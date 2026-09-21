@@ -1,6 +1,7 @@
 """Invoice PDF Generator using Jinja2 and WeasyPrint."""
 from datetime import datetime, timedelta
 from typing import Dict, Optional
+import traceback
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from weasyprint import HTML
 from pathlib import Path
@@ -271,7 +272,6 @@ class InvoiceGenerator:
             }
             
         except Exception as e:
-            import traceback
             error_details = traceback.format_exc()
             return {
                 "success": False,

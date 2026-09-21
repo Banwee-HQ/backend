@@ -2,16 +2,18 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 
+import core.db as core_db
 from core.db import get_db
 from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
 from core.logging import get_structured_logger
 from core.dependencies import require_admin, require_auth
 from models.accounts.user import User
+from models.commerce.orders import Order
 from models.commerce.shipping_tracking import ShippingProvider, ShipmentTracking
 
 from services.commerce.shipping_tracking import ShippingTrackingService
@@ -215,11 +217,8 @@ async def list(
 ):
     """List shipments visible to the current user"""
     try:
-        from sqlalchemy import select as sa_select, func
-        from models.commerce.orders import Order
-
         base_query = (
-            sa_select(ShipmentTracking)
+            select(ShipmentTracking)
             .join(Order, ShipmentTracking.order_id == Order.id)
             .where(Order.user_id == current_user.id)
             .options(
@@ -229,7 +228,7 @@ async def list(
             )
         )
         count_query = (
-            sa_select(func.count())
+            select(func.count())
             .select_from(ShipmentTracking)
             .join(Order, ShipmentTracking.order_id == Order.id)
             .where(Order.user_id == current_user.id)
@@ -406,13 +405,11 @@ async def delete_provider(
 # Background task for tracking shipments
 async def track_shipment_background(tracking_number: str, carrier: str):
     """Background task to track shipments"""
-    from core.db import AsyncSessionDB
-    
-    if not AsyncSessionDB:
+    if not core_db.AsyncSessionDB:
         logger.warning(f"Background tracking skipped for {tracking_number}: DB not initialized")
         return
 
-    async with AsyncSessionDB() as db:
+    async with core_db.AsyncSessionDB() as db:
         try:
             shipping_service = ShippingTrackingService(db)
             await shipping_service.track_shipment(tracking_number, carrier)

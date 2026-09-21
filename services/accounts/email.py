@@ -7,6 +7,7 @@ from fastapi import BackgroundTasks
 from services.system.templates import JinjaTemplateService
 from core.config import settings
 from core.logging import get_structured_logger
+from core.utils.messages.email import send_email_brevo, template_map
 
 logger = get_structured_logger(__name__)
 
@@ -58,7 +59,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("purchase/order_confirmation.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject=f"Order Confirmation - {order_number}",
@@ -73,7 +73,6 @@ class EmailService:
         verification_token: str
     ):
         """Send verification email (called from ARQ worker)"""
-        from core.config import settings
         verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
         
         context = {
@@ -86,7 +85,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("account/activation.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject="Verify Your Email Address - Banwee",
@@ -112,7 +110,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("post_purchase/thank_you.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject="🙏 Thank You for Your Purchase!",
@@ -137,7 +134,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("post_purchase/review_request.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject="⭐ Tell Us What You Think",
@@ -163,7 +159,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("account/password_reset.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject="Reset Your Password",
@@ -202,7 +197,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("purchase/shipping_update.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject=f"Your Order {order_number} Has Shipped!",
@@ -235,7 +229,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("system/low_stock_alert.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject=f"Low Stock Alert: {product_name}",
@@ -281,7 +274,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("purchase/order_delivered.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=recipient_email,
             subject=f"Your Order {order_number} Has Been Delivered!",
@@ -330,7 +322,6 @@ class EmailService:
         
         html_content = await self.render_email_with_template("system/subscription_payment_failed.html", context)
         
-        from core.utils.messages.email import send_email_brevo
         await send_email_brevo(
             to_email=user_email,
             subject=subject,
@@ -358,8 +349,6 @@ class EmailService:
         **kwargs
     ):
         """Internal method to send emails via Brevo"""
-        from core.utils.messages.email import send_email_brevo
-        from core.config import settings
         
         # Build subject based on mail_type
         subject_map = {
@@ -424,7 +413,6 @@ class EmailService:
             })
         
         # Use existing template_map from core/utils/messages/email.py
-        from core.utils.messages.email import template_map
         
         template_name = template_map.get(mail_type)
         
@@ -456,7 +444,6 @@ class EmailService:
         context: Dict[str, Any]
     ) -> str:
         """Render an email template"""
-        from services.system.templates import JinjaTemplateService
         template_service = JinjaTemplateService(template_dir="core/utils/messages/templates")
         rendered = await template_service.render_email(template_name, context)
         return rendered['content']

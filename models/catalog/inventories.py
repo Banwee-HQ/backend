@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import Base, CHAR_LENGTH, GUID
 from core.utils.uuid_utils import uuid7
+from core.exceptions import APIException
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from uuid import UUID as UUIDType
@@ -90,14 +91,8 @@ class Inventory(Base):
     
     @classmethod
     async def get_with_lock(cls, db: AsyncSession, variant_id: UUIDType) -> Optional['Inventory']:
-        """Get inventory record with SELECT ... FOR UPDATE, to prevent concurrent modification.
-
-        populate_existing=True is required: if this row was already read (unlocked) earlier
-        in the same session - e.g. a stock pre-check - the row lock still blocks correctly at
-        the DB level, but without this, SQLAlchemy would hand back the already-in-memory
-        object with its stale pre-lock attribute values instead of the fresh post-lock ones,
-        silently defeating the lock.
-        """
+        """Get inventory with SELECT ... FOR UPDATE. populate_existing=True is required: without
+        it, a row already read earlier in the session comes back stale, silently defeating the lock."""
         try:
             query = select(cls).where(cls.variant_id == variant_id).with_for_update().execution_options(populate_existing=True)
             result = await db.execute(query)
@@ -134,7 +129,6 @@ class Inventory(Base):
         
         # Validate stock levels
         if new_available < 0:
-            from core.exceptions import APIException
             raise APIException(
                 status_code=400,
                 message=f"Insufficient stock. Available: {self.quantity_available}, Requested: {abs(quantity_change)}"
@@ -252,7 +246,6 @@ async def atomic_bulk_stock_update(
             
             inventory = inventory_map.get(variant_id)
             if not inventory:
-                from core.exceptions import APIException
                 raise APIException(
                     status_code=404,
                     message=f"Inventory not found for variant {variant_id}"

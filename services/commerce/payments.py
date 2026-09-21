@@ -18,6 +18,7 @@ import json
 import time
 import asyncio
 from models.commerce.payments import CardBrand
+from services.commerce.payment_failure_handler import PaymentFailureHandler
 
 # Configure Stripe
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', '')
@@ -603,8 +604,6 @@ class PaymentService:
             
         except stripe.error.StripeError as e:
             # Use comprehensive failure handler
-            from services.commerce.payment_failure_handler import PaymentFailureHandler
-            
             failure_handler = PaymentFailureHandler(self.db)
             
             # Update payment intent with basic failure info first
@@ -726,8 +725,6 @@ class PaymentService:
         """
         Process payment with timeout, retry logic, and comprehensive error handling
         """
-        import asyncio
-        
         for attempt in range(max_retries):
             try:
                 logger.info(f"Payment attempt {attempt + 1}/{max_retries} for user {user_id}, amount {amount}")
@@ -1143,7 +1140,6 @@ class PaymentService:
             payment_method = None
             if transaction.transaction_metadata:
                 try:
-                    import json
                     metadata = json.loads(transaction.transaction_metadata)
                     if 'payment_method_type' in metadata:
                         payment_method = metadata['payment_method_type'].replace('PaymentType.', '')
@@ -1176,8 +1172,6 @@ class PaymentService:
         """Get all transactions (admin only)"""
         offset = (page - 1) * limit
 
-        from models.accounts.user import User
-
         # Build base query with filters
         query = select(Transaction).options(
             selectinload(Transaction.user)
@@ -1190,7 +1184,6 @@ class PaymentService:
         # Apply date range filters
         if date_from:
             try:
-                from datetime import datetime
                 date_from_dt = datetime.fromisoformat(date_from)
                 query = query.where(Transaction.created_at >= date_from_dt)
             except ValueError:
@@ -1198,10 +1191,8 @@ class PaymentService:
 
         if date_to:
             try:
-                from datetime import datetime
                 date_to_dt = datetime.fromisoformat(date_to)
                 # Include the entire day by adding 1 day
-                from datetime import timedelta
                 date_to_dt = date_to_dt + timedelta(days=1)
                 query = query.where(Transaction.created_at < date_to_dt)
             except ValueError:
@@ -1228,16 +1219,13 @@ class PaymentService:
             count_query = count_query.where(Transaction.status == status)
         if date_from:
             try:
-                from datetime import datetime
                 date_from_dt = datetime.fromisoformat(date_from)
                 count_query = count_query.where(Transaction.created_at >= date_from_dt)
             except ValueError:
                 pass
         if date_to:
             try:
-                from datetime import datetime
                 date_to_dt = datetime.fromisoformat(date_to)
-                from datetime import timedelta
                 date_to_dt = date_to_dt + timedelta(days=1)
                 count_query = count_query.where(Transaction.created_at < date_to_dt)
             except ValueError:
@@ -1266,7 +1254,6 @@ class PaymentService:
             payment_method_value = None
             if transaction.transaction_metadata:
                 try:
-                    import json
                     metadata = json.loads(transaction.transaction_metadata)
                     if 'payment_method_type' in metadata:
                         payment_method_value = metadata['payment_method_type'].replace('PaymentType.', '')
@@ -1763,7 +1750,6 @@ class PaymentService:
             failed_payments = result.scalars().all()
             
             # Get total count
-            from sqlalchemy import func
             count_result = await self.db.execute(
                 select(func.count(PaymentIntent.id)).where(
                     PaymentIntent.user_id == user_id,

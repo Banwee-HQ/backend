@@ -343,6 +343,7 @@ class RecommendationService:
         products = result.scalars().all()
         
         # Convert to response format
+        # Local: products.py imports RecommendationService, so this would be circular at top level.
         from services.catalog.products import ProductService
         product_service = ProductService(self.db)
         
@@ -390,7 +391,7 @@ class RecommendationService:
                 result = await self.db.execute(query)
                 products = result.scalars().all()
 
-            from services.catalog.products import ProductService
+            from services.catalog.products import ProductService  # Local: see comment above
             product_service = ProductService(self.db)
             
             return [product_service._convert_product_to_response(p) for p in products]

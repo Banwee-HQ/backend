@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timezone
-from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
+from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment, atomic_bulk_stock_update
 from models.catalog.product import ProductVariant, Product
 from schemas.catalog.inventory import (
     LocationCreate as WarehouseLocationCreate,
@@ -535,9 +535,6 @@ class InventoryService:
     async def _perform_stock_adjustment(self, adjustment_data: StockAdjustmentCreate, adjusted_by_user_id: Optional[UUID], commit: bool) -> Inventory:
         """Internal method to perform stock adjustment with database lock"""
         try:
-            # Use atomic stock operation from model
-            from models.catalog.inventories import Inventory
-            
             # Get inventory with database lock
             inventory = await Inventory.get_with_lock(self.db, adjustment_data.variant_id)
             
@@ -987,8 +984,9 @@ class InventoryService:
         
         # Queue product availability sync as background task (don't wait for it)
         try:
+            # Local: core.worker imports InventoryService, so this would be circular at top level.
             from core.worker import enqueue_sync_product_availability
-            
+
             # Get the variant to find its product
             variant_result = await self.db.execute(
                 select(ProductVariant).where(ProductVariant.id == variant_id)
@@ -1036,8 +1034,6 @@ class InventoryService:
         Atomically update multiple stock levels using SELECT ... FOR UPDATE
         """
         try:
-            from models.catalog.inventories import atomic_bulk_stock_update
-            
             results = await atomic_bulk_stock_update(
                 db=self.db,
                 stock_changes=stock_changes,

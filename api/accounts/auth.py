@@ -9,8 +9,13 @@ from core.logging import get_structured_logger as get_logger
 from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword
 from services.accounts.auth import AuthService
 from services.accounts.user import UserService
+from services.accounts.email import EmailService
+from services.commerce.cart import CartService
 from models.accounts.user import User
 import time
+import re
+import secrets
+from datetime import datetime, timedelta, timezone
 
 logger = get_logger(__name__)
 
@@ -20,7 +25,6 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def _add_pending_cart_item(db: AsyncSession, user_id, variant_id, quantity: int):
     """Add the variant a client attached to a login/register request, without blocking auth on cart errors."""
     try:
-        from services.commerce.cart import CartService
         await CartService(db).add_to_cart(user_id, variant_id, quantity)
     except HTTPException as e:
         logger.warning(f"Could not add pending cart item {variant_id} for user {user_id}: {e.detail}")
@@ -188,8 +192,6 @@ async def verify(
         # Handle case where token might be embedded in HTML (frontend issue)
         if token.startswith('<!DOCTYPE') or token.startswith('<!doctype'):
             # Extract token from HTML - look for token parameter in URL
-            import re
-            # Look for token=...& or token=..." pattern
             token_match = re.search(r'token=([^&"\s]+)', token)
             if token_match:
                 token = token_match.group(1)
@@ -253,14 +255,11 @@ async def resend(
         if user.verified:
             raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="Email is already verified")
 
-        import secrets
-        from datetime import datetime, timedelta, timezone
         token = secrets.token_urlsafe(32)
         user.verification_token = token
         user.token_expiration = datetime.now(timezone.utc) + timedelta(hours=24)
         await db.commit()
 
-        from services.accounts.email import EmailService
         email_service = EmailService(db)
         email_service.send_verification(background_tasks, request.email, user.firstname, token)
 
@@ -328,9 +327,8 @@ async def update(
 
         # Parse date_of_birth string to timezone-aware datetime if needed
         if "date_of_birth" in user_data and isinstance(user_data["date_of_birth"], str):
-            from datetime import datetime as dt, timezone
             try:
-                parsed = dt.fromisoformat(user_data["date_of_birth"])
+                parsed = datetime.fromisoformat(user_data["date_of_birth"])
                 if parsed.tzinfo is None:
                     parsed = parsed.replace(tzinfo=timezone.utc)
                 user_data["date_of_birth"] = parsed
