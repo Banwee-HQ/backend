@@ -250,7 +250,7 @@ async def get_product(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Product not found"
             )
-        logger.debug(f"Successfully fetched product")
+        logger.debug("Successfully fetched product")
         return Response.success(data=product)
     except APIException:
         raise

@@ -45,9 +45,6 @@ class CartService:
             return self._create_empty_cart_response(country_code, province_code, cart.id)
 
         # Eager load cart items with variant and product relationships
-        from sqlalchemy.orm import selectinload
-        from models.catalog.product import Product, ProductVariant
-        
         cart_result = await self.db.execute(
             select(Cart)
             .options(

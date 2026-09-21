@@ -35,7 +35,7 @@ class EmailService:
     async def _get_order_by_id(self, order_id: UUID) -> Order:
         result = await self.db_session.execute(select(Order).filter(Order.id == order_id))
         order = result.scalars().first()
-        if not user:
+        if not order:
             raise APIException(status_code=404, message="Order not found for email operation.")
         return order
 
@@ -342,7 +342,7 @@ class EmailService:
         
         # Determine subject based on retry count
         if retry_count >= 3:
-            subject = f"Subscription Paused - Payment Failed"
+            subject = "Subscription Paused - Payment Failed"
             context["is_paused"] = True
             context["message"] = (
                 f"We've attempted to process payment for your subscription '{subscription_name}' "

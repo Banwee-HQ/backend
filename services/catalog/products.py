@@ -723,7 +723,7 @@ class ProductService:
             await self.db.flush()  # Get variant ID
             
             # ALWAYS create inventory record for the variant (even if stock is 0)
-            from models.catalog.inventories import Inventory, WarehouseLocation
+            from models.catalog.inventories import WarehouseLocation
             
             # Get warehouse location from variant data if provided, otherwise use default
             warehouse_location_id = None
@@ -837,15 +837,11 @@ class ProductService:
                         variant_dict = variant_data.dict(exclude_unset=True, exclude={'id', 'images', 'stock'})
                         logger.info(f"Fields to update: {list(variant_dict.keys())}")
                         
-                        # Flag to track if we made any changes
-                        made_changes = False
-                        
                         for field, value in variant_dict.items():
                             if value is not None:  # Only update if value is provided
                                 old_value = getattr(variant, field, None)
                                 if old_value != value:  # Only if value actually changed
                                     setattr(variant, field, value)
-                                    made_changes = True
                                     logger.info(f"Updated variant.{field}: {old_value} -> {value}")
                         
                         # Handle stock update via inventory

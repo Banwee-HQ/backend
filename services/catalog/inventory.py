@@ -443,7 +443,7 @@ class InventoryService:
         }
             
         except Exception as e:
-            logger.error(f"Error in get_all_inventory_items", exception=e)
+            logger.error("Error in get_all_inventory_items", exception=e)
             # Return empty result instead of raising exception
             return {
             "data": [],
@@ -550,7 +550,7 @@ class InventoryService:
                 )
             
             # Perform atomic update
-            adjustment = await inventory.atomic_update_stock(
+            await inventory.atomic_update_stock(
                 db=self.db,
                 quantity_change=adjustment_data.quantity_change,
                 reason=adjustment_data.reason,
@@ -573,12 +573,12 @@ class InventoryService:
                 try:
                     await self.sync(variant.product_id)
                 except Exception as e:
-                    logger.warning(f"Failed to sync product availability after stock adjustment", exception=e)
+                    logger.warning("Failed to sync product availability after stock adjustment", exception=e)
             
             return inventory
             
         except Exception as e:
-            logger.error(f"Error in stock adjustment", exception=e)
+            logger.error("Error in stock adjustment", exception=e)
             raise APIException(
                 status_code=500,
                 message=f"Failed to adjust stock: {str(e)}"
@@ -812,7 +812,7 @@ class InventoryService:
                 }
                 
         except Exception as e:
-            logger.error(f"Error in batch warehouse update", exception=e)
+            logger.error("Error in batch warehouse update", exception=e)
             raise APIException(
                 status_code=500,
                 message=f"Failed to update inventory from warehouse data: {str(e)}"
@@ -900,7 +900,7 @@ class InventoryService:
         }
             
         except Exception as e:
-            logger.error(f"Error checking stock availability", exception=e)
+            logger.error("Error checking stock availability", exception=e)
             return {
             "available": False,
             "current_stock": 0,

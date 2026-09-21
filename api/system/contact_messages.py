@@ -11,7 +11,6 @@ from core.dependencies import get_current_auth_user, require_admin
 from schemas.system.contact_message import (
     Create,
     Update,
-    Response,
     ListResponse,
     MessageStatus,
     MessagePriority

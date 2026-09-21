@@ -1,10 +1,9 @@
 """Order service: complete order lifecycle with backend-only price calculations."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc, delete, String
+from sqlalchemy import select, and_, or_, desc, delete, String, text
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
 from models.commerce.orders import Order, OrderItem, TrackingEvent, PaymentStatus, OrderStatus, FulfillmentStatus, OrderSource
-from models.accounts.user import User
 from services.accounts.email import EmailService
 from models.commerce.cart import Cart, CartItem
 from models.accounts.user import User, Address
@@ -553,7 +552,6 @@ class OrderService:
         validation_result = await self.validate_checkout(user_id, request)
         
         if not validation_result['can_proceed']:
-            error_messages = [error['message'] for error in validation_result['errors']]
             raise HTTPException(
                 status_code=400,
                 detail={

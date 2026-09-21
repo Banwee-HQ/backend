@@ -285,9 +285,6 @@ class SubscriptionScheduler:
 
             # --- STEP 2: FINALIZE ORDER (only after successful payment) ---
 
-            # Get quantities
-            variant_quantities = subscription.subscription_metadata.get("variant_quantities", {}) if subscription.subscription_metadata else {}
-
             # Fill in the placeholder order created before payment with its real totals/status.
             order.order_status = OrderStatus.CONFIRMED
             order.payment_status = PaymentStatus.PAID

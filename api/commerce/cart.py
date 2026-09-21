@@ -83,7 +83,7 @@ async def patch(
     """Update cart item quantity (partial update)."""
     try:
         cart_service = CartService(db)
-        result = await cart_service.update_item(
+        await cart_service.update_item(
             user_id=current_user.id,
             cart_item_id=item_id,
             quantity=request.quantity

@@ -421,7 +421,7 @@ async def password(
         hashed_password = auth_service.get_password_hash(new_pwd)
         await user_service.update(current_user.id, {"hashed_password": hashed_password})
 
-        return APIResponse.success(message="Password changed successfully")
+        return Response.success(message="Password changed successfully")
     except APIException:
         raise
     except HTTPException:
@@ -453,7 +453,7 @@ async def delete(
         await db.delete(current_user)
         await db.commit()
 
-        return APIResponse.success(message="Account deleted successfully")
+        return Response.success(message="Account deleted successfully")
     except APIException:
         raise
     except HTTPException:

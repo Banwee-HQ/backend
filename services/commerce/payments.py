@@ -594,20 +594,7 @@ class PaymentService:
                     description="Payment processed successfully"
                 )
                 self.db.add(transaction)
-                
-                # Send secure notification for successful payment (only if committing)
-                if commit:
-                    await self._send_payment_notification(
-                        payment_intent.user_id,
-                        payment_intent.order_id,
-                        "payment_succeeded",
-                        {
-                            "payment_intent_id": str(payment_intent.id),
-                            "amount": payment_intent.amount_breakdown.get("total", 0),
-                            "currency": payment_intent.currency
-                        }
-                    )
-            
+
             elif stripe_intent.status == "requires_action":
                 payment_intent.requires_action = True
                 payment_intent.client_secret = stripe_intent.client_secret
@@ -651,33 +638,9 @@ class PaymentService:
                             "currency": payment_intent.currency
                         }
                     )
-                    
-                    # Send enhanced failure notification
-                    await self._send_payment_notification(
-                        payment_intent.user_id,
-                        payment_intent.order_id,
-                        "payment_failed_enhanced",
-                        {
-                            "payment_intent_id": str(payment_intent.id),
-                            "error": str(e),
-                            "failure_result": failure_result,
-                            "user_message": failure_result.get("user_message"),
-                            "next_steps": failure_result.get("next_steps")
-                        }
-                    )
-                    
+
                 except Exception as handler_error:
                     logger.error(f"Error in failure handler: {handler_error}")
-                    # Fall back to basic notification
-                    await self._send_payment_notification(
-                        payment_intent.user_id,
-                        payment_intent.order_id,
-                        "payment_failed",
-                        {
-                            "payment_intent_id": str(payment_intent.id),
-                            "error": str(e)
-                        }
-                    )
             
             raise HTTPException(status_code=400, detail=f"Payment failed: {str(e)}")
 
@@ -1527,43 +1490,6 @@ class PaymentService:
         await self.db.commit()
         return True
     
-    async def _send_payment_notification(
-        self,
-        user_id: UUID,
-        order_id: Optional[UUID],
-        event_type: str,
-        data: Dict[str, Any]
-    ):
-        """Send payment notification via secure message broker"""
-        try:
-            # Publish payment event
-            await publish_payment_event(
-                event_type=event_type,
-                payment_data={
-                    "user_id": str(user_id),
-                    "order_id": str(order_id) if order_id else None,
-                    "event_data": data,
-                    "timestamp": datetime.utcnow().isoformat()
-                },
-                correlation_id=str(order_id) if order_id else str(user_id)
-            )
-            
-            # Publish notification for real-time updates
-            await publish_notification({
-                "type": "payment_update",
-                "user_id": str(user_id),
-                "order_id": str(order_id) if order_id else None,
-                "event_type": event_type,
-                "data": data,
-                "timestamp": datetime.utcnow().isoformat()
-            })
-            
-            logger.info(f"Payment notification sent securely: {event_type} for user {user_id}")
-            
-        except Exception as e:
-            logger.error(f"Failed to send payment notification: {e}")
-            # Don't fail payment processing if notification fails
-
     # --- Payment failure handling methods ---
 
     async def _get_payment_intent_with_lock(self, payment_intent_id: UUID) -> Optional[PaymentIntent]:

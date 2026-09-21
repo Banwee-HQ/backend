@@ -244,7 +244,6 @@ class ShippingTrackingService:
             if not shipment:
                 raise APIException(status_code=404, message="Shipment not found")
 
-            old_status = shipment.status
             shipment.status = status
 
             # Update delivery timestamps

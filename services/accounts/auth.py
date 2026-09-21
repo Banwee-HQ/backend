@@ -385,7 +385,7 @@ class AuthService:
         user = result.scalar_one_or_none()
         
         if not user:
-            logger.warning(f"Password reset attempted with invalid token")
+            logger.warning("Password reset attempted with invalid token")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired reset token"

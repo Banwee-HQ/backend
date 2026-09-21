@@ -463,7 +463,7 @@ class RefundService:
             if refund_item.quantity > order_item.quantity:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Cannot refund more items than ordered"
+                    detail="Cannot refund more items than ordered"
                 )
             
             # Calculate refund amount
@@ -553,7 +553,7 @@ class RefundService:
             for refund_item in refund_items:
                 try:
                     # Restore inventory for each refunded item
-                    restore_result = await inventory_service.increment(
+                    await inventory_service.increment(
                         variant_id=refund_item.order_item.variant_id,
                         quantity=refund_item.quantity_to_refund,
                         location_id=None,  # Will be determined by service
@@ -627,21 +627,8 @@ class RefundService:
             raise
     
     async def _send_refund_notifications(self, refund: Refund, event_type: str):
-        """Send refund notifications to customer"""
-        try:
-            # This would integrate with your notification service
-            notification_data = {
-                "user_id": str(refund.user_id),
-                "refund_number": refund.refund_number,
-                "amount": refund.requested_amount,
-                "status": refund.status.value,
-                "event_type": event_type
-            }
-            
-            # Send refund notifications using ARQ
-            
-        except Exception as e:
-            logger.error(f"Failed to send refund notification: {e}")
+        """Send refund notifications to customer. Not yet implemented (ARQ notification integration was removed)."""
+        pass
     
     async def _format_refund_response(self, refund: Refund) -> RefundResponse:
         """Format refund for API response"""
