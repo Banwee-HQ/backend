@@ -17,16 +17,29 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+async def _add_pending_cart_item(db: AsyncSession, user_id, variant_id, quantity: int):
+    """Add the variant a client attached to a login/register request, without blocking auth on cart errors."""
+    try:
+        from services.commerce.cart import CartService
+        await CartService(db).add_to_cart(user_id, variant_id, quantity)
+    except HTTPException as e:
+        logger.warning(f"Could not add pending cart item {variant_id} for user {user_id}: {e.detail}")
+
+
 @router.post("/register/")
 async def register(
     user_data: UserCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
-    """Register a new user."""
+    """Register a new user. If the signup was triggered by an add-to-cart attempt, add that item to their cart."""
     try:
         auth_service = AuthService(db)
         user = await auth_service.create(user_data, background_tasks)
+
+        if user_data.variant_id:
+            await _add_pending_cart_item(db, user.id, user_data.variant_id, user_data.quantity)
+
         return Response.success(data=user, message="User registered successfully")
     except HTTPException:
         raise
@@ -43,11 +56,15 @@ async def login(
     user_login: Login,
     db: AsyncSession = Depends(get_db)
 ):
-    """Login user and return access token."""
+    """Login user and return access token. If login was triggered by an add-to-cart attempt, add that item to their cart."""
     try:
         auth_service = AuthService(db)
         token = await auth_service.authenticate(user_login.email, user_login.password, background_tasks)
         logger.info(f"User login successful: {user_login.email}")
+
+        if user_login.variant_id:
+            await _add_pending_cart_item(db, token.user.id, user_login.variant_id, user_login.quantity)
+
         return Response.success(data=token, message="Login successful")
     except HTTPException as e:
         # Re-raise HTTP exceptions (authentication failures) as-is

@@ -8,11 +8,19 @@ from uuid import UUID
 class UserCreate(UserBase):
     password: str
     phone: Optional[str] = None
+    # Set when signup was triggered by an anonymous add-to-cart attempt, so the
+    # item can be added to the new user's cart right after registration.
+    variant_id: Optional[UUID] = None
+    quantity: int = 1
 
 
 class Login(BaseModel):
     email: EmailStr
     password: str
+    # Set when login was triggered by an anonymous add-to-cart attempt, so the
+    # item can be added to the user's cart right after authentication.
+    variant_id: Optional[UUID] = None
+    quantity: int = 1
 
 
 class Response(BaseModel):

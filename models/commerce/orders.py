@@ -73,7 +73,6 @@ class Order(Base):
 
     # Customer reference
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
-    guest_email: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)  # For guest orders
 
     # Subscription reference for recurring orders
     subscription_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"), nullable=True)
@@ -134,7 +133,6 @@ class Order(Base):
             "id": str(self.id),
             "order_number": self.order_number,
             "user_id": str(self.user_id),
-            "guest_email": self.guest_email,
             "order_status": self.order_status,
             "payment_status": self.payment_status,
             "fulfillment_status": self.fulfillment_status,

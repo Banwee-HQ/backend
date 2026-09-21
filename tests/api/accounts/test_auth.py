@@ -5,6 +5,17 @@ from httpx import AsyncClient
 from uuid import uuid4
 
 
+@pytest.fixture
+async def created_variant(async_client: AsyncClient, admin_headers, sample_product_data):
+    cat = await async_client.post("/v1/categories/",
+        headers=admin_headers, json={"name": "Cat", "slug": f"cat-{uuid4().hex[:8]}"}
+    )
+    sample_product_data["category_id"] = cat.json()["data"]["id"]
+    product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
+    return variants.json()["data"][0]
+
+
 @pytest.mark.api
 @pytest.mark.auth
 class TestAuthEndpoints:
@@ -147,6 +158,48 @@ class TestAuthEndpoints:
             json={"current_password": "NotTheRealPassword1!", "new_password": "NewPass123!"}
         )
         assert response.status_code in [400, 401]
+
+    async def test_login_with_variant_adds_item_to_cart(self, async_client: AsyncClient, test_user, created_variant):
+        """POST /v1/auth/login - A variant_id attached to login (from an anonymous add-to-cart) lands in the cart."""
+        response = await async_client.post("/v1/auth/login/", json={
+            "email": test_user.email, "password": "TestPassword123!",
+            "variant_id": created_variant["id"], "quantity": 2
+        })
+        assert response.status_code == 200
+        token = response.json()["data"]["access_token"]
+
+        cart = await async_client.get("/v1/cart/", headers={"Authorization": f"Bearer {token}"})
+        items = cart.json()["data"]["items"]
+        assert len(items) == 1
+        assert items[0]["variant_id"] == created_variant["id"]
+        assert items[0]["quantity"] == 2
+
+    async def test_login_with_out_of_stock_variant_still_succeeds(self, async_client: AsyncClient, test_user, created_variant):
+        """POST /v1/auth/login - An add-to-cart failure (e.g. insufficient stock) must not block login."""
+        response = await async_client.post("/v1/auth/login/", json={
+            "email": test_user.email, "password": "TestPassword123!",
+            "variant_id": created_variant["id"], "quantity": 99999
+        })
+        assert response.status_code == 200
+        assert "access_token" in response.json()["data"]
+
+    async def test_register_with_variant_adds_item_to_cart(self, async_client: AsyncClient, created_variant):
+        """POST /v1/auth/register - A variant_id attached to signup lands in the new user's cart after login."""
+        email = f"test_{uuid4().hex[:8]}@example.com"
+        register_resp = await async_client.post("/v1/auth/register/", json={
+            "email": email, "password": "SecurePass123!",
+            "first_name": "Test", "last_name": "User",
+            "variant_id": created_variant["id"], "quantity": 1
+        })
+        assert register_resp.status_code in [200, 201]
+
+        login_resp = await async_client.post("/v1/auth/login/", json={"email": email, "password": "SecurePass123!"})
+        token = login_resp.json()["data"]["access_token"]
+
+        cart = await async_client.get("/v1/cart/", headers={"Authorization": f"Bearer {token}"})
+        items = cart.json()["data"]["items"]
+        assert len(items) == 1
+        assert items[0]["variant_id"] == created_variant["id"]
 
     async def test_account_lockout_after_failed_logins(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/login - Repeated wrong passwords lock the account (see services/accounts/auth.py)."""

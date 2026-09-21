@@ -861,7 +861,6 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('order_number', sa.String(length=50), nullable=False),
     sa.Column('user_id', core.db.GUID(), nullable=False),
-    sa.Column('guest_email', sa.String(length=255), nullable=True),
     sa.Column('subscription_id', core.db.GUID(), nullable=True),
     sa.Column('order_status', sa.Enum('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED', name='orderstatus', schema='public'), nullable=False),
     sa.Column('payment_status', sa.Enum('PENDING', 'AUTHORIZED', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED', name='paymentstatus', schema='public'), nullable=False),
