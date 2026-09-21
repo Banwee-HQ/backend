@@ -1,7 +1,4 @@
-"""
-Comprehensive Order Service with Advanced Pricing and Security
-Handles complete order lifecycle with backend-only price calculations
-"""
+"""Order service: complete order lifecycle with backend-only price calculations."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, delete, String
 from sqlalchemy.orm import selectinload
@@ -257,47 +254,8 @@ def get_currency_from_address(country: str) -> str:
 
 
 class OrderService:
-    """
-    Comprehensive order service with advanced pricing and security validation
-    
-    CRITICAL CALCULATION METHODOLOGY:
-    ================================
-    
-    This service is responsible for ALL order total calculations. All calculations
-    are performed on the backend (NEVER trust frontend prices) and follow this formula:
-    
-    SUBTOTAL = SUM(quantity × price_per_unit) for all items
-    TOTAL = SUBTOTAL + SHIPPING_COST + TAX_AMOUNT - DISCOUNT_AMOUNT
-    
-    Calculation Lifecycle:
-    
-    1. AT ORDER CREATION TIME:
-       - User submits checkout request from frontend (may include incorrect prices)
-       - _validate_and_recalculate_prices() recalculates all item prices from database
-       - _calculate_final_order_total() calculates subtotal = SUM(item.quantity × item.backend_price)
-       - Order is created with calculated_subtotal stored in order.subtotal field
-       - If any price mismatch between frontend and backend is detected, log it for security audit
-    
-    2. AT ORDER RETRIEVAL TIME (for admin dashboard):
-       - Order is fetched from database with all items
-       - AdminService._calculate_subtotal_from_items() recalculates subtotal = SUM(quantity × price_per_unit)
-       - This serves as data integrity check and provides audit trail
-       - If stored subtotal != calculated subtotal, use calculated value (stored may be corrupted)
-    
-    Key Rules:
-    - NEVER calculate prices on frontend (display only)
-    - ALWAYS recalculate on backend before storage
-    - Quantity MUST be multiplied by price_per_unit (not frontend's total_price)
-    - All calculations use backend prices (sale_price if available, else base_price)
-    - Calculations are atomic - all or nothing (transactions)
-    - All price discrepancies are logged for security audit
-    
-    This ensures:
-    ✓ Data integrity: Prices always match database source
-    ✓ Security: Frontend cannot inject false prices
-    ✓ Audit trail: All calculations are traceable to database
-    ✓ Accuracy: Quantity always considered in calculations
-    """
+    """Order service with backend-only pricing: TOTAL = SUM(qty×backend_price) + shipping + tax - discount.
+    Frontend prices are never trusted; mismatches are recalculated from the DB and logged for audit."""
     
     def __init__(self, db: AsyncSession, lock_service=None):
         self.db = db
@@ -314,10 +272,7 @@ class OrderService:
         discount_code: Optional[str] = None,
         currency: str = "USD"
     ) -> PricingCalculationResult:
-        """
-        Calculate comprehensive pricing with all components
-        This is the authoritative pricing calculation - NEVER trust frontend prices
-        """
+        """The authoritative pricing calculation (subtotal/shipping/tax/discount); never trust frontend prices."""
         logger.info(f"Calculating comprehensive pricing for {len(cart_items)} items")
         
         # Step 1: Calculate subtotal from product variant sale prices
@@ -357,8 +312,6 @@ class OrderService:
             province_name=shipping_address.state,
             country_name=shipping_address.country or "United States"
         )
-        # print(shipping_address.country,'====',
-        #     shipping_address.state, tax_rate)
         # Tax is calculated on subtotal only (not shipping in most jurisdictions)
         tax_amount = (subtotal * Decimal(str(tax_rate))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         logger.info(f"Tax calculation", metadata={
@@ -593,11 +546,7 @@ class OrderService:
         background_tasks: BackgroundTasks,
         idempotency_key: Optional[str] = None
     ) -> OrderResponse:
-        """
-        Create (place) an order with comprehensive validation and security checks.
-        This is the single order-creation path - both POST /orders/ and
-        POST /orders/checkout/ call this method.
-        """
+        """Create an order with full validation; the single path both checkout endpoints call."""
         logger.info(f"Processing order for user {user_id}")
         
         # Step 1: Comprehensive validation
@@ -1279,9 +1228,8 @@ class OrderService:
             try:
                 order.total_amount = corrected_total
                 await self.db.commit()
-                # updated_at is DB-computed (onupdate=func.now()), so it's always
-                # marked stale after this UPDATE regardless of expire_on_commit -
-                # refresh now, before the plain attribute reads below.
+                # updated_at is DB-computed and stale after this UPDATE regardless
+                # of expire_on_commit, so refresh before the plain reads below.
                 await self.db.refresh(order)
                 logger.info(f"✅ Updated order {order.id} total in database to ${corrected_total:.2f}")
             except Exception as e:
@@ -1337,10 +1285,7 @@ class OrderService:
         )
 
     async def _validate_and_recalculate_prices(self, cart) -> Dict[str, Any]:
-        """
-        CRITICAL SECURITY: Validate all prices against current database prices
-        Never trust frontend prices - always recalculate on backend
-        """
+        """Security-critical: validate all prices against the DB; never trust frontend prices."""
         try:
             validated_items = []
             total_discrepancies = []
@@ -1410,10 +1355,8 @@ class OrderService:
             # Calculate backend subtotal
             backend_subtotal = sum(item["backend_total"] for item in validated_items)
             
-            # If there are price discrepancies, we can either:
-            # 1. Reject the order (strict security)
-            # 2. Accept with backend prices (user-friendly)
-            # For security, we'll log discrepancies but use backend prices
+            # For security, log any price discrepancies but proceed using backend prices
+            # (rather than rejecting the order outright).
             
             if total_discrepancies:
                 logger.warning(
@@ -1446,10 +1389,7 @@ class OrderService:
         shipping_address,
         promocode=None
     ) -> Dict[str, float]:
-        """
-        Calculate final order total with shipping, taxes, and discounts
-        All calculations done on backend - never trust frontend
-        """
+        """Calculate the final order total (shipping, tax, discounts) on the backend."""
         try:
             # Calculate subtotal from validated backend prices
             subtotal = sum(item["backend_total"] for item in validated_items)
@@ -1514,10 +1454,7 @@ class OrderService:
         return min(discount, subtotal)
 
     async def _get_tax_rate(self, shipping_address) -> float:
-        """
-        Get tax rate from database based on shipping address
-        Returns 0.0 if no tax rate is found in database
-        """
+        """Get tax rate for the shipping address; returns 0.0 if none is found."""
         try:
             if not shipping_address:
                 logger.info("No shipping address provided, using 0.0 tax rate")
@@ -1801,10 +1738,8 @@ class OrderService:
             if not original_order:
                 raise HTTPException(status_code=404, detail="Original order not found")
 
-            # Snapshot before clear_cart() - it expires every object in the
-            # session (not just the cart), which would otherwise strand this
-            # loop trying to lazy-load original_order.items outside a safe
-            # async context.
+            # Snapshot before clear_cart(): it expires every object in the session,
+            # which would strand this loop trying to lazy-load items later.
             original_items = [(item.variant_id, item.quantity) for item in original_order.items]
 
             # Clear user's current cart
