@@ -6,9 +6,7 @@ from decimal import Decimal
 from datetime import date, datetime
 
 
-# ============================================================================
-# Cart Service Types
-# ============================================================================
+# --- Cart Service Types ---
 
 class CartValidationResult(TypedDict, total=False):
     """Result of cart validation with detailed information"""
@@ -19,9 +17,7 @@ class CartValidationResult(TypedDict, total=False):
     summary: Dict[str, Any]
 
 
-# ============================================================================
-# Order Service Types
-# ============================================================================
+# --- Order Service Types ---
 
 class PricingCalculationResult(TypedDict, total=False):
     """Result of comprehensive pricing calculation"""
@@ -35,9 +31,7 @@ class PricingCalculationResult(TypedDict, total=False):
     breakdown: Dict[str, Any]
 
 
-# ============================================================================
-# Discount Service Types
-# ============================================================================
+# --- Discount Service Types ---
 
 class DiscountValidationResult(TypedDict, total=False):
     """Result of discount validation"""
@@ -53,9 +47,7 @@ class DiscountCalculationResult(TypedDict, total=False):
     discount_type: str
 
 
-# ============================================================================
-# Export Service Types
-# ============================================================================
+# --- Export Service Types ---
 
 class ExportFilters(TypedDict, total=False):
     """Filters for export data"""
@@ -76,9 +68,7 @@ class ExportResult(TypedDict, total=False):
     generated_at: datetime
 
 
-# ============================================================================
-# Template Service Types
-# ============================================================================
+# --- Template Service Types ---
 
 class RenderedTemplate(TypedDict, total=False):
     """Result of template rendering"""

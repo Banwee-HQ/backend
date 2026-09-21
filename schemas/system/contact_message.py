@@ -1,7 +1,4 @@
-"""
-Contact Message Schemas
-Pydantic schemas for contact message validation
-"""
+"""Pydantic schemas for contact message validation."""
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
