@@ -86,13 +86,30 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Create a fresh database session for each test."""
-    async with TestingSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.rollback()
-            await session.close()
+    """Create a fresh database session for each test.
+
+    Runs the whole test inside one outer transaction on a dedicated connection,
+    with the session itself joined to it via a SAVEPOINT (join_transaction_mode=
+    "create_savepoint"). Application code under test routinely calls session.commit()
+    as part of its real behavior (e.g. SubscriptionService.create()) - with a plain
+    session that would durably persist everything flushed so far in this session,
+    including "test-only" fixture rows a test never intended to keep, leaking them
+    into the shared test DB for other tests to trip over. With this join mode, an
+    internal commit only ends the SAVEPOINT (a new one starts automatically), so
+    nothing durably commits until the outer transaction does - and it never does:
+    the connection is rolled back at teardown no matter what the code under test did.
+    """
+    async with test_engine.connect() as connection:
+        await connection.begin()
+        async with AsyncSession(
+            bind=connection, expire_on_commit=False, autoflush=False,
+            join_transaction_mode="create_savepoint",
+        ) as session:
+            try:
+                yield session
+            finally:
+                await session.close()
+        await connection.rollback()
 
 
 @pytest_asyncio.fixture(scope="function")

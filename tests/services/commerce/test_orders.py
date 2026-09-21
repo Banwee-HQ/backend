@@ -26,7 +26,7 @@ from schemas.commerce.orders import Checkout
 from models.commerce.discounts import DiscountType
 from models.catalog.category import Category
 from models.catalog.product import Product, ProductVariant
-from models.catalog.inventories import Inventory
+from models.catalog.inventories import Inventory, StockAdjustment
 from models.commerce.cart import Cart, CartItem
 from models.accounts.user import Address, User, UserRole
 from models.commerce.shipping import ShippingMethod
@@ -306,20 +306,33 @@ class TestCreate:
         await db_session.refresh(inventory)
         assert inventory.quantity_available == 1
 
-    async def test_concurrent_checkouts_for_the_last_unit_do_not_oversell(
-        self, db_session, variant, address, shipping_method, mocker
-    ):
+    async def test_concurrent_checkouts_for_the_last_unit_do_not_oversell(self, mocker):
         """True concurrency test: two independent sessions race to buy the last unit
         of stock at the same time. The row lock in adjust_stock() must serialize them -
-        exactly one order succeeds, the other fails cleanly, and stock never goes negative."""
-        inventory_result = await db_session.execute(
-            select(Inventory).where(Inventory.variant_id == variant.id)
-        )
-        inventory = inventory_result.scalar_one()
-        inventory.quantity_available = 1
-        await db_session.commit()
+        exactly one order succeeds, the other fails cleanly, and stock never goes negative.
+
+        Setup uses its own genuinely-committed connection rather than the db_session
+        fixture: db_session runs each test in a SAVEPOINT for isolation, which the
+        independent racer connections below (real concurrency needs real separate
+        connections) can never see.
+        """
+        variant_id, product_id, category_id, shipping_method_id = uuid7(), uuid7(), uuid7(), uuid7()
+        async with TestingSessionLocal() as setup_session:
+            setup_session.add_all([
+                Category(id=category_id, name="Cat", slug=f"cat-{uuid4().hex[:8]}"),
+                Product(id=product_id, name="Widget", slug=f"widget-{uuid4().hex[:8]}", category_id=category_id),
+            ])
+            await setup_session.flush()
+            setup_session.add_all([
+                ProductVariant(id=variant_id, product_id=product_id, sku=f"SKU-{uuid4().hex[:8]}", name="Default", base_price=Decimal("19.99")),
+                ShippingMethod(id=shipping_method_id, name="Standard", price=Decimal("10.00"), estimated_days=5, is_active=True),
+            ])
+            await setup_session.flush()
+            setup_session.add(Inventory(id=uuid7(), variant_id=variant_id, quantity_available=1))
+            await setup_session.commit()
 
         password_manager = PasswordManager()
+        racer_user_ids = []
 
         async def make_racer(session):
             user = User(
@@ -328,6 +341,7 @@ class TestCreate:
                 firstname="Racer", lastname="User", role=UserRole.CUSTOMER,
                 account_status="active", verification_status="verified",
             )
+            racer_user_ids.append(user.id)
             session.add(user)
             await session.flush()
 
@@ -345,15 +359,15 @@ class TestCreate:
             await session.flush()
 
             cart_item = CartItem(
-                id=uuid7(), cart_id=cart.id, product_id=variant.product_id, variant_id=variant.id,
-                quantity=1, price_per_unit=variant.base_price,
+                id=uuid7(), cart_id=cart.id, product_id=product_id, variant_id=variant_id,
+                quantity=1, price_per_unit=Decimal("19.99"),
             )
             session.add(cart_item)
             await session.commit()
 
             checkout = Checkout(
                 shipping_address_id=racer_address.id,
-                shipping_method_id=shipping_method.id,
+                shipping_method_id=shipping_method_id,
                 payment_method_id=payment_method.id,
             )
             return user, checkout
@@ -363,24 +377,49 @@ class TestCreate:
             return_value={"status": "succeeded"},
         )
 
-        async with TestingSessionLocal() as session_a, TestingSessionLocal() as session_b:
-            user_a, checkout_a = await make_racer(session_a)
-            user_b, checkout_b = await make_racer(session_b)
+        try:
+            async with TestingSessionLocal() as session_a, TestingSessionLocal() as session_b:
+                user_a, checkout_a = await make_racer(session_a)
+                user_b, checkout_b = await make_racer(session_b)
 
-            results = await asyncio.gather(
-                OrderService(session_a).create(user_a.id, checkout_a, BackgroundTasks()),
-                OrderService(session_b).create(user_b.id, checkout_b, BackgroundTasks()),
-                return_exceptions=True,
-            )
+                results = await asyncio.gather(
+                    OrderService(session_a).create(user_a.id, checkout_a, BackgroundTasks()),
+                    OrderService(session_b).create(user_b.id, checkout_b, BackgroundTasks()),
+                    return_exceptions=True,
+                )
 
-        successes = [r for r in results if not isinstance(r, Exception)]
-        failures = [r for r in results if isinstance(r, Exception)]
-        assert len(successes) == 1, f"expected exactly one winner, got: {results}"
-        assert len(failures) == 1
-        assert "Insufficient stock" in str(getattr(failures[0], "message", failures[0]))
+            successes = [r for r in results if not isinstance(r, Exception)]
+            failures = [r for r in results if isinstance(r, Exception)]
+            assert len(successes) == 1, f"expected exactly one winner, got: {results}"
+            assert len(failures) == 1
+            assert "Insufficient stock" in str(getattr(failures[0], "message", failures[0]))
 
-        await db_session.refresh(inventory)
-        assert inventory.quantity_available == 0
+            async with TestingSessionLocal() as check_session:
+                result = await check_session.execute(select(Inventory).where(Inventory.variant_id == variant_id))
+                assert result.scalar_one().quantity_available == 0
+        finally:
+            async with TestingSessionLocal() as cleanup_session:
+                await cleanup_session.execute(StockAdjustment.__table__.delete().where(
+                    StockAdjustment.inventory_id.in_(select(Inventory.id).where(Inventory.variant_id == variant_id))
+                ))
+                for user_id in racer_user_ids:
+                    await cleanup_session.execute(OrderItem.__table__.delete().where(
+                        OrderItem.order_id.in_(select(Order.id).where(Order.user_id == user_id))
+                    ))
+                    await cleanup_session.execute(Order.__table__.delete().where(Order.user_id == user_id))
+                    await cleanup_session.execute(CartItem.__table__.delete().where(
+                        CartItem.cart_id.in_(select(Cart.id).where(Cart.user_id == user_id))
+                    ))
+                    await cleanup_session.execute(Cart.__table__.delete().where(Cart.user_id == user_id))
+                    await cleanup_session.execute(PaymentMethod.__table__.delete().where(PaymentMethod.user_id == user_id))
+                    await cleanup_session.execute(Address.__table__.delete().where(Address.user_id == user_id))
+                    await cleanup_session.execute(User.__table__.delete().where(User.id == user_id))
+                await cleanup_session.execute(Inventory.__table__.delete().where(Inventory.variant_id == variant_id))
+                await cleanup_session.execute(ShippingMethod.__table__.delete().where(ShippingMethod.id == shipping_method_id))
+                await cleanup_session.execute(ProductVariant.__table__.delete().where(ProductVariant.id == variant_id))
+                await cleanup_session.execute(Product.__table__.delete().where(Product.id == product_id))
+                await cleanup_session.execute(Category.__table__.delete().where(Category.id == category_id))
+                await cleanup_session.commit()
 
 
 # ---------------------------------------------------------------------------

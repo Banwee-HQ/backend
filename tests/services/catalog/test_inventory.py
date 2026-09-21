@@ -16,7 +16,7 @@ from services.catalog.inventory import InventoryService
 from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
 from models.catalog.category import Category
 from models.catalog.product import Product, ProductVariant
-from models.catalog.inventories import Inventory
+from models.catalog.inventories import Inventory, StockAdjustment
 from tests.conftest import TestingSessionLocal
 
 
@@ -96,37 +96,63 @@ class TestAdjustStock:
             )
         assert exc_info.value.status_code == 404
 
-    async def test_concurrent_adjustments_for_the_last_unit_do_not_oversell(self, db_session, variant):
+    async def test_concurrent_adjustments_for_the_last_unit_do_not_oversell(self):
         """Regression test for the identity-map staleness bug: an earlier, unlocked
         read of the same Inventory row in a session (e.g. check_stock) must not cause
         a later locked read (get_with_lock, used by adjust_stock) to hand back stale
-        in-memory data once the lock is actually acquired."""
-        inventory_result = await db_session.execute(
-            select(Inventory).where(Inventory.variant_id == variant.id)
-        )
-        inventory = inventory_result.scalar_one()
-        inventory.quantity_available = 1
-        await db_session.commit()
+        in-memory data once the lock is actually acquired.
 
-        async def racer(session):
-            service = InventoryService(session)
-            # Mirror the real checkout path: an earlier, unlocked stock check on the
-            # same row before the locked adjustment.
-            await service.check_stock(variant.id, 1)
-            return await service.adjust_stock(
-                StockAdjustmentCreate(variant_id=variant.id, quantity_change=-1, reason="race"),
-            )
+        Setup uses its own genuinely-committed connection rather than the db_session
+        fixture: db_session runs each test in a SAVEPOINT for isolation, which the
+        independent racer connections below (real concurrency needs real separate
+        connections) can never see - a plain commit() there wouldn't leave the DB
+        table itself unwritten from those connections' point of view.
+        """
+        variant_id = uuid7()
+        async with TestingSessionLocal() as setup_session:
+            category = Category(id=uuid7(), name="Cat", slug=f"cat-{uuid4().hex[:8]}")
+            product = Product(id=uuid7(), name="Widget", slug=f"widget-{uuid4().hex[:8]}", category_id=category.id)
+            v = ProductVariant(id=variant_id, product_id=product.id, sku=f"SKU-{uuid4().hex[:8]}", name="Default", base_price=Decimal("19.99"))
+            setup_session.add_all([category, product, v])
+            await setup_session.flush()
+            setup_session.add(Inventory(id=uuid7(), variant_id=variant_id, quantity_available=1))
+            await setup_session.commit()
 
-        async with TestingSessionLocal() as session_a, TestingSessionLocal() as session_b:
-            results = await asyncio.gather(
-                racer(session_a), racer(session_b), return_exceptions=True,
-            )
+        try:
+            async def racer(session):
+                service = InventoryService(session)
+                # Mirror the real checkout path: an earlier, unlocked stock check on the
+                # same row before the locked adjustment.
+                await service.check_stock(variant_id, 1)
+                return await service.adjust_stock(
+                    StockAdjustmentCreate(variant_id=variant_id, quantity_change=-1, reason="race"),
+                )
 
-        successes = [r for r in results if not isinstance(r, Exception)]
-        failures = [r for r in results if isinstance(r, Exception)]
-        assert len(successes) == 1, f"expected exactly one winner, got: {results}"
-        assert len(failures) == 1
-        assert "Insufficient stock" in getattr(failures[0], "message", str(failures[0]))
+            async with TestingSessionLocal() as session_a, TestingSessionLocal() as session_b:
+                results = await asyncio.gather(
+                    racer(session_a), racer(session_b), return_exceptions=True,
+                )
 
-        await db_session.refresh(inventory)
-        assert inventory.quantity_available == 0
+            successes = [r for r in results if not isinstance(r, Exception)]
+            failures = [r for r in results if isinstance(r, Exception)]
+            assert len(successes) == 1, f"expected exactly one winner, got: {results}"
+            assert len(failures) == 1
+            assert "Insufficient stock" in getattr(failures[0], "message", str(failures[0]))
+
+            async with TestingSessionLocal() as check_session:
+                result = await check_session.execute(select(Inventory).where(Inventory.variant_id == variant_id))
+                assert result.scalar_one().quantity_available == 0
+        finally:
+            async with TestingSessionLocal() as cleanup_session:
+                await cleanup_session.execute(
+                    StockAdjustment.__table__.delete().where(
+                        StockAdjustment.inventory_id.in_(
+                            select(Inventory.id).where(Inventory.variant_id == variant_id)
+                        )
+                    )
+                )
+                await cleanup_session.execute(Inventory.__table__.delete().where(Inventory.variant_id == variant_id))
+                await cleanup_session.execute(ProductVariant.__table__.delete().where(ProductVariant.id == variant_id))
+                await cleanup_session.execute(Product.__table__.delete().where(Product.id == product.id))
+                await cleanup_session.execute(Category.__table__.delete().where(Category.id == category.id))
+                await cleanup_session.commit()
