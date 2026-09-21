@@ -1,7 +1,4 @@
-"""
-Subscription Scheduler Service
-Handles automatic creation of orders for periodic shipments
-"""
+"""Subscription scheduler: automatic order creation for periodic shipments."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
@@ -58,10 +55,8 @@ class SubscriptionScheduler:
         )
         
         due_subscriptions = result.scalars().all()
-        # Captured now, while nothing in this batch has failed yet - a
-        # sibling's rollback later in the loop expires every attribute on
-        # every object already loaded in this shared session, including
-        # .id on subscriptions still waiting to be processed.
+        # Captured now: a sibling's rollback later in the loop expires every
+        # attribute on every object in this shared session, including .id.
         due_ids = [s.id for s in due_subscriptions]
 
         processed_count = 0
@@ -107,10 +102,8 @@ class SubscriptionScheduler:
     async def process_subscription(self, subscription_id: UUID) -> Dict[str, Any]:
         """Process a single subscription - payment first, then order"""
         try:
-            # Always fetch fresh rather than trust a caller-held reference -
-            # in process_due_subscriptions()'s loop, a sibling subscription's
-            # rollback expires every attribute on every object already
-            # loaded in this shared session, including ones not yet processed.
+            # Always fetch fresh: in the batch loop, a sibling's rollback expires
+            # every attribute on every object already loaded in this session.
             result = await self.db.execute(
                 select(Subscription).where(Subscription.id == subscription_id).options(
                     selectinload(Subscription.shipping_method),
@@ -173,9 +166,7 @@ class SubscriptionScheduler:
             # Use the implemented method name to recalculate pricing
             pricing = await subscription_service.recalc_pricing(subscription)
             
-            # ========================================
-            # STEP 1: PROCESS PAYMENT FIRST
-            # ========================================
+            # --- STEP 1: PROCESS PAYMENT FIRST ---
             from services.commerce.payments import PaymentService
             
             # Get user's default payment method
@@ -196,10 +187,8 @@ class SubscriptionScheduler:
             order_number = await self._generate_order_number()
             order_id = uuid7()
 
-            # PaymentIntent.order_id is a real FK to orders.id, so the order
-            # has to exist before process_idempotent() can reference it -
-            # insert a placeholder now (same pattern OrderService.create()
-            # uses) and fill in the real totals/status once payment succeeds.
+            # PaymentIntent.order_id is a real FK, so insert a placeholder order now
+            # (same pattern as OrderService.create()) and fill in totals after payment.
             shipping_address = await self._get_shipping_address(subscription)
             order = Order(
                 id=order_id,
@@ -294,9 +283,7 @@ class SubscriptionScheduler:
             
             logger.info(f"✅ Payment succeeded for subscription {subscription.id}, creating order...")
 
-            # ========================================
-            # STEP 2: FINALIZE ORDER (only after successful payment)
-            # ========================================
+            # --- STEP 2: FINALIZE ORDER (only after successful payment) ---
 
             # Get quantities
             variant_quantities = subscription.subscription_metadata.get("variant_quantities", {}) if subscription.subscription_metadata else {}
@@ -312,9 +299,7 @@ class SubscriptionScheduler:
             order.shipping_method = subscription.shipping_method.name if subscription.shipping_method else "standard"
             await self.db.flush()
             
-            # ========================================
-            # STEP 3: CREATE ORDER ITEMS
-            # ========================================
+            # --- STEP 3: CREATE ORDER ITEMS ---
             for variant_price in pricing["variant_prices"]:
                 variant_id = UUID(variant_price["id"])
                 variant = next((v for v in variants if v.id == variant_id), None)
@@ -335,9 +320,7 @@ class SubscriptionScheduler:
             
             await self.db.flush()
             
-            # ========================================
-            # STEP 4: UPDATE INVENTORY
-            # ========================================
+            # --- STEP 4: UPDATE INVENTORY ---
             from services.catalog.inventory import InventoryService
             from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
             
@@ -360,9 +343,7 @@ class SubscriptionScheduler:
                     commit=False
                 )
             
-            # ========================================
-            # STEP 5: UPDATE SUBSCRIPTION
-            # ========================================
+            # --- STEP 5: UPDATE SUBSCRIPTION ---
             subscription.status = "active"
             subscription.last_payment_error = None
             subscription.payment_retry_count = 0  # Reset retry count on success
@@ -394,9 +375,8 @@ class SubscriptionScheduler:
     async def _generate_order_number(self) -> str:
         """Generate unique order number"""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-        # The first 8 chars of a UUID7 are its millisecond timestamp, not
-        # random - two calls close together (e.g. a batch run) would produce
-        # near-identical prefixes here. Use the random tail instead.
+        # The first 8 chars of a UUID7 are its timestamp, not random, so a batch
+        # run would produce near-identical prefixes; use the random tail instead.
         short_uuid = str(uuid7()).replace('-', '')[-8:].upper()
         return f"SUB-{timestamp}-{short_uuid}"
     
@@ -441,9 +421,7 @@ class SubscriptionScheduler:
             # This automatically handles 28, 29, 30, 31 day months
             next_period_end = current_period_end + relativedelta(months=1)
             
-            # Example: Jan 31 + 1 month = Feb 28/29 (last day of Feb)
-            # Example: Jan 30 + 1 month = Feb 28/29 (last day of Feb)
-            # Example: Mar 31 + 1 month = Apr 30 (last day of Apr)
+            # e.g. Jan 31 + 1 month = Feb 28/29; Mar 31 + 1 month = Apr 30.
         
         subscription.current_period_start = current_period_end
         subscription.current_period_end = next_period_end
