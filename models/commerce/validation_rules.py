@@ -53,8 +53,8 @@ class TaxValidationRule(Base):
         if not self.is_active:
             return 0.0
         
-        calculated_tax = amount * self.tax_rate
-        return max(calculated_tax, self.minimum_tax)
+        calculated_tax = amount * float(self.tax_rate)
+        return max(calculated_tax, float(self.minimum_tax))
 
 
 class ShippingValidationRule(Base):
@@ -109,8 +109,8 @@ class ShippingValidationRule(Base):
             return 0.0
         
         # Simple calculation: base rate + weight-based adjustment
-        calculated_shipping = self.base_rate + (weight * 0.5)  # $0.50 per kg
-        return max(calculated_shipping, self.minimum_shipping)
+        calculated_shipping = float(self.base_rate) + (weight * 0.5)  # $0.50 per kg
+        return max(calculated_shipping, float(self.minimum_shipping))
 
     def applies_to_weight(self, weight: float) -> bool:
         """Check if this rule applies to the given weight"""
