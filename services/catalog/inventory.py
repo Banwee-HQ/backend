@@ -822,10 +822,7 @@ class InventoryService:
         self,
         requests: List[Dict[str, Any]]
     ) -> Dict[UUID, Dict[str, Any]]:
-        """
-        Check stock for multiple (variant_id, quantity) pairs in a single query,
-        keyed by variant_id. Avoids one round-trip per item when validating a whole cart.
-        """
+        """Check stock for multiple variant/quantity pairs in one query, keyed by variant_id."""
         variant_ids = [r["variant_id"] for r in requests]
         if not variant_ids:
             return {}
@@ -870,10 +867,7 @@ class InventoryService:
         quantity: int,
         location_id: Optional[UUID] = None
     ) -> Dict[str, Any]:
-        """
-        Check if sufficient stock is available for purchase
-        Returns availability status and current stock levels
-        """
+        """Check if sufficient stock is available; returns availability and current levels."""
         try:
             # Find inventory item
             query = select(Inventory).where(Inventory.variant_id == variant_id)
@@ -1130,11 +1124,8 @@ class InventoryService:
             notes=f"Stock restored from cancelled order {order_id}" if order_id else "Stock restored from cancellation"
         )
 
-        # flush, don't commit: every caller (order cancellation, refund auto-approval,
-        # payment failure handling) manages its own larger transaction around this
-        # call - committing here silently finalized (and desynced) that transaction
-        # out from under the caller, which is what made refund auto-approval corrupt
-        # its own not-yet-committed Refund record.
+        # flush, don't commit: callers manage their own larger transaction around this
+        # call, and committing here previously corrupted refund auto-approval's Refund record.
         await self.db.flush()
 
         logger.info(f"Atomically incremented stock for variant {variant_id}: +{quantity}")
@@ -1226,10 +1217,7 @@ class InventoryService:
         order_id: Optional[str] = None,
         user_id: Optional[str] = None
     ):
-        """
-        Log inventory changes if logging is enabled
-        Uses unified logging system with settings check
-        """
+        """Log inventory changes via the unified logging system."""
         try:
             logger.info(
                 f"Inventory Change: Action={action}, InventoryID={inventory_id}, VariantID={variant_id}, "
@@ -1241,10 +1229,7 @@ class InventoryService:
             # Don't raise exception as logging failures shouldn't break inventory operations
 
     async def sync(self, product_id: Optional[UUID] = None) -> Dict[str, Any]:
-        """
-        Sync product availability_status based on inventory levels.
-        If product_id is provided, sync only that product. Otherwise sync all products.
-        """
+        """Sync availability_status from inventory levels, for one product or all."""
         try:
             if product_id:
                 # Sync single product

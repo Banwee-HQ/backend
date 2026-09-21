@@ -1,7 +1,4 @@
-"""
-Smart Product Recommendations Service
-Uses complementary (cross-sell), similar (alternative), and behavioral (social proof) algorithms
-"""
+"""Recommendations: complementary (cross-sell), similar (alternative), behavioral (social proof)."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, desc
 from sqlalchemy.orm import selectinload
@@ -20,12 +17,7 @@ logger = get_structured_logger(__name__)
 
 
 class RecommendationService:
-    """
-    Smart recommendation engine using multiple algorithms:
-    1. Complementary (Cross-sell): Products frequently bought together
-    2. Similar (Alternative): Products in same category with similar attributes
-    3. Behavioral (Social proof): Popular products based on orders and reviews
-    """
+    """Combines complementary (cross-sell), similar (alternative), and behavioral scores."""
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -45,10 +37,7 @@ class RecommendationService:
         product_id: UUID, 
         limit: int = 4
     ) -> List[ProductResponse]:
-        """
-        Get smart product recommendations using all three algorithms.
-        Returns top N products ranked by combined score.
-        """
+        """Get top N recommendations, ranked by combined algorithm score."""
         try:
             # Get the source product
             product_query = select(Product).where(Product.id == product_id)
@@ -101,10 +90,7 @@ class RecommendationService:
         product_id: UUID, 
         limit: int
     ) -> List[Tuple[UUID, float]]:
-        """
-        Algorithm 1: Complementary Products (Cross-sell)
-        Find products frequently bought together with this product.
-        """
+        """Complementary (cross-sell): products frequently bought together with this one."""
         try:
             # Find orders containing this product
             orders_with_product = (
@@ -154,10 +140,7 @@ class RecommendationService:
         source_product: Product, 
         limit: int
     ) -> List[Tuple[UUID, float]]:
-        """
-        Algorithm 2: Similar Products (Alternative)
-        Find products in same category with similar price range and attributes.
-        """
+        """Similar (alternative): products in the same category with similar price/attributes."""
         try:
             # Get source product's price range
             source_variants = await self.db.execute(
@@ -220,10 +203,7 @@ class RecommendationService:
         product_id: UUID, 
         limit: int
     ) -> List[Tuple[UUID, float]]:
-        """
-        Algorithm 3: Behavioral Products (Social Proof)
-        Find popular products based on recent orders and high ratings.
-        """
+        """Behavioral (social proof): popular products from recent orders and high ratings."""
         try:
             # Get source product's category
             product_query = select(Product.category_id).where(Product.id == product_id)
@@ -378,10 +358,7 @@ class RecommendationService:
         source_product: Product,
         limit: int
     ) -> List[ProductResponse]:
-        """
-        Fallback: Simple category-based recommendations.
-        If no products in same category, return any active products.
-        """
+        """Fallback: same-category products, or any active products if none match."""
         try:
             # First try products in the same category
             query = select(Product).options(

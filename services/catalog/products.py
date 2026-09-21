@@ -425,12 +425,7 @@ class ProductService:
         return [self._convert_product_to_response(product) for product in products]
 
     async def recommended(self, product_id: UUID, limit: int = 4) -> List[ProductResponse]:
-        """
-        Get smart product recommendations using multiple algorithms:
-        - Complementary (cross-sell): Products frequently bought together
-        - Similar (alternative): Same category, similar price range
-        - Behavioral (social proof): Popular based on orders and reviews
-        """
+        """Get smart recommendations (complementary, similar, behavioral); see RecommendationService."""
         from services.catalog.recommendations import RecommendationService
         
         recommendation_service = RecommendationService(self.db)
@@ -702,10 +697,8 @@ class ProductService:
 
         # Create variants
         for v_idx, variant_data in enumerate(variants_to_create):
-            # Auto-generate SKU: {name prefix}-{product_id entropy}-{variant_index}
-            # uuid7's leading bits are a millisecond timestamp shared by everything created in the
-            # same ~minute, so any two products would collide there - use the trailing (random) hex
-            # instead, which is what actually distinguishes IDs created close together.
+            # uuid7's leading bits are a shared timestamp, not random, so use the
+            # trailing hex, which actually distinguishes IDs created close together.
             product_prefix = db_product.name[:3].upper().replace(' ', '')
             auto_sku = f"{product_prefix}-{str(db_product.id).replace('-', '')[-8:]}-{v_idx}"
             final_sku = variant_data.sku if variant_data.sku else auto_sku
@@ -1134,9 +1127,7 @@ class ProductService:
         await self.db.delete(product)
         await self.db.commit()
 
-    # ==========================================================
-    # VARIANT IMAGE CRUD
-    # ==========================================================
+    # --- Variant image CRUD ---
     async def create_image(self, variant_id: UUID, url: str, alt_text: Optional[str] = None,
                           is_primary: bool = False, sort_order: int = 0) -> dict:
         """Create a new image for a variant"""
