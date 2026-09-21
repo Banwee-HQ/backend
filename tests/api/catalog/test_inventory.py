@@ -116,6 +116,49 @@ class TestInventoryItemEndpoints:
         response = await async_client.get("/v1/inventory/?low_stock=true", headers=admin_headers)
         assert response.status_code == 200
 
+    async def test_get_by_id(self, async_client: AsyncClient, admin_headers, created_variant):
+        """GET /v1/inventory/{id} - Get a specific inventory row by its own id."""
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        inventory_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.get(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == inventory_id
+
+    async def test_get_by_id_not_found(self, async_client: AsyncClient, admin_headers):
+        """GET /v1/inventory/{id} - Unknown ID returns 404."""
+        response = await async_client.get(f"/v1/inventory/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_update_as_admin(self, async_client: AsyncClient, admin_headers, created_variant):
+        """PATCH /v1/inventory/{id} - Update quantity/threshold (admin)."""
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        inventory_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.patch(f"/v1/inventory/{inventory_id}/",
+            headers=admin_headers, json={"quantity": 42, "low_stock_threshold": 5})
+        assert response.status_code == 200
+
+    async def test_update_requires_admin(self, async_client: AsyncClient, auth_headers, admin_headers, created_variant):
+        """PATCH /v1/inventory/{id} - Non-admin is forbidden."""
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        inventory_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.patch(f"/v1/inventory/{inventory_id}/",
+            headers=auth_headers, json={"quantity": 1})
+        assert response.status_code == 403
+
+    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, created_variant):
+        """DELETE /v1/inventory/{id} - Delete an inventory row (admin)."""
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        inventory_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.delete(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
+        assert response.status_code == 200
+
+        get_after = await async_client.get(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
+        assert get_after.status_code == 404
+
 
 @pytest.mark.api
 @pytest.mark.inventory
@@ -145,6 +188,38 @@ class TestAdjustmentEndpoints:
         """GET /v1/inventory/adjustments/ - Admin can list adjustments."""
         response = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
         assert response.status_code == 200
+
+    async def test_get_by_id(self, async_client: AsyncClient, admin_headers, created_variant):
+        """GET /v1/inventory/adjustments/{id} - Get a specific adjustment."""
+        await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json={
+            "variant_id": created_variant["id"], "quantity_change": 5, "reason": "Restock"
+        })
+        listed = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
+        adjustment_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.get(f"/v1/inventory/adjustments/{adjustment_id}/", headers=admin_headers)
+        assert response.status_code == 200
+
+    async def test_get_by_id_not_found(self, async_client: AsyncClient, admin_headers):
+        """GET /v1/inventory/adjustments/{id} - Unknown ID returns 404."""
+        response = await async_client.get(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, created_variant):
+        """DELETE /v1/inventory/adjustments/{id} - Delete an adjustment (admin)."""
+        await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json={
+            "variant_id": created_variant["id"], "quantity_change": 5, "reason": "Restock"
+        })
+        listed = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
+        adjustment_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.delete(f"/v1/inventory/adjustments/{adjustment_id}/", headers=admin_headers)
+        assert response.status_code == 200
+
+    async def test_delete_not_found(self, async_client: AsyncClient, admin_headers):
+        """DELETE /v1/inventory/adjustments/{id} - Unknown ID returns 404."""
+        response = await async_client.delete(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
 
 
 @pytest.mark.api

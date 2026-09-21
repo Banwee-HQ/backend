@@ -56,6 +56,8 @@ class Update(BaseModel):
 
 
 class Response(Base):
+    # Auto-created inventory (e.g. from a new variant) has no location assigned yet.
+    location_id: Optional[UUID] = None
     id: UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
