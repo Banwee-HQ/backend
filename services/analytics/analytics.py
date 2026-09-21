@@ -81,7 +81,11 @@ class AnalyticsService:
             )
             
             self.db.add(event)
-            
+            # _update_session_metrics() below queries for this same event
+            # (e.g. to detect a just-tracked purchase) - flush explicitly
+            # rather than relying on the session's autoflush setting.
+            await self.db.flush()
+
             # Update session metrics
             await self._update_session_metrics(session_id)
             
@@ -697,27 +701,22 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get comprehensive sales overview data for dashboard"""
         try:
-            # Base query for orders
-            base_query = select(Order).where(
-                and_(
-                    Order.created_at >= start_date,
-                    Order.created_at <= end_date,
-                    Order.order_status.in_(['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PROCESSING'])
-                )
-            )
-            
-            # Apply filters if provided
+            # Build the category filter subquery once, applied to both the
+            # main and previous-period queries below - OrderItem.variant_id
+            # is a ProductVariant, not a Product, so the join has to go
+            # through it.
+            category_filter = None
             if categories:
-                # Filter by product categories through order items
                 category_filter = select(Order.id).join(OrderItem).join(
-                    Product, OrderItem.variant_id == Product.id
+                    ProductVariant, OrderItem.variant_id == ProductVariant.id
+                ).join(
+                    Product, ProductVariant.product_id == Product.id
                 ).where(
                     Product.category_id.in_(
                         select(Category.id).where(Category.slug.in_(categories))
                     )
                 )
-                base_query = base_query.where(Order.id.in_(category_filter))
-            
+
             # Generate time series data based on granularity
             if granularity == "daily":
                 time_format = func.date(Order.created_at)
@@ -742,7 +741,9 @@ class AnalyticsService:
                     Order.order_status.in_(['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PROCESSING'])
                 )
             ).group_by(time_format).order_by(time_format)
-            
+            if category_filter is not None:
+                sales_query = sales_query.where(Order.id.in_(category_filter))
+
             sales_result = await self.db.execute(sales_query)
             
             # Process chart data
@@ -789,7 +790,9 @@ class AnalyticsService:
                     Order.order_status.in_(['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PROCESSING'])
                 )
             )
-            
+            if category_filter is not None:
+                prev_query = prev_query.where(Order.id.in_(category_filter))
+
             prev_result = await self.db.execute(prev_query)
             prev_data = prev_result.first()
             
@@ -1127,7 +1130,7 @@ class AnalyticsService:
             # Product statistics
             total_products = await self.db.scalar(select(func.count(Product.id))) or 0
             active_products = await self.db.scalar(
-                select(func.count(Product.id)).where(Product.product_status == "active")
+                select(func.count(Product.id)).where(Product.product_status == ProductStatus.ACTIVE)
             ) or 0
 
             # Subscription statistics

@@ -1,39 +1,25 @@
 import csv
 import io
-import json
-from typing import List, Dict, Any, Optional
-from datetime import datetime, date
-from decimal import Decimal
+from typing import List, Dict, Any
+from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
-from pydantic import BaseModel
 
 # Import Jinja2
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # WeasyPrint requires system libraries (pango, gobject) — import lazily
 try:
-    from weasyprint import HTML, CSS
+    from weasyprint import HTML
     _WEASYPRINT_AVAILABLE = True
 except OSError:
     HTML = None  # type: ignore
-    CSS = None   # type: ignore
     _WEASYPRINT_AVAILABLE = False
-
-
-from schemas.common.service_types import ExportFilters, ExportResult
 
 
 class ExportService:
     """Consolidated service for exporting data to various formats"""
-    
-    def __init__(self):
-        # Initialize Jinja2 environment for template rendering
-        self.jinja_env = Environment(
-            loader=FileSystemLoader("templates"),
-            autoescape=select_autoescape(["html", "xml"])
-        )
-    
+
     @staticmethod
     def export_orders_to_csv(orders: List[Dict[str, Any]]) -> io.BytesIO:
         """Export orders to CSV format"""
@@ -182,9 +168,9 @@ class ExportService:
                                 <td>${{ "%.2f"|format(order.total_amount) }}</td>
                                 <td>{{ order.created_at[:10] }}</td>
                                 <td>
-                                    {% if order.items %}
+                                    {% if order['items'] %}
                                         <div class="order-items">
-                                            {% for item in order.items %}
+                                            {% for item in order['items'] %}
                                                 <div class="order-item">
                                                     {{ item.variant.product_name }} ({{ item.variant.name }}) - {{ item.quantity }} x ${{ "%.2f"|format(item.price_per_unit) }}
                                                     <div class="order-item-detail">Total: ${{ "%.2f"|format(item.total_price) }}</div>
@@ -238,218 +224,3 @@ class ExportService:
         output = io.BytesIO(pdf_bytes)
         output.seek(0)
         return output
-    
-    # Enhanced export methods for subscriptions and payments
-    
-    async def export_subscription_data(
-        self,
-        subscriptions_data: List[Dict[str, Any]],
-        filters: ExportFilters,
-        format_type: str,
-        template_name: Optional[str] = None
-    ) -> ExportResult:
-        """
-        Export subscription data in various formats
-        
-        Args:
-            subscriptions_data: List of subscription data dictionaries
-            filters: Export filters applied
-            format_type: Output format ("csv", "json", "html")
-            template_name: Optional custom template name
-            
-        Returns:
-            ExportResult with exported content
-        """
-        timestamp = datetime.now()
-        
-        if format_type == "csv":
-            return await self._export_subscriptions_csv(subscriptions_data, filters, timestamp)
-        elif format_type == "json":
-            return await self._export_subscriptions_json(subscriptions_data, filters, timestamp)
-        elif format_type == "html":
-            template = template_name or "exports/subscriptions_export.html"
-            return await self._export_subscriptions_html(subscriptions_data, filters, timestamp, template)
-        else:
-            raise ValueError(f"Unsupported format type: {format_type}")
-    
-    async def _export_subscriptions_csv(
-        self,
-        subscriptions_data: List[Dict[str, Any]],
-        filters: ExportFilters,
-        timestamp: datetime
-    ) -> ExportResult:
-        """Export subscriptions to CSV format"""
-        output = io.StringIO()
-        
-        if not subscriptions_data:
-            output.write("No subscription data to export\n")
-        else:
-            # Define CSV headers
-            headers = [
-                'Subscription ID', 'Customer Name', 'Customer Email', 'Status',
-                'Total Cost', 'Currency', 'Delivery Type', 'Billing Cycle',
-                'Variants', 'Admin Fee', 'Delivery Cost', 'Tax Amount',
-                'Loyalty Discount', 'Created At', 'Next Billing Date'
-            ]
-            
-            writer = csv.DictWriter(output, fieldnames=headers)
-            writer.writeheader()
-            
-            for subscription in subscriptions_data:
-                user = subscription.get('user', {})
-                cost_breakdown = subscription.get('cost_breakdown', {})
-                
-                # Format variants list
-                variants = subscription.get('variants', [])
-                variant_names = [v.get('name', 'Unknown') for v in variants]
-                
-                writer.writerow({
-                    'Subscription ID': subscription.get('id', ''),
-                    'Customer Name': f"{user.get('firstname', '')} {user.get('lastname', '')}".strip(),
-                    'Customer Email': user.get('email', ''),
-                    'Status': subscription.get('status', ''),
-                    'Total Cost': cost_breakdown.get('total_amount', 0),
-                    'Currency': cost_breakdown.get('currency', 'USD'),
-                    'Shipping Method': subscription.get('shipping_method', {}).get('name', '') if subscription.get('shipping_method') else '',
-                    'Billing Cycle': subscription.get('billing_cycle', ''),
-                    'Variants': '; '.join(variant_names),
-                    'Admin Fee': cost_breakdown.get('admin_fee', 0),
-                    'Delivery Cost': cost_breakdown.get('delivery_cost', 0),
-                    'Tax Amount': cost_breakdown.get('tax_amount', 0),
-                    'Loyalty Discount': cost_breakdown.get('loyalty_discount', 0),
-                    'Created At': subscription.get('created_at', ''),
-                    'Next Billing Date': subscription.get('next_billing_date', '')
-                })
-        
-        content = output.getvalue().encode('utf-8')
-        filename = f"subscriptions_export_{timestamp.strftime('%Y%m%d_%H%M%S')}.csv"
-        
-        return ExportResult(
-            content=content,
-            content_type='text/csv',
-            filename=filename,
-            format_type='csv',
-            generated_at=timestamp
-        )
-    
-    async def _export_subscriptions_json(
-        self,
-        subscriptions_data: List[Dict[str, Any]],
-        filters: ExportFilters,
-        timestamp: datetime
-    ) -> ExportResult:
-        """Export subscriptions to JSON format"""
-        
-        # Prepare export metadata
-        export_data = {
-            'metadata': {
-                'generated_at': timestamp.isoformat(),
-                'format': 'json',
-                'filters_applied': filters.dict(exclude_none=True),
-                'total_records': len(subscriptions_data)
-            },
-            'subscriptions': subscriptions_data
-        }
-        
-        # Convert to JSON with proper serialization
-        json_content = json.dumps(export_data, indent=2, default=self._json_serializer)
-        content = json_content.encode('utf-8')
-        filename = f"subscriptions_export_{timestamp.strftime('%Y%m%d_%H%M%S')}.json"
-        
-        return ExportResult(
-            content=content,
-            content_type='application/json',
-            filename=filename,
-            format_type='json',
-            generated_at=timestamp
-        )
-    
-    async def _export_subscriptions_html(
-        self,
-        subscriptions_data: List[Dict[str, Any]],
-        filters: ExportFilters,
-        timestamp: datetime,
-        template_name: str
-    ) -> ExportResult:
-        """Export subscriptions to HTML format using Jinja template"""
-        
-        # Calculate summary statistics
-        total_revenue = sum(
-            sub.get('cost_breakdown', {}).get('total_amount', 0) 
-            for sub in subscriptions_data
-        )
-        
-        active_subscriptions = len([
-            sub for sub in subscriptions_data 
-            if sub.get('status') == 'active'
-        ])
-        
-        context = {
-            'subscriptions': subscriptions_data,
-            'filters': filters.dict(exclude_none=True),
-            'summary': {
-                'total_subscriptions': len(subscriptions_data),
-                'active_subscriptions': active_subscriptions,
-                'total_revenue': total_revenue,
-                'generated_at': timestamp
-            },
-            'company_name': 'Banwee'
-        }
-        
-        try:
-            template = self.jinja_env.get_template(template_name)
-            rendered_content = template.render(context)
-        except Exception:
-            # Fallback to basic HTML if template not found
-            rendered_content = self._generate_basic_html_export(subscriptions_data, "Subscriptions Export")
-        
-        content = rendered_content.encode('utf-8')
-        filename = f"subscriptions_export_{timestamp.strftime('%Y%m%d_%H%M%S')}.html"
-        
-        return ExportResult(
-            content=content,
-            content_type='text/html',
-            filename=filename,
-            format_type='html',
-            generated_at=timestamp
-        )
-    
-    def _json_serializer(self, obj):
-        """JSON serializer for special types"""
-        if isinstance(obj, (datetime, date)):
-            return obj.isoformat()
-        elif isinstance(obj, Decimal):
-            return float(obj)
-        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-    
-    def _generate_basic_html_export(self, data: List[Dict[str, Any]], title: str) -> str:
-        """Generate basic HTML export when template is not available"""
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>{title}</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                table {{ border-collapse: collapse; width: 100%; }}
-                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                th {{ background-color: #f2f2f2; }}
-            </style>
-        </head>
-        <body>
-            <h1>{title}</h1>
-            <p>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            <p>Total records: {len(data)}</p>
-            <table>
-                <tr><th>Data</th></tr>
-        """
-        
-        for item in data:
-            html += f"<tr><td>{str(item)}</td></tr>"
-        
-        html += """
-            </table>
-        </body>
-        </html>
-        """
-        return html
