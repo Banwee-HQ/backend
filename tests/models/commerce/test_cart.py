@@ -40,9 +40,9 @@ class TestCartItemValidation:
     def test_positive_quantity_is_accepted(self):
         assert make_item(1, "1.00").quantity == 1
 
-    def test_zero_quantity_is_rejected(self):
-        with pytest.raises(ValueError):
-            make_item(0, "1.00")
+    def test_zero_quantity_is_accepted(self):
+        # An out-of-stock cart item is capped to 0 by CartService, not rejected.
+        assert make_item(0, "1.00").quantity == 0
 
     def test_negative_quantity_is_rejected(self):
         with pytest.raises(ValueError):

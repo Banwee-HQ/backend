@@ -101,6 +101,18 @@ async def cart_with_item(db_session, test_user, variant) -> Cart:
 
 
 @pytest.fixture
+async def out_of_stock_variant(db_session) -> ProductVariant:
+    category = Category(id=uuid7(), name="Cat", slug=f"cat-{uuid4().hex[:8]}")
+    product = Product(id=uuid7(), name="Sold Out Widget", slug=f"widget-{uuid4().hex[:8]}", category_id=category.id)
+    v = ProductVariant(id=uuid7(), product_id=product.id, sku=f"SKU-{uuid4().hex[:8]}", name="Default", base_price=Decimal("9.99"))
+    db_session.add_all([category, product, v])
+    await db_session.flush()
+    db_session.add(Inventory(id=uuid7(), variant_id=v.id, quantity_available=0))
+    await db_session.commit()
+    return v
+
+
+@pytest.fixture
 def checkout_request(address, shipping_method, payment_method) -> Checkout:
     return Checkout(
         shipping_address_id=address.id,
@@ -268,6 +280,23 @@ class TestValidateCheckout:
 
 class TestCreate:
 
+    async def test_successful_checkout_increments_variant_purchase_count(
+        self, db_session, test_user, variant, cart_with_item, checkout_request, mocker
+    ):
+        """The item bought is the variant, not the parent product - purchase_count lives
+        on ProductVariant and must reflect the quantity actually ordered."""
+        assert variant.purchase_count == 0
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+
+        service = OrderService(db_session)
+        await service.create(test_user.id, checkout_request, BackgroundTasks())
+
+        await db_session.refresh(variant)
+        assert variant.purchase_count == 2  # cart_with_item requests quantity=2
+
     async def test_payment_declined_raises_400(self, db_session, test_user, cart_with_item, checkout_request, mocker):
         mocker.patch(
             "services.commerce.payments.PaymentService.process_idempotent",
@@ -305,6 +334,36 @@ class TestCreate:
 
         await db_session.refresh(inventory)
         assert inventory.quantity_available == 1
+
+    async def test_out_of_stock_item_is_skipped_and_stays_in_cart(
+        self, db_session, test_user, variant, cart_with_item, out_of_stock_variant, checkout_request, mocker
+    ):
+        """A quantity-0 cart item (e.g. from CartService.add_to_cart capping to stock)
+        must not block checkout of the rest of the cart, and must survive it untouched."""
+        cart = cart_with_item
+        oos_item = CartItem(
+            id=uuid7(), cart_id=cart.id, product_id=out_of_stock_variant.product_id,
+            variant_id=out_of_stock_variant.id, quantity=0, price_per_unit=out_of_stock_variant.base_price,
+        )
+        db_session.add(oos_item)
+        await db_session.commit()
+
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, BackgroundTasks())
+
+        assert len(order.items) == 1
+        assert order.items[0].variant_id == variant.id
+
+        remaining = await db_session.execute(select(CartItem).where(CartItem.cart_id == cart.id))
+        remaining_items = remaining.scalars().all()
+        assert len(remaining_items) == 1
+        assert remaining_items[0].variant_id == out_of_stock_variant.id
+        assert remaining_items[0].quantity == 0
 
     async def test_concurrent_checkouts_for_the_last_unit_do_not_oversell(self, mocker):
         """True concurrency test: two independent sessions race to buy the last unit

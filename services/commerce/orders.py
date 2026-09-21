@@ -1,8 +1,11 @@
 """Order service: complete order lifecycle with backend-only price calculations."""
+import re
+import traceback
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, delete, String, text
+from sqlalchemy import select, and_, or_, delete, String, text, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
+from core.exceptions import APIException
 from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus, FulfillmentStatus
 from services.accounts.email import EmailService
 from models.commerce.cart import Cart, CartItem
@@ -260,6 +263,12 @@ class OrderService:
         self.shipping_service = ShippingService(db)
         self.discount_engine = DiscountEngine(db)
 
+    @staticmethod
+    def _orderable_items(cart_items: List[CartItem]) -> List[CartItem]:
+        """Cart items that are actually purchasable now; out-of-stock (quantity 0) or
+        deactivated variants stay in the cart but are skipped at checkout, not blocked."""
+        return [item for item in cart_items if item.quantity > 0 and item.variant and item.variant.is_active]
+
     async def calc_pricing(
         self,
         cart_items: List[CartItem],
@@ -430,22 +439,24 @@ class OrderService:
                 for issue in cart_validation.get('issues'):
                     logger.info(f"Cart issue: {issue}")
             
-            if not cart_validation.get('valid', False):
+            # A cart with one out-of-stock item alongside otherwise-valid items can still
+            # check out (that item is simply skipped) - only block when nothing is purchasable.
+            if not cart_validation.get('can_checkout', False):
                 validation_result['valid'] = False
                 validation_result['can_proceed'] = False
                 validation_result['errors'].extend(cart_validation.get('issues', []))
                 return _clean_result(validation_result)
-            
+
             cart = cart_validation['cart']
-            
-            # Verify cart has items before proceeding
-            if not cart or not hasattr(cart, 'items') or not cart.items:
+            orderable_items = self._orderable_items(cart.items) if cart and hasattr(cart, 'items') else []
+
+            if not orderable_items:
                 validation_result['valid'] = False
                 validation_result['can_proceed'] = False
                 validation_result['errors'].append({
                     'type': 'cart_validation',
-                    'severity': 'error', 
-                    'message': 'Cart has no valid items for checkout'
+                    'severity': 'error',
+                    'message': 'Cart has no items available to checkout'
                 })
                 return _clean_result(validation_result)
             
@@ -496,7 +507,7 @@ class OrderService:
             
             # Step 5: Calculate comprehensive pricing
             pricing = await self.calc_pricing(
-                cart.items,
+                orderable_items,
                 shipping_address,
                 request.shipping_method_id,
                 getattr(request, 'discount_code', None),
@@ -524,7 +535,6 @@ class OrderService:
             return _clean_result(validation_result)
             
         except Exception as e:
-            import traceback
             logger.error(f"Checkout validation failed for user {user_id}: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             validation_result['valid'] = False
@@ -574,12 +584,13 @@ class OrderService:
                 detail="Cart not found"
             )
         
-        if not cart.items:
+        orderable_items = self._orderable_items(cart.items)
+        if not orderable_items:
             raise HTTPException(
                 status_code=400,
-                detail="Cart is empty - no items to checkout"
+                detail="Cart has no items available to checkout"
             )
-        
+
         pricing = validation_result['pricing']
         
         # Step 2: Get addresses and shipping method
@@ -597,9 +608,8 @@ class OrderService:
         try:
             # Generate a temp order id and deterministic order number using it
             temp_order_id = uuid7()  # Temporary ID for payment processing
-            # UUID7's leading hex chars are a shared millisecond timestamp, not random, so
-            # orders created close together (e.g. concurrent checkouts) would get colliding
-            # order_numbers if we sliced from the front - use the trailing (random) hex instead.
+            # UUID7's leading hex chars are a shared timestamp, not random - slice from the
+            # tail so concurrent checkouts don't collide.
             order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[-12:].upper()}"
 
             temp_currency = get_currency_from_address(shipping_address.country) if shipping_address.country else "USD"
@@ -623,13 +633,10 @@ class OrderService:
             self.db.add(placeholder_order)
             await self.db.flush()
 
-            # Step 3: Reserve inventory BEFORE charging payment. adjust_stock() takes a row
-            # lock (SELECT ... FOR UPDATE) and raises on insufficient stock - doing this first
-            # means a losing race for the last unit fails with a clean 400 before any money
-            # moves, instead of charging the card and then rolling back the DB (with no refund
-            # and no order/transaction record) if the decrement fails after payment.
+            # Step 3: Reserve inventory BEFORE charging payment, so a losing race for the
+            # last unit fails cleanly instead of charging the card and rolling back after.
             order_items_list = []
-            for cart_item in cart.items:
+            for cart_item in orderable_items:
                 variant_price = cart_item.variant.sale_price or cart_item.variant.base_price
 
                 order_item = OrderItem(
@@ -642,6 +649,7 @@ class OrderService:
                 )
                 self.db.add(order_item)
                 order_items_list.append(order_item)
+                cart_item.variant.purchase_count = (cart_item.variant.purchase_count or 0) + cart_item.quantity
 
                 adjustment = StockAdjustmentCreate(
                     variant_id=cart_item.variant_id,
@@ -717,7 +725,7 @@ class OrderService:
                             "quantity": cart_item.quantity,
                             "price": float(cart_item.variant.sale_price or cart_item.variant.base_price or 0)
                         }
-                        for cart_item in cart.items
+                        for cart_item in orderable_items
                     ]
                     email_service = EmailService(self.db)
                     background_tasks.add_task(
@@ -733,8 +741,10 @@ class OrderService:
             except Exception as email_error:
                 logger.error(f"Failed to schedule invoice email: {email_error}")
             
-            # Clear cart
-            await self.db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
+            # Clear only the items that were actually ordered - anything skipped for being
+            # out of stock or deactivated stays in the cart for the customer to revisit.
+            ordered_item_ids = [item.id for item in orderable_items]
+            await self.db.execute(delete(CartItem).where(CartItem.id.in_(ordered_item_ids)))
             
             # Explicitly commit the transaction to persist all changes
             await self.db.commit()
@@ -786,7 +796,6 @@ class OrderService:
             # declined payment) instead of masking them as a 500 below.
             raise
         except Exception as e:
-            import traceback
             logger.exception(f"Order creation failed for user {user_id}: {e}\nTraceback: {traceback.format_exc()}")
             # Session will auto-rollback on exception due to the context manager
             raise HTTPException(
@@ -813,8 +822,6 @@ class OrderService:
         sort_order: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get paginated list of orders. If user_id is None, returns all orders (admin)."""
-        from sqlalchemy import func
-        import traceback
 
         try:
             offset = (page - 1) * limit
@@ -924,7 +931,6 @@ class OrderService:
 
     async def get(self, order_id: UUID, user_id: Optional[UUID] = None) -> Optional[OrderResponse]:
         """Get a specific order by ID. If user_id is provided, only return that user's order."""
-        import traceback
         try:
             # Build query - filter by user_id if provided (for regular users), no filter for admins
             if user_id:
@@ -1069,7 +1075,6 @@ class OrderService:
 
         # Auto-populate carrier from ShippingMethod if not provided
         if not carrier_name and order.shipping_method:
-            from models.commerce.shipping import ShippingMethod
             shipping_method_result = await self.db.execute(
                 select(ShippingMethod).where(ShippingMethod.name == order.shipping_method)
             )
@@ -1248,7 +1253,6 @@ class OrderService:
         # Generate tracking URL if tracking number and shipping method exist
         tracking_url = None
         if order.tracking_number and order.shipping_method:
-            from models.commerce.shipping import ShippingMethod
             shipping_method_result = await self.db.execute(
                 select(ShippingMethod).where(ShippingMethod.name == order.shipping_method)
             )
@@ -1398,7 +1402,6 @@ class OrderService:
             shipping_cost = 0.0
             if shipping_method:
                 # Use ShippingService for proper calculation
-                from services.commerce.shipping import ShippingService
                 shipping_service = ShippingService(self.db)
                 
                 # Extract address info for shipping calculation
@@ -1538,7 +1541,6 @@ class OrderService:
         Send order-created side effects (confirmation email) after a successful checkout.
         """
         try:
-            from services.accounts.email import EmailService
 
             # Prepare order items for the email template
             order_items = []
@@ -1583,7 +1585,6 @@ class OrderService:
             raise
     async def tracking(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get order tracking information for authenticated user"""
-        from core.exceptions import APIException
         try:
             # Get order with tracking events
             query = select(Order).where(
@@ -1634,7 +1635,6 @@ class OrderService:
 
     async def payments(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get payment intents and transactions for an order (authenticated, owner only)"""
-        from core.exceptions import APIException
         try:
             query = select(Order).where(
                 and_(Order.id == order_id, Order.user_id == user_id)
@@ -1810,9 +1810,10 @@ class OrderService:
             if not order:
                 raise HTTPException(status_code=404, detail="Order not found")
             
-            # Use invoice generator utility
+            # Local: pulls in WeasyPrint's native cairo/pango deps, so a missing
+            # install only breaks invoicing, not app startup.
             from core.utils.invoice_generator import InvoiceGenerator
-            
+
             invoice_generator = InvoiceGenerator()
             
             # Prepare order data for invoice
@@ -1935,7 +1936,6 @@ class OrderService:
             notes = []
             if order.customer_notes:
                 # Split notes by timestamp pattern
-                import re
                 note_pattern = r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (.*?)(?=\n\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]|$)'
                 matches = re.findall(note_pattern, order.customer_notes, re.DOTALL)
                 
@@ -2104,7 +2104,6 @@ class OrderService:
 
     async def get_statistics(self, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
         """Get order statistics (admin only)."""
-        from sqlalchemy import func
 
         # Build base query
         query = select(Order)

@@ -81,10 +81,8 @@ async def make_stocked_variant(db_session, price=20.0, stock=50, **overrides):
     product = await make_product(db_session)
     variant = await make_variant(db_session, product.id, base_price=price, **overrides)
     await make_inventory(db_session, variant.id, quantity_available=stock)
-    # make_variant's db.refresh() above ran before the Inventory row existed, which
-    # caches variant.inventory = None in the session's identity map - selectinload
-    # on a later query won't overwrite an already-populated relationship attribute
-    # on an identity-map hit, so expire it to force a real reload.
+    # make_variant's refresh above cached variant.inventory = None before this row
+    # existed; expire it so a later query actually reloads the relationship.
     db_session.expire(variant, ["inventory"])
     return product, variant
 
@@ -195,22 +193,27 @@ class TestAddToCart:
             await service.add_to_cart(user.id, variant.id, quantity=1)
         assert exc_info.value.status_code == 400
 
-    async def test_insufficient_stock_raises_400(self, db_session):
+    async def test_quantity_beyond_stock_is_capped_not_rejected(self, db_session):
         user = await make_user(db_session)
         product, variant = await make_stocked_variant(db_session, stock=1)
         service = CartService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.add_to_cart(user.id, variant.id, quantity=5)
-        assert exc_info.value.status_code == 400
+        result = await service.add_to_cart(user.id, variant.id, quantity=5)
+        assert result["items"][0]["quantity"] == 1
 
-    async def test_incrementing_beyond_stock_raises_400(self, db_session):
+    async def test_out_of_stock_item_is_added_with_zero_quantity(self, db_session):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, stock=0)
+        service = CartService(db_session)
+        result = await service.add_to_cart(user.id, variant.id, quantity=1)
+        assert result["items"][0]["quantity"] == 0
+
+    async def test_incrementing_beyond_stock_is_capped_not_rejected(self, db_session):
         user = await make_user(db_session)
         product, variant = await make_stocked_variant(db_session, stock=3)
         service = CartService(db_session)
         await service.add_to_cart(user.id, variant.id, quantity=2)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.add_to_cart(user.id, variant.id, quantity=2)
-        assert exc_info.value.status_code == 400
+        result = await service.add_to_cart(user.id, variant.id, quantity=2)
+        assert result["items"][0]["quantity"] == 3
 
 
 class TestUpdateItem:

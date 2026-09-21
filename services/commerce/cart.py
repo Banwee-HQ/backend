@@ -12,8 +12,10 @@ from core.logging import get_structured_logger
 
 from models.commerce.cart import Cart, CartItem
 from models.catalog.product import ProductVariant
+from models.commerce.shipping import ShippingMethod
 from services.commerce.tax import TaxService
 from services.commerce.promocode import PromocodeService
+from services.catalog.inventory import InventoryService
 from schemas.common.service_types import CartValidationResult
 
 logger = get_structured_logger(__name__)
@@ -353,7 +355,6 @@ class CartService:
             
             # Check stock availability
             try:
-                from services.catalog.inventory import InventoryService
                 inventory_service = InventoryService(self.db)
                 stock_check = await inventory_service.check_stock(item.variant_id, item.quantity)
                 
@@ -462,8 +463,9 @@ class CartService:
         variant_id: UUID,
         quantity: int = 1
     ) -> Dict[str, Any]:
-        """Add item to cart in PostgreSQL"""
-        
+        """Add item to cart. Out-of-stock quantities are capped to what's available (0 if
+        none), not rejected - the item stays in the cart so the customer can see it."""
+
         if not user_id:
             raise HTTPException(status_code=401, detail="User must be authenticated to add items to cart")
 
@@ -477,18 +479,12 @@ class CartService:
             .where(ProductVariant.id == variant_id)
         )
         variant = result.scalar_one_or_none()
-        
+
         if not variant:
             raise HTTPException(status_code=404, detail="Product variant not found")
-        
+
         if not variant.is_active:
             raise HTTPException(status_code=400, detail="Product variant is not available")
-        
-        if variant.stock < quantity:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Insufficient stock. Only {variant.stock} items available"
-            )
 
         # Get or create cart
         result = await self.db.execute(
@@ -513,24 +509,17 @@ class CartService:
         existing_item = result.scalar_one_or_none()
 
         if existing_item:
-            # Update existing item
-            new_quantity = existing_item.quantity + quantity
-            if variant.stock < new_quantity:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cannot add {quantity} more items. Only {variant.stock - existing_item.quantity} more available"
-                )
-            
-            existing_item.quantity = new_quantity
+            # Update existing item, capped to available stock
+            existing_item.quantity = min(existing_item.quantity + quantity, variant.stock)
             existing_item.price_per_unit = variant.sale_price or variant.base_price
         else:
-            # Add new item
+            # Add new item, capped to available stock (0 if out of stock)
             new_item = CartItem(
                 id=uuid7(),
                 cart_id=cart.id,
                 product_id=variant.product_id,
                 variant_id=variant_id,
-                quantity=quantity,
+                quantity=min(quantity, variant.stock),
                 price_per_unit=variant.sale_price or variant.base_price
             )
             self.db.add(new_item)
@@ -744,9 +733,6 @@ class CartService:
         address: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Get shipping options for cart from database"""
-        from models.commerce.shipping import ShippingMethod
-        from sqlalchemy import select
-        
         try:
             # Get active shipping methods from database
             result = await self.db.execute(

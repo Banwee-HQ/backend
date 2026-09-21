@@ -79,8 +79,9 @@ class CartItem(Base):
 
     @validates('quantity')
     def validate_quantity(self, key, quantity):
-        if not isinstance(quantity, int) or quantity <= 0:
-            raise ValueError("Quantity must be a positive integer.")
+        # 0 is allowed: an item can sit in the cart out of stock, capped by CartService.
+        if not isinstance(quantity, int) or quantity < 0:
+            raise ValueError("Quantity must be a non-negative integer.")
         return quantity
 
 # DDL statement for the function
