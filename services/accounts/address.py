@@ -25,9 +25,7 @@ class AddressService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # -----------------------------------------------------------
-    # CRUD OPERATIONS
-    # -----------------------------------------------------------
+    # --- CRUD operations ---
 
     async def create(
         self,
@@ -123,9 +121,7 @@ class AddressService:
         await self.db.commit()
         return result.rowcount > 0
 
-    # -----------------------------------------------------------
-    # CUSTOM LOGIC
-    # -----------------------------------------------------------
+    # --- Custom logic ---
 
     async def default(self, user_id: UUID) -> Optional[Address]:
         """Get a user's first (default) address."""

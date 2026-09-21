@@ -231,10 +231,7 @@ class UserService:
         limit: int = 20,
         role_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Search for users with prefix matching on name and email.
-        Falls back to simple LIKE search if pg_trgm is unavailable.
-        """
+        """Search users by name/email prefix; falls back to LIKE if pg_trgm is unavailable."""
         if not query or len(query.strip()) < 2:
             return []
 
@@ -243,9 +240,8 @@ class UserService:
         try:
             return await self._search_with_similarity(q, limit, role_filter)
         except Exception:
-            # pg_trgm not available - fall back to simple LIKE search. A failed
-            # raw-SQL statement leaves the transaction aborted, so it must be
-            # rolled back before the session can run another query.
+            # pg_trgm unavailable: fall back to LIKE. A failed raw-SQL statement leaves
+            # the transaction aborted, so it must be rolled back first.
             await self.db.rollback()
             return await self._search_simple(q, limit, role_filter)
 
@@ -377,9 +373,7 @@ class UserService:
             
         return users
 
-    # ============================================================================
-    # ADMIN USER MANAGEMENT METHODS
-    # ============================================================================
+    # --- Admin user management methods ---
 
     async def update_status(self, user_id: UUID, is_active: bool) -> Optional[User]:
         """Update user active status (admin only)."""

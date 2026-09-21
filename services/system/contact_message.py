@@ -1,7 +1,4 @@
-"""
-Contact Message Service
-Business logic for contact message operations
-"""
+"""Contact message service: business logic for contact form operations."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import desc, or_, func, select

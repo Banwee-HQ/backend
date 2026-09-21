@@ -20,12 +20,7 @@ class JinjaTemplateService:
     """Service for rendering Jinja templates for emails and exports"""
     
     def __init__(self, template_dir: str = "templates"):
-        """
-        Initialize the Jinja template service
-        
-        Args:
-            template_dir: Directory containing template files
-        """
+        """Initialize the Jinja template service with a template directory."""
         self.template_dir = Path(template_dir)
         
         # Create template directory if it doesn't exist
@@ -129,15 +124,7 @@ class JinjaTemplateService:
         self,
         template_content: str
     ) -> TemplateValidationResult:
-        """
-        Validate a template string for syntax errors
-        
-        Args:
-            template_content: The template content as a string
-            
-        Returns:
-            TemplateValidationResult with validation status and any errors
-        """
+        """Validate a template string for syntax errors."""
         errors = []
         warnings = []
         
@@ -168,16 +155,7 @@ class JinjaTemplateService:
         )
     
     def create_template_file(self, template_name: str, content: str) -> bool:
-        """
-        Create a new template file
-        
-        Args:
-            template_name: Name of the template file
-            content: Template content
-            
-        Returns:
-            True if successful, False otherwise
-        """
+        """Create a new template file; returns True on success."""
         try:
             template_path = self.template_dir / template_name
             template_path.parent.mkdir(parents=True, exist_ok=True)
@@ -193,12 +171,7 @@ class JinjaTemplateService:
             return False
     
     def list_templates(self) -> list[str]:
-        """
-        List all available template files
-        
-        Returns:
-            List of template file names
-        """
+        """List all available template file names."""
         try:
             templates = []
             for file_path in self.template_dir.rglob("*.html"):
@@ -210,14 +183,6 @@ class JinjaTemplateService:
             return []
     
     def template_exists(self, template_name: str) -> bool:
-        """
-        Check if a template file exists
-        
-        Args:
-            template_name: Name of the template file
-            
-        Returns:
-            True if template exists, False otherwise
-        """
+        """Check if a template file exists."""
         template_path = self.template_dir / template_name
         return template_path.exists()

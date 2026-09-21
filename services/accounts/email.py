@@ -17,15 +17,10 @@ from core.logging import get_structured_logger
 logger = get_structured_logger(__name__)
 
 
-# ============================================================================
-# EMAIL SERVICE - All email logic and sending
-# ============================================================================
+# --- Email service: all email logic and sending ---
 
 class EmailService:
-    """
-    Centralized email service that handles all email operations.
-    Used by ARQ worker to send emails with proper template rendering.
-    """
+    """Centralized email service: template rendering and sending for all email operations."""
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
         self.template_service = JinjaTemplateService(template_dir="core/utils/messages/templates")
@@ -471,9 +466,8 @@ class EmailService:
             # Fallback to simple HTML if no template found
             html_content = f"<p>Hello {context['customer_name']},</p><p>This is a {mail_type} email.</p>"
         
-        # Send email - this always runs as a fire-and-forget background task, so a failure here
-        # (bad credentials, provider outage, rate limit) must never propagate and break the
-        # response/connection of whatever request queued it.
+        # Fire-and-forget background task: a failure here must never propagate and
+        # break the response/connection of whatever request queued it.
         try:
             await send_email_brevo(
                 to_email=to_email,

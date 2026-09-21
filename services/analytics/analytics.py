@@ -1,8 +1,4 @@
-"""
-Business Analytics Service
-Tracks and calculates key e-commerce metrics including conversion rates,
-cart abandonment, time to first purchase, refund rates, and repeat customers
-"""
+"""Business analytics: conversion rates, cart abandonment, refund rates, repeat customers."""
 from datetime import datetime, timezone, timedelta, date
 from typing import Dict, Any, List, Optional, Tuple
 from uuid import UUID
@@ -81,9 +77,8 @@ class AnalyticsService:
             )
             
             self.db.add(event)
-            # _update_session_metrics() below queries for this same event
-            # (e.g. to detect a just-tracked purchase) - flush explicitly
-            # rather than relying on the session's autoflush setting.
+            # _update_session_metrics() below queries for this same event, so flush
+            # explicitly rather than relying on autoflush.
             await self.db.flush()
 
             # Update session metrics
@@ -701,10 +696,8 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """Get comprehensive sales overview data for dashboard"""
         try:
-            # Build the category filter subquery once, applied to both the
-            # main and previous-period queries below - OrderItem.variant_id
-            # is a ProductVariant, not a Product, so the join has to go
-            # through it.
+            # Built once, applied to both main and previous-period queries below.
+            # OrderItem.variant_id is a ProductVariant, so the join goes through it.
             category_filter = None
             if categories:
                 category_filter = select(Order.id).join(OrderItem).join(
