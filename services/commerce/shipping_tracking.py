@@ -1,7 +1,4 @@
-"""
-Shipping Tracking Service
-Integrates with multiple shipping carriers (UPS, Canada Express, Royal Mail, etc.)
-"""
+"""Shipping tracking service; integrates with multiple carriers (UPS, Royal Mail, etc.)."""
 
 import asyncio
 import aiohttp
@@ -182,10 +179,8 @@ class ShippingTrackingService:
             shipment.external_tracking_data = tracking_data
 
             await self.db.commit()
-            # updated_at is DB-computed (onupdate=func.now()), so it's always
-            # marked stale after this UPDATE regardless of expire_on_commit -
-            # refresh just that column (not relationships, already eager-loaded
-            # above) before to_dict() reads it synchronously below.
+            # updated_at is DB-computed and stale after this UPDATE regardless of
+            # expire_on_commit, so refresh it before to_dict() reads it below.
             await self.db.refresh(shipment, attribute_names=["updated_at"])
 
             return {
@@ -341,9 +336,8 @@ class ShippingTrackingService:
                     event_timestamp,
                     event_data
                 )
-                # Keep the in-memory collection in sync so an immediate
-                # shipment.to_dict() (track_shipment()'s return value) reflects
-                # events just created here, not just what was loaded earlier.
+                # Keep the in-memory collection in sync so an immediate to_dict()
+                # reflects events just created here, not just what was loaded earlier.
                 shipment.tracking_events.append(new_event)
 
             except (ValueError, KeyError) as e:

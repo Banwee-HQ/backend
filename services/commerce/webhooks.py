@@ -1,7 +1,4 @@
-"""
-Webhook Service - Secure Stripe webhook handling with comprehensive security
-Processes Stripe webhooks with signature verification, rate limiting, and secure message publishing
-"""
+"""Secure Stripe webhook handling: signature verification, rate limiting, secure publishing."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from fastapi import HTTPException, Request
@@ -70,10 +67,7 @@ async def verify_stripe_webhook_request(
 
 
 class WebhookService:
-    """
-    Secure Stripe webhook handling with signature verification
-    Processes webhooks in real-time without storing webhook events
-    """
+    """Secure Stripe webhook handling; processes events in real-time without storing them."""
     
     def __init__(self, db: AsyncSession):
         self.db = db

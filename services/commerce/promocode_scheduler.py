@@ -1,7 +1,4 @@
-"""
-Promocode Scheduler Service
-Handles automatic activation/deactivation of promocodes based on validity dates
-"""
+"""Promocode scheduler: automatic activation/deactivation based on validity dates."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from datetime import datetime, timezone
@@ -21,12 +18,7 @@ class PromoCodeScheduler:
         self.db = db
     
     async def update_promocode_statuses(self) -> Dict[str, Any]:
-        """
-        Update promocode statuses based on validity dates:
-        - Activate promocodes that have reached their valid_from date
-        - Deactivate promocodes that have passed their valid_until date
-        - Deactivate promocodes that have reached their usage_limit
-        """
+        """Activate/deactivate promocodes based on valid_from/valid_until/usage_limit."""
         current_time = datetime.now(timezone.utc)
         
         activated_count = 0
@@ -34,13 +26,7 @@ class PromoCodeScheduler:
         results = []
         
         try:
-            # ========================================
-            # STEP 1: Activate promocodes that should be active now
-            # ========================================
-            # Find inactive promocodes where:
-            # - valid_from is in the past (or null)
-            # - valid_until is in the future (or null)
-            # - usage_limit not reached (or null)
+            # --- Step 1: activate inactive promocodes now within their validity window ---
             result = await self.db.execute(
                 select(Promocode).where(
                     and_(
@@ -75,10 +61,7 @@ class PromoCodeScheduler:
                 })
                 logger.info(f"✅ Activated promocode: {promocode.code}")
             
-            # ========================================
-            # STEP 2: Deactivate expired promocodes
-            # ========================================
-            # Find active promocodes where valid_until has passed
+            # --- Step 2: deactivate active promocodes whose valid_until has passed ---
             result = await self.db.execute(
                 select(Promocode).where(
                     and_(
@@ -102,9 +85,7 @@ class PromoCodeScheduler:
                 })
                 logger.info(f"❌ Deactivated expired promocode: {promocode.code}")
             
-            # ========================================
-            # STEP 3: Deactivate promocodes that reached usage limit
-            # ========================================
+            # --- Step 3: deactivate promocodes that reached their usage limit ---
             result = await self.db.execute(
                 select(Promocode).where(
                     and_(
@@ -129,9 +110,7 @@ class PromoCodeScheduler:
                 })
                 logger.info(f"❌ Deactivated promocode (limit reached): {promocode.code} ({promocode.used_count}/{promocode.usage_limit})")
             
-            # ========================================
-            # STEP 4: Deactivate promocodes not yet valid
-            # ========================================
+            # --- Step 4: deactivate promocodes not yet within their validity window ---
             result = await self.db.execute(
                 select(Promocode).where(
                     and_(

@@ -45,10 +45,7 @@ class ShippingService:
         limit: int = 10,
         is_active: Optional[bool] = None
     ) -> Dict[str, Any]:
-        """
-        Get all shipping methods with pagination (admin only).
-        Returns a dict with items, total, pages, and page info.
-        """
+        """Get all shipping methods with pagination (admin only)."""
         # Build base query
         query = select(ShippingMethod)
         count_query = select(func.count(ShippingMethod.id))
@@ -88,10 +85,7 @@ class ShippingService:
         address: dict, 
         shipping_method_id: Optional[UUID] = None
     ) -> float:
-        """
-        Calculate shipping cost based on selected method.
-        Simple implementation - just returns the method price.
-        """
+        """Calculate shipping cost; simply returns the selected method's price."""
         if shipping_method_id:
             method = await self.get(shipping_method_id)
             if method and method.is_active:
