@@ -182,6 +182,11 @@ class ShippingTrackingService:
             shipment.external_tracking_data = tracking_data
 
             await self.db.commit()
+            # updated_at is DB-computed (onupdate=func.now()), so it's always
+            # marked stale after this UPDATE regardless of expire_on_commit -
+            # refresh just that column (not relationships, already eager-loaded
+            # above) before to_dict() reads it synchronously below.
+            await self.db.refresh(shipment, attribute_names=["updated_at"])
 
             return {
                 "shipment": shipment.to_dict(),
@@ -274,6 +279,9 @@ class ShippingTrackingService:
             )
             return result.scalar_one()
 
+        except APIException:
+            await self.db.rollback()
+            raise
         except Exception as e:
             await self.db.rollback()
             raise APIException(status_code=500, message=f"Failed to update shipment status: {str(e)}")
@@ -325,7 +333,7 @@ class ShippingTrackingService:
                 if event_timestamp.isoformat() in existing_events:
                     continue
 
-                await self._create_tracking_event(
+                new_event = await self._create_tracking_event(
                     shipment.id,
                     event_data.get('event_type', 'unknown'),
                     event_data.get('description', ''),
@@ -333,14 +341,18 @@ class ShippingTrackingService:
                     event_timestamp,
                     event_data
                 )
+                # Keep the in-memory collection in sync so an immediate
+                # shipment.to_dict() (track_shipment()'s return value) reflects
+                # events just created here, not just what was loaded earlier.
+                shipment.tracking_events.append(new_event)
 
             except (ValueError, KeyError) as e:
                 logger.error(f"Error processing tracking event: {e}")
                 continue
 
-    async def _create_tracking_event(self, shipment_id: str, event_type: str, 
+    async def _create_tracking_event(self, shipment_id: str, event_type: str,
                                     description: str, location: Dict[str, Any] = None,
-                                    timestamp: datetime = None, additional_data: Dict[str, Any] = None):
+                                    timestamp: datetime = None, additional_data: Dict[str, Any] = None) -> TrackingEvent:
         """Create a tracking event"""
         event = TrackingEvent(
             shipment_id=shipment_id,
@@ -360,3 +372,4 @@ class ShippingTrackingService:
         )
 
         self.db.add(event)
+        return event
