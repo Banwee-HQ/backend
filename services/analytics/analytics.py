@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from models.accounts import UserSession, TrafficSource
 from models.system import AnalyticsEvent, ConversionFunnel, EventType
-from models.commerce.orders import Order, OrderItem
+from models.commerce.orders import Order, OrderItem, OrderStatus
 from models.accounts.user import User
 from models.commerce.refunds import Refund, RefundStatus
 from models.commerce.subscriptions import Subscription
@@ -929,9 +929,11 @@ class AnalyticsService:
             else:
                 end_date = today
 
-            # end_date is a bare date; compare against an exclusive next-day bound so
-            # created_at timestamps later "today" aren't excluded by casting to midnight.
-            end_date_exclusive = end_date + timedelta(days=1)
+            # Compare as explicit UTC datetimes, not bare dates: a bare date cast to
+            # timestamptz resolves in the DB session's timezone, which can silently
+            # shift the boundary and exclude rows created later "today" in UTC.
+            start_date = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+            end_date_exclusive = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
 
             # Get total users (excluding admin users, filtered by date range)
             total_users = await self.db.scalar(
@@ -962,10 +964,13 @@ class AnalyticsService:
                 Order.created_at < end_date_exclusive
             ]
             if status:
-                order_conditions.append(Order.order_status == status)
+                try:
+                    order_conditions.append(Order.order_status == OrderStatus(status.lower()))
+                except ValueError:
+                    pass  # Unrecognized status value - skip the filter rather than erroring
 
             total_orders = await self.db.scalar(
-                select(func.count(Order.id)).where(and_(*order_conditions)) if order_conditions else select(func.count(Order.id))
+                select(func.count(Order.id)).where(and_(*order_conditions))
             )
             logger.info(f"📦 Total orders (filtered by {status}): {total_orders}")
 
