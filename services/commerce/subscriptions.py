@@ -536,8 +536,12 @@ class SubscriptionService:
             if not subscription.subscription_metadata:
                 subscription.subscription_metadata = {}
             subscription.subscription_metadata["variant_quantities"] = variant_quantities
-        
+
         await self.db.commit()
+        # products is a many-to-many collection - once loaded on this
+        # identity-mapped object, a later selectinload (inside get()) won't
+        # re-query it even after the association rows just changed above.
+        self.db.expire(subscription, ["products"])
         return await self.get(subscription.id)
 
     async def cancel(self, subscription_id: UUID, user_id: UUID, reason: Optional[str] = None) -> Subscription:
@@ -763,6 +767,7 @@ class SubscriptionService:
                     subscription.variant_ids = subscription.variant_ids + [str(vid)]
         
         await self.db.commit()
+        self.db.expire(subscription, ["products"])
         return await self.get(subscription.id)
 
     async def remove_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
@@ -784,8 +789,9 @@ class SubscriptionService:
             )
         if subscription.variant_ids:
             subscription.variant_ids = [v for v in subscription.variant_ids if v not in [str(vid) for vid in variant_ids]]
-        
+
         await self.db.commit()
+        self.db.expire(subscription, ["products"])
         return await self.get(subscription.id)
 
     async def set_quantity(self, subscription_id: UUID, variant_id: UUID, quantity: int, user_id: UUID) -> Subscription:

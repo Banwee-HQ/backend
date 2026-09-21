@@ -58,18 +58,23 @@ class SubscriptionScheduler:
         )
         
         due_subscriptions = result.scalars().all()
-        
+        # Captured now, while nothing in this batch has failed yet - a
+        # sibling's rollback later in the loop expires every attribute on
+        # every object already loaded in this shared session, including
+        # .id on subscriptions still waiting to be processed.
+        due_ids = [s.id for s in due_subscriptions]
+
         processed_count = 0
         failed_count = 0
         results = []
-        
-        for subscription in due_subscriptions:
+
+        for subscription_id in due_ids:
             try:
-                result = await self.process_subscription(subscription)
+                result = await self.process_subscription(subscription_id)
                 if result["success"]:
                     processed_count += 1
                     results.append({
-                        "subscription_id": str(subscription.id),
+                        "subscription_id": str(subscription_id),
                         "order_id": result["order_id"],
                         "order_number": result["order_number"],
                         "user_email": result["user_email"],
@@ -78,30 +83,48 @@ class SubscriptionScheduler:
                 else:
                     failed_count += 1
                     results.append({
-                        "subscription_id": str(subscription.id),
+                        "subscription_id": str(subscription_id),
                         "status": "failed",
                         "reason": result.get("error", "Unknown error"),
-                        "retry_count": subscription.payment_retry_count
+                        "retry_count": result.get("retry_count")
                     })
             except Exception as e:
                 failed_count += 1
                 results.append({
-                    "subscription_id": str(subscription.id),
+                    "subscription_id": str(subscription_id),
                     "status": "failed",
                     "reason": str(e)
                 })
-                logger.error(f"Failed to process subscription {subscription.id}: {e}")
-        
+                logger.error(f"Failed to process subscription {subscription_id}: {e}")
+
         return {
             "processed_count": processed_count,
             "failed_count": failed_count,
             "total_due": len(due_subscriptions),
             "results": results
         }
-    
-    async def process_subscription(self, subscription: Subscription) -> Dict[str, Any]:
+
+    async def process_subscription(self, subscription_id: UUID) -> Dict[str, Any]:
         """Process a single subscription - payment first, then order"""
         try:
+            # Always fetch fresh rather than trust a caller-held reference -
+            # in process_due_subscriptions()'s loop, a sibling subscription's
+            # rollback expires every attribute on every object already
+            # loaded in this shared session, including ones not yet processed.
+            result = await self.db.execute(
+                select(Subscription).where(Subscription.id == subscription_id).options(
+                    selectinload(Subscription.shipping_method),
+                    selectinload(Subscription.delivery_address),
+                )
+            )
+            subscription = result.scalar_one_or_none()
+            if not subscription:
+                return {
+                    "success": False,
+                    "subscription_id": str(subscription_id),
+                    "message": "Subscription not found"
+                }
+
             # Check subscription status before processing
             if subscription.status not in ["active"]:
                 logger.info(f"Skipping subscription {subscription.id} - status is {subscription.status}, not active")
@@ -172,7 +195,32 @@ class SubscriptionScheduler:
             # Generate order number and ID
             order_number = await self._generate_order_number()
             order_id = uuid7()
-            
+
+            # PaymentIntent.order_id is a real FK to orders.id, so the order
+            # has to exist before process_idempotent() can reference it -
+            # insert a placeholder now (same pattern OrderService.create()
+            # uses) and fill in the real totals/status once payment succeeds.
+            shipping_address = await self._get_shipping_address(subscription)
+            order = Order(
+                id=order_id,
+                user_id=subscription.user_id,
+                order_number=order_number,
+                order_status=OrderStatus.PENDING,
+                payment_status=PaymentStatus.PENDING,
+                fulfillment_status=FulfillmentStatus.UNFULFILLED,
+                source=OrderSource.API,
+                subtotal=0,
+                tax_amount=0,
+                shipping_cost=0,
+                total_amount=0,
+                currency=subscription.currency or "USD",
+                shipping_address=shipping_address,
+                billing_address=shipping_address,
+                subscription_id=subscription.id
+            )
+            self.db.add(order)
+            await self.db.flush()
+
             payment_service = PaymentService(self.db)
             payment_result = await payment_service.process_idempotent(
                 user_id=subscription.user_id,
@@ -182,11 +230,14 @@ class SubscriptionScheduler:
                 idempotency_key=f"subscription_{subscription.id}_{order_id}",
                 request_id=str(order_id)
             )
-            
+
             # Check payment status
             if payment_result.get("status") != "succeeded":
                 error_message = payment_result.get("error", "Payment processing failed")
-                
+
+                order.order_status = OrderStatus.CANCELLED
+                order.payment_status = PaymentStatus.FAILED
+
                 # Update retry tracking
                 subscription.payment_retry_count = (subscription.payment_retry_count or 0) + 1
                 subscription.last_payment_attempt = datetime.now(timezone.utc)
@@ -242,38 +293,23 @@ class SubscriptionScheduler:
                 }
             
             logger.info(f"✅ Payment succeeded for subscription {subscription.id}, creating order...")
-            
+
             # ========================================
-            # STEP 2: CREATE ORDER (only after successful payment)
+            # STEP 2: FINALIZE ORDER (only after successful payment)
             # ========================================
-            
-            # Get shipping address
-            shipping_address = await self._get_shipping_address(subscription)
-            
+
             # Get quantities
             variant_quantities = subscription.subscription_metadata.get("variant_quantities", {}) if subscription.subscription_metadata else {}
-            
-            order = Order(
-                id=order_id,
-                user_id=subscription.user_id,
-                order_number=order_number,
-                order_status=OrderStatus.CONFIRMED,
-                payment_status=PaymentStatus.PAID,
-                fulfillment_status=FulfillmentStatus.UNFULFILLED,
-                source=OrderSource.API,
-                subtotal=pricing["subtotal"],
-                tax_amount=pricing["tax"],
-                shipping_cost=pricing["shipping"],
-                discount_amount=pricing.get("discount", 0.0),
-                total_amount=pricing["total"],
-                currency=subscription.currency or "USD",
-                shipping_method=subscription.shipping_method.name if subscription.shipping_method else "standard",
-                shipping_address=shipping_address,
-                billing_address=shipping_address,
-                subscription_id=subscription.id
-            )
-            
-            self.db.add(order)
+
+            # Fill in the placeholder order created before payment with its real totals/status.
+            order.order_status = OrderStatus.CONFIRMED
+            order.payment_status = PaymentStatus.PAID
+            order.subtotal = pricing["subtotal"]
+            order.tax_amount = pricing["tax"]
+            order.shipping_cost = pricing["shipping"]
+            order.discount_amount = pricing.get("discount", 0.0)
+            order.total_amount = pricing["total"]
+            order.shipping_method = subscription.shipping_method.name if subscription.shipping_method else "standard"
             await self.db.flush()
             
             # ========================================
@@ -349,7 +385,7 @@ class SubscriptionScheduler:
             
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to process subscription {subscription.id}: {e}")
+            logger.error(f"Failed to process subscription {subscription_id}: {e}")
             return {
                 "success": False,
                 "error": str(e)
@@ -358,7 +394,10 @@ class SubscriptionScheduler:
     async def _generate_order_number(self) -> str:
         """Generate unique order number"""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-        short_uuid = str(uuid7())[:8].upper()
+        # The first 8 chars of a UUID7 are its millisecond timestamp, not
+        # random - two calls close together (e.g. a batch run) would produce
+        # near-identical prefixes here. Use the random tail instead.
+        short_uuid = str(uuid7()).replace('-', '')[-8:].upper()
         return f"SUB-{timestamp}-{short_uuid}"
     
     async def _get_shipping_address(self, subscription: Subscription) -> Dict[str, Any]:
