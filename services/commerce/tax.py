@@ -1,6 +1,4 @@
-"""
-Tax calculation service
-"""
+"""Tax calculation service."""
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -23,18 +21,7 @@ class TaxService:
         province_name: Optional[str] = None,
         country_name: Optional[str] = None
     ) -> float:
-        """
-        Get tax rate for a specific location
-        
-        Args:
-            country_code: ISO 3166-1 alpha-2 country code (e.g., "US", "CA", "GB")
-            province_code: State/Province code (e.g., "CA" for California, "ON" for Ontario)
-            province_name: State/Province name (e.g., "California", "Ontario")
-            country_name: Full country name (e.g., "United States", "Canada")
-        
-        Returns:
-            Tax rate as decimal (e.g., 0.0725 for 7.25%)
-        """
+        """Get tax rate (e.g. 0.0725 for 7.25%) for a location, by code or name."""
         tax_info = await self.info(country_code, province_code, province_name, country_name)
         return tax_info.get("tax_rate", 0.0)
     
@@ -44,17 +31,7 @@ class TaxService:
         country_code: str, 
         province_code: Optional[str] = None
     ) -> float:
-        """
-        Calculate tax amount for a given subtotal
-        
-        Args:
-            amount: Subtotal amount to calculate tax on
-            country_code: ISO 3166-1 alpha-2 country code
-            province_code: State/Province code (optional)
-        
-        Returns:
-            Tax amount
-        """
+        """Calculate the tax amount for a given subtotal and location."""
         logger.info(f"Calculating tax for amount ${amount:.2f}, country: {country_code}, province: {province_code}")
         tax_rate = float(await self.rate(country_code, province_code))
         tax_amount = amount * tax_rate
@@ -68,18 +45,7 @@ class TaxService:
         province_name: Optional[str] = None,
         country_name: Optional[str] = None
     ) -> dict:
-        """
-        Get detailed tax information for a location
-        
-        Args:
-            country_code: ISO 3166-1 alpha-2 country code (e.g., "US", "CA", "GB")
-            province_code: State/Province code (e.g., "CA" for California, "ON" for Ontario)
-            province_name: State/Province name (e.g., "California", "Ontario")
-            country_name: Full country name (e.g., "United States", "Canada")
-        
-        Returns:
-            Dictionary with tax rate, name, and location info
-        """
+        """Get detailed tax info (rate, name, location) for a location, by code or name."""
         country_code = country_code.upper() if country_code else None
         province_code = province_code.upper() if province_code else None
         try:

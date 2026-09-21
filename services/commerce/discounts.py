@@ -1,8 +1,4 @@
-"""
-Discount Engine Service for subscription discount management
-Implements discount code validation, calculation logic, and optimal discount selection
-Requirements: 3.1, 3.2, 3.5
-"""
+"""Discount engine: code validation, calculation logic, and optimal discount selection."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, desc, delete
 from models.commerce.discounts import Discount, SubscriptionDiscount
@@ -34,18 +30,7 @@ class DiscountEngine:
         subscription_id: Optional[str] = None,
         subtotal: Optional[Decimal] = None
     ) -> DiscountValidationResult:
-        """
-        Validate discount code against promotional rules
-        Requirements: 3.1, 3.5
-        
-        Args:
-            discount_code: The discount code to validate
-            subscription_id: Optional subscription ID for duplicate checking
-            subtotal: Optional subtotal for minimum amount validation
-            
-        Returns:
-            DiscountValidationResult with validation status and details
-        """
+        """Validate a discount code against promotional rules (active, duplicate, minimum amount)."""
         try:
             # Find the discount by code
             discount_result = await self.db.execute(
@@ -129,19 +114,7 @@ class DiscountEngine:
         shipping_cost: Decimal = Decimal('0'),
         tax_amount: Decimal = Decimal('0')
     ) -> DiscountCalculationResult:
-        """
-        Calculate discount amount for percentage and fixed amount discounts
-        Requirements: 3.1, 3.5
-        
-        Args:
-            discount: The discount object to apply
-            subtotal: Subscription subtotal
-            shipping_cost: Shipping cost (for free shipping discounts)
-            tax_amount: Tax amount
-            
-        Returns:
-            DiscountCalculationResult with calculated amounts
-        """
+        """Calculate the discount amount for percentage, fixed, or free-shipping discounts."""
         try:
             discount_amount = Decimal('0')
             
@@ -201,19 +174,7 @@ class DiscountEngine:
         shipping_cost: Decimal = Decimal('0'),
         tax_amount: Decimal = Decimal('0')
     ) -> Tuple[Optional[Discount], DiscountCalculationResult]:
-        """
-        Select the most beneficial discount when multiple are applicable
-        Requirements: 3.2
-        
-        Args:
-            available_discounts: List of valid discounts to choose from
-            subtotal: Subscription subtotal
-            shipping_cost: Shipping cost
-            tax_amount: Tax amount
-            
-        Returns:
-            Tuple of (best_discount, calculation_result) or (None, None) if no valid discounts
-        """
+        """Select the most beneficial discount among several applicable ones."""
         if not available_discounts:
             return None, None
         
@@ -249,13 +210,7 @@ class DiscountEngine:
             return None, None
 
     async def remove_expired_discounts(self) -> Dict[str, Any]:
-        """
-        Background job for checking and removing expired discounts
-        Requirements: 3.3
-        
-        Returns:
-            Summary of expired discounts removed
-        """
+        """Background job: check for and remove expired discounts."""
         try:
             now = datetime.now(timezone.utc)
             
@@ -348,17 +303,7 @@ class DiscountEngine:
         location_code: Optional[str] = None,
         user_id: Optional[str] = None
     ) -> List[Discount]:
-        """
-        Get list of currently applicable discounts for a given context
-        
-        Args:
-            subtotal: Subscription subtotal for minimum amount checking
-            location_code: Optional location for geo-targeted discounts
-            user_id: Optional user ID for user-specific discounts
-            
-        Returns:
-            List of applicable discounts
-        """
+        """Get active, non-expired discounts applicable to this subtotal/location/user."""
         try:
             now = datetime.now(timezone.utc)
             
@@ -395,17 +340,7 @@ class DiscountEngine:
         limit: int = 20,
         is_active: Optional[bool] = None
     ) -> Dict[str, Any]:
-        """
-        List all discounts with pagination
-        
-        Args:
-            page: Page number (1-based)
-            limit: Items per page
-            is_active: Filter by active status (optional)
-            
-        Returns:
-            Paginated list of discounts
-        """
+        """List all discounts with pagination, optionally filtered by active status."""
         try:
             offset = (page - 1) * limit
             
@@ -455,12 +390,7 @@ class DiscountEngine:
         maximum_discount: Optional[float] = None,
         usage_limit: Optional[int] = None
     ) -> Discount:
-        """
-        Create a new discount for testing and administrative purposes
-        
-        Returns:
-            Created discount object
-        """
+        """Create a new discount, for testing and administrative purposes."""
         try:
             discount = Discount(
                 code=code.upper(),

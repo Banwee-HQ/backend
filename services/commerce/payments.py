@@ -832,9 +832,8 @@ class PaymentService:
                 )
 
             except HTTPException:
-                # Not retryable (e.g. 404 payment method not found, 400 expired
-                # card) - propagate immediately instead of burning retries and
-                # relabeling it as a 500 below.
+                # Not retryable (e.g. 404 payment method, 400 expired card): propagate
+                # immediately instead of burning retries and relabeling it a 500.
                 await self.db.rollback()
                 raise
             except Exception as e:
@@ -935,10 +934,7 @@ class PaymentService:
         request_id: Optional[str] = None,
         frontend_calculated_amount: Optional[float] = None  # Amount calculated by frontend
     ) -> Dict[str, Any]:
-        """
-        Process payment with idempotency guarantee and price validation
-        Validates that frontend-calculated prices match backend calculations
-        """
+        """Process payment idempotently, validating frontend prices against backend calculations."""
         start_time = time.time()
         
         if not request_id:
@@ -1567,9 +1563,8 @@ class PaymentService:
         except Exception as e:
             logger.error(f"Failed to send payment notification: {e}")
             # Don't fail payment processing if notification fails
-    # ============================================================================
-    # PAYMENT FAILURE HANDLING METHODS
-    # ============================================================================
+
+    # --- Payment failure handling methods ---
 
     async def _get_payment_intent_with_lock(self, payment_intent_id: UUID) -> Optional[PaymentIntent]:
         """Get payment intent with SELECT ... FOR UPDATE lock"""

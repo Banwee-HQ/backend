@@ -1,7 +1,4 @@
-"""
-Comprehensive Cart Service with Backend-Only Pricing
-PostgreSQL-based cart with real-time tax and pricing calculations
-"""
+"""PostgreSQL-based cart service with backend-only, real-time tax and pricing."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, and_, func, update
 from sqlalchemy.orm import selectinload, noload, lazyload, joinedload
@@ -25,10 +22,7 @@ logger = get_structured_logger(__name__)
 
 
 class CartService:
-    """
-    Comprehensive PostgreSQL-based cart service with backend-only pricing
-    All pricing calculations are performed server-side for security
-    """
+    """PostgreSQL-based cart service; all pricing is calculated server-side for security."""
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -40,10 +34,7 @@ class CartService:
         country_code: str = 'US',
         province_code: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Get cart with comprehensive pricing calculations
-        All prices are calculated server-side from database
-        """
+        """Get cart with comprehensive pricing; all prices calculated server-side."""
         if not user_id:
             raise ValueError("user_id is required")
 
@@ -78,10 +69,8 @@ class CartService:
         if cart.promocode and not cart.promocode.is_active:
             cart.promocode_id = None
             await self.db.commit()
-            # commit() expires every attribute on cart by default - a plain attribute
-            # access below (e.g. cart.updated_at) would otherwise try an implicit
-            # synchronous refresh outside the async-safe context and raise
-            # MissingGreenlet. Refresh explicitly while still inside this await chain.
+            # commit() expires all attributes; refresh explicitly here or a later sync
+            # attribute access (e.g. cart.updated_at) raises MissingGreenlet.
             await self.db.refresh(cart)
 
         discount_amount = float(cart.discount_amount)
@@ -189,10 +178,7 @@ class CartService:
         country_code: str, 
         province_code: Optional[str]
     ) -> Dict[str, Any]:
-        """
-        Calculate comprehensive cart pricing with tax
-        All calculations use current database prices
-        """
+        """Calculate comprehensive cart pricing with tax, using current database prices."""
         subtotal = Decimal('0.00')
         item_breakdown = []
         
@@ -256,10 +242,7 @@ class CartService:
         country_code: str = 'US',
         province_code: Optional[str] = None
     ) -> CartValidationResult:
-        """
-        Comprehensive cart validation for checkout readiness
-        Checks stock availability, pricing, and business rules
-        """
+        """Validate cart for checkout: stock availability, pricing, and business rules."""
         logger.info(f"Validating cart for user {user_id}")
         
         issues = []
@@ -638,9 +621,8 @@ class CartService:
             raise HTTPException(status_code=404, detail="Cart item not found")
 
         await self.db.commit()
-        # A raw bulk delete() doesn't sync the ORM's identity map - the Cart object
-        # from an earlier get_or_create() in this same session would still show its
-        # stale, already-loaded items collection otherwise.
+        # A raw bulk delete() doesn't sync the ORM's identity map, so expire it or
+        # an earlier-loaded Cart still shows its stale items collection.
         self.db.expire_all()
 
         # Return updated cart
@@ -671,9 +653,8 @@ class CartService:
         )
 
         await self.db.commit()
-        # Both statements above are raw bulk operations, which bypass the ORM's
-        # identity map - without this, an already-loaded Cart in this session would
-        # still show its stale items collection and promocode.
+        # Both statements above bypass the ORM's identity map, so expire it or an
+        # already-loaded Cart still shows stale items/promocode.
         self.db.expire_all()
 
         # Return empty cart
@@ -737,9 +718,8 @@ class CartService:
 
         cart.promocode_id = promocode.id
         await self.db.commit()
-        # Setting the FK column directly doesn't refresh the already-loaded
-        # `promocode` relationship object, so cart.discount_amount (which reads
-        # self.promocode) would still see the old value in this same session.
+        # Setting the FK directly doesn't refresh the loaded `promocode` relationship,
+        # which cart.discount_amount reads.
         await self.db.refresh(cart, ["promocode"])
 
         cart_data = await self.get_cart(user_id=user_id)

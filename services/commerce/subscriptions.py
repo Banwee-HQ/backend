@@ -1,7 +1,4 @@
-"""
-Simplified Subscription Service
-Handles subscription creation, updates, and pricing calculations
-"""
+"""Subscription service: creation, updates, and pricing calculations."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete
 from sqlalchemy.orm import selectinload
@@ -538,9 +535,8 @@ class SubscriptionService:
             subscription.subscription_metadata["variant_quantities"] = variant_quantities
 
         await self.db.commit()
-        # products is a many-to-many collection - once loaded on this
-        # identity-mapped object, a later selectinload (inside get()) won't
-        # re-query it even after the association rows just changed above.
+        # products is many-to-many; once loaded, a later selectinload (inside get())
+        # won't re-query it even after the association rows just changed.
         self.db.expire(subscription, ["products"])
         return await self.get(subscription.id)
 

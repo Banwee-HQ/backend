@@ -35,10 +35,7 @@ class RefundService:
         order_id: UUID,
         refund_request: RefundRequest
     ) -> RefundResponse:
-        """
-        Request a refund with intelligent processing
-        Automatically approves eligible refunds for faster processing
-        """
+        """Request a refund, auto-approving it if eligible."""
         try:
             # Validate order and user
             order = await self._get_user_order(user_id, order_id)
@@ -100,10 +97,8 @@ class RefundService:
                 await self._auto_approve_refund(refund)
 
             await self.db.commit()
-            # refresh() only reloads refund's own columns - _format_refund_response
-            # also needs refund.refund_items, which isn't loaded yet and can't be
-            # lazy-loaded here (no greenlet context for an implicit SELECT), so
-            # re-fetch with the same eager-loading get() already uses elsewhere.
+            # refresh() only reloads columns; _format_refund_response also needs
+            # refund_items, so re-fetch with the same eager-loading get() uses.
             refund = await self.db.execute(
                 select(Refund).where(Refund.id == refund.id).options(
                     selectinload(Refund.refund_items)
@@ -120,10 +115,7 @@ class RefundService:
             raise HTTPException(status_code=500, detail="Failed to process refund request")
     
     async def process_auto(self) -> Dict[str, Any]:
-        """
-        Process pending automatic refunds
-        Called by background job to handle auto-approved refunds
-        """
+        """Process pending auto-approved refunds; called by a background job."""
         try:
             # Get auto-approved refunds that need processing
             pending_refunds = await self.db.execute(
@@ -294,9 +286,8 @@ class RefundService:
             # Send notification
             await self._send_refund_notifications(refund, "cancelled")
 
-            # refund_items was never loaded on this query, and can't be lazy-loaded
-            # here (no greenlet context) - re-fetch with the same eager-loading
-            # get() and request() already use for this reason.
+            # refund_items was never loaded on this query and can't be lazy-loaded
+            # here, so re-fetch with the same eager-loading get()/request() use.
             result = await self.db.execute(
                 select(Refund).where(Refund.id == refund.id).options(selectinload(Refund.refund_items))
             )

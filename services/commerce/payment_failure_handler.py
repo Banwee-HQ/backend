@@ -1,7 +1,4 @@
-"""
-Payment failure handling utilities
-Provides standardized failure categorization and recovery metadata.
-"""
+"""Payment failure handling: standardized failure categorization and recovery metadata."""
 from typing import Any, Dict, Optional
 from datetime import datetime
 from core.logging import get_structured_logger
