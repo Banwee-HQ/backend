@@ -12,10 +12,7 @@ from sqlalchemy import inspect
 
 
 class Response(JSONResponse):
-    """
-    Standardized API response wrapper that matches frontend expectations
-    Inherits from JSONResponse to be directly returnable from FastAPI routes
-    """
+    """Standardized API response wrapper, directly returnable from FastAPI routes."""
 
     def __init__(
         self,

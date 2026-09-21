@@ -8,22 +8,7 @@ from typing import Union
 
 
 def uuid7() -> uuid.UUID:
-    """
-    Generate a UUIDv7 (time-ordered UUID) for better database performance
-    
-    UUIDv7 format:
-    - 48-bit timestamp (milliseconds since Unix epoch)
-    - 12-bit random data
-    - 4-bit version (0111)
-    - 62-bit random data
-    - 2-bit variant (10)
-    
-    Benefits over UUIDv4:
-    - Time-ordered for better database indexing
-    - Better clustering in B-tree indexes
-    - Improved query performance
-    - Reduced index fragmentation
-    """
+    """Generate a UUIDv7 (time-ordered UUID) for better DB index locality than UUIDv4."""
     # Get current timestamp in milliseconds
     timestamp_ms = int(time.time() * 1000)
     
@@ -63,10 +48,7 @@ def is_uuid7(uuid_obj: Union[str, uuid.UUID]) -> bool:
 
 
 def extract_timestamp_from_uuid7(uuid_obj: Union[str, uuid.UUID]) -> int:
-    """
-    Extract timestamp (milliseconds since Unix epoch) from UUIDv7
-    Returns 0 if not a valid UUIDv7
-    """
+    """Extract timestamp (ms since epoch) from UUIDv7; returns 0 if not a valid UUIDv7."""
     if isinstance(uuid_obj, str):
         try:
             uuid_obj = uuid.UUID(uuid_obj)

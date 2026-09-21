@@ -1,7 +1,4 @@
-"""
-Background task worker — ARQ/Redis removed.
-Uses asyncio for scheduled jobs and FastAPI BackgroundTasks for one-off tasks.
-"""
+"""Background task worker (ARQ/Redis removed): asyncio for scheduled jobs, BackgroundTasks for one-off tasks."""
 import asyncio
 from typing import Dict, Any
 from datetime import datetime
@@ -21,9 +18,7 @@ def _get_db_session():
     return None
 
 
-# ============================================================================
-# EMAIL TASKS
-# ============================================================================
+# --- Email tasks ---
 
 async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
     session = _get_db_session()
@@ -108,9 +103,7 @@ async def send_email_task(email_type: str, recipient: str, **kwargs) -> str:
         raise
 
 
-# ============================================================================
-# SUBSCRIPTION TASKS
-# ============================================================================
+# --- Subscription tasks ---
 
 async def process_subscription_orders_task() -> str:
     """Process due subscription orders."""
@@ -136,9 +129,7 @@ async def process_subscription_orders_task() -> str:
         raise
 
 
-# ============================================================================
-# PROMOCODE TASKS
-# ============================================================================
+# --- Promocode tasks ---
 
 async def update_promocode_statuses_task() -> str:
     """Update promocode statuses."""
@@ -164,9 +155,7 @@ async def update_promocode_statuses_task() -> str:
         raise
 
 
-# ============================================================================
-# SCHEDULER — runs periodic jobs using asyncio
-# ============================================================================
+# --- Scheduler: runs periodic jobs using asyncio ---
 
 async def _run_scheduler():
     """Lightweight asyncio scheduler — replaces ARQ cron jobs."""
@@ -207,9 +196,7 @@ def start_scheduler():
     print("✅ Background scheduler registered")
 
 
-# ============================================================================
-# COMPAT STUBS — so existing callers don't break
-# ============================================================================
+# --- Compat stubs, so existing callers don't break ---
 
 async def enqueue_subscription_renewal(subscription_id: str, **kwargs):
     await process_subscription_orders_task()

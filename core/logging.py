@@ -1,7 +1,4 @@
-"""
-Colored print-based logger — drop-in replacement for structured logging.
-All files using get_structured_logger() continue to work unchanged.
-"""
+"""Colored print-based logger — drop-in replacement for structured logging."""
 import traceback
 from datetime import datetime
 

@@ -125,15 +125,8 @@ v1_router.include_router(tax_router)
 v1_router.include_router(promocodes_router)
 v1_router.include_router(subscriptions_router)
 v1_router.include_router(webhooks_router)
-# Admin routes are distributed to domain-specific modules:
-# - /users/* for user management (in accounts/user.py)
-# - /products/admin/* for product management (in catalog/products.py)
-# - /orders/admin/* for order management (in commerce/orders.py)
-# - /refunds/admin/* for refund management (in commerce/refunds.py)
-# - /subscriptions/admin/* for subscription management (in commerce/subscriptions.py)
-# - /tax/admin/* for tax rate management (in commerce/tax.py)
-# - /inventory/sync* for inventory sync (in catalog/inventory.py)
-# - /analytics/admin/* for analytics/stats (in analytics/analytics.py)
+# Admin routes are distributed to their domain-specific modules
+# (e.g. accounts/user.py, catalog/products.py, commerce/orders.py) rather than grouped here.
 v1_router.include_router(analytics_router)
 v1_router.include_router(health_router)
 v1_router.include_router(contact_messages_router)

@@ -1,6 +1,4 @@
-"""
-Invoice PDF Generator using Jinja2 and WeasyPrint
-"""
+"""Invoice PDF Generator using Jinja2 and WeasyPrint."""
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -12,12 +10,7 @@ class InvoiceGenerator:
     """Generate PDF invoices from HTML templates using Jinja2 and WeasyPrint"""
     
     def __init__(self, template_dir: Optional[str] = None):
-        """
-        Initialize the invoice generator
-        
-        Args:
-            template_dir: Directory containing invoice templates
-        """
+        """Initialize the invoice generator with a template directory."""
         if template_dir is None:
             # Default to the templates directory
             base_dir = Path(__file__).parent
@@ -56,15 +49,7 @@ class InvoiceGenerator:
         return None
     
     def prepare_invoice_data(self, order_data: Dict) -> Dict:
-        """
-        Prepare invoice data from order information
-        
-        Args:
-            order_data: Dictionary containing order information
-            
-        Returns:
-            Dictionary with formatted invoice data
-        """
+        """Prepare formatted invoice data (items, totals, customer info) from raw order data."""
         current_date = datetime.now()
         
         # Format items
@@ -138,16 +123,7 @@ class InvoiceGenerator:
         order_data: Dict, 
         template_name: str = "invoice_template.html"
     ) -> str:
-        """
-        Generate HTML invoice from template
-        
-        Args:
-            order_data: Order information dictionary
-            template_name: Name of the Jinja2 template file
-            
-        Returns:
-            Rendered HTML string
-        """
+        """Render the HTML invoice; falls back to a simple inline template on error."""
         try:
             # Prepare data
             invoice_data = self.prepare_invoice_data(order_data)
@@ -211,17 +187,7 @@ class InvoiceGenerator:
         output_path: str,
         template_name: str = "invoice_template.html"
     ) -> str:
-        """
-        Generate PDF invoice from template
-        
-        Args:
-            order_data: Order information dictionary
-            output_path: Path where PDF should be saved
-            template_name: Name of the Jinja2 template file
-            
-        Returns:
-            Path to generated PDF file
-        """
+        """Generate a PDF invoice and write it to output_path."""
         # Generate HTML
         html_content = self.generate_html(order_data, template_name)
         
@@ -235,16 +201,7 @@ class InvoiceGenerator:
         order_data: Dict,
         template_name: str = "invoice_template.html"
     ) -> bytes:
-        """
-        Generate PDF invoice as bytes (useful for email attachments)
-
-        Args:
-            order_data: Order information dictionary
-            template_name: Name of the Jinja2 template file
-
-        Returns:
-            PDF content as bytes
-        """
+        """Generate a PDF invoice as bytes, for email attachments."""
         try:
             # Generate HTML
             html_content = self.generate_html(order_data, template_name)
@@ -282,15 +239,7 @@ class InvoiceGenerator:
                 raise Exception(f"Both main template and fallback failed. Main error: {str(e)}, Fallback error: {str(fallback_error)}")
     
     async def generate_invoice(self, order_data: Dict) -> Dict:
-        """
-        Generate invoice and return result with file path or bytes
-        
-        Args:
-            order_data: Order information dictionary
-            
-        Returns:
-            Dictionary with invoice result
-        """
+        """Generate the invoice PDF and return a result dict with success/pdf_bytes/error."""
         try:
             # Validate template directory exists
             if not self.template_dir.exists():

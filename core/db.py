@@ -21,11 +21,7 @@ CHAR_LENGTH = 255
 
 
 class GUID(TypeDecorator):
-    """Platform-independent GUID type.
-
-    Uses PostgreSQL's UUID type, otherwise uses
-    CHAR(36), storing as stringified UUID values with hyphens.
-    """
+    """Platform-independent GUID: PostgreSQL UUID, or CHAR(36) elsewhere."""
     impl = CHAR
 
     cache_ok = True
@@ -263,10 +259,7 @@ class DatabaseManager:
 db_manager = DatabaseManager()
 
 async def initialize_db(database_uri: str, env_is_local: bool, engine=None):
-    """Initializes the database manager with engine and session factory.
-    
-    PostgreSQL only: Requires Alembic migrations - won't auto-create tables.
-    """
+    """Initializes the database manager. PostgreSQL only; requires Alembic migrations."""
     if engine:
         # Use provided engine
         global engine_db, AsyncSessionDB

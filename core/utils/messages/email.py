@@ -94,16 +94,7 @@ async def send_email_brevo(
     context: dict = {},
     html_content: str = None
 ):
-    """
-    Send an email via Brevo (Sendinblue) transactional API.
-
-    Args:
-        to_email: Recipient email address
-        subject: Email subject
-        template_name: Jinja2 template path (e.g. 'account/welcome.html')
-        context: Template context variables
-        html_content: Pre-rendered HTML (alternative to template_name)
-    """
+    """Send an email via Brevo's transactional API, using either a template or raw HTML."""
     if not template_name and not html_content:
         raise ValueError("Either template_name or html_content is required")
 
