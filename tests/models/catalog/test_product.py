@@ -130,6 +130,20 @@ class TestAvailabilityStatus:
         assert product.availability_status == "limited"
 
 
+class TestVariantToDict:
+
+    def test_includes_top_level_stock_matching_inventory(self):
+        """Regression test: VariantResponse requires a top-level `stock` field, but
+        to_dict() used to only nest it under `inventory`, so every VariantResponse.model_validate()
+        call failed and silently fell through to a slower fallback path."""
+        variant = make_variant(base_price=10, quantity_available=7)
+        assert variant.to_dict()["stock"] == 7
+
+    def test_stock_is_zero_when_no_inventory_record(self):
+        variant = make_variant(base_price=10)
+        assert variant.to_dict()["stock"] == 0
+
+
 class TestVariantCurrentPriceAndDiscount:
 
     def test_current_price_is_base_price_without_sale(self):

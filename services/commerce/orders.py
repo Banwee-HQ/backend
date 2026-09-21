@@ -597,7 +597,10 @@ class OrderService:
         try:
             # Generate a temp order id and deterministic order number using it
             temp_order_id = uuid7()  # Temporary ID for payment processing
-            order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[:12].upper()}"
+            # UUID7's leading hex chars are a shared millisecond timestamp, not random, so
+            # orders created close together (e.g. concurrent checkouts) would get colliding
+            # order_numbers if we sliced from the front - use the trailing (random) hex instead.
+            order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[-12:].upper()}"
 
             temp_currency = get_currency_from_address(shipping_address.country) if shipping_address.country else "USD"
 

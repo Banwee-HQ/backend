@@ -36,7 +36,7 @@ class ProductService:
             variant_dict = variant.to_dict(include_images=True)
             return ProductVariantResponse.model_validate(variant_dict)
         except Exception as e:
-            print(f"Error converting variant {variant.id}: {e}")
+            logger.error(f"Error converting variant {variant.id}: {e}")
             # Return minimal variant data
             return ProductVariantResponse(
                 id=variant.id,

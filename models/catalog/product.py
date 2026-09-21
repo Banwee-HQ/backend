@@ -248,6 +248,7 @@ class ProductVariant(Base):
             "sale_price": self.sale_price,
             "current_price": self.current_price,
             "discount_percentage": self.discount_percentage,
+            "stock": self.inventory.quantity_available if self.inventory else 0,
             "attributes": self.attributes,
             "specifications": self.specifications,
             "dietary_tags": self.dietary_tags,
