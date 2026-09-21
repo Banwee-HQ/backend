@@ -193,6 +193,11 @@ class PaymentIntent(Base):
     failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Structured failure detail (Stripe error, retry_count, last_retry_at) - kept
+    # separate from payment_intent_metadata, which already carries caller-supplied
+    # data (idempotency_key, request_id) that failure info would otherwise clobber.
+    failure_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
     # Metadata for additional tracking (JSONB for structured payment data)
     payment_intent_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 

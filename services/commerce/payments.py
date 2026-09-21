@@ -34,7 +34,6 @@ class PaymentService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._init_failure_handling()
 
     async def create_method(
         self,
@@ -701,12 +700,12 @@ class PaymentService:
             ).offset(offset).limit(limit).order_by(PaymentIntent.created_at.desc())
         )
         intents = result.scalars().all()
-        
+
         # Get total count
         count_result = await self.db.execute(
-            select(PaymentIntent).where(PaymentIntent.user_id == user_id)
+            select(func.count()).select_from(PaymentIntent).where(PaymentIntent.user_id == user_id)
         )
-        total = len(count_result.scalars().all())
+        total = count_result.scalar() or 0
         
         return {
             "items": intents,
@@ -727,11 +726,9 @@ class PaymentService:
         if not intent:
             return None
         
-        # Only allow updating metadata and description
+        # Only allow updating metadata - description isn't a column on PaymentIntent
         if "metadata" in update_data:
-            intent.metadata = update_data["metadata"]
-        if "description" in update_data:
-            intent.description = update_data["description"]
+            intent.payment_intent_metadata = update_data["metadata"]
         
         await self.db.commit()
         await self.db.refresh(intent)
@@ -830,20 +827,26 @@ class PaymentService:
                 )
                 
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Payment failed: {e.user_message or str(e)}"
                 )
-                
+
+            except HTTPException:
+                # Not retryable (e.g. 404 payment method not found, 400 expired
+                # card) - propagate immediately instead of burning retries and
+                # relabeling it as a 500 below.
+                await self.db.rollback()
+                raise
             except Exception as e:
                 logger.error(f"Payment error on attempt {attempt + 1} for user {user_id}: {e}")
                 await self.db.rollback()
-                
+
                 if attempt == max_retries - 1:
                     raise HTTPException(
-                        status_code=500, 
+                        status_code=500,
                         detail=f"Payment processing failed after {max_retries} attempts: {str(e)}"
                     )
-                
+
                 # Wait before retry
                 await asyncio.sleep(2 ** attempt)
         
@@ -1137,76 +1140,14 @@ class PaymentService:
         except stripe.error.StripeError as e:
             logger.error(f"Stripe error for idempotency key {idempotency_key}: {e}")
             raise HTTPException(status_code=400, detail=f"Payment failed: {str(e)}")
-        
+
+        except HTTPException:
+            # Preserve intentional status codes raised above (price mismatch,
+            # missing payment method) instead of masking them as a 500 below.
+            raise
         except Exception as e:
             logger.error(f"Payment processing error for idempotency key {idempotency_key}: {e}")
             raise HTTPException(status_code=500, detail=f"Payment processing failed: {str(e)}")
-
-    async def validate_pricing(
-        self,
-        order_items: List[Dict[str, Any]],
-        shipping_cost: float = 0.0,
-        tax_amount: float = 0.0,
-        discount_amount: float = 0.0
-    ) -> Dict[str, Any]:
-        """
-        Validate order pricing by recalculating from backend data
-        Never trust frontend prices - always validate against backend
-        """
-        from models.catalog.product import ProductVariant
-        
-        total_items_cost = 0.0
-        validated_items = []
-        
-        for item in order_items:
-            variant_id = UUID(item["variant_id"])
-            quantity = int(item["quantity"])
-            frontend_price = float(item.get("price_per_unit", 0))
-            
-            # Get actual price from database
-            variant_result = await self.db.execute(
-                select(ProductVariant).where(ProductVariant.id == variant_id)
-            )
-            variant = variant_result.scalar_one_or_none()
-            
-            if not variant:
-                raise HTTPException(status_code=404, detail=f"Product variant {variant_id} not found")
-            
-            backend_price = float(variant.price)
-            
-            # Validate price matches (allow small rounding differences)
-            if abs(frontend_price - backend_price) > 0.01:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Price mismatch for variant {variant_id}: frontend {frontend_price}, backend {backend_price}"
-                )
-            
-            item_total = backend_price * quantity
-            total_items_cost += item_total
-            
-            validated_items.append({
-                "variant_id": str(variant_id),
-                "quantity": quantity,
-                "price_per_unit": backend_price,
-                "total_price": item_total,
-                "variant_name": variant.name
-            })
-        
-        # Calculate final total
-        subtotal = total_items_cost
-        total_after_discount = subtotal - discount_amount
-        total_with_tax = total_after_discount + tax_amount
-        final_total = total_with_tax + shipping_cost
-        
-        return {
-            "items": validated_items,
-            "subtotal": subtotal,
-            "discount_amount": discount_amount,
-            "tax_amount": tax_amount,
-            "shipping_cost": shipping_cost,
-            "final_total": final_total,
-            "validation_passed": True
-        }
 
     async def transactions(
         self,
@@ -1230,9 +1171,9 @@ class PaymentService:
 
         # Get total count
         count_result = await self.db.execute(
-            select(Transaction).where(Transaction.user_id == user_id)
+            select(func.count()).select_from(Transaction).where(Transaction.user_id == user_id)
         )
-        total = len(count_result.scalars().all())
+        total = count_result.scalar() or 0
 
         # Construct transaction data with customer_name and payment_method
         transaction_data = []
@@ -1328,7 +1269,7 @@ class PaymentService:
         transactions = result.scalars().all()
 
         # Get total count with same filters
-        count_query = select(Transaction)
+        count_query = select(func.count()).select_from(Transaction)
         if status:
             count_query = count_query.where(Transaction.status == status)
         if date_from:
@@ -1355,7 +1296,7 @@ class PaymentService:
             )
 
         count_result = await self.db.execute(count_query)
-        total = len(count_result.scalars().all())
+        total = count_result.scalar() or 0
 
         # Construct transaction data with customer_name and payment_method
         transaction_data = []
@@ -1418,7 +1359,7 @@ class PaymentService:
             status=transaction_data.get("status", "pending"),
             transaction_type=transaction_data.get("transaction_type", "manual"),
             description=transaction_data.get("description", "Manual transaction"),
-            transaction_metadata=transaction_data.get("metadata", {})
+            transaction_metadata=json.dumps(transaction_data.get("metadata", {}))
         )
         self.db.add(transaction)
         await self.db.commit()
@@ -1441,7 +1382,7 @@ class PaymentService:
         if "description" in update_data:
             transaction.description = update_data["description"]
         if "metadata" in update_data:
-            transaction.transaction_metadata = update_data["metadata"]
+            transaction.transaction_metadata = json.dumps(update_data["metadata"])
         
         await self.db.commit()
         await self.db.refresh(transaction)
@@ -1502,7 +1443,7 @@ class PaymentService:
                 status="succeeded",
                 transaction_type="refund",
                 description=f"Refund processed: {reason}",
-                transaction_metadata={"stripe_refund_id": stripe_refund.id}
+                transaction_metadata=json.dumps({"stripe_refund_id": stripe_refund.id})
             )
             
             self.db.add(transaction)
@@ -1537,12 +1478,12 @@ class PaymentService:
         refunds = result.scalars().all()
         
         count_result = await self.db.execute(
-            select(Transaction).where(
+            select(func.count()).select_from(Transaction).where(
                 Transaction.user_id == user_id,
                 Transaction.transaction_type == "refund"
             )
         )
-        total = len(count_result.scalars().all())
+        total = count_result.scalar() or 0
         
         return {
             "items": [r.to_dict() for r in refunds],
@@ -1567,7 +1508,7 @@ class PaymentService:
         if "description" in update_data:
             refund.description = update_data["description"]
         if "metadata" in update_data:
-            refund.transaction_metadata = update_data["metadata"]
+            refund.transaction_metadata = json.dumps(update_data["metadata"])
         
         await self.db.commit()
         await self.db.refresh(refund)
@@ -1629,100 +1570,6 @@ class PaymentService:
     # ============================================================================
     # PAYMENT FAILURE HANDLING METHODS
     # ============================================================================
-    
-    def _init_failure_handling(self):
-        """Initialize failure handling components"""
-        # Failure reason mapping from Stripe error codes
-        self.stripe_error_mapping = {
-            "insufficient_funds": PaymentFailureReason.INSUFFICIENT_FUNDS,
-            "card_declined": PaymentFailureReason.CARD_DECLINED,
-            "expired_card": PaymentFailureReason.EXPIRED_CARD,
-            "incorrect_number": PaymentFailureReason.INVALID_CARD,
-            "incorrect_cvc": PaymentFailureReason.INVALID_CARD,
-            "authentication_required": PaymentFailureReason.AUTHENTICATION_REQUIRED,
-            "processing_error": PaymentFailureReason.PROCESSING_ERROR,
-            "rate_limit": PaymentFailureReason.LIMIT_EXCEEDED,
-            "fraud": PaymentFailureReason.FRAUD_SUSPECTED,
-        }
-
-    async def handle_failure(
-        self,
-        payment_intent_id: UUID,
-        stripe_error: Optional[Dict] = None,
-        failure_context: Optional[Dict] = None
-    ) -> Dict[str, Any]:
-        """
-        Comprehensive payment failure handling with recovery mechanisms
-        
-        Args:
-            payment_intent_id: Failed payment intent ID
-            stripe_error: Stripe error details
-            failure_context: Additional failure context
-            
-        Returns:
-            Recovery action details
-        """
-        try:
-            # Get payment intent with lock
-            payment_intent = await self._get_payment_intent_with_lock(payment_intent_id)
-            
-            if not payment_intent:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Payment intent {payment_intent_id} not found"
-                )
-            
-            # Categorize failure reason
-            failure_reason = self._categorize_failure_reason(stripe_error)
-            
-            # Update payment intent with failure details
-            await self._update_payment_intent_failure(payment_intent, stripe_error, failure_reason)
-            
-            # Handle order-specific failures
-            recovery_actions = []
-            if payment_intent.order_id:
-                order_actions = await self._handle_order_payment_failure(
-                    payment_intent.order_id, 
-                    failure_reason,
-                    failure_context
-                )
-                recovery_actions.extend(order_actions)
-            
-            # Handle subscription-specific failures
-            if payment_intent.subscription_id:
-                subscription_actions = await self._handle_subscription_payment_failure(
-                    payment_intent.subscription_id,
-                    failure_reason,
-                    failure_context
-                )
-                recovery_actions.extend(subscription_actions)
-            
-            # Send user notification
-            await self._send_failure_notification(payment_intent, failure_reason)
-            
-            # Determine retry strategy
-            retry_strategy = self._determine_retry_strategy(failure_reason, payment_intent)
-            
-            await self.db.commit()
-            
-            logger.info(f"Payment failure handled: {payment_intent_id}, reason: {failure_reason.value}")
-            
-            return {
-                "payment_intent_id": str(payment_intent_id),
-                "failure_reason": failure_reason.value,
-                "recovery_actions": recovery_actions,
-                "retry_strategy": retry_strategy,
-                "user_message": self._get_user_friendly_message(failure_reason),
-                "next_steps": self._get_next_steps(failure_reason)
-            }
-            
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error handling payment failure for {payment_intent_id}: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to handle payment failure: {str(e)}"
-            )
 
     async def _get_payment_intent_with_lock(self, payment_intent_id: UUID) -> Optional[PaymentIntent]:
         """Get payment intent with SELECT ... FOR UPDATE lock"""
@@ -1732,224 +1579,6 @@ class PaymentService:
             .with_for_update()
         )
         return result.scalar_one_or_none()
-
-    def _categorize_failure_reason(self, stripe_error: Optional[Dict]) -> PaymentFailureReason:
-        """Categorize payment failure reason from Stripe error"""
-        if not stripe_error:
-            return PaymentFailureReason.UNKNOWN
-        
-        error_code = stripe_error.get("code", "").lower()
-        decline_code = stripe_error.get("decline_code", "").lower()
-        
-        # Check error code first
-        if error_code in self.stripe_error_mapping:
-            return self.stripe_error_mapping[error_code]
-        
-        # Check decline code
-        if decline_code in self.stripe_error_mapping:
-            return self.stripe_error_mapping[decline_code]
-        
-        # Check error type
-        error_type = stripe_error.get("type", "").lower()
-        if "card" in error_type:
-            return PaymentFailureReason.CARD_DECLINED
-        elif "authentication" in error_type:
-            return PaymentFailureReason.AUTHENTICATION_REQUIRED
-        
-        return PaymentFailureReason.UNKNOWN
-
-    async def _update_payment_intent_failure(
-        self,
-        payment_intent: PaymentIntent,
-        stripe_error: Optional[Dict],
-        failure_reason: PaymentFailureReason
-    ):
-        """Update payment intent with failure details"""
-        payment_intent.status = "failed"
-        payment_intent.failed_at = datetime.utcnow()
-        payment_intent.failure_reason = failure_reason.value
-        
-        # Store detailed error information
-        if stripe_error:
-            payment_intent.failure_metadata = {
-                "stripe_error": stripe_error,
-                "categorized_reason": failure_reason.value,
-                "failed_at": datetime.utcnow().isoformat(),
-                "retry_count": payment_intent.failure_metadata.get("retry_count", 0) + 1 if payment_intent.failure_metadata else 1
-            }
-
-    async def _handle_order_payment_failure(
-        self,
-        order_id: UUID,
-        failure_reason: PaymentFailureReason,
-        failure_context: Optional[Dict]
-    ) -> List[Dict[str, Any]]:
-        """Handle payment failure for orders with inventory restoration"""
-        recovery_actions = []
-        
-        try:
-            # Get order with lock
-            order_result = await self.db.execute(
-                select(Order)
-                .where(Order.id == order_id)
-                .options(selectinload(Order.items).selectinload(OrderItem.variant))
-                .with_for_update()
-            )
-            order = order_result.scalar_one_or_none()
-            
-            if not order:
-                return recovery_actions
-            
-            # Update order status
-            order.order_status = OrderStatus.CANCELLED
-            order.payment_status = PaymentStatus.FAILED
-            order.version += 1
-            
-            # Store failure details in order metadata
-            if not order.order_metadata:
-                order.order_metadata = {}
-            
-            order.order_metadata.update({
-                "payment_failure": {
-                    "reason": failure_reason.value,
-                    "failed_at": datetime.utcnow().isoformat(),
-                    "context": failure_context or {}
-                }
-            })
-            
-            # Restore inventory for failed payment
-            from services.catalog.inventory import InventoryService
-            inventory_service = InventoryService(self.db)
-            inventory_restored = []
-            
-            for item in order.items:
-                if item.variant:
-                    try:
-                        # Restore stock atomically
-                        restore_result = await inventory_service.increment(
-                            variant_id=item.variant_id,
-                            quantity=item.quantity,
-                            location_id=item.variant.inventory.location_id if item.variant.inventory else None,
-                            order_id=order_id,
-                            user_id=order.user_id
-                        )
-                        
-                        inventory_restored.append({
-                            "variant_id": str(item.variant_id),
-                            "quantity_restored": item.quantity,
-                            "product_name": item.variant.product.name if item.variant.product else "Unknown"
-                        })
-                        
-                    except Exception as e:
-                        logger.error(f"Failed to restore inventory for variant {item.variant_id}: {e}")
-            
-            if inventory_restored:
-                recovery_actions.append({
-                    "action": "inventory_restored",
-                    "details": inventory_restored
-                })
-            
-            # Set order expiry for retry window
-            retry_window_hours = self._get_retry_window_hours(failure_reason)
-            order.order_metadata["payment_retry_expires_at"] = (
-                datetime.utcnow() + timedelta(hours=retry_window_hours)
-            ).isoformat()
-            
-            recovery_actions.append({
-                "action": "order_marked_for_retry",
-                "retry_expires_at": order.order_metadata["payment_retry_expires_at"],
-                "retry_window_hours": retry_window_hours
-            })
-            
-        except Exception as e:
-            logger.error(f"Error handling order payment failure {order_id}: {e}")
-            recovery_actions.append({
-                "action": "error",
-                "message": f"Failed to handle order payment failure: {str(e)}"
-            })
-        
-        return recovery_actions
-
-    async def _handle_subscription_payment_failure(
-        self,
-        subscription_id: UUID,
-        failure_reason: PaymentFailureReason,
-        failure_context: Optional[Dict]
-    ) -> List[Dict[str, Any]]:
-        """Handle payment failure for subscriptions with grace period"""
-        recovery_actions = []
-        
-        try:
-            # Get subscription with lock
-            subscription_result = await self.db.execute(
-                select(Subscription)
-                .where(Subscription.id == subscription_id)
-                .with_for_update()
-            )
-            subscription = subscription_result.scalar_one_or_none()
-            
-            if not subscription:
-                return recovery_actions
-            
-            # Determine grace period based on failure reason
-            grace_period_days = self._get_subscription_grace_period(failure_reason)
-            
-            # Update subscription status and metadata
-            if failure_reason in [PaymentFailureReason.INSUFFICIENT_FUNDS, PaymentFailureReason.CARD_DECLINED]:
-                subscription.status = "payment_failed"
-                subscription.grace_period_ends_at = datetime.utcnow() + timedelta(days=grace_period_days)
-            else:
-                subscription.status = "suspended"
-            
-            # Store failure details
-            if not subscription.subscription_metadata:
-                subscription.subscription_metadata = {}
-            
-            subscription.subscription_metadata.update({
-                "payment_failure": {
-                    "reason": failure_reason.value,
-                    "failed_at": datetime.utcnow().isoformat(),
-                    "grace_period_days": grace_period_days,
-                    "retry_count": subscription.subscription_metadata.get("payment_failure", {}).get("retry_count", 0) + 1
-                }
-            })
-            
-            recovery_actions.extend([
-                {
-                    "action": "subscription_grace_period_activated",
-                    "grace_period_days": grace_period_days,
-                    "grace_period_ends_at": subscription.grace_period_ends_at.isoformat() if subscription.grace_period_ends_at else None
-                }
-            ])
-            
-        except Exception as e:
-            logger.error(f"Error handling subscription payment failure {subscription_id}: {e}")
-            recovery_actions.append({
-                "action": "error",
-                "message": f"Failed to handle subscription payment failure: {str(e)}"
-            })
-        
-        return recovery_actions
-
-    async def _send_failure_notification(
-        self,
-        payment_intent: PaymentIntent,
-        failure_reason: PaymentFailureReason
-    ):
-        """Send user-friendly notification about payment failure"""
-        try:
-            user_message = self._get_user_friendly_message(failure_reason)
-            notification_type = "error" if failure_reason in [
-                PaymentFailureReason.FRAUD_SUSPECTED,
-                PaymentFailureReason.PROCESSING_ERROR
-            ] else "warning"
-            
-            # For payment failures, we could send an email notification instead
-            # For now, we'll just log the failure
-            logger.info(f"Payment failure notification would be sent to user {payment_intent.user_id}: {user_message}")
-            
-        except Exception as e:
-            logger.error(f"Error handling payment failure notification: {e}")
 
     def _determine_retry_strategy(
         self,
@@ -2004,28 +1633,6 @@ class PaymentService:
                 PaymentFailureReason.NETWORK_ERROR
             ] else "manual"
         }
-
-    def _get_retry_window_hours(self, failure_reason: PaymentFailureReason) -> int:
-        """Get retry window in hours for order payment failures"""
-        retry_windows = {
-            PaymentFailureReason.INSUFFICIENT_FUNDS: 168,  # 1 week
-            PaymentFailureReason.CARD_DECLINED: 72,  # 3 days
-            PaymentFailureReason.PROCESSING_ERROR: 24,  # 1 day
-            PaymentFailureReason.NETWORK_ERROR: 12,  # 12 hours
-            PaymentFailureReason.AUTHENTICATION_REQUIRED: 48,  # 2 days
-        }
-        return retry_windows.get(failure_reason, 48)  # Default 2 days
-
-    def _get_subscription_grace_period(self, failure_reason: PaymentFailureReason) -> int:
-        """Get grace period in days for subscription payment failures"""
-        grace_periods = {
-            PaymentFailureReason.INSUFFICIENT_FUNDS: 7,  # 1 week
-            PaymentFailureReason.CARD_DECLINED: 5,  # 5 days
-            PaymentFailureReason.PROCESSING_ERROR: 3,  # 3 days
-            PaymentFailureReason.NETWORK_ERROR: 1,  # 1 day
-            PaymentFailureReason.AUTHENTICATION_REQUIRED: 3,  # 3 days
-        }
-        return grace_periods.get(failure_reason, 3)  # Default 3 days
 
     def _get_user_friendly_message(self, failure_reason: PaymentFailureReason) -> str:
         """Get user-friendly message for payment failure"""
@@ -2124,9 +1731,23 @@ class PaymentService:
                     detail=f"Payment retry not allowed: {retry_strategy['reason']}"
                 )
             
-            # Update payment method if provided
+            # Update payment method if provided - payment_method_id stores the
+            # Stripe string id, not our internal PaymentMethod row's UUID.
             if new_payment_method_id:
-                payment_intent.payment_method_id = new_payment_method_id
+                pm_result = await self.db.execute(
+                    select(PaymentMethod).where(
+                        and_(
+                            PaymentMethod.id == new_payment_method_id,
+                            PaymentMethod.user_id == payment_intent.user_id,
+                            PaymentMethod.is_active == True
+                        )
+                    )
+                )
+                new_payment_method = pm_result.scalar_one_or_none()
+                if not new_payment_method:
+                    raise HTTPException(status_code=404, detail="Payment method not found")
+                payment_intent.payment_method_id = new_payment_method.stripe_payment_method_id
+                payment_intent.payment_method_type = new_payment_method.type
             
             # Reset payment intent for retry
             payment_intent.status = "requires_payment_method"
