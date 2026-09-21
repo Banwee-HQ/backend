@@ -78,6 +78,31 @@ class TestPaymentMethodEndpoints:
         response = await async_client.delete(f"/v1/payments/methods/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
 
+    async def test_patch(self, async_client: AsyncClient, auth_headers, created_method):
+        """PATCH /v1/payments/methods/{id} - Update a method."""
+        response = await async_client.patch(f"/v1/payments/methods/{created_method['id']}/",
+            headers=auth_headers, json={"is_default": True})
+        assert response.status_code == 200
+        assert response.json()["data"]["is_default"] is True
+
+    async def test_patch_not_found(self, async_client: AsyncClient, auth_headers):
+        """PATCH /v1/payments/methods/{id} - Unknown ID returns 404."""
+        response = await async_client.patch(f"/v1/payments/methods/{uuid4()}/",
+            headers=auth_headers, json={"is_default": True})
+        assert response.status_code == 404
+
+    async def test_set_default_not_found(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/payments/methods/{id}/default - Unknown ID returns 404."""
+        response = await async_client.post(f"/v1/payments/methods/{uuid4()}/default/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_process_payment(self, async_client: AsyncClient, auth_headers, created_method):
+        """POST /v1/payments/process - Process a payment against a real payment method."""
+        response = await async_client.post("/v1/payments/process/", headers=auth_headers, params={
+            "amount": 25.0, "payment_method_id": created_method["id"]
+        })
+        assert response.status_code == 200
+
 
 @pytest.mark.api
 class TestPaymentIntentEndpoints:

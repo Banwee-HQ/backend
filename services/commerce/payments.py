@@ -542,7 +542,11 @@ class PaymentService:
             if commit:
                 await self.db.commit()
                 await self.db.refresh(payment_intent)
-            
+            else:
+                # confirm_intent() immediately re-queries this row by id - flush explicitly
+                # rather than relying on the session's autoflush setting to make it visible.
+                await self.db.flush()
+
             return payment_intent
             
         except stripe.error.StripeError as e:
