@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from core.exceptions import HTTPException
 
 class MethodBase(BaseModel):
     name: str = Field(..., min_length=1)
