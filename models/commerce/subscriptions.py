@@ -28,6 +28,7 @@ class DeliveryType(str, Enum):
 
 class BillingCycle(str, Enum):
     """Billing cycle options"""
+    WEEKLY = "weekly"
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
     YEARLY = "yearly"

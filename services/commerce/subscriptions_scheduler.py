@@ -15,7 +15,7 @@ from models.catalog.product import ProductVariant
 from models.accounts.user import User, Address
 from models.commerce.payments import PaymentMethod
 from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
-from services.commerce.subscriptions import SubscriptionService
+from services.commerce.subscriptions import SubscriptionService, compute_period_end
 from services.commerce.payments import PaymentService
 from services.accounts.email import EmailService
 from services.catalog.inventory import InventoryService
@@ -399,35 +399,22 @@ class SubscriptionScheduler:
         }
     
     async def _update_billing_dates(self, subscription: Subscription):
-        """Update subscription billing dates with proper month-end handling"""
+        """Update subscription billing dates, using relativedelta so month/year-end dates roll over correctly."""
         current_period_end = subscription.current_period_end or datetime.now(timezone.utc)
-        
-        if subscription.billing_cycle == "weekly":
-            next_period_end = current_period_end + timedelta(weeks=1)
-            
-        elif subscription.billing_cycle == "yearly":
-            # Use relativedelta to handle leap years properly
-            next_period_end = current_period_end + relativedelta(years=1)
-            
-        else:  # monthly (default)
-            # Use relativedelta to handle month-end dates properly
-            # This automatically handles 28, 29, 30, 31 day months
-            next_period_end = current_period_end + relativedelta(months=1)
-            
-            # e.g. Jan 31 + 1 month = Feb 28/29; Mar 31 + 1 month = Apr 30.
-        
+        next_period_end = compute_period_end(current_period_end, subscription.billing_cycle)
+
         subscription.current_period_start = current_period_end
         subscription.current_period_end = next_period_end
         subscription.next_billing_date = next_period_end
         
-        # Update metadata
-        if not subscription.subscription_metadata:
-            subscription.subscription_metadata = {}
-        
-        subscription.subscription_metadata.update({
+        # Update metadata - reassign a new dict, since mutating the existing one in
+        # place doesn't register as a change on a plain JSON column.
+        metadata = dict(subscription.subscription_metadata or {})
+        metadata.update({
             "last_order_created": datetime.now(timezone.utc).isoformat(),
-            "orders_created_count": subscription.subscription_metadata.get("orders_created_count", 0) + 1
+            "orders_created_count": metadata.get("orders_created_count", 0) + 1
         })
+        subscription.subscription_metadata = metadata
         
         logger.info(f"Updated billing dates for subscription {subscription.id}: next billing on {next_period_end.date()}")
 

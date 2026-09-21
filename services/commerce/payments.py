@@ -1657,11 +1657,12 @@ class PaymentService:
             payment_intent.failed_at = None
             payment_intent.failure_reason = None
             
-            # Update retry count
-            if not payment_intent.failure_metadata:
-                payment_intent.failure_metadata = {}
-            payment_intent.failure_metadata["retry_count"] = payment_intent.failure_metadata.get("retry_count", 0) + 1
-            payment_intent.failure_metadata["last_retry_at"] = datetime.utcnow().isoformat()
+            # Update retry count - reassign a new dict, since mutating the existing one in
+            # place doesn't register as a change on a plain JSON column.
+            failure_metadata = dict(payment_intent.failure_metadata or {})
+            failure_metadata["retry_count"] = failure_metadata.get("retry_count", 0) + 1
+            failure_metadata["last_retry_at"] = datetime.utcnow().isoformat()
+            payment_intent.failure_metadata = failure_metadata
             
             await self.db.commit()
             

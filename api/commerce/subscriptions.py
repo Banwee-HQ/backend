@@ -10,14 +10,16 @@ from core.dependencies import require_admin, require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.subscriptions import (
-    Create, 
-    Update, 
+    Create,
+    Update,
     CostCalculation,
     AddProducts,
     RemoveProducts,
     UpdateQuantity,
     QuantityChange,
-    DiscountApplication
+    DiscountApplication,
+    ChangeFrequency,
+    SkipShipment
 )
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
@@ -119,6 +121,23 @@ async def plans(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch subscription plans: {str(e)}"
+        )
+
+
+@router.get("/due/")
+async def list_due(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """List active subscriptions currently due for billing (admin only)."""
+    try:
+        subscription_service = SubscriptionService(db)
+        due = await subscription_service.list_due()
+        return Response.success(data=[s.to_dict() for s in due])
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to list due subscriptions: {str(e)}"
         )
 
 
@@ -228,6 +247,8 @@ async def create(
         )
     except APIException as e:
         raise e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating subscription: {e}")
         raise APIException(
@@ -235,7 +256,7 @@ async def create(
             message=f"Failed to create subscription: {str(e)}"
         )
 @router.get("/")
-async def list(
+async def list_subscriptions(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -302,6 +323,8 @@ async def add_products(
         )
     except APIException as e:
         raise e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error adding products to subscription: {e}")
         raise APIException(
@@ -535,20 +558,16 @@ async def update(
     """Update a subscription."""
     try:
         subscription_service = SubscriptionService(db)
-        # Extract product_variant_ids and other data
-        product_variant_ids = getattr(subscription_data, 'variant_ids', None) or getattr(subscription_data, 'product_variant_ids', None)
         # Pass data directly to the service method
         subscription = await subscription_service.update(
             subscription_id=subscription_id,
             user_id=current_user.id,
             name=subscription_data.name if hasattr(subscription_data, 'name') else None,
-            product_variant_ids=product_variant_ids,
+            variant_ids=subscription_data.variant_ids if hasattr(subscription_data, 'variant_ids') else None,
             # Pass other updateable fields from subscription_data
             delivery_address_id=subscription_data.delivery_address_id if hasattr(subscription_data, 'delivery_address_id') else None,
             shipping_method_id=subscription_data.shipping_method_id if hasattr(subscription_data, 'shipping_method_id') else None,
             auto_renew=subscription_data.auto_renew if hasattr(subscription_data, 'auto_renew') else None,
-            billing_cycle=subscription_data.billing_cycle if hasattr(subscription_data, 'billing_cycle') else None,
-            pause_reason=subscription_data.pause_reason if hasattr(subscription_data, 'pause_reason') else None,
             current_period_start=subscription_data.current_period_start if hasattr(subscription_data, 'current_period_start') else None
             # Add other fields here as needed
         )
@@ -629,20 +648,20 @@ async def process_shipment(
             )
         # Create order from subscription
         scheduler = SubscriptionScheduler(db)
-        order = await scheduler.create_subscription_order(subscription)
-        if order:
+        result = await scheduler.process_subscription(subscription_id)
+        if result.get("success"):
             return Response.success(
                 data={
                     "subscription_id": str(subscription_id),
-                    "order_id": str(order.id),
-                    "order_number": order.order_number
+                    "order_id": result["order_id"],
+                    "order_number": result["order_number"]
                 },
                 message="Subscription shipment processed successfully"
             )
         else:
             raise APIException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message="Failed to create order from subscription"
+                message=f"Failed to create order from subscription: {result.get('error', 'unknown error')}"
             )
     except APIException:
         raise
@@ -707,6 +726,91 @@ async def resume(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to resume/activate subscription: {str(e)}"
         )
+
+
+@router.patch("/{subscription_id}/frequency/")
+async def change_frequency(
+    subscription_id: UUID,
+    request: ChangeFrequency,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Change a subscription's billing frequency."""
+    try:
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.change_frequency(
+            subscription_id, current_user.id, request.frequency
+        )
+        return Response.success(
+            data=subscription.to_dict(include_products=True),
+            message="Subscription frequency updated successfully"
+        )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to change subscription frequency: {str(e)}"
+        )
+
+
+@router.post("/{subscription_id}/skip/")
+async def skip(
+    subscription_id: UUID,
+    request: SkipShipment,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Skip the upcoming shipment, optionally to a specific date."""
+    try:
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.skip_next_shipment(
+            subscription_id, current_user.id, request.next_shipment_date
+        )
+        return Response.success(
+            data=subscription.to_dict(include_products=True),
+            message="Upcoming shipment skipped successfully"
+        )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to skip shipment: {str(e)}"
+        )
+
+
+@router.post("/{subscription_id}/unskip/")
+async def unskip(
+    subscription_id: UUID,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Undo the most recent skip, restoring the original next shipment date."""
+    try:
+        subscription_service = SubscriptionService(db)
+        subscription = await subscription_service.unskip_next_shipment(
+            subscription_id, current_user.id
+        )
+        return Response.success(
+            data=subscription.to_dict(include_products=True),
+            message="Shipment skip undone successfully"
+        )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to unskip shipment: {str(e)}"
+        )
+
+
 @router.delete("/{subscription_id}/products/{product_id}/")
 async def remove_product(
     subscription_id: UUID,
@@ -817,7 +921,7 @@ async def details(
             variant_ids = list(variant_quantities.keys())
             result = await db.execute(
                 select(ProductVariant)
-                .options(selectinload(ProductVariant.product))
+                .options(selectinload(ProductVariant.product), selectinload(ProductVariant.images))
                 .where(ProductVariant.id.in_(variant_ids))
             )
             variants = result.scalars().all()
@@ -831,7 +935,7 @@ async def details(
                     "quantity": quantity,
                     "unit_price": float(variant.current_price),
                     "total_price": float(variant.current_price * quantity),
-                    "image": variant.product.images[0].image_url if variant.product.images else None,
+                    "image": variant.images[0].url if variant.images else None,
                     "added_at": subscription.created_at.isoformat()
                 })
 

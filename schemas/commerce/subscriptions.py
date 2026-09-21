@@ -91,6 +91,16 @@ class DiscountApplication(BaseModel):
     discount_code: str
 
 
+class ChangeFrequency(BaseModel):
+    """Change subscription billing frequency"""
+    frequency: BillingCycle
+
+
+class SkipShipment(BaseModel):
+    """Skip the upcoming shipment, optionally to a specific date"""
+    next_shipment_date: Optional[str] = None
+
+
 class Response(BaseModel):
     """Subscription response"""
     id: str

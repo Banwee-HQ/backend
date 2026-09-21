@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete, or_, func, update
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from models.commerce.subscriptions import Subscription, SubscriptionStatus, SubscriptionProductAssociation, SubscriptionProduct
+from models.commerce.subscriptions import Subscription, SubscriptionStatus, BillingCycle, SubscriptionProductAssociation, SubscriptionProduct
 from models.commerce.discounts import SubscriptionDiscount, ProductRemovalAudit
 from models.commerce.orders import Order
 from models.commerce.shipping import ShippingMethod
@@ -20,6 +20,18 @@ from dateutil.relativedelta import relativedelta
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)
+
+
+def compute_period_end(start: datetime, billing_cycle: str) -> datetime:
+    """End of a billing period given its start - the single source of truth for cycle
+    math, shared by subscription creation, frequency changes, and the renewal scheduler."""
+    if billing_cycle == BillingCycle.WEEKLY:
+        return start + timedelta(weeks=1)
+    if billing_cycle == BillingCycle.QUARTERLY:
+        return start + relativedelta(months=3)
+    if billing_cycle == BillingCycle.YEARLY:
+        return start + relativedelta(years=1)
+    return start + relativedelta(months=1)  # monthly (default)
 
 
 class SubscriptionService:
@@ -116,14 +128,7 @@ class SubscriptionService:
         else:
             now = datetime.now(timezone.utc)
 
-        if billing_cycle == "monthly":
-            period_end = now + relativedelta(months=1)
-        elif billing_cycle == "quarterly":
-            period_end = now + relativedelta(months=3)
-        elif billing_cycle == "yearly":
-            period_end = now + relativedelta(years=1)
-        else:
-            period_end = now + relativedelta(months=1)
+        period_end = compute_period_end(now, billing_cycle)
 
         # Create subscription
         subscription = Subscription(
@@ -492,14 +497,7 @@ class SubscriptionService:
             subscription.current_period_start = new_period_start
 
             # Recalculate period end and next billing date
-            if subscription.billing_cycle == "monthly":
-                new_period_end = new_period_start + relativedelta(months=1)
-            elif subscription.billing_cycle == "quarterly":
-                new_period_end = new_period_start + relativedelta(months=3)
-            elif subscription.billing_cycle == "yearly":
-                new_period_end = new_period_start + relativedelta(years=1)
-            else:
-                new_period_end = new_period_start + relativedelta(months=1)
+            new_period_end = compute_period_end(new_period_start, subscription.billing_cycle)
 
             subscription.current_period_end = new_period_end
             subscription.next_billing_date = new_period_end
@@ -528,9 +526,9 @@ class SubscriptionService:
                 self.db.add(association)
         
         if variant_quantities:
-            if not subscription.subscription_metadata:
-                subscription.subscription_metadata = {}
-            subscription.subscription_metadata["variant_quantities"] = variant_quantities
+            metadata = dict(subscription.subscription_metadata or {})
+            metadata["variant_quantities"] = variant_quantities
+            subscription.subscription_metadata = metadata
 
         await self.db.commit()
         # products is many-to-many; once loaded, a later selectinload (inside get())
@@ -588,6 +586,78 @@ class SubscriptionService:
         subscription.cancelled_at = None
         subscription.auto_renew = True
         subscription.next_billing_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        await self.db.commit()
+        return await self.get(subscription.id)
+
+    async def list_due(self, limit: int = 50) -> List[Subscription]:
+        """List active subscriptions currently due for billing (admin)."""
+        result = await self.db.execute(
+            select(Subscription)
+            .where(
+                and_(
+                    Subscription.status == "active",
+                    Subscription.auto_renew == True,
+                    Subscription.next_billing_date <= datetime.now(timezone.utc),
+                )
+            )
+            .order_by(Subscription.next_billing_date.asc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    async def change_frequency(self, subscription_id: UUID, user_id: UUID, frequency: str) -> Subscription:
+        """Change billing cycle and recompute the current period end from its existing start."""
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        subscription.billing_cycle = frequency
+        period_start = subscription.current_period_start or datetime.now(timezone.utc)
+        period_end = compute_period_end(period_start, frequency)
+        subscription.current_period_end = period_end
+        subscription.next_billing_date = period_end
+
+        await self.db.commit()
+        return await self.get(subscription.id)
+
+    async def skip_next_shipment(
+        self, subscription_id: UUID, user_id: UUID, next_shipment_date: Optional[str] = None
+    ) -> Subscription:
+        """Push next_billing_date out, remembering the original date so it can be undone."""
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        metadata = dict(subscription.subscription_metadata or {})
+        metadata["skipped_from_date"] = (
+            subscription.next_billing_date.isoformat() if subscription.next_billing_date else None
+        )
+        subscription.subscription_metadata = metadata
+
+        if next_shipment_date:
+            subscription.next_billing_date = datetime.fromisoformat(next_shipment_date).replace(tzinfo=timezone.utc)
+        else:
+            base = subscription.next_billing_date or datetime.now(timezone.utc)
+            subscription.next_billing_date = compute_period_end(base, subscription.billing_cycle)
+
+        await self.db.commit()
+        return await self.get(subscription.id)
+
+    async def unskip_next_shipment(self, subscription_id: UUID, user_id: UUID) -> Subscription:
+        """Restore next_billing_date to what it was before the last skip."""
+        subscription = await self.get(subscription_id, user_id)
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        metadata = dict(subscription.subscription_metadata or {})
+        original = metadata.get("skipped_from_date")
+        if not original:
+            raise HTTPException(status_code=400, detail="Subscription has not been skipped")
+
+        subscription.next_billing_date = datetime.fromisoformat(original)
+        metadata.pop("skipped_from_date", None)
+        subscription.subscription_metadata = metadata
 
         await self.db.commit()
         return await self.get(subscription.id)
