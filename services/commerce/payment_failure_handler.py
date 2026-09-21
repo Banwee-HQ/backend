@@ -20,7 +20,7 @@ class PaymentFailureHandler:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def handle_payment_failure(
+    async def handle_failure(
         self,
         payment_intent_id: str,
         stripe_error: Optional[Dict[str, Any]] = None,
