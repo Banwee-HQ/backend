@@ -172,9 +172,8 @@ class TestProcessDueSubscriptions:
         loaded in this shared session - including subscriptions not yet
         processed - so the very next subscription.status read crashed with
         MissingGreenlet (a synchronous lazy-reload with no async context)."""
-        # admin_user has no payment method - a distinct owner from test_user
-        # (who does, via the payment_method fixture) so this one is
-        # guaranteed to fail rather than also succeed.
+        # admin_user has no payment method - a distinct owner from test_user (who does),
+        # so this one is guaranteed to fail rather than also succeed.
         no_pm_sub = await SubscriptionService(db_session).create(
             user_id=admin_user.id, name="No Payment Method", variant_ids=[str(variant.id)]
         )

@@ -214,11 +214,8 @@ class TestUpdateConversionFunnel:
 
         service = AnalyticsService(db_session)
         await service._update_conversion_funnel(session_id, test_user.id, EventType.PAGE_VIEW)
-        # Flush between calls - in real usage (via track_event()) each call
-        # ends with a commit, so the second call's lookup query always sees
-        # the row the first one created. Two calls with nothing in between
-        # would otherwise both miss it (autoflush=False here) and insert a
-        # second ConversionFunnel row for the same session_id.
+        # Flush between calls - real usage (via track_event()) commits after each
+        # one, so without this both calls would miss the row and double-insert.
         await db_session.flush()
         await service._update_conversion_funnel(session_id, test_user.id, EventType.CART_ADD)
         await db_session.commit()
@@ -318,10 +315,8 @@ class TestGetRevenueMetrics:
         assert result["summary"]["total_revenue"] >= 49.98
 
     async def test_pending_orders_are_excluded(self, db_session, test_user):
-        # A wide, shared window plus a before/after delta instead of an
-        # absolute count - the shared test DB has other committed orders in
-        # any window narrow enough to isolate, especially when the full
-        # file runs and tests execute back-to-back within the same second.
+        # A wide, shared window plus a before/after delta instead of an absolute
+        # count, since the shared test DB has other committed orders too.
         service = AnalyticsService(db_session)
         start = datetime.now(timezone.utc) - timedelta(days=1)
         end = datetime.now(timezone.utc) + timedelta(days=1)

@@ -66,8 +66,3 @@ class TestAnalyticsEndpoints:
         response = await async_client.get("/v1/analytics/repeat-customers/", headers=admin_headers)
         assert response.status_code in [200, 403, 404]
 
-
-# =============================================================================
-# SUBSCRIPTIONS ENDPOINTS (24 endpoints)
-# =============================================================================
-

@@ -108,8 +108,3 @@ class TestSubscriptionEndpoints:
             headers=auth_headers, json={})
         assert response.status_code in [200, 404, 403, 500]  # 500 if DB error
 
-
-# =============================================================================
-# INVENTORY ENDPOINTS (14 endpoints)
-# =============================================================================
-

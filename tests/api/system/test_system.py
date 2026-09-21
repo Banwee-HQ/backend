@@ -30,8 +30,3 @@ class TestRootAndSystem:
         response = await async_client.get("/docs")
         assert response.status_code == 200
 
-
-# =============================================================================
-# AUTHENTICATION ENDPOINTS (19 endpoints)
-# =============================================================================
-

@@ -25,9 +25,8 @@ from models.commerce.tax_rates import TaxRate
 
 
 def unique_code() -> str:
-    # country_code is VARCHAR(2) (ISO 3166-1 alpha-2), so this can't be a UUID
-    # fragment. "X?" is in ISO's user-assigned range - never a real country -
-    # so it can't collide with genuine seeded tax rates (US, NG, ...).
+    # country_code is VARCHAR(2), so no UUID fragment - "X?" is ISO's user-assigned
+    # range, never a real country, so it can't collide with seeded tax rates.
     return "X" + random.choice(string.ascii_uppercase)
 
 

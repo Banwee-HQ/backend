@@ -18,9 +18,8 @@ from services.analytics.export import ExportService
 
 
 def sample_order(**overrides) -> dict:
-    # Matches OrderService._format_order_response()'s real shape - the items
-    # this actually gets called with, via api/analytics/analytics.py's
-    # OrderService.list() -> ExportService.export_orders_to_*() pipeline.
+    # Matches OrderService._format_order_response()'s real shape, as passed
+    # through OrderService.list() -> ExportService.export_orders_to_*().
     order = {
         "id": "order-123",
         "user": {"firstname": "Ada", "lastname": "Lovelace", "email": "ada@example.com"},

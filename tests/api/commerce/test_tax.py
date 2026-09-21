@@ -46,8 +46,3 @@ class TestTaxEndpoints:
         response = await async_client.delete(f"/v1/tax/rates/{rate_id}/", headers=admin_headers)
         assert response.status_code in [200, 404, 403]
 
-
-# =============================================================================
-# SHIPPING ENDPOINTS (6+ endpoints)
-# =============================================================================
-

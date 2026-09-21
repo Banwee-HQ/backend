@@ -54,9 +54,8 @@ test_engine = create_async_engine(
     echo=False,
 )
 
-# Match core.db.DatabaseManager's connection setup: without this, enum types and
-# anything else that isn't in the "public" schema resolve inconsistently depending
-# on where a given object happened to land at creation time.
+# Match core.db.DatabaseManager's connection setup, or enum types and anything else
+# outside "public" resolve inconsistently depending on where they landed at creation.
 from sqlalchemy import event as _sa_event
 
 

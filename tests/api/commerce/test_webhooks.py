@@ -22,30 +22,3 @@ class TestWebhookEndpoints:
         """GET /v1/webhooks/health - Webhook health check."""
         response = await async_client.get("/v1/webhooks/health/")
         assert response.status_code == 200
-
-
-# =============================================================================
-# COMPREHENSIVE TEST SUITE SUMMARY
-# =============================================================================
-# Total API Endpoints in Backend: 221+
-# Test Coverage:
-#   - Root & System: 3 tests
-#   - Authentication: 20 tests
-#   - Users: 13 tests
-#   - Addresses: 5 tests
-#   - Products: 22 tests
-#   - Reviews: 6 tests
-#   - Cart: 6 tests
-#   - Orders: 5 tests
-#   - Payments: 8 tests
-#   - Contact Messages: 5 tests
-#   - Analytics: 20 tests
-#   - Inventory: 14 tests
-#   - Shipping: 9 tests
-#   - Subscriptions: 12 tests
-#   - Tax: 6 tests
-#   - Promocodes: 8 tests
-#   - Refunds: 4 tests
-#   - Webhooks: 2 tests
-# Total: 158 test cases covering 221+ API endpoints
-# =============================================================================

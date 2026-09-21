@@ -45,9 +45,8 @@ async def address(db_session, test_user) -> Address:
 
 @pytest.fixture
 async def shipping_method(db_session) -> ShippingMethod:
-    # flush, not commit - a committed row here can pick up a real FK reference
-    # from a committed Subscription (shipping_method_id), which then blocks
-    # other tests' cleanup of shipping methods with a ForeignKeyViolationError.
+    # flush, not commit - a committed row can pick up a real FK reference from a
+    # committed Subscription, which then blocks other tests' cleanup.
     m = ShippingMethod(id=uuid7(), name="Standard", price=Decimal("10.00"), estimated_days=5, is_active=True)
     db_session.add(m)
     await db_session.flush()
@@ -125,9 +124,8 @@ class TestGetShippingCost:
     async def test_falls_back_to_flat_rate_when_no_methods_exist(self, db_session):
         service = SubscriptionService(db_session)
         cost = await service._get_shipping_cost(uuid4())
-        # No shipping methods created in this isolated test - either the
-        # 8.99 hardcoded fallback, or a cheapest-active-method from other
-        # tests' leaked data (commits aren't rolled back mid-suite).
+        # Either the 8.99 hardcoded fallback, or a cheapest-active-method from
+        # other tests' leaked data (commits aren't rolled back mid-suite).
         assert cost > Decimal("0.00")
 
 

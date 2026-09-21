@@ -14,9 +14,8 @@ def make_refund(order_created_days_ago=1, reason=RefundReason.DEFECTIVE_PRODUCT,
         status=RefundStatus.REQUESTED, refund_type=refund_type, reason=reason,
         requested_amount=amount, currency="USD",
     )
-    # is_eligible_for_auto_approval only reads order.created_at - a real
-    # (unpersisted) Order instance, since the relationship setter below
-    # requires a proper mapped object, not a plain namespace.
+    # A real (unpersisted) Order instance - the relationship setter needs a
+    # proper mapped object, not a plain namespace.
     refund.order = Order(
         id=uuid7(), order_number="ORD-TEST", user_id=uuid7(),
         subtotal=amount, total_amount=amount, billing_address={}, shipping_address={},
