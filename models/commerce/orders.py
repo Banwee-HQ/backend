@@ -1,7 +1,4 @@
-"""
-Optimized order models with hard delete only
-Includes: Order, OrderItem, TrackingEvent
-"""
+"""Order models (hard delete only): Order, OrderItem, TrackingEvent."""
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column

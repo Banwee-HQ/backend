@@ -1,7 +1,4 @@
-"""
-Shipping Tracking Models
-Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, etc.)
-"""
+"""Shipping tracking models; integrates with multiple carriers (UPS, Royal Mail, etc.)."""
 
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID, ENUM as PG_ENUM, JSON

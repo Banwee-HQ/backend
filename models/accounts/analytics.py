@@ -1,7 +1,4 @@
-"""
-User analytics models for accounts service
-Includes: UserSession and CustomerLifecycleMetrics
-"""
+"""User analytics models: UserSession and CustomerLifecycleMetrics."""
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column

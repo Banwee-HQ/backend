@@ -1,7 +1,4 @@
-"""
-Consolidated payment models
-Includes: PaymentMethod, PaymentIntent, Transaction
-"""
+"""Consolidated payment models: PaymentMethod, PaymentIntent, Transaction."""
 from sqlalchemy import String, Boolean, ForeignKey, Numeric, Text, Integer, Date, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON, ENUM as PG_ENUM
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -193,9 +190,8 @@ class PaymentIntent(Base):
     failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # Structured failure detail (Stripe error, retry_count, last_retry_at) - kept
-    # separate from payment_intent_metadata, which already carries caller-supplied
-    # data (idempotency_key, request_id) that failure info would otherwise clobber.
+    # Structured failure detail (Stripe error, retry_count), kept separate from
+    # payment_intent_metadata so it doesn't clobber caller-supplied data there.
     failure_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Metadata for additional tracking (JSONB for structured payment data)
@@ -232,12 +228,7 @@ class PaymentIntent(Base):
 
     @property
     def amount(self) -> float:
-        """Return a simple numeric total for compatibility with schemas.
-
-        The database stores an `amount_breakdown` JSONB for flexibility; many
-        API schemas expect a top-level `amount` attribute. Expose it here as a
-        read-only property so Pydantic's `from_orm` can access it.
-        """
+        """Expose amount_breakdown's total as a top-level attribute for schemas expecting `amount`."""
         try:
             if isinstance(self.amount_breakdown, dict):
                 return float(self.amount_breakdown.get("total", 0.0) or 0.0)

@@ -1,7 +1,4 @@
-"""
-System analytics models for tracking user behavior
-Includes: AnalyticsEvent, ConversionFunnel, EventType
-"""
+"""System analytics models: AnalyticsEvent, ConversionFunnel, EventType."""
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column

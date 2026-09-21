@@ -1,7 +1,4 @@
-"""
-Contact Message Model
-Stores customer contact form submissions
-"""
+"""Contact message model: stores customer contact form submissions."""
 
 from sqlalchemy import String, Text, DateTime, Index
 from sqlalchemy.dialects.postgresql import ENUM

@@ -1,8 +1,4 @@
-"""
-Consolidated subscription models
-Includes: Subscription and related subscription models
-Optimized for PostgreSQL with partial indexes for active subscriptions and products
-"""
+"""Consolidated subscription models, with partial indexes for active subscriptions/products."""
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, Table, JSON, Text, Integer, Date, func, Index, Column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column

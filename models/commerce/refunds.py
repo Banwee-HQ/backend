@@ -1,7 +1,4 @@
-"""
-Refund models for painless refund processing
-Includes: Refund, RefundItem, RefundReason
-"""
+"""Refund models: Refund, RefundItem, RefundReason."""
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -157,10 +154,7 @@ class Refund(Base):
     @property
     def is_eligible_for_auto_approval(self) -> bool:
         """Check if refund is eligible for automatic approval"""
-        # Auto-approve if:
-        # 1. Requested within 30 days of order
-        # 2. Full refund for defective/wrong item
-        # 3. Amount is reasonable (< $500)
+        # Auto-approve if: within 30 days, a full refund for defective/wrong item, and < $500.
         if not self.order or not self.order.created_at:
             return False
             

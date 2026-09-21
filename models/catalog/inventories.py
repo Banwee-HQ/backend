@@ -1,7 +1,4 @@
-"""
-Consolidated inventory models with atomic stock operations
-Includes: WarehouseLocation, Inventory, StockAdjustment
-"""
+"""Inventory models with atomic stock ops: WarehouseLocation, Inventory, StockAdjustment."""
 from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Boolean, func, Index, select, update
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
@@ -94,10 +91,7 @@ class Inventory(Base):
     
     @classmethod
     async def get_with_lock(cls, db: AsyncSession, variant_id: UUIDType) -> Optional['Inventory']:
-        """
-        Get inventory record with SELECT ... FOR UPDATE lock
-        Prevents concurrent modifications during stock operations
-        """
+        """Get inventory record with SELECT ... FOR UPDATE, to prevent concurrent modification."""
         try:
             query = select(cls).where(cls.variant_id == variant_id).with_for_update()
             result = await db.execute(query)
@@ -108,10 +102,7 @@ class Inventory(Base):
 
     @classmethod
     async def get_multiple_with_lock(cls, db: AsyncSession, variant_ids: List[UUIDType]) -> List['Inventory']:
-        """
-        Get multiple inventory records with locks in consistent order
-        Orders by variant_id to prevent deadlocks
-        """
+        """Get multiple inventory records with locks, ordered by variant_id to prevent deadlocks."""
         try:
             query = select(cls).where(
                 cls.variant_id.in_(variant_ids)
@@ -131,20 +122,7 @@ class Inventory(Base):
         user_id: Optional[UUIDType] = None,
         notes: Optional[str] = None
     ) -> 'StockAdjustment':
-        """
-        Atomically update stock with proper validation and audit trail
-        Must be called within a transaction with the inventory already locked
-        
-        Args:
-            db: Database session
-            quantity_change: Positive for increase, negative for decrease
-            reason: Reason for stock change
-            user_id: User making the change
-            notes: Additional notes
-        
-        Returns:
-            Created StockAdjustment record
-        """
+        """Atomically update stock with an audit trail. Caller must already hold the row lock."""
         # Calculate new quantities
         new_available = self.quantity_available + quantity_change
         
@@ -249,18 +227,7 @@ async def atomic_stock_operation(
     operation: str,
     **kwargs
 ) -> Dict[str, Any]:
-    """
-    Perform atomic stock operations with proper locking
-    
-    Args:
-        db: Database session
-        variant_id: Product variant ID
-        operation: Operation type ('update')
-        **kwargs: Operation-specific parameters
-    
-    Returns:
-        Operation result dictionary
-    """
+    """Perform an atomic, row-locked stock operation (currently only 'update' is supported)."""
     try:
         # Get inventory with lock
         inventory = await Inventory.get_with_lock(db, variant_id)
@@ -306,18 +273,7 @@ async def atomic_bulk_stock_update(
     reason: str,
     user_id: Optional[UUIDType] = None
 ) -> List[Dict]:
-    """
-    Atomically update multiple stock levels in a single transaction
-    
-    Args:
-        db: Database session
-        stock_changes: List of dicts with 'variant_id', 'quantity_change', 'notes'
-        reason: Reason for stock changes
-        user_id: User making the changes
-    
-    Returns:
-        List of operation results
-    """
+    """Atomically update multiple stock levels in a single transaction."""
     try:
         # Extract variant IDs and get locks in consistent order
         variant_ids = [change['variant_id'] for change in stock_changes]
