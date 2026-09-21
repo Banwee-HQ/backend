@@ -78,6 +78,11 @@ class CartService:
         if cart.promocode and not cart.promocode.is_active:
             cart.promocode_id = None
             await self.db.commit()
+            # commit() expires every attribute on cart by default - a plain attribute
+            # access below (e.g. cart.updated_at) would otherwise try an implicit
+            # synchronous refresh outside the async-safe context and raise
+            # MissingGreenlet. Refresh explicitly while still inside this await chain.
+            await self.db.refresh(cart)
 
         discount_amount = float(cart.discount_amount)
 
@@ -633,7 +638,11 @@ class CartService:
             raise HTTPException(status_code=404, detail="Cart item not found")
 
         await self.db.commit()
-        
+        # A raw bulk delete() doesn't sync the ORM's identity map - the Cart object
+        # from an earlier get_or_create() in this same session would still show its
+        # stale, already-loaded items collection otherwise.
+        self.db.expire_all()
+
         # Return updated cart
         return await self.get_cart(user_id=user_id)
 
@@ -662,7 +671,11 @@ class CartService:
         )
 
         await self.db.commit()
-        
+        # Both statements above are raw bulk operations, which bypass the ORM's
+        # identity map - without this, an already-loaded Cart in this session would
+        # still show its stale items collection and promocode.
+        self.db.expire_all()
+
         # Return empty cart
         return await self.get_cart(user_id=user_id)
 
@@ -724,6 +737,10 @@ class CartService:
 
         cart.promocode_id = promocode.id
         await self.db.commit()
+        # Setting the FK column directly doesn't refresh the already-loaded
+        # `promocode` relationship object, so cart.discount_amount (which reads
+        # self.promocode) would still see the old value in this same session.
+        await self.db.refresh(cart, ["promocode"])
 
         cart_data = await self.get_cart(user_id=user_id)
         return {
@@ -737,6 +754,7 @@ class CartService:
         cart = await self.get_or_create(user_id)
         cart.promocode_id = None
         await self.db.commit()
+        await self.db.refresh(cart, ["promocode"])
 
         cart_data = await self.get_cart(user_id=user_id)
         return {
