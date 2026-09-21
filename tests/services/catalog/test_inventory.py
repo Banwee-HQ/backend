@@ -80,6 +80,19 @@ class TestAdjustStock:
         )
         assert inventory.quantity_available == 7
 
+    async def test_invalidates_the_product_read_cache(self, db_session, variant):
+        from core.utils.cache import product_read_cache
+        product_read_cache[("variant", variant.id)] = "stale"
+        product_read_cache[("variants", variant.product_id)] = "stale"
+
+        service = InventoryService(db_session)
+        await service.adjust_stock(
+            StockAdjustmentCreate(variant_id=variant.id, quantity_change=-1, reason="test"),
+        )
+
+        assert ("variant", variant.id) not in product_read_cache
+        assert ("variants", variant.product_id) not in product_read_cache
+
     async def test_raises_400_on_insufficient_stock(self, db_session, variant):
         service = InventoryService(db_session)
         with pytest.raises(APIException) as exc_info:

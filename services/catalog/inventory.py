@@ -22,6 +22,7 @@ from schemas.catalog.inventory import (
 )
 from core.exceptions import APIException
 from core.logging import get_structured_logger
+from core.utils.cache import invalidate_variant, invalidate_all
 
 logger = get_structured_logger(__name__)
 
@@ -562,8 +563,9 @@ class InventoryService:
                 select(ProductVariant).where(ProductVariant.id == adjustment_data.variant_id)
             )
             variant = variant_result.scalar_one_or_none()
-            
+
             if variant and variant.product_id:
+                invalidate_variant(adjustment_data.variant_id, variant.product_id)
                 # Sync availability status (don't fail if this fails)
                 try:
                     await self.sync(variant.product_id)
@@ -1040,7 +1042,8 @@ class InventoryService:
                 reason=reason,
                 user_id=user_id
             )
-            
+            invalidate_all()
+
             return {
                 "success": True,
                 "updated_count": len(results),

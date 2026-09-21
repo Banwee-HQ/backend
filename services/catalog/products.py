@@ -20,6 +20,7 @@ from schemas.catalog.product import (
 from schemas.catalog.category import CategoryBrief
 from core.exceptions import APIException
 from core.logging import get_structured_logger
+from core.utils.cache import product_read_cache, invalidate_variant, invalidate_product
 from fastapi import HTTPException
 from datetime import datetime, timezone, date
 
@@ -449,9 +450,13 @@ class ProductService:
         )
 
     async def get(self, product_id: Optional[UUID] = None, slug: Optional[str] = None) -> Optional[ProductResponse]:
-        """Get product by ID or slug."""
+        """Get product by ID or slug. Cached for 5s (display only - cart/checkout never read this)."""
         if not product_id and not slug:
             raise ValueError("Either product_id or slug must be provided")
+
+        cache_key = ("product", product_id or slug)
+        if cache_key in product_read_cache:
+            return product_read_cache[cache_key]
 
         query = select(Product).options(
             selectinload(Product.variants).selectinload(ProductVariant.images),
@@ -466,29 +471,45 @@ class ProductService:
         result = await self.db.execute(query)
         product = result.scalar_one_or_none()
 
-        if product:
-            return self._convert_product_to_response(product)
-        return None
+        response = self._convert_product_to_response(product) if product else None
+        if response is not None:
+            product_read_cache[cache_key] = response
+        return response
 
     async def get_variant(self, variant_id: UUID) -> Optional[ProductVariantResponse]:
-        """Get a variant by ID"""
+        """Get a variant by ID. Cached for 5s (display only - cart/checkout never read this)."""
+        cache_key = ("variant", variant_id)
+        if cache_key in product_read_cache:
+            return product_read_cache[cache_key]
+
         query = select(ProductVariant).options(
             selectinload(ProductVariant.images),
             selectinload(ProductVariant.inventory)
         ).where(ProductVariant.id == variant_id)
         result = await self.db.execute(query)
         variant = result.scalar_one_or_none()
-        return self._convert_variant_to_response(variant) if variant else None
+
+        response = self._convert_variant_to_response(variant) if variant else None
+        if response is not None:
+            product_read_cache[cache_key] = response
+        return response
 
     async def list_variants(self, product_id: UUID) -> List[ProductVariantResponse]:
-        """List all variants for a product"""
+        """List all variants for a product. Cached for 5s (display only - cart/checkout never read this)."""
+        cache_key = ("variants", product_id)
+        if cache_key in product_read_cache:
+            return product_read_cache[cache_key]
+
         query = select(ProductVariant).options(
             selectinload(ProductVariant.images),
             selectinload(ProductVariant.inventory)
         ).where(ProductVariant.product_id == product_id)
         result = await self.db.execute(query)
         variants = result.scalars().all()
-        return [self._convert_variant_to_response(v) for v in variants]
+
+        response = [self._convert_variant_to_response(v) for v in variants]
+        product_read_cache[cache_key] = response
+        return response
 
     async def create_variant(self, product_id: UUID, variant_data: ProductVariantCreate) -> ProductVariantResponse:
         """Create a new variant for a product"""
@@ -537,7 +558,8 @@ class ProductService:
                 self.db.add(image)
             await self.db.commit()
             await self.db.refresh(variant)
-        
+
+        invalidate_variant(variant.id, product_id)
         return await self.get_variant(variant.id)
 
     async def update_variant(self, variant_id: UUID, update_data: ProductVariantUpdate) -> ProductVariantResponse:
@@ -578,7 +600,8 @@ class ProductService:
                 self.db.add(image)
             await self.db.commit()
             await self.db.refresh(variant)
-        
+
+        invalidate_variant(variant.id, variant.product_id)
         return await self.get_variant(variant.id)
 
     async def delete_variant(self, variant_id: UUID) -> bool:
@@ -590,6 +613,7 @@ class ProductService:
         
         await self.db.delete(variant)
         await self.db.commit()
+        invalidate_variant(variant_id, variant.product_id)
         return True
 
     async def all_variants(
@@ -1013,6 +1037,7 @@ class ProductService:
         logger.info(f"Product {product_id} updated successfully")
 
         # Return the updated product
+        invalidate_product(product_id, product.slug)
         return await self.get(product_id)
 
     async def moderate(self, product_id: UUID, action: str, notes: Optional[str] = None) -> ProductResponse:
@@ -1035,6 +1060,7 @@ class ProductService:
             product.product_metadata = {**(product.product_metadata or {}), "moderation_notes": notes}
 
         await self.db.commit()
+        invalidate_product(product_id, product.slug)
         return await self.get(product_id)
 
     async def set_featured(self, product_id: UUID, featured: bool) -> ProductResponse:
@@ -1046,6 +1072,7 @@ class ProductService:
 
         product.is_featured = featured
         await self.db.commit()
+        invalidate_product(product_id, product.slug)
         return await self.get(product_id)
 
     async def delete(self, product_id: UUID, user_id: UUID, is_admin: bool = False):
@@ -1095,6 +1122,9 @@ class ProductService:
         # Delete the product (this will cascade delete variants and inventory due to cascade="all, delete-orphan")
         await self.db.delete(product)
         await self.db.commit()
+        invalidate_product(product_id, product.slug)
+        for variant_id in variant_ids:
+            invalidate_variant(variant_id)
 
     # --- Variant image CRUD ---
     async def create_image(self, variant_id: UUID, url: str, alt_text: Optional[str] = None,
