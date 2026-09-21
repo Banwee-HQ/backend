@@ -226,52 +226,6 @@ class StockAdjustment(Base):
     inventory = relationship("Inventory", back_populates="adjustments")
     adjusted_by = relationship("User", back_populates="stock_adjustments")
 
-# Utility functions for atomic operations
-async def atomic_stock_operation(
-    db: AsyncSession,
-    variant_id: UUIDType,
-    operation: str,
-    **kwargs
-) -> Dict[str, Any]:
-    """Perform an atomic, row-locked stock operation (currently only 'update' is supported)."""
-    try:
-        # Get inventory with lock
-        inventory = await Inventory.get_with_lock(db, variant_id)
-        
-        if not inventory:
-            from core.exceptions import APIException
-            raise APIException(
-                status_code=404,
-                message=f"Inventory not found for variant {variant_id}"
-            )
-        
-        if operation == "update":
-            adjustment = await inventory.atomic_update_stock(
-                db=db,
-                quantity_change=kwargs['quantity_change'],
-                reason=kwargs['reason'],
-                user_id=kwargs.get('user_id'),
-                notes=kwargs.get('notes')
-            )
-            await db.commit()
-            return {
-                "operation": "update",
-                "inventory": inventory.to_dict(),
-                "adjustment_id": str(adjustment.id)
-            }
-        
-        else:
-            from core.exceptions import APIException
-            raise APIException(
-                status_code=400,
-                message=f"Unknown operation: {operation}"
-            )
-    
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Error in atomic stock operation {operation}: {e}")
-        raise
-
 
 async def atomic_bulk_stock_update(
     db: AsyncSession,

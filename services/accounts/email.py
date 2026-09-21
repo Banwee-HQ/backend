@@ -1,17 +1,11 @@
-from uuid import UUID
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from fastapi import BackgroundTasks
 
-from models.accounts.user import User, Address
-from models.commerce.orders import Order
-from models.catalog.product import ProductVariant
 from services.system.templates import JinjaTemplateService
 from core.config import settings
-from core.exceptions import APIException
 from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)
@@ -24,28 +18,6 @@ class EmailService:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
         self.template_service = JinjaTemplateService(template_dir="core/utils/messages/templates")
-
-    async def _get_user_by_id(self, user_id: UUID) -> User:
-        result = await self.db_session.execute(select(User).filter(User.id == user_id))
-        user = result.scalars().first()
-        if not user:
-            raise APIException(status_code=404, message="User not found for email operation.")
-        return user
-
-    async def _get_order_by_id(self, order_id: UUID) -> Order:
-        result = await self.db_session.execute(select(Order).filter(Order.id == order_id))
-        order = result.scalars().first()
-        if not order:
-            raise APIException(status_code=404, message="Order not found for email operation.")
-        return order
-
-    async def _get_address_by_id(self, address_id: UUID) -> Optional[Address]:
-        result = await self.db_session.execute(select(Address).filter(Address.id == address_id))
-        return result.scalars().first()
-
-    async def _get_product_variant_by_id(self, variant_id: UUID) -> Optional[ProductVariant]:
-        result = await self.db_session.execute(select(ProductVariant).filter(ProductVariant.id == variant_id))
-        return result.scalars().first()
 
     async def send_order_confirmation_email(
         self,
@@ -489,36 +461,6 @@ class EmailService:
         rendered = await template_service.render_email(template_name, context)
         return rendered['content']
 
-    def send_order_confirmation(
-        self,
-        background_tasks: BackgroundTasks,
-        to_email: str,
-        customer_name: str,
-        order_id: str,
-        order_number: str,
-        order_date: datetime,
-        order_total: float,
-        currency: str = "USD",
-        items: Optional[List[Dict]] = None,
-        shipping_address: Optional[str] = None,
-        estimated_delivery: Optional[datetime] = None
-    ):
-        """Queue order confirmation email"""
-        background_tasks.add_task(
-            self._send_direct,
-            "order_confirmation",
-            to_email,
-            customer_name=customer_name,
-            order_id=order_id,
-            order_number=order_number,
-            order_date=order_date,
-            order_total=order_total,
-            currency=currency,
-            items=items,
-            shipping_address=shipping_address,
-            estimated_delivery=estimated_delivery
-        )
-
     def send_shipping_update(
         self,
         background_tasks: BackgroundTasks,
@@ -559,54 +501,6 @@ class EmailService:
             verification_token=verification_token
         )
 
-    def send_thank_you(
-        self,
-        background_tasks: BackgroundTasks,
-        to_email: str,
-        customer_name: str,
-        order_number: str = None
-    ):
-        """Queue thank you email"""
-        background_tasks.add_task(
-            self._send_direct,
-            "thank_you",
-            to_email,
-            customer_name=customer_name,
-            order_number=order_number
-        )
-
-    def send_review_request(
-        self,
-        background_tasks: BackgroundTasks,
-        to_email: str,
-        customer_name: str,
-        order_number: str = None
-    ):
-        """Queue review request email"""
-        background_tasks.add_task(
-            self._send_direct,
-            "review_request",
-            to_email,
-            customer_name=customer_name,
-            order_number=order_number
-        )
-
-    def send_password_reset(
-        self,
-        background_tasks: BackgroundTasks,
-        to_email: str,
-        reset_token: str,
-        reset_link: str
-    ):
-        """Queue password reset email"""
-        background_tasks.add_task(
-            self._send_direct,
-            "password_reset",
-            to_email,
-            reset_token=reset_token,
-            reset_link=reset_link
-        )
-
     def send_order_delivered(
         self,
         background_tasks: BackgroundTasks,
@@ -632,32 +526,3 @@ class EmailService:
             delivery_address=delivery_address,
             delivery_notes=delivery_notes
         )
-
-    async def _send_direct_background(
-        self,
-        email_type: str,
-        to_email: str,
-        **kwargs
-    ):
-        """Send email directly (used by background tasks)"""
-        from core.utils.messages.email import send_email_brevo
-
-        # Simple email sending without database for background tasks
-        subject_map = {
-            "order_confirmation": "Your Order Confirmation",
-            "shipping_update": "Shipping Update",
-            "verification": "Verify Your Email",
-            "thank_you": "Thank You for Your Order",
-            "review_request": "Review Your Purchase",
-            "password_reset": "Password Reset Request",
-            "order_delivered": "Your Order Has Been Delivered"
-        }
-
-        subject = subject_map.get(email_type, "Banwee Notification")
-        body = f"Email type: {email_type}\nData: {kwargs}"
-
-        try:
-            await send_email_brevo(to_email=to_email, subject=subject, html_content=body)
-            logger.info(f"{email_type} email sent to {to_email}")
-        except Exception as e:
-            logger.error(f"Failed to send {email_type} email: {e}")

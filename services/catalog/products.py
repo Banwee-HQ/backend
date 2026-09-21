@@ -13,7 +13,7 @@ from models.commerce.orders import OrderItem
 from schemas.catalog.product import (
     Create as ProductCreate, Update as ProductUpdate, Response as ProductResponse,
     VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate,
-    VariantResponse as ProductVariantResponse, ImageResponse as ProductImageResponse,
+    VariantResponse as ProductVariantResponse,
     PriceRange, ListResponse as ProductListResponse
 )
 from schemas.catalog.category import CategoryBrief
@@ -28,25 +28,6 @@ logger = get_structured_logger(__name__)
 class ProductService:
     def __init__(self, db: AsyncSession):
         self.db = db
-
-    def _convert_image_to_response(self, image: ProductImage) -> ProductImageResponse:
-        """Convert ProductImage model to response format."""
-        created_at_val = image.created_at
-        if isinstance(created_at_val, (datetime, date)):
-            created_at_str = created_at_val.isoformat()
-        else:
-            created_at_str = created_at_val or ""
-
-        return ProductImageResponse(
-            id=image.id,
-            variant_id=image.variant_id,
-            url=image.url,
-            alt_text=image.alt_text,
-            is_primary=image.is_primary,
-            sort_order=image.sort_order,
-            format=image.format,
-            created_at=created_at_str
-        )
 
     def _convert_variant_to_response(self, variant: ProductVariant) -> ProductVariantResponse:
         """Convert ProductVariant model to response format."""

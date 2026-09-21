@@ -139,24 +139,3 @@ class Response(JSONResponse):
             status_code=status_code,
             errors=errors
         )
-
-
-def create_response(
-    success: bool = True,
-    data: Any = None,
-    message: str = "Success",
-    status_code: int = status.HTTP_200_OK,
-    pagination: Optional[Dict[str, Any]] = None,
-    errors: Optional[list] = None
-) -> Response:
-    """
-    Helper function to create standardized responses
-    """
-    return Response(
-        success=success,
-        data=data,
-        message=message,
-        status_code=status_code,
-        pagination=pagination,
-        errors=errors
-    )

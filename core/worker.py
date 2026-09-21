@@ -200,9 +200,6 @@ def start_scheduler():
 async def enqueue_subscription_renewal(subscription_id: str, **kwargs):
     await process_subscription_orders_task()
 
-async def enqueue_subscription_processing():
-    await process_subscription_orders_task()
-
 async def enqueue_cart_cleanup():
     pass  # No-op without Redis TTL
 
