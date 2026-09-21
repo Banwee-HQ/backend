@@ -1,29 +1,42 @@
 """Tests for core/worker.py - task dispatch and enqueue stubs."""
 
+import asyncio
 import pytest
 
 from core import worker
 
 
-class TestGetDbSession:
+class TestGetRetryingDbSession:
 
     def test_returns_none_when_db_manager_missing(self, mocker):
         mocker.patch("core.db.db_manager", None)
-        assert worker._get_db_session() is None
+        assert worker._get_retrying_db_session() is None
 
     def test_returns_session_from_db_manager(self, mocker):
         mock_session_ctx = object()
         mock_manager = mocker.Mock()
         mock_manager.get_session_with_retry.return_value = mock_session_ctx
         mocker.patch("core.db.db_manager", mock_manager)
-        assert worker._get_db_session() is mock_session_ctx
+        assert worker._get_retrying_db_session() is mock_session_ctx
+
+
+class TestGetPlainSessionFactory:
+
+    def test_returns_none_when_db_manager_missing(self, mocker):
+        mocker.patch("core.db.db_manager", None)
+        assert worker._get_plain_session_factory() is None
+
+    def test_returns_session_factory_from_db_manager(self, mocker):
+        mock_manager = mocker.Mock(session_factory="the-factory")
+        mocker.patch("core.db.db_manager", mock_manager)
+        assert worker._get_plain_session_factory() == "the-factory"
 
 
 class TestSendEmailTask:
 
     @pytest.mark.asyncio
     async def test_returns_failed_when_no_session(self, mocker):
-        mocker.patch("core.worker._get_db_session", return_value=None)
+        mocker.patch("core.worker._get_retrying_db_session", return_value=None)
         result = await worker.send_email_task("verification", "a@example.com")
         assert result == "failed"
 
@@ -33,7 +46,7 @@ class TestSendEmailTask:
         mock_session = mocker.MagicMock()
         mock_session.__aenter__ = mocker.AsyncMock(return_value=mock_db)
         mock_session.__aexit__ = mocker.AsyncMock(return_value=False)
-        mocker.patch("core.worker._get_db_session", return_value=mock_session)
+        mocker.patch("core.worker._get_retrying_db_session", return_value=mock_session)
 
         mock_email_service = mocker.AsyncMock()
         mock_email_service_cls = mocker.patch("services.accounts.email.EmailService", return_value=mock_email_service)
@@ -49,7 +62,7 @@ class TestSendEmailTask:
         mock_session = mocker.MagicMock()
         mock_session.__aenter__ = mocker.AsyncMock(return_value=mock_db)
         mock_session.__aexit__ = mocker.AsyncMock(return_value=False)
-        mocker.patch("core.worker._get_db_session", return_value=mock_session)
+        mocker.patch("core.worker._get_retrying_db_session", return_value=mock_session)
         mocker.patch("services.accounts.email.EmailService", return_value=mocker.AsyncMock())
 
         result = await worker.send_email_task("bogus_type", "a@example.com")
@@ -69,7 +82,7 @@ class TestProcessSubscriptionOrdersTask:
         mock_manager = mocker.Mock(session_factory=None)
         mocker.patch("core.db.db_manager", mock_manager)
         result = await worker.process_subscription_orders_task()
-        assert result == "failed: no session factory"
+        assert result == "failed: db not initialized"
 
     @pytest.mark.asyncio
     async def test_reports_processed_and_failed_counts(self, mocker):
@@ -113,6 +126,61 @@ class TestUpdatePromocodeStatusesTask:
         assert result == "promocodes: 2 activated, 1 deactivated"
 
 
+class TestRunScheduler:
+
+    @pytest.mark.asyncio
+    async def test_runs_subscription_job_at_a_trigger_hour(self, mocker):
+        mock_now = mocker.Mock(hour=2, minute=0)
+        mocker.patch("core.worker.datetime", mocker.Mock(now=mocker.Mock(return_value=mock_now)))
+        mocker.patch("core.worker.asyncio.sleep", side_effect=StopAsyncIteration)
+        mock_subscription_task = mocker.patch("core.worker.process_subscription_orders_task", new=mocker.AsyncMock(return_value="ok"))
+        mock_promocode_task = mocker.patch("core.worker.update_promocode_statuses_task", new=mocker.AsyncMock(return_value="ok"))
+
+        with pytest.raises(StopAsyncIteration):
+            await worker._run_scheduler()
+
+        mock_subscription_task.assert_awaited_once()
+        mock_promocode_task.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_runs_promocode_job_at_midnight(self, mocker):
+        mock_now = mocker.Mock(hour=0, minute=0)
+        mocker.patch("core.worker.datetime", mocker.Mock(now=mocker.Mock(return_value=mock_now)))
+        mocker.patch("core.worker.asyncio.sleep", side_effect=StopAsyncIteration)
+        mock_subscription_task = mocker.patch("core.worker.process_subscription_orders_task", new=mocker.AsyncMock(return_value="ok"))
+        mock_promocode_task = mocker.patch("core.worker.update_promocode_statuses_task", new=mocker.AsyncMock(return_value="ok"))
+
+        with pytest.raises(StopAsyncIteration):
+            await worker._run_scheduler()
+
+        mock_promocode_task.assert_awaited_once()
+        mock_subscription_task.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_does_not_run_jobs_outside_trigger_times(self, mocker):
+        mock_now = mocker.Mock(hour=3, minute=15)
+        mocker.patch("core.worker.datetime", mocker.Mock(now=mocker.Mock(return_value=mock_now)))
+        mocker.patch("core.worker.asyncio.sleep", side_effect=StopAsyncIteration)
+        mock_subscription_task = mocker.patch("core.worker.process_subscription_orders_task", new=mocker.AsyncMock(return_value="ok"))
+        mock_promocode_task = mocker.patch("core.worker.update_promocode_statuses_task", new=mocker.AsyncMock(return_value="ok"))
+
+        with pytest.raises(StopAsyncIteration):
+            await worker._run_scheduler()
+
+        mock_subscription_task.assert_not_awaited()
+        mock_promocode_task.assert_not_awaited()
+
+
+class TestStartScheduler:
+
+    @pytest.mark.asyncio
+    async def test_schedules_the_scheduler_loop_on_the_running_event_loop(self, mocker):
+        mocker.patch("core.worker._run_scheduler", new=mocker.AsyncMock(return_value=None))
+        worker.start_scheduler()
+        # Let the scheduled task actually run before the test tears down.
+        await asyncio.sleep(0)
+
+
 class TestEnqueueStubs:
 
     @pytest.mark.asyncio
@@ -133,5 +201,5 @@ class TestEnqueueStubs:
 
     @pytest.mark.asyncio
     async def test_enqueue_sync_product_availability_no_session_is_noop(self, mocker):
-        mocker.patch("core.worker._get_db_session", return_value=None)
+        mocker.patch("core.worker._get_retrying_db_session", return_value=None)
         assert await worker.enqueue_sync_product_availability("some-id") is None
