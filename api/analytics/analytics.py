@@ -19,7 +19,7 @@ from models.accounts.user import User
 from models.accounts.user import User as UserModel
 from models.system import EventType
 from models.accounts import TrafficSource
-from models.catalog.product import Product
+from models.catalog.product import Product, ProductStatus
 from models.commerce.orders import Order
 from services.analytics.analytics import AnalyticsService
 from services.analytics.export import ExportService
@@ -585,7 +585,7 @@ async def products(
         total_products = total_result.scalar() or 0
 
         active_result = await db.execute(
-            select(func.count()).select_from(Product).where(Product.is_active == True)
+            select(func.count()).select_from(Product).where(Product.product_status == ProductStatus.ACTIVE)
         )
         active_products = active_result.scalar() or 0
 

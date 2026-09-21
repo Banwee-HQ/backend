@@ -10,7 +10,7 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from core.logging import get_structured_logger
 
-from models.catalog.product import Product, ProductVariant
+from models.catalog.product import Product, ProductVariant, ProductStatus
 from models.commerce.orders import Order, OrderItem
 from models.commerce.cart import CartItem
 from models.catalog.review import Review
@@ -168,7 +168,7 @@ class RecommendationService:
             if not source_variants_list:
                 return []
             
-            avg_price = sum(v.base_price for v in source_variants_list) / len(source_variants_list)
+            avg_price = float(sum(v.base_price for v in source_variants_list)) / len(source_variants_list)
             price_tolerance = avg_price * 0.3  # 30% price tolerance
             
             # Find similar products in same category
@@ -182,7 +182,7 @@ class RecommendationService:
                     and_(
                         Product.category_id == source_product.category_id,
                         Product.id != source_product.id,
-                        Product.is_active == True
+                        Product.product_status == ProductStatus.ACTIVE
                     )
                 )
                 .group_by(Product.id)
@@ -204,7 +204,7 @@ class RecommendationService:
             # Calculate similarity scores based on price proximity
             scores = []
             for p in products:
-                price_diff = abs(p.avg_price - avg_price)
+                price_diff = abs(float(p.avg_price) - avg_price)
                 # Closer price = higher score
                 similarity = 1.0 - (price_diff / price_tolerance) if price_tolerance > 0 else 1.0
                 scores.append((p.id, max(0.0, min(1.0, similarity))))
@@ -275,7 +275,7 @@ class RecommendationService:
                     and_(
                         Product.category_id == category_id,
                         Product.id != product_id,
-                        Product.is_active == True
+                        Product.product_status == ProductStatus.ACTIVE
                     )
                 )
                 .order_by(
@@ -356,7 +356,7 @@ class RecommendationService:
         ).where(
             and_(
                 Product.id.in_(product_ids),
-                Product.is_active == True
+                Product.product_status == ProductStatus.ACTIVE
             )
         )
         
@@ -391,7 +391,7 @@ class RecommendationService:
                 and_(
                     Product.category_id == source_product.category_id,
                     Product.id != source_product.id,
-                    Product.is_active == True
+                    Product.product_status == ProductStatus.ACTIVE
                 )
             ).limit(limit)
 
@@ -407,7 +407,7 @@ class RecommendationService:
                 ).where(
                     and_(
                         Product.id != source_product.id,
-                        Product.is_active == True
+                        Product.product_status == ProductStatus.ACTIVE
                     )
                 ).limit(limit)
 

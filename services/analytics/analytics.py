@@ -18,7 +18,7 @@ from models.commerce.orders import Order, OrderItem
 from models.accounts.user import User
 from models.commerce.refunds import Refund, RefundStatus
 from models.commerce.subscriptions import Subscription
-from models.catalog.product import Product, ProductVariant
+from models.catalog.product import Product, ProductVariant, ProductStatus
 from models.catalog.category import Category
 from models.catalog.inventories import Inventory
 from core.config import settings
@@ -992,7 +992,7 @@ class AnalyticsService:
                 select(func.count(Product.id)).where(and_(*product_conditions)) if product_conditions else select(func.count(Product.id))
             )
             active_products = await self.db.scalar(
-                select(func.count(Product.id)).where(Product.is_active == True)
+                select(func.count(Product.id)).where(Product.product_status == ProductStatus.ACTIVE)
             )
 
             # Get revenue data (include confirmed, processing, shipped, and delivered orders)
