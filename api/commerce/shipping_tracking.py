@@ -1,7 +1,4 @@
-"""
-Shipping Tracking API Endpoints
-Integrates with multiple shipping companies (UPS, Canada Express, Royal Mail, etc.)
-"""
+"""Shipping tracking API endpoints; integrates with multiple carriers (UPS, Royal Mail, etc.)."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -353,10 +350,8 @@ async def patch_provider(
 
         await db.commit()
 
-        # Re-fetch with carrier eager-loaded: committing a dirty object appears to
-        # expire its already-loaded relationships even with expire_on_commit=False,
-        # so provider.to_dict() (a plain sync method, no greenlet context) would
-        # otherwise trigger an implicit lazy load and crash with MissingGreenlet.
+        # Re-fetch with carrier eager-loaded: committing a dirty object expires its
+        # relationships even with expire_on_commit=False, so to_dict() would otherwise crash.
         result = await db.execute(
             select(ShippingProvider)
             .where(ShippingProvider.id == provider.id)
@@ -435,10 +430,7 @@ async def handle_carrier_webhook(
 ):
     """Handle webhook notifications from shipping carriers"""
     try:
-        # Verify webhook signature if applicable
-        # Process webhook data
-        # Update shipment tracking
-        
+        # TODO: verify signature, process data, and update tracking.
         return APIResponse.success(
             message="Webhook processed successfully"
         )

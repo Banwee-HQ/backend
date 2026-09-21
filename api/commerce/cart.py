@@ -16,9 +16,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/cart", tags=["Cart"])
 
 
-# ==========================================================
-# CART - 5 Standard APIs (operating on cart items)
-# ==========================================================
+# --- CART - 5 Standard APIs (operating on cart items) ---
 @router.post("/")
 async def create(
     request: Add,
@@ -157,10 +155,7 @@ async def validate(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Comprehensive cart validation - should be called before checkout
-    Validates availability, stock, prices, and product status
-    """
+    """Validate cart availability, stock, prices, and product status before checkout."""
     try:
         cart_service = CartService(db)
         

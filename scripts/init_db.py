@@ -1,19 +1,5 @@
-"""
-Bootstrap a fresh Postgres database with the current schema.
-
-Used for local development and CI. The historical alembic chain in alembic/versions/
-was never rooted (its earliest migration already assumes a baseline schema exists -
-that baseline was originally created once via Base.metadata.create_all and never
-captured as a migration), so `alembic upgrade head` cannot build a database from
-empty. This script does what that original bootstrap did, then stamps the DB at
-the current alembic head so future `alembic upgrade head` runs apply cleanly on
-top of it.
-
-Usage:
-    python scripts/init_db.py
-
-Reads DATABASE_URL from the environment the same way core.config does.
-"""
+"""Bootstrap a fresh Postgres DB (the alembic chain isn't rooted) and stamp it at head.
+Usage: python scripts/init_db.py. Reads DATABASE_URL the same way core.config does."""
 import asyncio
 import os
 import sys

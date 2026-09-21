@@ -332,9 +332,7 @@ async def delete(
         )
 
 
-# ==========================================================
-# VARIANTS - 5 Standard APIs
-# ==========================================================
+# --- VARIANTS - 5 Standard APIs ---
 @router.post("/{product_id}/variants/")
 async def create_variant(
     product_id: UUID,
@@ -432,9 +430,7 @@ async def delete_variant(
         raise APIException(status_code=500, message=f"Failed to delete variant: {str(e)}")
 
 
-# ==========================================================
-# VARIANT IMAGES - 5 Standard APIs
-# ==========================================================
+# --- VARIANT IMAGES - 5 Standard APIs ---
 @router.post("/variants/{variant_id}/images/")
 async def create_image(
     variant_id: UUID,

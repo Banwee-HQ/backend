@@ -43,9 +43,7 @@ async def overview(current_user: User = Depends(require_auth), db: AsyncSession 
         raise APIException(status_code=500, message=str(e))
 
 
-# ==========================================================
-# PAYMENT METHODS - 5 Standard APIs
-# ==========================================================
+# --- PAYMENT METHODS - 5 Standard APIs ---
 @router.post("/methods/")
 async def create_method(
     payment_method_data: MethodCreate,
@@ -171,9 +169,7 @@ async def delete_method(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to delete payment method: {str(e)}")
 
 
-# ==========================================================
-# PAYMENT INTENTS - 5 Standard APIs
-# ==========================================================
+# --- PAYMENT INTENTS - 5 Standard APIs ---
 @router.post("/intents/")
 async def create_intent(
     payment_intent_data: IntentCreate,
@@ -249,9 +245,7 @@ async def list_intents(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list payment intents: {str(e)}")
 
 
-# ==========================================================
-# TRANSACTIONS - Read Only (system creates automatically)
-# ==========================================================
+# --- TRANSACTIONS - Read Only (system creates automatically) ---
 @router.get("/transactions/{transaction_id}/")
 async def get_transaction(
     transaction_id: UUID,
@@ -326,9 +320,7 @@ async def list_all_transactions(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list transactions: {str(e)}")
 
 
-# ==========================================================
-# REFUNDS - Create & List Only (immutable after processing)
-# ==========================================================
+# --- REFUNDS - Create & List Only (immutable after processing) ---
 @router.post("/refunds/")
 async def create_refund(
     request: Refund,
@@ -401,9 +393,7 @@ async def list_refunds(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list refunds: {str(e)}")
 
 
-# ==========================================================
-# KEPT ROUTES - Additional functionality
-# ==========================================================
+# --- KEPT ROUTES - Additional functionality ---
 @router.post("/intents/{payment_intent_id}/confirm/")
 async def confirm_intent(
     payment_intent_id: UUID,
@@ -476,9 +466,7 @@ async def process_payment(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to process payment: {str(e)}")
 
 
-# ==========================================================
-# FAILURE HANDLING - Kept routes
-# ==========================================================
+# --- FAILURE HANDLING - Kept routes ---
 @router.get("/failures/{payment_intent_id}/status/")
 async def failure_status(
     payment_intent_id: UUID,

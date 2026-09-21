@@ -18,9 +18,7 @@ from schemas.commerce.orders import Checkout, Note
 router = APIRouter(prefix="/orders", tags=["Orders"])
 logger = get_structured_logger(__name__)
 
-# ==========================================================
-# ORDERS - 5 Standard APIs
-# ==========================================================
+# --- ORDERS - 5 Standard APIs ---
 @router.post("/")
 async def create(
     request: Checkout,
@@ -161,9 +159,7 @@ async def list(
         raise APIException(status_code=500, message=f"Failed to fetch orders: {str(e)}")
 
 
-# ==========================================================
-# KEPT ROUTES
-# ==========================================================
+# --- KEPT ROUTES ---
 @router.post("/checkout/validate/")
 async def validate(
     request: Checkout,
@@ -246,9 +242,7 @@ async def get_invoice(
         raise APIException(status_code=500, message=f"Failed to generate invoice: {str(e)}")
 
 
-# ==========================================================
-# NOTES - Create, Get, List Only (Immutable Audit Records)
-# ==========================================================
+# --- NOTES - Create, Get, List Only (Immutable Audit Records) ---
 @router.post("/{order_id}/notes/")
 async def create_note(
     order_id: UUID,
@@ -302,9 +296,7 @@ async def list_notes(
         raise APIException(status_code=500, message=f"Failed to get notes: {str(e)}")
 
 
-# ==========================================================
-# ORDER TRACKING - Moved from shipping_tracking.py
-# ==========================================================
+# --- ORDER TRACKING - Moved from shipping_tracking.py ---
 @router.get("/{order_id}/tracking/")
 async def get_tracking(
     order_id: UUID,
@@ -364,9 +356,7 @@ async def get_order_shipments(
         )
 
 
-# ==========================================================
-# PUBLIC TRACKING - No authentication required
-# ==========================================================
+# --- PUBLIC TRACKING - No authentication required ---
 @router.get("/track/{order_id}/")
 async def get_public_tracking(
     order_id: str,

@@ -187,9 +187,7 @@ async def delete(
         )
 
 
-# ==========================================================
-# CALCULATE - Kept Route
-# ==========================================================
+# --- CALCULATE - Kept Route ---
 @router.post("/calculate/")
 async def calc_cost(
     body: Calculate,

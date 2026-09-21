@@ -11,10 +11,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 @router.get("/")
 async def liveness_check():
-    """
-    Basic liveness check - returns 200 if the service is running
-    Used by load balancers and orchestrators
-    """
+    """Basic liveness check: 200 if the service is running, for load balancers/orchestrators."""
     return Response.success(data={
         "status": "alive",
         "timestamp": datetime.now().isoformat(),
@@ -24,11 +21,7 @@ async def liveness_check():
 
 @router.get("/ready")
 async def readiness_check():
-    """
-    Readiness check - verifies the database is reachable, not just that the
-    process is running. Used by orchestrators/load balancers to decide
-    whether this instance should receive traffic.
-    """
+    """Readiness check: verifies the DB is reachable, to decide if this instance gets traffic."""
     db_health = await get_db_health()
     is_ready = db_health.get("status") == "healthy"
 

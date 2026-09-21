@@ -21,9 +21,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
-# ==========================================================
-# LOCATIONS - 5 Standard APIs
-# ==========================================================
+# --- LOCATIONS - 5 Standard APIs ---
 @router.post("/locations/")
 async def create_location(
     location_data: LocationCreate,
@@ -121,9 +119,7 @@ async def delete_location(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete location: {e}")
 
 
-# ==========================================================
-# INVENTORY - 5 Standard APIs
-# ==========================================================
+# --- INVENTORY - 5 Standard APIs ---
 @router.post("/")
 async def create(
     inventory_data: Create,
@@ -143,12 +139,10 @@ async def create(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create inventory item: {e}")
 
 
-# ==========================================================
-# ADJUSTMENTS - 5 Standard APIs
-# ==========================================================
-# Registered before GET /{inventory_id}/ below: that route's single wildcard
-# segment would otherwise swallow /adjustments/ requests first (route matching
-# is registration-order-based), treating "adjustments" as an invalid UUID.
+# --- ADJUSTMENTS - 5 Standard APIs ---
+
+# Registered before GET /{inventory_id}/: route matching is registration-order-based,
+# so that wildcard route would otherwise swallow /adjustments/ as an invalid UUID.
 @router.post("/adjustments/")
 async def create_adj(
     adjustment_data: AdjustmentCreate,
@@ -334,19 +328,14 @@ async def delete(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete inventory item: {e}")
 
 
-# ==========================================================
-# INVENTORY SYNC ENDPOINTS - Moved from admin.py
-# ==========================================================
+# --- INVENTORY SYNC ENDPOINTS - Moved from admin.py ---
 
 @router.post("/sync-all/")
 async def sync_all(
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """
-    Sync all product availability statuses based on current inventory levels.
-    Admin only - for data consistency maintenance.
-    """
+    """Sync all product availability statuses from inventory levels (admin only)."""
     try:
         inventory_service = InventoryService(db)
         result = await inventory_service.sync()
@@ -368,10 +357,7 @@ async def sync_product(
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """
-    Sync a single product's availability status based on its variant inventory levels.
-    Admin only - for data consistency maintenance.
-    """
+    """Sync one product's availability status from its variant inventory levels (admin only)."""
     try:
         product_id_uuid = UUIDType(product_id)
         inventory_service = InventoryService(db)

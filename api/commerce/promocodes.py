@@ -272,14 +272,7 @@ async def trigger_cleanup(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Manually trigger promocode status cleanup (admin only).
-    
-    This endpoint:
-    - Activates promocodes that have reached their valid_from date
-    - Deactivates expired promocodes (past valid_until)
-    - Deactivates promocodes that reached usage limit
-    - Deactivates promocodes not yet valid
-    """
+    """Manually trigger promocode activation/deactivation by validity date (admin only)."""
     try:
         scheduler = PromoCodeScheduler(db)
         result = await scheduler.update_promocode_statuses()

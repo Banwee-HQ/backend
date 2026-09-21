@@ -18,10 +18,7 @@ async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Handle Stripe webhooks with signature verification
-    Processes webhooks immediately without storing webhook events
-    """
+    """Handle Stripe webhooks with signature verification; processes immediately, no storage."""
     try:
         # Get request body and signature
         payload = await request.body()

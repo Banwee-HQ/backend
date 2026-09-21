@@ -24,17 +24,8 @@ async def create(
     current_user = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a refund request.
-
-    Takes a raw dict (order_id plus the Request fields) rather than the Request
-    schema directly since order_id isn't part of Request - it's a path param on
-    the sibling /orders/{order_id}/request/ route instead. RefundService.request()
-    reads refund_request.items/.reason/etc. as attributes, so this must build a
-    real Request model; passing the dict straight through used to make
-    refund_request.items resolve to dict.items (the builtin method) instead of
-    the item list, which blew up with "'method' object is not iterable" on any
-    order that actually passed the eligibility check.
-    """
+    """Create a refund request. Must build a real Request model (not pass the dict through) -
+    RefundService.request() reads .items as an attribute, which resolves to dict.items otherwise."""
     try:
         raw_order_id = refund_data.get("order_id")
         if not raw_order_id:

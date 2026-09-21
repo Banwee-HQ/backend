@@ -1,8 +1,4 @@
-"""
-Business Analytics API Routes
-Provides comprehensive e-commerce metrics including conversion rates,
-cart abandonment, time to first purchase, refund rates, and repeat customers
-"""
+"""Analytics API: e-commerce metrics (conversion, cart abandonment, refunds, repeat customers)."""
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,11 +32,7 @@ async def track(
     current_user: Optional[User] = Depends(get_current_auth_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Track an analytics event
-    
-    Used by frontend to track user interactions and e-commerce events.
-    """
+    """Track an analytics event; used by the frontend for user interactions."""
     try:
         analytics_service = AnalyticsService(db)
         event = await analytics_service.track_event(
@@ -368,12 +360,7 @@ async def sales_overview(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get comprehensive sales overview data for dashboard
-    
-    Returns sales metrics, chart data, and performance indicators
-    optimized for the sales overview dashboard.
-    """
+    """Get sales metrics, chart data, and performance indicators for the dashboard."""
     try:
         analytics_service = AnalyticsService(db)
         # Set default date range if not provided

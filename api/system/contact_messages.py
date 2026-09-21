@@ -1,7 +1,4 @@
-"""
-Contact Messages API
-Endpoints for contact message management
-"""
+"""Contact messages API: endpoints for contact message management."""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -1,7 +1,4 @@
-"""
-Complete OAuth Implementation Example
-This is what's missing to make OAuth fully functional
-"""
+"""Complete OAuth implementation (what's missing to make OAuth fully functional)."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession

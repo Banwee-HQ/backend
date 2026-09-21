@@ -6,15 +6,8 @@ from .commerce import cart_router, orders_router, payments_router, refunds_route
 from .analytics import analytics_router
 from .system import health_router, contact_messages_router
 
-# Admin functionality has been distributed to domain-specific modules:
-# - accounts/user.py for user management
-# - catalog/products.py for product management
-# - commerce/orders.py for order management
-# - commerce/refunds.py for refund management
-# - commerce/subscriptions.py for subscription management
-# - commerce/tax.py for tax rate management
-#
-# The analytics module contains analytics and reporting endpoints.
+# Admin functionality lives in its domain-specific module (e.g. accounts/user.py,
+# catalog/products.py, commerce/orders.py) rather than grouped here.
 
 __all__ = [
     "auth_router", "oauth_router", "oauth_social_router", "user_router", "addresses_router",

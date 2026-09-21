@@ -70,9 +70,7 @@ async def calculate_tax(
         )
 
 
-# ============================================================================
-# ADMIN TAX RATES MANAGEMENT ROUTES
-# ============================================================================
+# --- Admin tax rates management routes ---
 
 
 @router.get("/rates/")
