@@ -1800,31 +1800,37 @@ class OrderService:
             
             if not original_order:
                 raise HTTPException(status_code=404, detail="Original order not found")
-            
+
+            # Snapshot before clear_cart() - it expires every object in the
+            # session (not just the cart), which would otherwise strand this
+            # loop trying to lazy-load original_order.items outside a safe
+            # async context.
+            original_items = [(item.variant_id, item.quantity) for item in original_order.items]
+
             # Clear user's current cart
             cart_service = CartService(self.db)
             await cart_service.clear_cart(user_id)
-            
+
             # Add items from original order to cart
-            for item in original_order.items:
+            for variant_id, quantity in original_items:
                 # Check if variant still exists and is available
-                variant_query = select(ProductVariant).where(ProductVariant.id == item.variant_id)
+                variant_query = select(ProductVariant).where(ProductVariant.id == variant_id)
                 variant_result = await self.db.execute(variant_query)
                 variant = variant_result.scalar_one_or_none()
-                
+
                 if variant and variant.is_active:
                     # Check stock availability
                     stock_check = await self.inventory_service.check_stock(
-                        variant_id=item.variant_id,
-                        quantity=item.quantity
+                        variant_id=variant_id,
+                        quantity=quantity
                     )
-                    
+
                     # Add to cart with available quantity
-                    quantity_to_add = min(item.quantity, stock_check.get("current_stock", 0))
+                    quantity_to_add = min(quantity, stock_check.get("current_stock", 0))
                     if quantity_to_add > 0:
                         await cart_service.add_to_cart(
                             user_id=user_id,
-                            variant_id=item.variant_id,
+                            variant_id=variant_id,
                             quantity=quantity_to_add
                         )
             

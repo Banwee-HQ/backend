@@ -72,6 +72,8 @@ class Response(BaseModel):
     completed_at: Optional[datetime]
     items: List[ItemResponse]
     timeline: List[TimelineItem]
+    customer_name: Optional[str] = None
+    customer: Optional[dict] = None
 
     class Config:
         from_attributes = True

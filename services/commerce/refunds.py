@@ -217,7 +217,7 @@ class RefundService:
             for refund in refunds:
                 refund_data = await self._format_refund_response(refund)
                 if not user_id and refund.user:
-                    refund_data["customer_name"] = refund.user.full_name
+                    refund_data.customer_name = refund.user.full_name
                 items.append(refund_data)
             
             return {
@@ -255,7 +255,7 @@ class RefundService:
             
             # Include user info for admin access
             if not user_id and refund.user:
-                refund_data["customer"] = {
+                refund_data.customer = {
                     "id": str(refund.user.id),
                     "name": refund.user.full_name,
                     "email": refund.user.email
@@ -290,18 +290,102 @@ class RefundService:
             
             refund.status = RefundStatus.CANCELLED
             await self.db.commit()
-            
+
             # Send notification
             await self._send_refund_notifications(refund, "cancelled")
-            
+
+            # refund_items was never loaded on this query, and can't be lazy-loaded
+            # here (no greenlet context) - re-fetch with the same eager-loading
+            # get() and request() already use for this reason.
+            result = await self.db.execute(
+                select(Refund).where(Refund.id == refund.id).options(selectinload(Refund.refund_items))
+            )
+            refund = result.scalar_one()
+
             return await self._format_refund_response(refund)
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Failed to cancel refund: {e}")
             raise HTTPException(status_code=500, detail="Failed to cancel refund")
-    
+
+    async def update_status(
+        self,
+        refund_id: UUID,
+        status: str,
+        admin_notes: Optional[str] = None
+    ) -> RefundResponse:
+        """Update a refund's status (admin only) - approve, reject, or otherwise transition it."""
+        try:
+            result = await self.db.execute(
+                select(Refund).where(Refund.id == refund_id).options(selectinload(Refund.refund_items))
+            )
+            refund = result.scalar_one_or_none()
+            if not refund:
+                raise HTTPException(status_code=404, detail="Refund not found")
+
+            try:
+                new_status = RefundStatus(status.lower())
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid refund status: {status}")
+
+            refund.status = new_status
+            if admin_notes:
+                refund.admin_notes = admin_notes
+
+            now = datetime.now(timezone.utc)
+            if new_status == RefundStatus.APPROVED and not refund.approved_at:
+                refund.approved_amount = refund.approved_amount or refund.requested_amount
+                refund.approved_at = now
+                await self._restore_inventory_for_refund(refund)
+            elif new_status == RefundStatus.COMPLETED and not refund.completed_at:
+                refund.completed_at = now
+
+            await self.db.commit()
+
+            await self._send_refund_notifications(refund, new_status.value)
+
+            return await self._format_refund_response(refund)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update refund status: {e}")
+            raise HTTPException(status_code=500, detail="Failed to update refund status")
+
+    async def patch(self, refund_id: UUID, payload: dict) -> RefundResponse:
+        """Partially update a refund (admin only) - status, admin notes, or approved amount."""
+        try:
+            result = await self.db.execute(
+                select(Refund).where(Refund.id == refund_id).options(selectinload(Refund.refund_items))
+            )
+            refund = result.scalar_one_or_none()
+            if not refund:
+                raise HTTPException(status_code=404, detail="Refund not found")
+
+            if payload.get("status"):
+                try:
+                    refund.status = RefundStatus(str(payload["status"]).lower())
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid refund status: {payload['status']}")
+            if "admin_notes" in payload:
+                refund.admin_notes = payload["admin_notes"]
+            if payload.get("approved_amount") is not None:
+                refund.approved_amount = payload["approved_amount"]
+                if not refund.approved_at:
+                    refund.approved_at = datetime.now(timezone.utc)
+
+            await self.db.commit()
+
+            return await self._format_refund_response(refund)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to patch refund: {e}")
+            raise HTTPException(status_code=500, detail="Failed to update refund")
+
     async def _get_user_order(self, user_id: UUID, order_id: UUID) -> Order:
         """Get and validate user's order"""
         order = await self.db.execute(
@@ -609,15 +693,14 @@ class RefundService:
     ) -> int:
         """Get count of user's refunds"""
         try:
-            query = select(Refund).where(Refund.user_id == user_id)
-            
+            query = select(func.count()).select_from(Refund).where(Refund.user_id == user_id)
+
             if status:
                 query = query.where(Refund.status == status)
-            
+
             result = await self.db.execute(query)
-            refunds = result.scalars().all()
-            
-            return len(refunds)
+
+            return result.scalar() or 0
             
         except Exception as e:
             logger.error(f"Failed to get user refunds count: {e}")
@@ -629,17 +712,24 @@ class RefundService:
             # Get all user refunds via the paginated method
             result = await self.list(user_id, page=1, limit=1000)
             refunds = result.get("items", [])
-            
-            stats = {
+
+            processing_hours = [
+                (r.completed_at - r.requested_at).total_seconds() / 3600
+                for r in refunds if r.completed_at and r.requested_at
+            ]
+
+            return {
                 "total_refunds": result.get("total", 0),
-                "total_amount": result.get("total", 0),
-                "auto_approved_count": 0,
-                "pending_count": 0,
-                "completed_count": 0,
-                "average_processing_time_hours": None
+                "total_amount": sum(r.requested_amount for r in refunds),
+                "auto_approved_count": sum(1 for r in refunds if r.auto_approved),
+                "pending_count": sum(
+                    1 for r in refunds if r.status in [RefundStatus.REQUESTED, RefundStatus.PENDING_REVIEW]
+                ),
+                "completed_count": sum(1 for r in refunds if r.status == RefundStatus.COMPLETED),
+                "average_processing_time_hours": (
+                    sum(processing_hours) / len(processing_hours) if processing_hours else None
+                )
             }
-            
-            return stats
             
         except Exception as e:
             logger.error(f"Failed to get user refund stats: {e}")

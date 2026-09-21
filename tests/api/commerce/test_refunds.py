@@ -114,8 +114,13 @@ class TestRefundEndpoints:
         assert response.status_code == 403
 
     async def test_update_status_as_admin_not_found(self, async_client: AsyncClient, admin_headers):
-        """PUT /v1/refunds/{id}/status - Unknown refund still errors cleanly for an admin."""
+        """PUT /v1/refunds/{id}/status - Unknown refund returns 404 for an admin.
+
+        Regression test: RefundService had no update_status() method at all
+        (nor patch()), so this - and PATCH /v1/refunds/{id} - always 500'd,
+        regardless of whether the refund existed.
+        """
         response = await async_client.put(f"/v1/refunds/{uuid4()}/status/",
             headers=admin_headers, json={"status": "approved"}
         )
-        assert response.status_code in [404, 500]
+        assert response.status_code == 404
