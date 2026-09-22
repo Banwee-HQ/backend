@@ -284,81 +284,113 @@ class SubscriptionScheduler:
             
             logger.info(f"✅ Payment succeeded for subscription {subscription.id}, creating order...")
 
-            # --- STEP 2: FINALIZE ORDER (only after successful payment) ---
+            # --- STEP 2 onward: FINALIZE ORDER (only after successful payment) ---
+            # Stripe has already been charged and that Transaction record is durably
+            # committed (process_idempotent() commits it internally). Everything from
+            # here on is its own failure domain: if any of it raises, we must NOT let
+            # the generic except below roll back to a state where next_billing_date
+            # was never advanced - that would leave this subscription "due" again on
+            # the next scheduler run with a fresh idempotency key, charging the
+            # customer a second time for the same period. On failure here we pause
+            # the subscription instead, so it stops being auto-billed until a human
+            # reconciles the already-successful charge with its stuck order.
+            try:
+                # Fill in the placeholder order created before payment with its real totals/status.
+                order.order_status = OrderStatus.CONFIRMED
+                order.payment_status = PaymentStatus.PAID
+                order.subtotal = pricing["subtotal"]
+                order.tax_amount = pricing["tax"]
+                order.shipping_cost = pricing["shipping"]
+                order.discount_amount = pricing.get("discount", 0.0)
+                order.total_amount = pricing["total"]
+                order.shipping_method = subscription.shipping_method.name if subscription.shipping_method else "standard"
+                await self.db.flush()
 
-            # Fill in the placeholder order created before payment with its real totals/status.
-            order.order_status = OrderStatus.CONFIRMED
-            order.payment_status = PaymentStatus.PAID
-            order.subtotal = pricing["subtotal"]
-            order.tax_amount = pricing["tax"]
-            order.shipping_cost = pricing["shipping"]
-            order.discount_amount = pricing.get("discount", 0.0)
-            order.total_amount = pricing["total"]
-            order.shipping_method = subscription.shipping_method.name if subscription.shipping_method else "standard"
-            await self.db.flush()
-            
-            # --- STEP 3: CREATE ORDER ITEMS ---
-            for variant_price in pricing["variant_prices"]:
-                variant_id = UUID(variant_price["id"])
-                variant = next((v for v in variants if v.id == variant_id), None)
-                
-                if variant:
+                # --- CREATE ORDER ITEMS ---
+                for variant_price in pricing["variant_prices"]:
+                    variant_id = UUID(variant_price["id"])
+                    variant = next((v for v in variants if v.id == variant_id), None)
+
+                    if variant:
+                        qty = variant_price["qty"]
+                        price = variant_price["price"]
+
+                        order_item = OrderItem(
+                            order_id=order.id,
+                            variant_id=variant.id,
+                            quantity=qty,
+                            price_per_unit=price,
+                            total_price=price * qty
+                        )
+
+                        self.db.add(order_item)
+
+                await self.db.flush()
+
+                # --- UPDATE INVENTORY ---
+                inventory_service = InventoryService(self.db, None)
+
+                for variant_price in pricing["variant_prices"]:
+                    variant_id = UUID(variant_price["id"])
                     qty = variant_price["qty"]
-                    price = variant_price["price"]
-                    
-                    order_item = OrderItem(
-                        order_id=order.id,
-                        variant_id=variant.id,
-                        quantity=qty,
-                        price_per_unit=price,
-                        total_price=price * qty
+
+                    adjustment = StockAdjustmentCreate(
+                        variant_id=variant_id,
+                        quantity_change=-qty,
+                        reason=f"Subscription order: {order.order_number}",
+                        notes=f"Auto-adjusted for subscription {subscription.id}"
                     )
-                    
-                    self.db.add(order_item)
-            
-            await self.db.flush()
-            
-            # --- STEP 4: UPDATE INVENTORY ---
-            inventory_service = InventoryService(self.db, None)
-            
-            for variant_price in pricing["variant_prices"]:
-                variant_id = UUID(variant_price["id"])
-                qty = variant_price["qty"]
-                
-                adjustment = StockAdjustmentCreate(
-                    variant_id=variant_id,
-                    quantity_change=-qty,
-                    reason=f"Subscription order: {order.order_number}",
-                    notes=f"Auto-adjusted for subscription {subscription.id}"
+
+                    await inventory_service.adjust_stock(
+                        adjustment,
+                        adjusted_by_user_id=subscription.user_id,
+                        commit=False
+                    )
+
+                # --- UPDATE SUBSCRIPTION ---
+                subscription.status = "active"
+                subscription.last_payment_error = None
+                subscription.payment_retry_count = 0  # Reset retry count on success
+                subscription.last_payment_attempt = datetime.now(timezone.utc)
+                subscription.next_retry_date = None
+
+                # Update billing dates
+                await self._update_billing_dates(subscription)
+
+                await self.db.commit()
+
+                logger.info(f"✅ Successfully created subscription order {order.order_number}")
+
+                return {
+                    "success": True,
+                    "order_id": str(order.id),
+                    "order_number": order.order_number,
+                    "user_email": user.email
+                }
+            except Exception as finalize_error:
+                await self.db.rollback()
+                logger.critical(
+                    f"Subscription {subscription_id} was charged successfully but order "
+                    f"finalization failed - pausing to prevent a duplicate charge on retry: {finalize_error}"
                 )
-                
-                await inventory_service.adjust_stock(
-                    adjustment,
-                    adjusted_by_user_id=subscription.user_id,
-                    commit=False
+                # Re-fetch by the original subscription_id param: the rollback above
+                # expired every attribute on the (now stale) `subscription` object,
+                # so reading subscription.id here would itself crash.
+                sub_result = await self.db.execute(select(Subscription).where(Subscription.id == subscription_id))
+                subscription = sub_result.scalar_one()
+                subscription.status = "paused"
+                subscription.paused_at = datetime.now(timezone.utc)
+                subscription.pause_reason = (
+                    f"Payment succeeded but order finalization failed: {finalize_error}. "
+                    "Needs manual reconciliation before resuming."
                 )
-            
-            # --- STEP 5: UPDATE SUBSCRIPTION ---
-            subscription.status = "active"
-            subscription.last_payment_error = None
-            subscription.payment_retry_count = 0  # Reset retry count on success
-            subscription.last_payment_attempt = datetime.now(timezone.utc)
-            subscription.next_retry_date = None
-            
-            # Update billing dates
-            await self._update_billing_dates(subscription)
-            
-            await self.db.commit()
-            
-            logger.info(f"✅ Successfully created subscription order {order.order_number}")
-            
-            return {
-                "success": True,
-                "order_id": str(order.id),
-                "order_number": order.order_number,
-                "user_email": user.email
-            }
-            
+                await self.db.commit()
+                return {
+                    "success": False,
+                    "error": f"Payment succeeded but order finalization failed: {finalize_error}",
+                    "needs_manual_reconciliation": True
+                }
+
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Failed to process subscription {subscription_id}: {e}")

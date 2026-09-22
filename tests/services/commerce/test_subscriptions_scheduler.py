@@ -6,6 +6,7 @@ import stripe
 from uuid import uuid4
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
+from sqlalchemy import select
 
 from core.utils.uuid_utils import uuid7
 from services.commerce.subscriptions import SubscriptionService
@@ -138,6 +139,39 @@ class TestProcessSubscription:
         assert subscription.status == "paused"
         assert subscription.next_retry_date is None
         assert "3 attempts" in subscription.pause_reason
+
+    async def test_finalization_failure_after_successful_charge_pauses_instead_of_leaving_it_rebillable(
+        self, db_session, test_user, variant, payment_method, subscription, mocker
+    ):
+        """Regression test: Stripe is charged before the order is finalized
+        (items, inventory, next_billing_date). If finalization then failed,
+        the old code rolled back only the in-memory finalization work - the
+        Transaction record from the already-successful charge stayed
+        committed, but next_billing_date was never advanced, so the
+        subscription looked "due" again on the very next scheduler run,
+        which would generate a fresh idempotency key and charge the
+        customer a second time. Verifies a finalization failure now pauses
+        the subscription (removing it from the due query) instead."""
+        mocker.patch(
+            "services.catalog.inventory.InventoryService.adjust_stock",
+            side_effect=Exception("Simulated inventory failure"),
+        )
+
+        scheduler = SubscriptionScheduler(db_session)
+        result = await scheduler.process_subscription(subscription.id)
+
+        assert result["success"] is False
+        assert result.get("needs_manual_reconciliation") is True
+
+        db_result = await db_session.execute(select(Subscription).where(Subscription.id == subscription.id))
+        refreshed = db_result.scalar_one()
+        assert refreshed.status == "paused"
+        assert "reconciliation" in refreshed.pause_reason.lower()
+
+        # The subscription must not be picked up again by the due-subscriptions query -
+        # re-processing it would charge the customer a second time for this period.
+        due_result = await scheduler.process_due_subscriptions()
+        assert not any(r["subscription_id"] == str(subscription.id) for r in due_result["results"])
 
     async def test_no_variants_fails_gracefully(self, db_session, test_user, subscription):
         subscription.variant_ids = []
