@@ -211,6 +211,10 @@ async def calc_cost(
             },
             message="Shipping cost calculated successfully"
         )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error calculating shipping cost: {e}")
         raise APIException(

@@ -56,6 +56,31 @@ class TestShippingMethodEndpoints:
         })
         assert response.status_code == 403
 
+    async def test_create_unauthenticated(self, async_client: AsyncClient):
+        """POST /v1/shipping/methods - No auth is rejected."""
+        response = await async_client.post("/v1/shipping/methods/", json={
+            "name": "Sneaky", "price": 1.0, "estimated_days": 1
+        })
+        assert response.status_code == 401
+
+    async def test_list_all_filters_by_active(self, async_client: AsyncClient, admin_headers, created_method):
+        """GET /v1/shipping/methods?all_methods=true&is_active=false - Filter to inactive methods only."""
+        await async_client.patch(f"/v1/shipping/methods/{created_method['id']}/",
+            headers=admin_headers, json={"is_active": False}
+        )
+        response = await async_client.get(
+            "/v1/shipping/methods/?all_methods=true&is_active=false", headers=admin_headers
+        )
+        assert response.status_code == 200
+        ids = [m["id"] for m in response.json()["data"]]
+        assert created_method["id"] in ids
+
+    async def test_update_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.patch(f"/v1/shipping/methods/{uuid4()}/",
+            headers=admin_headers, json={"price": 5.0}
+        )
+        assert response.status_code == 404
+
     async def test_get_by_id(self, async_client: AsyncClient, created_method):
         """GET /v1/shipping/methods/{id} - Get a method (no auth required)."""
         response = await async_client.get(f"/v1/shipping/methods/{created_method['id']}/")
