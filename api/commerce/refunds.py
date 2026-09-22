@@ -151,6 +151,10 @@ async def request(
             refund_request=refund_request
         )
         return Response.success(data=refund, message="Refund request submitted")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_400_BAD_REQUEST,

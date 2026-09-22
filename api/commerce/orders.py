@@ -172,6 +172,10 @@ async def validate(
         order_service = OrderService(db)
         validation_result = await order_service.validate_checkout(current_user.id, request)
         return Response.success(data=validation_result, message="Checkout validation completed")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         tb = traceback.format_exc()
         print(f"VALIDATE CHECKOUT ERROR: {e}\n{tb}")
@@ -190,6 +194,10 @@ async def checkout(
         order_service = OrderService(db)
         order = await order_service.create(current_user.id, request, background_tasks)
         return Response.success(data=order, message="Order placed successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Order placement failed: {str(e)}")
 
@@ -205,6 +213,10 @@ async def cancel(
         order_service = OrderService(db)
         order = await order_service.cancel(order_id, current_user.id)
         return Response.success(data=order, message="Order cancelled successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=400, message="Failed to cancel order")
 
@@ -240,6 +252,10 @@ async def get_invoice(
                 headers={"Content-Disposition": f"attachment; filename=invoice-{invoice_result.get('invoice_ref', 'unknown')}.pdf"}
             )
         raise APIException(status_code=500, message=invoice_result.get('message', 'Failed to generate invoice'))
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to generate invoice: {str(e)}")
 
@@ -257,6 +273,10 @@ async def create_note(
         order_service = OrderService(db)
         result = await order_service.add_note(order_id, current_user.id, request.note)
         return Response.success(data=result, message="Note added successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to add note: {str(e)}")
 
@@ -294,6 +314,10 @@ async def list_notes(
         order_service = OrderService(db)
         notes = await order_service.notes(order_id, current_user.id)
         return Response.success(data=notes, message="Notes retrieved successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(status_code=500, message=f"Failed to get notes: {str(e)}")
 
@@ -341,15 +365,26 @@ async def get_order_payments(
 
 @router.get("/{order_id}/shipments/")
 async def get_order_shipments(
-    order_id: str,
+    order_id: UUID,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all shipments for an order."""
+    """Get all shipments for an order (owner only)."""
     try:
+        order_service = OrderService(db)
+        # list_by_order() has no ownership filter of its own - confirm this order
+        # belongs to the caller before returning its shipments.
+        order = await order_service.get(order_id, current_user.id)
+        if not order:
+            raise APIException(status_code=404, message="Order not found")
+
         shipping_service = ShippingTrackingService(db)
         shipments = await shipping_service.list_by_order(str(order_id))
         return Response.success(data=shipments, message="Shipments retrieved successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=500,

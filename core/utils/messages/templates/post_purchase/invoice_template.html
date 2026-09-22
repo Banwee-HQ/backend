@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice - {{ bnw_invoice_ref }}</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #253d4e; font-size: 13px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #253d4e; padding-bottom: 20px; margin-bottom: 20px; }
+        .logo { max-height: 48px; }
+        .invoice-title { font-size: 26px; font-weight: bold; color: #253d4e; text-align: right; }
+        .invoice-meta { text-align: right; color: #666; margin-top: 4px; }
+        .addresses { display: flex; justify-content: space-between; margin-bottom: 30px; }
+        .addresses h3 { font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th { text-align: left; background: #f5f5f5; padding: 8px; font-size: 12px; text-transform: uppercase; color: #666; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .text-right { text-align: right; }
+        .totals { width: 300px; margin-left: auto; }
+        .totals td { border: none; padding: 4px 8px; }
+        .grand-total { font-size: 16px; font-weight: bold; border-top: 2px solid #253d4e; }
+        .footer { margin-top: 40px; color: #888; font-size: 11px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            {% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="Banwee">{% else %}<strong>Banwee</strong>{% endif %}
+            <div>{{ company_address_line1 }}</div>
+            <div>{{ company_address_line2 }}</div>
+        </div>
+        <div>
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-meta">
+                <div>Invoice #: {{ bnw_invoice_ref }}</div>
+                <div>Issued: {{ bnw_invoice_issue_date }}</div>
+                <div>Due: {{ bnw_payment_due_date }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="addresses">
+        <div>
+            <h3>Bill To</h3>
+            <div>{{ bnw_customer_full_name }}</div>
+            <div>{{ bnw_customer_email_address }}</div>
+            <div>{{ bnw_customer_phone_number }}</div>
+        </div>
+        <div>
+            <h3>Order</h3>
+            <div>Order Ref: {{ bnw_order_reference_id }}</div>
+            <div>Placed: {{ bnw_order_placement_date }}</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Unit Price</th>
+                <th class="text-right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.name }}{% if item.description %}<br><small>{{ item.description }}</small>{% endif %}</td>
+                <td class="text-right">{{ item.quantity }}</td>
+                <td class="text-right">{{ item.unit_price }}</td>
+                <td class="text-right">{{ item.total_price }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="totals">
+        <tr><td>Subtotal</td><td class="text-right">{{ bnw_order_subtotal_amount }}</td></tr>
+        {% if bnw_discount_amount %}<tr><td>Discount ({{ discount_percentage }}%)</td><td class="text-right">-{{ bnw_discount_amount }}</td></tr>{% endif %}
+        <tr><td>Tax ({{ bnw_tax_rate }}%)</td><td class="text-right">{{ bnw_tax_amount }}</td></tr>
+        <tr><td>Shipping</td><td class="text-right">{{ bnw_shipping_amount }}</td></tr>
+        <tr class="grand-total"><td>Total</td><td class="text-right">{{ bnw_grand_total_amount }}</td></tr>
+    </table>
+
+    <div class="footer">Thank you for your business.</div>
+</body>
+</html>

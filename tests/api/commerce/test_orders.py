@@ -111,10 +111,11 @@ class TestCheckout:
         assert response.json()["data"]["order_status"] == "confirmed"
 
     async def test_checkout_unknown_payment_method(self, async_client: AsyncClient, auth_headers, checkout_ready_cart):
-        """POST /v1/orders/checkout - A payment method that doesn't exist is rejected."""
+        """POST /v1/orders/checkout - A payment method that doesn't exist is rejected
+        with a clean 400, not relabeled as a 500 by the endpoint's exception handler."""
         checkout_ready_cart["payment_method_id"] = str(uuid4())
         response = await async_client.post("/v1/orders/checkout/", headers=auth_headers, json=checkout_ready_cart)
-        assert response.status_code in [400, 500]
+        assert response.status_code == 400
 
 
 @pytest.mark.api
@@ -147,6 +148,11 @@ class TestOrderEndpoints:
         response = await async_client.patch(f"/v1/orders/{created_order.id}/cancel/", headers=auth_headers)
         assert response.status_code == 200
 
+    async def test_cancel_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        """Regression test: this used to relabel the service's 404 as a flat 400."""
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/cancel/", headers=admin_headers)
+        assert response.status_code == 404
+
     async def test_cancel_post_alias(self, async_client: AsyncClient, auth_headers, created_order):
         """POST /v1/orders/{id}/cancel - Compatibility alias."""
         response = await async_client.post(f"/v1/orders/{created_order.id}/cancel/", headers=auth_headers)
@@ -169,6 +175,18 @@ class TestOrderEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["total_notes"] == 1
 
+    async def test_list_notes_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        """Regression test: this used to relabel the service's 404 as a 500."""
+        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_add_note_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        """Regression test: this used to relabel the service's 404 as a flat 400."""
+        response = await async_client.post(f"/v1/orders/{created_order.id}/notes/",
+            headers=admin_headers, json={"note": "Not mine"}
+        )
+        assert response.status_code == 404
+
     async def test_get_note_by_index(self, async_client: AsyncClient, auth_headers, created_order):
         """GET /v1/orders/{id}/notes/{index} - Get a specific note."""
         await async_client.post(f"/v1/orders/{created_order.id}/notes/",
@@ -181,6 +199,17 @@ class TestOrderEndpoints:
     async def test_get_note_index_out_of_range(self, async_client: AsyncClient, auth_headers, created_order):
         """GET /v1/orders/{id}/notes/{index} - Out-of-range index returns 404."""
         response = await async_client.get(f"/v1/orders/{created_order.id}/notes/99/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_invoice(self, async_client: AsyncClient, auth_headers, created_order):
+        """GET /v1/orders/{id}/invoice - Download a PDF invoice for own order."""
+        response = await async_client.get(f"/v1/orders/{created_order.id}/invoice/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+
+    async def test_invoice_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        """Regression test: this used to relabel the service's 404 as a 500."""
+        response = await async_client.get(f"/v1/orders/{created_order.id}/invoice/", headers=admin_headers)
         assert response.status_code == 404
 
     async def test_tracking(self, async_client: AsyncClient, auth_headers, created_order):
@@ -199,6 +228,12 @@ class TestOrderEndpoints:
         """GET /v1/orders/{id}/shipments - No shipments yet, still 200."""
         response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
         assert response.status_code == 200
+
+    async def test_shipments_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        """Regression test: this endpoint had no ownership check at all - any
+        authenticated user could view any order's shipments by guessing its ID."""
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=admin_headers)
+        assert response.status_code == 404
 
     async def test_public_tracking_by_order_number(self, async_client: AsyncClient, created_order):
         """GET /v1/orders/track/{id} - Public tracking, no auth required."""
@@ -242,7 +277,8 @@ class TestOrderEndpoints:
         assert response.status_code == 200
 
     async def test_checkout_validate_empty_cart(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/orders/checkout/validate - Empty cart fails validation."""
+        """POST /v1/orders/checkout/validate - Empty cart fails validation, but the
+        request itself always succeeds - the result carries valid=False, not an HTTP error."""
         response = await async_client.post("/v1/orders/checkout/validate/",
             headers=auth_headers,
             json={
@@ -251,4 +287,5 @@ class TestOrderEndpoints:
                 "payment_method_id": str(uuid4()),
             }
         )
-        assert response.status_code in [200, 400, 404, 500]
+        assert response.status_code == 200
+        assert response.json()["data"]["can_proceed"] is False
