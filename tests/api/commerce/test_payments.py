@@ -16,6 +16,9 @@ from uuid import uuid4
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
+if not stripe.api_key.startswith("sk_test_") or "placeholder" in stripe.api_key:
+    pytest.skip("Stripe integration tests require a real STRIPE_SECRET_KEY", allow_module_level=True)
+
 
 def fresh_stripe_payment_method_id() -> str:
     return stripe.PaymentMethod.create(type="card", card={"token": "tok_visa"}).id
