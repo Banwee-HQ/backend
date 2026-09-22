@@ -29,6 +29,16 @@ async def created_method(async_client: AsyncClient, auth_headers):
     return response.json()["data"]
 
 
+@pytest.fixture
+async def succeeded_intent(async_client: AsyncClient, auth_headers, created_method):
+    """A real, captured Stripe PaymentIntent - refund/confirm need one that actually succeeded."""
+    response = await async_client.post("/v1/payments/process/", headers=auth_headers, params={
+        "amount": 25.0, "payment_method_id": created_method["id"]
+    })
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
 @pytest.mark.api
 class TestPaymentMethodEndpoints:
 
@@ -164,6 +174,47 @@ class TestRefundEndpoints:
         """GET /v1/payments/refunds - List own refunds."""
         response = await async_client.get("/v1/payments/refunds/", headers=auth_headers)
         assert response.status_code == 200
+
+    async def test_create_requires_admin(self, async_client: AsyncClient, auth_headers, succeeded_intent):
+        response = await async_client.post("/v1/payments/refunds/", headers=auth_headers, json={
+            "payment_intent_id": succeeded_intent["payment_intent_id"]
+        })
+        assert response.status_code == 403
+
+    async def test_create_and_get(self, async_client: AsyncClient, admin_headers, auth_headers, succeeded_intent):
+        created = await async_client.post("/v1/payments/refunds/", headers=admin_headers, json={
+            "payment_intent_id": succeeded_intent["payment_intent_id"], "amount": 10.0
+        })
+        assert created.status_code == 201, created.text
+        refund_id = created.json()["data"]["id"]
+
+        response = await async_client.get(f"/v1/payments/refunds/{refund_id}/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == refund_id
+
+    async def test_create_for_unknown_intent_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post("/v1/payments/refunds/", headers=admin_headers, json={
+            "payment_intent_id": str(uuid4())
+        })
+        assert response.status_code == 404
+
+
+@pytest.mark.api
+class TestConfirmIntent:
+
+    async def test_confirm_already_succeeded_intent(self, async_client: AsyncClient, auth_headers, succeeded_intent):
+        response = await async_client.post(
+            f"/v1/payments/intents/{succeeded_intent['payment_intent_id']}/confirm/",
+            headers=auth_headers, params={"payment_method_id": fresh_stripe_payment_method_id()}
+        )
+        assert response.status_code in (200, 400)
+
+    async def test_confirm_unknown_intent_returns_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(
+            f"/v1/payments/intents/{uuid4()}/confirm/",
+            headers=auth_headers, params={"payment_method_id": fresh_stripe_payment_method_id()}
+        )
+        assert response.status_code == 404
 
 
 @pytest.mark.api
