@@ -12,7 +12,7 @@ from core.exceptions import APIException
 from core.utils.response import Response as APIResponse
 from core.logging import get_structured_logger
 from core.dependencies import require_admin, require_auth
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 from models.commerce.orders import Order
 from models.commerce.shipping_tracking import ShippingProvider, ShipmentTracking
 
@@ -73,19 +73,25 @@ async def create_shipment(
 @router.get("/shipments/{shipment_id}/")
 async def get_shipment(
     shipment_id: str,
-    current_user = Depends(require_auth),
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get detailed tracking information for a shipment"""
+    """Get detailed tracking information for a shipment (owner or admin only)"""
     try:
         shipping_service = ShippingTrackingService(db)
         shipment = await shipping_service.get(str(shipment_id))
-        
+
         if not shipment:
             raise HTTPException(status_code=404, detail="Shipment not found")
-        
+
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        if not is_admin:
+            order = await db.get(Order, UUID(shipment["order_id"]))
+            if not order or order.user_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Shipment not found")
+
         return APIResponse.success(data=shipment)
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -177,8 +183,15 @@ async def create_carrier(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new carrier (Admin only)"""
-    carrier = await CarrierService(db).create(carrier_data)
-    return APIResponse.success(data=carrier.to_dict(), message="Carrier created successfully")
+    try:
+        carrier = await CarrierService(db).create(carrier_data)
+        return APIResponse.success(data=carrier.to_dict(), message="Carrier created successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to create carrier: {str(e)}")
 
 
 @router.patch("/carriers/{carrier_id}/")
@@ -189,10 +202,17 @@ async def update_carrier(
     db: AsyncSession = Depends(get_db)
 ):
     """Update a carrier (Admin only)"""
-    carrier = await CarrierService(db).update(carrier_id, carrier_data)
-    if not carrier:
-        raise HTTPException(status_code=404, detail="Carrier not found")
-    return APIResponse.success(data=carrier.to_dict(), message="Carrier updated successfully")
+    try:
+        carrier = await CarrierService(db).update(carrier_id, carrier_data)
+        if not carrier:
+            raise HTTPException(status_code=404, detail="Carrier not found")
+        return APIResponse.success(data=carrier.to_dict(), message="Carrier updated successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to update carrier: {str(e)}")
 
 
 @router.delete("/carriers/{carrier_id}/")
@@ -202,10 +222,17 @@ async def delete_carrier(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a carrier (Admin only). Fails if any provider still references it."""
-    deleted = await CarrierService(db).delete(carrier_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Carrier not found")
-    return APIResponse.success(message="Carrier deleted successfully")
+    try:
+        deleted = await CarrierService(db).delete(carrier_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Carrier not found")
+        return APIResponse.success(message="Carrier deleted successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to delete carrier: {str(e)}")
 
 
 @router.get("/shipments/")

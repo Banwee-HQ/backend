@@ -175,6 +175,26 @@ class TestShipmentEndpoints:
         response = await async_client.get(f"/v1/shipping-tracking/shipments/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
 
+    async def test_admin_can_get_any_shipment(self, async_client: AsyncClient, admin_headers, created_shipment):
+        """GET /v1/shipping-tracking/shipments/{id} - Admin can view any shipment."""
+        response = await async_client.get(f"/v1/shipping-tracking/shipments/{created_shipment['id']}/", headers=admin_headers)
+        assert response.status_code == 200
+
+    async def test_cannot_get_another_users_shipment(self, async_client: AsyncClient, created_shipment):
+        """GET /v1/shipping-tracking/shipments/{id} - A different, non-admin user can't view it."""
+        email = f"other_{uuid4().hex[:8]}@example.com"
+        register_resp = await async_client.post("/v1/auth/register/", json={
+            "email": email, "password": "SecurePass123!", "first_name": "Other", "last_name": "User",
+        })
+        assert register_resp.status_code in (200, 201)
+        login_resp = await async_client.post("/v1/auth/login/", json={"email": email, "password": "SecurePass123!"})
+        other_headers = {"Authorization": f"Bearer {login_resp.json()['data']['access_token']}"}
+
+        response = await async_client.get(
+            f"/v1/shipping-tracking/shipments/{created_shipment['id']}/", headers=other_headers
+        )
+        assert response.status_code == 404
+
     async def test_list_own(self, async_client: AsyncClient, auth_headers, created_shipment):
         """GET /v1/shipping-tracking/shipments - List own shipments."""
         response = await async_client.get("/v1/shipping-tracking/shipments/", headers=auth_headers)
