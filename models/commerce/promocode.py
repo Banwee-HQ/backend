@@ -1,6 +1,6 @@
 from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from datetime import datetime
 from typing import Optional
@@ -32,8 +32,8 @@ class Promocode(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -44,5 +44,5 @@ class Promocode(Base):
     usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_from: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)

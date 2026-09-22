@@ -3,7 +3,7 @@
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, func, Text, Integer, Numeric, Index
 from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from enum import Enum
 from datetime import datetime
@@ -66,8 +66,8 @@ class ShippingProvider(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     name: Mapped[str] = mapped_column(String(100))
     carrier_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.carriers.id"))
@@ -112,8 +112,8 @@ class ShipmentTracking(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Core shipment information
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
@@ -127,9 +127,9 @@ class ShipmentTracking(Base):
     shipment_type: Mapped[ShipmentType] = mapped_column(PG_ENUM(ShipmentType, name="shipment_type"), default=ShipmentType.STANDARD)
 
     # Timeline information
-    shipped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    estimated_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    actual_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    shipped_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    estimated_delivery: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    actual_delivery: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Location information
     origin_address: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Pickup address
@@ -150,7 +150,7 @@ class ShipmentTracking(Base):
 
     # External tracking data
     external_tracking_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Raw data from carrier API
-    last_api_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_api_sync: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     sync_status: Mapped[SyncStatus] = mapped_column(String(50), default=SyncStatus.PENDING)
 
     # Customer notifications
@@ -215,11 +215,11 @@ class ShipmentTrackingEvent(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     shipment_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.shipment_tracking.id"))
-    event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    event_timestamp: Mapped[datetime] = mapped_column(UTCDateTime())
     event_type: Mapped[ShipmentEventType] = mapped_column(String(50))
     event_description: Mapped[str] = mapped_column(Text)
     event_location: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {city, state, country, coordinates}
@@ -229,7 +229,7 @@ class ShipmentTrackingEvent(Base):
     carrier_event_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Additional details
-    estimated_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    estimated_delivery: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     delay_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     exception_details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
@@ -272,8 +272,8 @@ class ShippingWebhook(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.shipping_providers.id"))
     webhook_url: Mapped[str] = mapped_column(String(500))
@@ -281,7 +281,7 @@ class ShippingWebhook(Base):
     event_types: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # Which events to trigger on
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_triggered: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_triggered: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     success_count: Mapped[int] = mapped_column(Integer, default=0)
     error_count: Mapped[int] = mapped_column(Integer, default=0)
 

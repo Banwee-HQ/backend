@@ -2,7 +2,7 @@
 from sqlalchemy import String, Boolean, ForeignKey, Numeric, Text, Integer, Date, DateTime, func, Index
 from sqlalchemy.dialects.postgresql import JSON, ENUM as PG_ENUM
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from enum import Enum
@@ -91,8 +91,8 @@ class PaymentMethod(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     # Use PG_ENUM for type to map to PostgreSQL enum type
@@ -151,8 +151,8 @@ class PaymentIntent(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Stripe payment intent ID
     stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), unique=True)
@@ -183,11 +183,11 @@ class PaymentIntent(Base):
     client_secret: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Expiration
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Completion details
-    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    failed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Structured failure detail (Stripe error, retry_count), kept separate from
@@ -262,8 +262,8 @@ class Transaction(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     order_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.orders.id"), nullable=True)
@@ -320,8 +320,8 @@ class PaymentAnalytics(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Date for this analytics record
     date: Mapped[Date] = mapped_column(Date)

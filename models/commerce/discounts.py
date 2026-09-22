@@ -3,7 +3,7 @@ Discount management models for subscription product management
 """
 from sqlalchemy import String, Boolean, DateTime, Numeric, Text, Integer, func, Index, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -38,16 +38,16 @@ class Discount(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
     type: Mapped[DiscountType] = mapped_column(String(20))
     value: Mapped[float] = mapped_column(Numeric(10, 2))  # 10 for 10% or $10
     minimum_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     maximum_discount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
-    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_from: Mapped[datetime] = mapped_column(UTCDateTime())
+    valid_until: Mapped[datetime] = mapped_column(UTCDateTime())
     usage_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -90,13 +90,13 @@ class SubscriptionDiscount(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
     discount_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.discounts.id"))
     discount_amount: Mapped[float] = mapped_column(Numeric(10, 2))
-    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    applied_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
     # Relationships
     subscription = relationship("Subscription", back_populates="applied_discounts", lazy="select")
@@ -133,13 +133,13 @@ class ProductRemovalAudit(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     removed_by: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
-    removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    removed_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

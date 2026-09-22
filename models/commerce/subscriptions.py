@@ -1,7 +1,7 @@
 """Consolidated subscription models, with partial indexes for active subscriptions/products."""
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, JSON, Text, Integer, Date, func, Index, Column
 from sqlalchemy.orm import relationship, backref, Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -70,18 +70,18 @@ class SubscriptionProduct(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.subscriptions.id", ondelete="CASCADE"))
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
     total_price: Mapped[float] = mapped_column(Numeric(10, 2))
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    added_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
     # Removal tracking
-    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     removed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("accounts.users.id"), nullable=True)
 
     # Relationships
@@ -131,8 +131,8 @@ class Subscription(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # --- Core fields ---
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
@@ -141,16 +141,16 @@ class Subscription(Base):
     currency: Mapped[str] = mapped_column(String(3), default="CAD")
     billing_cycle: Mapped[BillingCycle] = mapped_column(String(20), default=BillingCycle.MONTHLY)
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
-    current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_billing_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    paused_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_start: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    next_billing_date: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    paused_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     pause_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_payment_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     payment_retry_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_payment_attempt: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_retry_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_payment_attempt: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    next_retry_date: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # --- Payment info ---
     payment_gateway: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -325,8 +325,8 @@ class SubscriptionCostHistory(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     subscription_id: Mapped[uuid.UUID] = mapped_column(GUID())
 
@@ -340,7 +340,7 @@ class SubscriptionCostHistory(Base):
     change_reason: Mapped[str] = mapped_column(String(100))  # "admin_percentage_change", "variant_price_change", etc.
 
     # When the change becomes effective
-    effective_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    effective_date: Mapped[datetime] = mapped_column(UTCDateTime())
 
     # Admin user who triggered the change (if applicable)
     changed_by: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
@@ -369,8 +369,8 @@ class SubscriptionAnalytics(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Date for this analytics record
     date: Mapped[Date] = mapped_column(Date)

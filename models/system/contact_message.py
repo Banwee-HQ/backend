@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import uuid
 import enum
 from typing import Optional
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 
 
@@ -53,9 +53,9 @@ class ContactMessage(Base):
     priority: Mapped[str] = mapped_column(ENUM('low', 'medium', 'high', 'urgent', name='messagepriority', create_type=False), default='medium')
     admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     
     def __repr__(self):
         return f"<ContactMessage {self.id} - {self.subject}>"

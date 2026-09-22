@@ -2,7 +2,7 @@
 from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, func, Index, select
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncSession
-from core.db import Base, CHAR_LENGTH, GUID
+from core.db import Base, CHAR_LENGTH, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from core.exceptions import APIException
 from datetime import datetime, timezone
@@ -33,8 +33,8 @@ class WarehouseLocation(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
     address: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True)
@@ -61,8 +61,8 @@ class Inventory(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"), unique=True)
     location_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("catalog.warehouse_locations.id"), nullable=True)
@@ -78,8 +78,8 @@ class Inventory(Base):
     inventory_status: Mapped[InventoryStatus] = mapped_column(String(50), default=InventoryStatus.ACTIVE)
 
     # Timestamps for tracking
-    last_restocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_sold_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_restocked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    last_sold_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Optimistic locking version counter
     version: Mapped[int] = mapped_column(Integer, default=0)
@@ -207,8 +207,8 @@ class StockAdjustment(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     inventory_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.inventory.id"))
     quantity_change: Mapped[int] = mapped_column(Integer)  # Positive for add, negative for remove

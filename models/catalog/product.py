@@ -3,7 +3,7 @@ Optimized product models with strategic JSON usage
 """
 from sqlalchemy import String, ForeignKey, DateTime, Numeric, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from core.db import Base, CHAR_LENGTH, GUID
+from core.db import Base, CHAR_LENGTH, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -39,8 +39,8 @@ class Product(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Core product information as columns for performance
     name: Mapped[str] = mapped_column(String(CHAR_LENGTH))
@@ -63,7 +63,7 @@ class Product(Base):
     is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Dates for lifecycle management
-    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Relationships with optimized lazy loading
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan", lazy="select")
@@ -175,8 +175,8 @@ class ProductVariant(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     product_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.products.id"))
     sku: Mapped[str] = mapped_column(String(100), unique=True)
@@ -289,8 +289,8 @@ class ProductImage(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     variant_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("catalog.product_variants.id"))
     url: Mapped[str] = mapped_column(String(500))

@@ -3,7 +3,7 @@ Validation rules models for tax and shipping fallback calculations
 """
 from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -25,8 +25,8 @@ class TaxValidationRule(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     location_code: Mapped[str] = mapped_column(String(10))  # Country/state code (e.g., "US-CA", "GB")
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 4))  # Tax rate as decimal (e.g., 0.08 for 8%)
@@ -73,8 +73,8 @@ class ShippingValidationRule(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     location_code: Mapped[str] = mapped_column(String(10))  # Country/state code (e.g., "US-CA", "GB")
     weight_min: Mapped[float] = mapped_column(Numeric(10, 3), default=0.0)  # Minimum weight in kg

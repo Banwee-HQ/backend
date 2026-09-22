@@ -1,11 +1,12 @@
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy import text, TypeDecorator, CHAR, event
+from sqlalchemy import text, TypeDecorator, CHAR, DateTime, event
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
 import asyncio
 import time
 import uuid
+from datetime import datetime, timezone as dt_timezone
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 from fastapi import HTTPException
@@ -48,6 +49,31 @@ class GUID(TypeDecorator):
             return value
 
 
+class UTCDateTime(TypeDecorator):
+    """DateTime(timezone=True) that treats an accidentally-naive datetime as UTC.
+
+    asyncpg (and most DB-API drivers) interpret a naive Python datetime using the
+    *client process's local system timezone*, not UTC and not the Postgres
+    session's TimeZone setting - a naive datetime.utcnow() silently gets shifted
+    by the local offset before storage. App code should always pass timezone-aware
+    UTC datetimes (datetime.now(timezone.utc)); this is the backstop for the times
+    it doesn't, normalizing any stray naive value to UTC instead of local time
+    before it reaches the driver, and doing the same on the way back out.
+    """
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=dt_timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=dt_timezone.utc)
+        return value
+
+
 # Database connection configuration - NOW INITIALIZED LATER
 engine_db = None
 AsyncSessionDB = None
@@ -79,11 +105,18 @@ class DatabaseManager:
             pool_timeout=30,
         )
 
-        # Set search_path on every new connection so all schemas are visible
+        # Set search_path and session timezone on every new connection. The timezone
+        # matters beyond just SELECT display formatting: any naive Python datetime
+        # bound as a timestamptz parameter (or written via a raw SQL literal) gets
+        # interpreted as being in *this* session timezone before conversion to UTC
+        # for storage, silently shifting it by the offset if this isn't UTC. App
+        # code should always pass timezone-aware UTC datetimes regardless - this is
+        # the defense-in-depth backstop for the times it doesn't.
         @event.listens_for(engine_db.sync_engine, "connect")
         def set_search_path(dbapi_conn, connection_record):
             cursor = dbapi_conn.cursor()
             cursor.execute("SET search_path TO accounts, catalog, commerce, admin, system, public")
+            cursor.execute("SET TIME ZONE 'UTC'")
             cursor.close()
 
         AsyncSessionDB = sessionmaker(

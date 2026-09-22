@@ -63,6 +63,7 @@ from sqlalchemy import event as _sa_event
 def _set_test_search_path(dbapi_conn, connection_record):
     cursor = dbapi_conn.cursor()
     cursor.execute("SET search_path TO accounts, catalog, commerce, admin, system, public")
+    cursor.execute("SET TIME ZONE 'UTC'")
     cursor.close()
 
 # Test session factory

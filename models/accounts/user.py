@@ -1,6 +1,6 @@
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, Integer, func, Index, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from core.db import Base, CHAR_LENGTH, GUID
+from core.db import Base, CHAR_LENGTH, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from enum import Enum
 import uuid
@@ -47,8 +47,8 @@ class User(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Core identity fields - frequently queried
     email: Mapped[str] = mapped_column(String(CHAR_LENGTH), unique=True)
@@ -71,15 +71,15 @@ class User(Base):
     timezone: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     # Optional profile fields
-    date_of_birth: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    date_of_birth: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     # Activity tracking
-    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_activity_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    last_activity_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # Core identity fields
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
-    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # External integrations
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(CHAR_LENGTH), nullable=True, unique=True)
@@ -89,11 +89,11 @@ class User(Base):
 
     # Simple fields as text for better performance
     verification_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    token_expiration: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_expiration: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Password reset fields
     reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    reset_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reset_token_expires: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Relationships with optimized lazy loading
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
@@ -183,8 +183,8 @@ class Address(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     user_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("accounts.users.id"))
     street: Mapped[str] = mapped_column(String(CHAR_LENGTH))

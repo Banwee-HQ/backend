@@ -2,7 +2,7 @@
 from sqlalchemy import String, ForeignKey, Numeric, Text, Integer, DateTime, func, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from core.db import Base, GUID
+from core.db import Base, GUID, UTCDateTime
 from core.utils.uuid_utils import uuid7
 from enum import Enum
 from typing import Dict, Any, Optional
@@ -45,8 +45,8 @@ class AnalyticsEvent(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Event identification
     session_id: Mapped[str] = mapped_column(String(255), ForeignKey("accounts.user_sessions.session_id"))
@@ -69,7 +69,7 @@ class AnalyticsEvent(Base):
     quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Timing
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user = relationship("User")
@@ -107,8 +107,8 @@ class ConversionFunnel(Base):
 
     # Common fields (previously from BaseModel)
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid7)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), onupdate=func.now(), nullable=True)
 
     # Funnel identification
     session_id: Mapped[str] = mapped_column(String(255), ForeignKey("accounts.user_sessions.session_id"))
@@ -119,15 +119,15 @@ class ConversionFunnel(Base):
     max_step_reached: Mapped[int] = mapped_column(Integer, default=0)
 
     # Step timestamps
-    landing_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    product_view_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    cart_add_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    checkout_start_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    purchase_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    landing_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    product_view_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    cart_add_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    checkout_start_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    purchase_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     # Funnel metadata
     abandoned_at_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    abandoned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    abandoned_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Financial data
