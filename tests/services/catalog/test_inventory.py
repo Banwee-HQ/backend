@@ -169,3 +169,162 @@ class TestAdjustStock:
                 await cleanup_session.execute(Product.__table__.delete().where(Product.id == product.id))
                 await cleanup_session.execute(Category.__table__.delete().where(Category.id == category.id))
                 await cleanup_session.commit()
+
+
+class TestLocationCrud:
+
+    async def test_create_list_get_update_delete(self, db_session):
+        from schemas.catalog.inventory import LocationCreate, LocationUpdate
+
+        service = InventoryService(db_session)
+        created = await service.create_location(LocationCreate(name=f"Warehouse {uuid4().hex[:6]}", address="1 Main St"))
+        assert created.name.startswith("Warehouse")
+
+        listed = await service.list_locations()
+        assert any(l.id == created.id for l in listed["data"])
+
+        fetched = await service.get_location(created.id)
+        assert fetched.id == created.id
+
+        updated = await service.update_location(created.id, LocationUpdate(name="Renamed Warehouse"))
+        assert updated.name == "Renamed Warehouse"
+
+        await service.delete_location(created.id)
+        assert await service.get_location(created.id) is None
+
+    async def test_get_unknown_location_returns_none(self, db_session):
+        service = InventoryService(db_session)
+        assert await service.get_location(uuid4()) is None
+
+    async def test_update_unknown_location_raises_404(self, db_session):
+        from schemas.catalog.inventory import LocationUpdate
+        service = InventoryService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.update_location(uuid4(), LocationUpdate(name="X"))
+        assert exc_info.value.status_code == 404
+
+    async def test_delete_location_with_inventory_is_rejected(self, db_session, variant):
+        from schemas.catalog.inventory import LocationCreate
+        service = InventoryService(db_session)
+        location = await service.create_location(LocationCreate(name=f"Warehouse {uuid4().hex[:6]}"))
+
+        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
+        inventory = inv_result.scalar_one()
+        inventory.location_id = location.id
+        await db_session.commit()
+
+        with pytest.raises(APIException) as exc_info:
+            await service.delete_location(location.id)
+        assert exc_info.value.status_code == 400
+
+
+class TestInventoryCrud:
+
+    async def test_create_update_delete(self, db_session):
+        from schemas.catalog.inventory import Create as InventoryCreate, Update as InventoryUpdate, LocationCreate
+
+        cat = Category(id=uuid7(), name="Cat", slug=f"cat-{uuid4().hex[:8]}")
+        product = Product(id=uuid7(), name="Widget", slug=f"widget-{uuid4().hex[:8]}", category_id=cat.id)
+        v = ProductVariant(id=uuid7(), product_id=product.id, sku=f"SKU-{uuid4().hex[:8]}", name="Default", base_price=Decimal("9.99"))
+        db_session.add_all([cat, product, v])
+        await db_session.commit()
+
+        service = InventoryService(db_session)
+        location = await service.create_location(LocationCreate(name=f"Warehouse {uuid4().hex[:6]}"))
+
+        created = await service.create(InventoryCreate(variant_id=v.id, location_id=location.id, quantity=25))
+        assert created.quantity_available == 25
+
+        updated = await service.update(created.id, InventoryUpdate(quantity=40))
+        assert updated.quantity_available == 40
+
+        await service.delete(created.id)
+        assert await service.get(created.id) is None
+
+    async def test_update_unknown_inventory_raises_404(self, db_session):
+        from schemas.catalog.inventory import Update as InventoryUpdate
+        service = InventoryService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.update(uuid4(), InventoryUpdate(quantity=1))
+        assert exc_info.value.status_code == 404
+
+    async def test_delete_unknown_inventory_raises_404(self, db_session):
+        service = InventoryService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.delete(uuid4())
+        assert exc_info.value.status_code == 404
+
+
+class TestAdjustmentCrud:
+
+    async def test_get_and_delete_adjustment(self, db_session, variant):
+        service = InventoryService(db_session)
+        await service.adjust_stock(
+            StockAdjustmentCreate(variant_id=variant.id, quantity_change=-2, reason="test"),
+        )
+        listed = await service.adjustments()
+        adjustment_id = listed["data"][0].id
+
+        fetched = await service.get_adjustment(adjustment_id)
+        assert fetched.id == adjustment_id
+
+        assert await service.delete_adjustment(adjustment_id) is True
+        assert await service.get_adjustment(adjustment_id) is None
+
+    async def test_get_unknown_adjustment_returns_none(self, db_session):
+        service = InventoryService(db_session)
+        assert await service.get_adjustment(uuid4()) is None
+
+    async def test_delete_unknown_adjustment_returns_false(self, db_session):
+        service = InventoryService(db_session)
+        assert await service.delete_adjustment(uuid4()) is False
+
+
+class TestIsLowStock:
+
+    async def test_true_when_at_or_below_threshold(self, db_session, variant):
+        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
+        inventory = inv_result.scalar_one()
+        inventory.low_stock_threshold = 20
+        await db_session.commit()
+
+        service = InventoryService(db_session)
+        assert await service.is_low_stock(inventory.id) is True
+
+    async def test_false_when_above_threshold(self, db_session, variant):
+        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
+        inventory = inv_result.scalar_one()
+        inventory.low_stock_threshold = 1
+        await db_session.commit()
+
+        service = InventoryService(db_session)
+        assert await service.is_low_stock(inventory.id) is False
+
+
+class TestIncrement:
+
+    async def test_increments_stock(self, db_session, variant):
+        service = InventoryService(db_session)
+        result = await service.increment(variant.id, quantity=5, location_id=uuid4())
+        assert result["success"] is True
+
+        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
+        assert inv_result.scalar_one().quantity_available == 15
+
+    async def test_unknown_variant_reports_failure(self, db_session):
+        service = InventoryService(db_session)
+        result = await service.increment(uuid4(), quantity=5, location_id=uuid4())
+        assert result["success"] is False
+
+
+class TestSync:
+
+    async def test_syncs_single_product(self, db_session, variant):
+        service = InventoryService(db_session)
+        result = await service.sync(variant.product_id)
+        assert result["success"] is True
+
+    async def test_unknown_product_reports_not_found(self, db_session):
+        service = InventoryService(db_session)
+        result = await service.sync(uuid4())
+        assert result["success"] is False

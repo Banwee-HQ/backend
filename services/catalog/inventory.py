@@ -462,10 +462,15 @@ class InventoryService:
         if not variant:
             raise APIException(status_code=404, message="Product variant not found.")
 
-        new_inventory = Inventory(id=uuid7(), **inventory_data.model_dump())
+        data = inventory_data.model_dump()
+        data["quantity_available"] = data.pop("quantity")
+        new_inventory = Inventory(id=uuid7(), **data)
         self.db.add(new_inventory)
         await self.db.commit()
-        await self.db.refresh(new_inventory)
+        # location_id is set but the relationship itself was never loaded on this
+        # brand-new object - request it explicitly so model_validate() below doesn't
+        # trigger a lazy load outside of an awaitable context.
+        await self.db.refresh(new_inventory, attribute_names=["location"])
         return InventoryResponse.model_validate(new_inventory)
 
     async def update(self, inventory_id: UUID, inventory_data: InventoryUpdate) -> InventoryResponse:
@@ -960,61 +965,62 @@ class InventoryService:
         user_id: Optional[UUID] = None
     ) -> Dict[str, Any]:
         """Internal method to perform stock increment with database lock"""
-        # Get inventory with atomic lock
-        inventory = await Inventory.get_with_lock(self.db, variant_id)
-        
-        if not inventory:
-            raise APIException(
-                status_code=404,
-                message=f"Inventory not found for variant {variant_id}"
-            )
-        
-        # Perform atomic stock update
-        adjustment = await inventory.atomic_update_stock(
-            db=self.db,
-            quantity_change=quantity,
-            reason="order_cancelled",
-            user_id=user_id,
-            notes=f"Stock restored from cancelled order {order_id}" if order_id else "Stock restored from cancellation"
-        )
-
-        # flush, don't commit: callers manage their own larger transaction around this
-        # call, and committing here previously corrupted refund auto-approval's Refund record.
-        await self.db.flush()
-
-        logger.info(f"Atomically incremented stock for variant {variant_id}: +{quantity}")
-        
-        # Queue product availability sync as background task (don't wait for it)
         try:
-            # Local: core.worker imports InventoryService, so this would be circular at top level.
-            from core.worker import enqueue_sync_product_availability
+            # Get inventory with atomic lock
+            inventory = await Inventory.get_with_lock(self.db, variant_id)
 
-            # Get the variant to find its product
-            variant_result = await self.db.execute(
-                select(ProductVariant).where(ProductVariant.id == variant_id)
+            if not inventory:
+                raise APIException(
+                    status_code=404,
+                    message=f"Inventory not found for variant {variant_id}"
+                )
+
+            # Perform atomic stock update
+            adjustment = await inventory.atomic_update_stock(
+                db=self.db,
+                quantity_change=quantity,
+                reason="order_cancelled",
+                user_id=user_id,
+                notes=f"Stock restored from cancelled order {order_id}" if order_id else "Stock restored from cancellation"
             )
-            variant = variant_result.scalar_one_or_none()
-            
-            if variant:
-                # Queue sync as background task - don't block the cancellation response
-                await enqueue_sync_product_availability(str(variant.product_id))
-                logger.info(f"Queued inventory sync", metadata={
-    "product_id": str(variant.product_id)
-})
-        except Exception as sync_error:
-            logger.warning(f"Failed to queue product availability sync: {sync_error}")
-            # Don't fail the entire operation if queueing fails
-        
+
+            # flush, don't commit: callers manage their own larger transaction around this
+            # call, and committing here previously corrupted refund auto-approval's Refund record.
+            await self.db.flush()
+
+            logger.info(f"Atomically incremented stock for variant {variant_id}: +{quantity}")
+
+            # Queue product availability sync as background task (don't wait for it)
+            try:
+                # Local: core.worker imports InventoryService, so this would be circular at top level.
+                from core.worker import enqueue_sync_product_availability
+
+                # Get the variant to find its product
+                variant_result = await self.db.execute(
+                    select(ProductVariant).where(ProductVariant.id == variant_id)
+                )
+                variant = variant_result.scalar_one_or_none()
+
+                if variant:
+                    # Queue sync as background task - don't block the cancellation response
+                    await enqueue_sync_product_availability(str(variant.product_id))
+                    logger.info(f"Queued inventory sync", metadata={
+        "product_id": str(variant.product_id)
+    })
+            except Exception as sync_error:
+                # Don't fail the entire operation if queueing fails
+                logger.warning(f"Failed to queue product availability sync: {sync_error}")
+
             return {
-            "success": True,
-            "message": "Stock incremented successfully",
-            "inventory_id": str(inventory.id),
-            "previous_quantity": inventory.quantity_available - quantity,
-            "new_quantity": inventory.quantity_available,
-            "quantity_incremented": quantity,
-            "adjustment_id": str(adjustment.id) if adjustment else None
-        }
-            
+                "success": True,
+                "message": "Stock incremented successfully",
+                "inventory_id": str(inventory.id),
+                "previous_quantity": inventory.quantity_available - quantity,
+                "new_quantity": inventory.quantity_available,
+                "quantity_incremented": quantity,
+                "adjustment_id": str(adjustment.id) if adjustment else None
+            }
+
         except APIException:
             await self.db.rollback()
             raise
