@@ -83,6 +83,19 @@ class TestCartEndpoints:
         response = await async_client.patch(f"/v1/cart/{uuid4()}/", headers=auth_headers, json={"quantity": 1})
         assert response.status_code == 404
 
+    async def test_remove_item_not_found(self, async_client: AsyncClient, auth_headers):
+        """DELETE /v1/cart/{item_id} - Unknown item ID returns 404."""
+        response = await async_client.delete(f"/v1/cart/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_cannot_update_another_users_cart_item(self, async_client: AsyncClient, auth_headers, admin_headers, cart_with_item):
+        """PATCH /v1/cart/{item_id} - Another user's cart item isn't accessible."""
+        cart = await async_client.get("/v1/cart/", headers=auth_headers)
+        item_id = cart.json()["data"]["items"][0]["id"]
+
+        response = await async_client.patch(f"/v1/cart/{item_id}/", headers=admin_headers, json={"quantity": 1})
+        assert response.status_code == 404
+
     async def test_remove_item(self, async_client: AsyncClient, auth_headers, cart_with_item):
         """DELETE /v1/cart/{item_id} - Remove cart item."""
         cart = await async_client.get("/v1/cart/", headers=auth_headers)
@@ -128,3 +141,19 @@ class TestCartEndpoints:
         """GET /v1/cart/checkout-summary - Get checkout summary."""
         response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
         assert response.status_code == 200
+
+    async def test_count_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/cart/count/")
+        assert response.status_code == 401
+
+    async def test_validate_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.post("/v1/cart/validate/")
+        assert response.status_code == 401
+
+    async def test_clear_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.post("/v1/cart/clear/")
+        assert response.status_code == 401
+
+    async def test_checkout_summary_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/cart/checkout-summary/")
+        assert response.status_code == 401
