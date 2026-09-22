@@ -1,5 +1,4 @@
 from uuid import UUID
-import traceback
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -177,8 +176,7 @@ async def validate(
     except HTTPException:
         raise
     except Exception as e:
-        tb = traceback.format_exc()
-        print(f"VALIDATE CHECKOUT ERROR: {e}\n{tb}")
+        logger.error(f"Checkout validation error: {e}", exc_info=True)
         raise APIException(status_code=500, message=f"Checkout validation failed: {str(e)}")
 
 

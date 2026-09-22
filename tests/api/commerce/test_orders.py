@@ -126,6 +126,25 @@ class TestOrderEndpoints:
         response = await async_client.get("/v1/orders/", headers=auth_headers)
         assert response.status_code == 200
 
+    async def test_list_admin_sees_all(self, async_client: AsyncClient, admin_headers, created_order):
+        """GET /v1/orders/ - Admin sees orders across all users."""
+        response = await async_client.get("/v1/orders/", headers=admin_headers)
+        assert response.status_code == 200
+        ids = [o["id"] for o in response.json()["data"]]
+        assert str(created_order.id) in ids
+
+    async def test_list_filters_by_status(self, async_client: AsyncClient, auth_headers, created_order):
+        response = await async_client.get(f"/v1/orders/?status={created_order.order_status.value}", headers=auth_headers)
+        assert response.status_code == 200
+        ids = [o["id"] for o in response.json()["data"]]
+        assert str(created_order.id) in ids
+
+    async def test_list_filters_by_search(self, async_client: AsyncClient, auth_headers, created_order):
+        response = await async_client.get(f"/v1/orders/?search={created_order.order_number}", headers=auth_headers)
+        assert response.status_code == 200
+        ids = [o["id"] for o in response.json()["data"]]
+        assert str(created_order.id) in ids
+
     async def test_get_by_id(self, async_client: AsyncClient, auth_headers, created_order):
         """GET /v1/orders/{id} - Get own order."""
         response = await async_client.get(f"/v1/orders/{created_order.id}/", headers=auth_headers)
@@ -266,10 +285,46 @@ class TestOrderEndpoints:
         )
         assert response.status_code == 403
 
+    async def test_ship_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
+        """POST /v1/orders/{id}/ship - Admin marks the order shipped."""
+        response = await async_client.post(f"/v1/orders/{created_order.id}/ship/",
+            headers=admin_headers, json={"carrier": "ups", "tracking_number": "1Z999"}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["order_status"] == "shipped"
+
     async def test_deliver_requires_admin(self, async_client: AsyncClient, auth_headers, created_order):
         """PUT /v1/orders/{id}/deliver - Non-admin is forbidden."""
         response = await async_client.put(f"/v1/orders/{created_order.id}/deliver/", headers=auth_headers)
         assert response.status_code == 403
+
+    async def test_deliver_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
+        """PUT /v1/orders/{id}/deliver - Admin marks the order delivered."""
+        response = await async_client.put(f"/v1/orders/{created_order.id}/deliver/",
+            headers=admin_headers, json={"notes": "Left at door"}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["order_status"] == "delivered"
+
+    async def test_update_status_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.patch(f"/v1/orders/{uuid4()}/status/",
+            headers=admin_headers, json={"status": "confirmed"}
+        )
+        assert response.status_code == 404
+
+    async def test_update_status_invalid_value_returns_400(self, async_client: AsyncClient, admin_headers, created_order):
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/status/",
+            headers=admin_headers, json={"status": "not-a-real-status"}
+        )
+        assert response.status_code == 400
+
+    async def test_tracking_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_payments_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=admin_headers)
+        assert response.status_code == 404
 
     async def test_statistics_requires_admin(self, async_client: AsyncClient, auth_headers):
         """GET /v1/orders/statistics - Non-admin is forbidden."""
