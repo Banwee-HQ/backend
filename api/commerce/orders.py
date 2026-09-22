@@ -81,7 +81,7 @@ async def get(
             raise APIException(status_code=404, message="Order not found")
 
         # Convert to dict and add customer information for admin
-        order_dict = order.model_dump() if hasattr(order, 'model_dump') else order.dict()
+        order_dict = order.model_dump()
 
         # Add customer information if user is loaded
         order_query = select(OrderModel).where(OrderModel.id == order_id).options(

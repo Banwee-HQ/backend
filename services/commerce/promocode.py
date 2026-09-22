@@ -21,7 +21,7 @@ class PromocodeService:
 
         new_promocode = Promocode(
             id=uuid7(),
-            **promocode_data.dict(exclude_unset=True)
+            **promocode_data.model_dump(exclude_unset=True)
         )
         self.db.add(new_promocode)
         await self.db.commit()
@@ -75,7 +75,7 @@ class PromocodeService:
         if not promocode:
             raise APIException(status_code=404, message="Promocode not found")
 
-        for key, value in promocode_data.dict(exclude_unset=True).items():
+        for key, value in promocode_data.model_dump(exclude_unset=True).items():
             setattr(promocode, key, value)
 
         await self.db.commit()

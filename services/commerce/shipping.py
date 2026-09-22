@@ -19,7 +19,7 @@ class ShippingService:
         """Create a new shipping method"""
         new_shipping_method = ShippingMethod(
             id=uuid7(),
-            **shipping_method_data.dict(exclude_unset=True)
+            **shipping_method_data.model_dump(exclude_unset=True)
         )
         self.db.add(new_shipping_method)
         await self.db.commit()
@@ -110,7 +110,7 @@ class ShippingService:
             raise APIException(
                 status_code=404, message="Shipping method not found")
 
-        for key, value in shipping_method_data.dict(exclude_unset=True).items():
+        for key, value in shipping_method_data.model_dump(exclude_unset=True).items():
             setattr(shipping_method, key, value)
 
         await self.db.commit()

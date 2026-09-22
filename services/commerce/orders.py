@@ -922,7 +922,7 @@ class OrderService:
             formatted_orders = []
             for order in orders:
                 order_response = await self._format_order_response(order)
-                order_dict = order_response.model_dump() if hasattr(order_response, 'model_dump') else order_response.dict()
+                order_dict = order_response.model_dump()
                 if order.user:
                     order_dict["customer"] = {
                         "id": str(order.user.id),

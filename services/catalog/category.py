@@ -75,7 +75,7 @@ class CategoryService:
             if not parent:
                 raise APIException(status_code=404, message="Parent category not found")
 
-        category = Category(id=uuid7(), **data.dict())
+        category = Category(id=uuid7(), **data.model_dump())
         self.db.add(category)
         await self.db.commit()
         await self.db.refresh(category)
@@ -86,7 +86,7 @@ class CategoryService:
         if not category:
             return None
 
-        update_dict = data.dict(exclude_unset=True)
+        update_dict = data.model_dump(exclude_unset=True)
 
         if update_dict.get("slug") and update_dict["slug"] != category.slug:
             existing = await self.get_by_slug(update_dict["slug"])

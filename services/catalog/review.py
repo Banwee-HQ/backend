@@ -126,7 +126,7 @@ class ReviewService:
             "total": total_reviews,
             "page": page,
             "limit": limit,
-            "data": [ReviewResponse.from_orm(r) for r in reviews]
+            "data": [ReviewResponse.model_validate(r) for r in reviews]
         }
 
     async def get(self, review_id: UUID) -> Optional[Review]:
@@ -144,7 +144,7 @@ class ReviewService:
             raise APIException(
                 status_code=403, message="Not authorized to update this review")
 
-        for key, value in review_data.dict(exclude_unset=True).items():
+        for key, value in review_data.model_dump(exclude_unset=True).items():
             setattr(review, key, value)
         review.updated_at = datetime.utcnow()
         await self.db.commit()
@@ -153,7 +153,7 @@ class ReviewService:
         # Update product rating
         await self._update_product_rating(review.product_id)
 
-        return ReviewResponse.from_orm(review)
+        return ReviewResponse.model_validate(review)
 
     async def delete(self, review_id: UUID, user_id: UUID):
         """Delete a review"""

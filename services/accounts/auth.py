@@ -182,7 +182,7 @@ class AuthService:
         user_service = UserService(self.db)
         new_user = await user_service.create(user_data, background_tasks)
 
-        return UserResponse.from_orm(new_user)
+        return UserResponse.model_validate(new_user)
 
     async def authenticate(self, email: str, password: str, background_tasks: BackgroundTasks) -> AuthResponse:
         """Authenticate user and return JWT tokens."""

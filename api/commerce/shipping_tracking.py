@@ -41,7 +41,7 @@ async def create_shipment(
     try:
         shipping_service = ShippingTrackingService(db)
         # Convert string IDs to UUID
-        shipment_dict = shipment_data.dict()
+        shipment_dict = shipment_data.model_dump()
         shipment_dict['order_id'] = UUID(shipment_dict['order_id'])
         if shipment_dict.get('order_item_id'):
             shipment_dict['order_item_id'] = UUID(shipment_dict['order_item_id'])
@@ -142,7 +142,7 @@ async def update_shipment_status(
         shipment = await shipping_service.update(
             str(shipment_id),
             update_data.status,
-            update_data.dict(exclude={'status'})
+            update_data.model_dump(exclude={'status'})
         )
         
         return APIResponse.success(

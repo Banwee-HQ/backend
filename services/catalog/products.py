@@ -795,7 +795,7 @@ class ProductService:
         is_admin: bool = False
     ) -> ProductResponse:
         """Update a product and its variants."""
-        logger.info(f"Updating product {product_id} with data: {product_data.dict(exclude_unset=True)}")
+        logger.info(f"Updating product {product_id} with data: {product_data.model_dump(exclude_unset=True)}")
         
         query = select(Product).options(
             selectinload(Product.variants).selectinload(ProductVariant.images),
@@ -814,7 +814,7 @@ class ProductService:
 
         # Update product fields - exclude_unset so omitted fields keep their current value
         # instead of being overwritten with the schema's None defaults.
-        update_dict = product_data.dict(exclude={'variants'}, exclude_unset=True)
+        update_dict = product_data.model_dump(exclude={'variants'}, exclude_unset=True)
         for field, value in update_dict.items():
             setattr(product, field, value)
 
@@ -823,12 +823,12 @@ class ProductService:
         # Handle variant updates if provided
         if product_data.variants is not None:
             logger.info(f"Processing {len(product_data.variants)} variants")
-            logger.info(f"Variant data: {[v.dict(exclude_unset=True) for v in product_data.variants]}")
+            logger.info(f"Variant data: {[v.model_dump(exclude_unset=True) for v in product_data.variants]}")
             existing_variant_ids = {str(v.id) for v in product.variants}
             updated_variant_ids = set()
             
             for idx, variant_data in enumerate(product_data.variants):
-                logger.info(f"Processing variant {idx}: id={variant_data.id}, data={variant_data.dict(exclude_unset=True)}")
+                logger.info(f"Processing variant {idx}: id={variant_data.id}, data={variant_data.model_dump(exclude_unset=True)}")
                 
                 if variant_data.id:
                     # Update existing variant
@@ -839,7 +839,7 @@ class ProductService:
                     if variant:
                         logger.info(f"Updating existing variant {variant_id}")
                         # Update variant fields - only update fields that were explicitly provided
-                        variant_dict = variant_data.dict(exclude_unset=True, exclude={'id', 'images', 'stock'})
+                        variant_dict = variant_data.model_dump(exclude_unset=True, exclude={'id', 'images', 'stock'})
                         logger.info(f"Fields to update: {list(variant_dict.keys())}")
                         
                         for field, value in variant_dict.items():
@@ -950,7 +950,7 @@ class ProductService:
                 else:
                     # Create new variant
                     logger.info(f"Creating new variant")
-                    new_variant_dict = variant_data.dict(exclude_unset=True, exclude={'id', 'images', 'stock'})
+                    new_variant_dict = variant_data.model_dump(exclude_unset=True, exclude={'id', 'images', 'stock'})
                     new_variant = ProductVariant(
                         product_id=product_id,
                         **new_variant_dict

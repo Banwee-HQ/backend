@@ -41,7 +41,7 @@ class CarrierService:
         if await self.get_by_code(data.code):
             raise APIException(status_code=400, message="A carrier with this code already exists")
 
-        carrier = Carrier(id=uuid7(), **data.dict())
+        carrier = Carrier(id=uuid7(), **data.model_dump())
         self.db.add(carrier)
         await self.db.commit()
         await self.db.refresh(carrier)
@@ -52,7 +52,7 @@ class CarrierService:
         if not carrier:
             return None
 
-        for field, value in data.dict(exclude_unset=True).items():
+        for field, value in data.model_dump(exclude_unset=True).items():
             setattr(carrier, field, value)
 
         await self.db.commit()

@@ -67,7 +67,7 @@ async def create_method(
             is_default=payment_method_data.is_default,
             payment_method_metadata=payment_method_data.payment_method_metadata,
         )
-        return Response.success(data=MethodResponse.from_orm(payment_method), code=status.HTTP_201_CREATED, message="Payment method created successfully")
+        return Response.success(data=MethodResponse.model_validate(payment_method), code=status.HTTP_201_CREATED, message="Payment method created successfully")
     except APIException:
         raise
     except HTTPException:
@@ -88,7 +88,7 @@ async def get_method(
         method = await service.get(payment_method_id, current_user.id)
         if not method:
             raise APIException(status_code=404, message="Payment method not found")
-        return Response.success(data=MethodResponse.from_orm(method), message="Payment method retrieved successfully")
+        return Response.success(data=MethodResponse.model_validate(method), message="Payment method retrieved successfully")
     except APIException:
         raise
     except HTTPException:
@@ -133,11 +133,11 @@ async def patch_method(
         updated_method = await service.update(
             payment_method_id,
             current_user.id,
-            payment_method_data.dict(exclude_unset=True)
+            payment_method_data.model_dump(exclude_unset=True)
         )
         if not updated_method:
             raise APIException(status_code=404, message="Payment method not found")
-        return Response.success(data=MethodResponse.from_orm(updated_method), message="Payment method updated successfully")
+        return Response.success(data=MethodResponse.model_validate(updated_method), message="Payment method updated successfully")
     except APIException:
         raise
     except HTTPException:
@@ -185,7 +185,7 @@ async def create_intent(
             subscription_id=None,
             metadata={}
         )
-        return Response.success(data=IntentResponse.from_orm(payment_intent), code=status.HTTP_201_CREATED, message="Payment intent created successfully")
+        return Response.success(data=IntentResponse.model_validate(payment_intent), code=status.HTTP_201_CREATED, message="Payment intent created successfully")
     except APIException:
         raise
     except HTTPException:
@@ -206,7 +206,7 @@ async def get_intent(
         intent = await service.get_intent(payment_intent_id, current_user.id)
         if not intent:
             raise APIException(status_code=404, message="Payment intent not found")
-        return Response.success(data=IntentResponse.from_orm(intent), message="Payment intent retrieved successfully")
+        return Response.success(data=IntentResponse.model_validate(intent), message="Payment intent retrieved successfully")
     except APIException:
         raise
     except HTTPException:
@@ -233,7 +233,7 @@ async def list_intents(
                 "total": result.get("total", 0),
                 "pages": (result.get("total", 0) + limit - 1) // limit
             }
-            return Response.success(data=[IntentResponse.from_orm(i) for i in result.get("items", [])], pagination=pagination)
+            return Response.success(data=[IntentResponse.model_validate(i) for i in result.get("items", [])], pagination=pagination)
         return Response.success(data=result)
     except APIException:
         raise
@@ -256,7 +256,7 @@ async def get_transaction(
         transaction = await service.get_transaction(transaction_id, current_user.id)
         if not transaction:
             raise APIException(status_code=404, message="Transaction not found")
-        return Response.success(data=TxnResponse.from_orm(transaction), message="Transaction retrieved successfully")
+        return Response.success(data=TxnResponse.model_validate(transaction), message="Transaction retrieved successfully")
     except APIException:
         raise
     except HTTPException:
@@ -333,7 +333,7 @@ async def create_refund(
             amount=request.amount,
             reason=request.reason
         )
-        return Response.success(data=TxnResponse.from_orm(transaction), message="Refund created successfully", status_code=status.HTTP_201_CREATED)
+        return Response.success(data=TxnResponse.model_validate(transaction), message="Refund created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
     except HTTPException:
@@ -354,7 +354,7 @@ async def get_refund(
         refund = await service.get_refund(refund_id, current_user.id)
         if not refund:
             raise APIException(status_code=404, message="Refund not found")
-        return Response.success(data=TxnResponse.from_orm(refund), message="Refund retrieved successfully")
+        return Response.success(data=TxnResponse.model_validate(refund), message="Refund retrieved successfully")
     except APIException:
         raise
     except HTTPException:
@@ -406,7 +406,7 @@ async def confirm_intent(
             payment_intent_id=payment_intent_id,
             payment_method_id=payment_method_id
         )
-        return Response.success(data=IntentResponse.from_orm(payment_intent), message="Payment intent confirmed successfully")
+        return Response.success(data=IntentResponse.model_validate(payment_intent), message="Payment intent confirmed successfully")
     except APIException:
         raise
     except HTTPException:
