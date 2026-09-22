@@ -52,6 +52,7 @@ class TestAdminOnlyEndpoints:
         "/v1/analytics/sales/",
         "/v1/analytics/stats/",
         "/v1/analytics/dashboard/admin/",
+        "/v1/analytics/sales-overview/",
     ]
 
     @pytest.mark.parametrize("path", ENDPOINTS)
@@ -63,20 +64,6 @@ class TestAdminOnlyEndpoints:
     async def test_admin_can_access(self, async_client: AsyncClient, admin_headers, path):
         response = await async_client.get(path, headers=admin_headers)
         assert response.status_code == 200
-
-
-@pytest.mark.api
-@pytest.mark.analytics
-class TestSalesOverview:
-    """/sales-overview/ only requires auth, not admin."""
-
-    async def test_any_authenticated_user_can_access(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.get("/v1/analytics/sales-overview/", headers=auth_headers)
-        assert response.status_code == 200
-
-    async def test_requires_auth(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/analytics/sales-overview/")
-        assert response.status_code == 401
 
 
 @pytest.mark.api

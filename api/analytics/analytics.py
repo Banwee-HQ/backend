@@ -357,10 +357,10 @@ async def sales_overview(
     categories: Optional[str] = Query(None),
     regions: Optional[str] = Query(None),
     sales_channels: Optional[str] = Query("online,instore"),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get sales metrics, chart data, and performance indicators for the dashboard."""
+    """Get sales metrics, chart data, and performance indicators for the dashboard (admin only)."""
     try:
         analytics_service = AnalyticsService(db)
         # Set default date range if not provided
