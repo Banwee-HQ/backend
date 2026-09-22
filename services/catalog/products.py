@@ -958,7 +958,7 @@ class ProductService:
                     
                     # Generate SKU if not provided
                     if not new_variant.sku:
-                        new_variant.sku = await self._generate_sku(product)
+                        new_variant.sku = f"SKU-{product_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     
                     self.db.add(new_variant)
                     await self.db.flush()  # Get the new variant ID
