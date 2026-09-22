@@ -95,6 +95,74 @@ class TestCarrierEndpoints:
         response = await async_client.delete(f"/v1/shipping-tracking/carriers/{created_carrier['id']}/", headers=admin_headers)
         assert response.status_code == 400
 
+    async def test_create_duplicate_code_is_rejected(self, async_client: AsyncClient, admin_headers):
+        """"ups" is pre-seeded (see the initial schema migration) - a real unique-code
+        collision, not a mocked one."""
+        response = await async_client.post("/v1/shipping-tracking/carriers/", headers=admin_headers, json={
+            "code": "ups", "name": "Duplicate UPS"
+        })
+        assert response.status_code == 400
+
+    async def test_create_propagates_http_exception(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.commerce.carriers.CarrierService.create",
+            side_effect=HTTPException(status_code=403, detail="nope"),
+        )
+        response = await async_client.post("/v1/shipping-tracking/carriers/", headers=admin_headers, json={
+            "code": f"x{uuid4().hex[:6]}", "name": "X"
+        })
+        assert response.status_code == 403
+
+    async def test_create_with_code_exceeding_db_column_returns_500(self, async_client: AsyncClient, admin_headers):
+        """code is a plain `str` in the schema but VARCHAR(50) in the DB - an
+        over-length value is a real DB error, not a mocked one."""
+        response = await async_client.post("/v1/shipping-tracking/carriers/", headers=admin_headers, json={
+            "code": "x" * 60, "name": "Too Long"
+        })
+        assert response.status_code == 500
+
+    async def test_update_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.patch(f"/v1/shipping-tracking/carriers/{uuid4()}/",
+            headers=admin_headers, json={"name": "Nope"}
+        )
+        assert response.status_code == 404
+
+    async def test_update_propagates_api_exception(self, async_client: AsyncClient, admin_headers, created_carrier, mocker):
+        mocker.patch(
+            "services.commerce.carriers.CarrierService.update",
+            side_effect=APIException(status_code=400, message="bad update"),
+        )
+        response = await async_client.patch(f"/v1/shipping-tracking/carriers/{created_carrier['id']}/",
+            headers=admin_headers, json={"name": "X"}
+        )
+        assert response.status_code == 400
+
+    async def test_update_with_name_exceeding_db_column_returns_500(self, async_client: AsyncClient, admin_headers, created_carrier):
+        response = await async_client.patch(f"/v1/shipping-tracking/carriers/{created_carrier['id']}/",
+            headers=admin_headers, json={"name": "x" * 150}
+        )
+        assert response.status_code == 500
+
+    async def test_delete_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.delete(f"/v1/shipping-tracking/carriers/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_delete_wraps_unexpected_error_as_500(self, async_client: AsyncClient, admin_headers, created_carrier, mocker):
+        mocker.patch(
+            "services.commerce.carriers.CarrierService.delete",
+            side_effect=RuntimeError("db down"),
+        )
+        response = await async_client.delete(f"/v1/shipping-tracking/carriers/{created_carrier['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_list_wraps_unexpected_error_as_500(self, async_client: AsyncClient, mocker):
+        mocker.patch(
+            "services.commerce.carriers.CarrierService.list",
+            side_effect=RuntimeError("db down"),
+        )
+        response = await async_client.get("/v1/shipping-tracking/carriers/")
+        assert response.status_code == 500
+
 
 @pytest.mark.api
 @pytest.mark.shipping
@@ -147,6 +215,61 @@ class TestProviderEndpoints:
         response = await async_client.delete(f"/v1/shipping-tracking/providers/{created_provider['id']}/", headers=admin_headers)
         assert response.status_code == 200
 
+    async def test_create_missing_required_key_returns_500(self, async_client: AsyncClient, admin_headers, created_carrier):
+        """provider_data is a raw dict (no pydantic schema) - a missing required key
+        is a real KeyError, not a mocked failure, and must roll back cleanly."""
+        response = await async_client.post("/v1/shipping-tracking/providers/", headers=admin_headers, json={
+            "name": "Incomplete Provider", "carrier": created_carrier["code"],
+            "api_url": "https://example.com/api",
+            # tracking_url_template intentionally omitted
+        })
+        assert response.status_code == 500
+
+    async def test_list_wraps_unexpected_error_as_500(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("api.commerce.shipping_tracking.APIResponse.success", side_effect=RuntimeError("boom"))
+        response = await async_client.get("/v1/shipping-tracking/providers/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_update_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.patch(f"/v1/shipping-tracking/providers/{uuid4()}/",
+            headers=admin_headers, json={"is_active": False}
+        )
+        assert response.status_code == 404
+
+    async def test_update_reassigns_carrier_by_code(self, async_client: AsyncClient, admin_headers, created_provider):
+        """The 'carrier' field on update is a carrier CODE, resolved to carrier_id."""
+        new_carrier_resp = await async_client.post("/v1/shipping-tracking/carriers/", headers=admin_headers, json={
+            "code": f"nc{uuid4().hex[:6]}", "name": "New Carrier For Reassign"
+        })
+        new_carrier = new_carrier_resp.json()["data"]
+        response = await async_client.patch(f"/v1/shipping-tracking/providers/{created_provider['id']}/",
+            headers=admin_headers, json={"carrier": new_carrier["code"]}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["carrier"] == new_carrier["code"]
+
+    async def test_update_unknown_carrier_code_returns_404(self, async_client: AsyncClient, admin_headers, created_provider):
+        response = await async_client.patch(f"/v1/shipping-tracking/providers/{created_provider['id']}/",
+            headers=admin_headers, json={"carrier": "not-a-real-carrier"}
+        )
+        assert response.status_code == 404
+
+    async def test_update_with_name_exceeding_db_column_returns_500(self, async_client: AsyncClient, admin_headers, created_provider):
+        response = await async_client.patch(f"/v1/shipping-tracking/providers/{created_provider['id']}/",
+            headers=admin_headers, json={"name": "x" * 150}
+        )
+        assert response.status_code == 500
+
+    async def test_delete_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.delete(f"/v1/shipping-tracking/providers/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_delete_referenced_by_shipment_returns_500(self, async_client: AsyncClient, admin_headers, created_shipment, created_provider):
+        """A provider still referenced by a shipment is a real FK violation on delete,
+        not a mocked failure - it must be reported, not corrupt referential integrity."""
+        response = await async_client.delete(f"/v1/shipping-tracking/providers/{created_provider['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
 
 @pytest.mark.api
 @pytest.mark.shipping
@@ -168,6 +291,33 @@ class TestShipmentEndpoints:
             "tracking_number": "TRACK123",
         })
         assert response.status_code == 400
+
+    async def test_create_with_order_item_id(self, async_client: AsyncClient, auth_headers, created_provider, own_order):
+        """order_id and order_item_id are both plain `str` fields converted to UUID by
+        hand in the router (schemas/commerce/shipping_tracking.py has no UUID type) -
+        a syntactically valid but non-existent order_item_id is a real FK violation."""
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+            "order_id": str(own_order.id), "carrier": created_provider["carrier"],
+            "tracking_number": f"TRACK{uuid4().hex[:8]}", "order_item_id": str(uuid4()),
+        })
+        assert response.status_code == 500
+
+    async def test_create_with_malformed_order_id_returns_500(self, async_client: AsyncClient, auth_headers, created_provider):
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+            "order_id": "not-a-valid-uuid", "carrier": created_provider["carrier"],
+            "tracking_number": f"TRACK{uuid4().hex[:8]}",
+        })
+        assert response.status_code == 500
+
+    async def test_create_propagates_http_exception(self, async_client: AsyncClient, auth_headers, own_order, mocker):
+        mocker.patch(
+            "services.commerce.shipping_tracking.ShippingTrackingService.create",
+            side_effect=HTTPException(status_code=403, detail="nope"),
+        )
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+            "order_id": str(own_order.id), "carrier": "ups", "tracking_number": "TRACK123",
+        })
+        assert response.status_code == 403
 
     async def test_get_by_id(self, async_client: AsyncClient, auth_headers, created_shipment):
         """GET /v1/shipping-tracking/shipments/{id} - Get a shipment."""

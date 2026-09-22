@@ -225,6 +225,20 @@ class TestUpdateConversionFunnel:
         assert funnel.landing_at is not None
         assert funnel.cart_add_at is not None
 
+    async def test_checkout_start_advances_funnel_to_step_three(self, db_session, test_user):
+        session_id = f"sess-{uuid4().hex[:12]}"
+        db_session.add(UserSession(id=uuid7(), session_id=session_id, user_id=test_user.id, started_at=datetime.now(timezone.utc)))
+        await db_session.flush()
+
+        service = AnalyticsService(db_session)
+        await service._update_conversion_funnel(session_id, test_user.id, EventType.CHECKOUT_START)
+        await db_session.commit()
+
+        result = await db_session.execute(select(ConversionFunnel).where(ConversionFunnel.session_id == session_id))
+        funnel = result.scalar_one()
+        assert funnel.current_step == 3
+        assert funnel.checkout_start_at is not None
+
     async def test_purchase_marks_funnel_completed(self, db_session, test_user):
         session_id = f"sess-{uuid4().hex[:12]}"
         db_session.add(UserSession(id=uuid7(), session_id=session_id, user_id=test_user.id, started_at=datetime.now(timezone.utc)))
@@ -259,6 +273,22 @@ class TestGetSalesTrendData:
         result = await service.get_sales_trend_data(start, end)
         assert result["summary"]["total_orders"] >= 1
         assert result["summary"]["total_revenue"] >= 49.98
+
+    async def test_growth_rate_computed_across_multiple_days(self, db_session, test_user):
+        two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
+        today = datetime.now(timezone.utc)
+        db_session.add_all([
+            make_order(test_user.id, total=Decimal("50.00"), created_at=two_days_ago),
+            make_order(test_user.id, total=Decimal("100.00"), created_at=today),
+        ])
+        await db_session.commit()
+
+        service = AnalyticsService(db_session)
+        start = two_days_ago - timedelta(hours=1)
+        end = today + timedelta(hours=1)
+        result = await service.get_sales_trend_data(start, end)
+        assert len(result["sales_trend"]) >= 2
+        assert result["summary"]["growth_rate"] != 0.0
 
 
 class TestGetSalesOverviewData:
