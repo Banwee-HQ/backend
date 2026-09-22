@@ -10,13 +10,18 @@ from typing import Dict, Any
 class TestWebhookEndpoints:
     """Test webhook endpoints."""
 
-    async def test_119_webhooks_stripe(self, async_client: AsyncClient):
-        """POST /v1/webhooks/stripe - Stripe webhook."""
+    async def test_119_webhooks_stripe_invalid_signature(self, async_client: AsyncClient):
+        """POST /v1/webhooks/stripe - A forged/invalid signature is rejected outright."""
         payload = {"type": "payment_intent.succeeded", "data": {"object": {"id": "pi_test"}}}
-        response = await async_client.post("/v1/webhooks/stripe/", 
+        response = await async_client.post("/v1/webhooks/stripe/",
             json=payload, headers={"stripe-signature": "test_sig"})
-        # Will fail due to invalid signature, but tests endpoint exists
-        assert response.status_code in [200, 400, 401]
+        assert response.status_code == 401
+
+    async def test_webhooks_stripe_missing_signature(self, async_client: AsyncClient):
+        """POST /v1/webhooks/stripe - No stripe-signature header at all."""
+        response = await async_client.post("/v1/webhooks/stripe/",
+            json={"type": "payment_intent.succeeded", "data": {"object": {"id": "pi_test"}}})
+        assert response.status_code == 400
 
     async def test_120_webhooks_health(self, async_client: AsyncClient):
         """GET /v1/webhooks/health - Webhook health check."""
