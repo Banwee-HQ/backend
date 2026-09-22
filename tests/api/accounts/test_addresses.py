@@ -96,3 +96,13 @@ class TestAddressEndpoints:
     async def test_delete_not_found(self, async_client: AsyncClient, auth_headers):
         response = await async_client.delete(f"/v1/addresses/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
+
+    async def test_create_unauthenticated(self, async_client: AsyncClient, sample_address_data):
+        response = await async_client.post("/v1/addresses/", json=sample_address_data)
+        assert response.status_code == 401
+
+    async def test_list_search(self, async_client: AsyncClient, auth_headers, sample_address_data):
+        await async_client.post("/v1/addresses/", headers=auth_headers, json=sample_address_data)
+        response = await async_client.get(f"/v1/addresses/?search={sample_address_data['city']}", headers=auth_headers)
+        assert response.status_code == 200
+        assert len(response.json()["data"]) >= 1

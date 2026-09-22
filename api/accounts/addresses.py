@@ -79,6 +79,8 @@ async def list(
         if isinstance(result, dict) and "data" in result and "pagination" in result:
             return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Addresses retrieved successfully")
         return Response.success(data=result, message="Addresses retrieved successfully")
+    except APIException:
+        raise
     except HTTPException:
         raise
     except Exception as e:
