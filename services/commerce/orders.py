@@ -712,7 +712,14 @@ class OrderService:
             }
             order.shipping_address = order.billing_address.copy()
             order.customer_notes = request.notes
-            await self.db.flush()
+
+            # Payment has already succeeded with Stripe at this point - commit the
+            # order's confirmed/paid state now, before any further work. Everything
+            # below (email scheduling, cart-clearing) is best-effort cleanup; if it
+            # fails, it must never be able to roll back a charge that already went
+            # through and take the order's paid status down with it.
+            await self.db.commit()
+            await self.db.refresh(order)
 
             # Send invoice/confirmation email in background
             try:
@@ -740,14 +747,23 @@ class OrderService:
                     )
             except Exception as email_error:
                 logger.error(f"Failed to schedule invoice email: {email_error}")
-            
+                # A failed SELECT here can leave the transaction aborted. Don't roll
+                # back explicitly: expire_on_commit=False keeps `order` and the
+                # already-loaded order items usable purely in-memory for the response
+                # below regardless, and rollback() would expire them and force a
+                # lazy (sync-context) reload that crashes with MissingGreenlet. The
+                # session is cleaned up on close() at the end of the request either way.
+
             # Clear only the items that were actually ordered - anything skipped for being
             # out of stock or deactivated stays in the cart for the customer to revisit.
-            ordered_item_ids = [item.id for item in orderable_items]
-            await self.db.execute(delete(CartItem).where(CartItem.id.in_(ordered_item_ids)))
-            
-            # Explicitly commit the transaction to persist all changes
-            await self.db.commit()
+            # Best-effort: the order itself is already committed and paid regardless of
+            # whether this cleanup succeeds.
+            try:
+                ordered_item_ids = [item.id for item in orderable_items]
+                await self.db.execute(delete(CartItem).where(CartItem.id.in_(ordered_item_ids)))
+                await self.db.commit()
+            except Exception as cart_clear_error:
+                logger.error(f"Failed to clear ordered items from cart: {cart_clear_error}")
             
             logger.info("Order completed", metadata={
                 "order_id": str(order.id),

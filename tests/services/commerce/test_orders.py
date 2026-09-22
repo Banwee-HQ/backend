@@ -297,6 +297,38 @@ class TestCreate:
         await db_session.refresh(variant)
         assert variant.purchase_count == 2  # cart_with_item requests quantity=2
 
+    async def test_order_survives_a_failed_post_payment_cart_clear(
+        self, db_session, test_user, variant, cart_with_item, checkout_request, mocker
+    ):
+        """Regression test: the order's confirmed/paid state and the best-effort
+        cart-clearing step used to share one uncommitted transaction. If clearing
+        the cart failed after a successful Stripe charge, the whole transaction -
+        including the order itself - rolled back, leaving the customer charged
+        with no matching order. Simulates that failure and confirms the order is
+        still durably committed as paid regardless."""
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+        from models.commerce.cart import CartItem as CartItemModel
+
+        real_execute = db_session.execute
+
+        async def failing_execute(statement, *args, **kwargs):
+            if statement.__class__.__name__ == "Delete" and statement.table.name == CartItemModel.__tablename__:
+                raise Exception("Simulated DB failure during cart clear")
+            return await real_execute(statement, *args, **kwargs)
+
+        mocker.patch.object(db_session, "execute", side_effect=failing_execute)
+
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, BackgroundTasks())
+
+        result = await real_execute(select(Order).where(Order.id == order.id))
+        persisted_order = result.scalar_one()
+        assert persisted_order.payment_status == PaymentStatus.PAID
+        assert persisted_order.order_status == OrderStatus.CONFIRMED
+
     async def test_payment_declined_raises_400(self, db_session, test_user, cart_with_item, checkout_request, mocker):
         mocker.patch(
             "services.commerce.payments.PaymentService.process_idempotent",

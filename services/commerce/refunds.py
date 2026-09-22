@@ -139,13 +139,22 @@ class RefundService:
             for refund in refunds:
                 try:
                     await self._process_stripe_refund(refund)
+                    await self.db.commit()
                     processed_count += 1
                 except Exception as e:
                     logger.error(f"Failed to process automatic refund {refund.id}: {e}")
                     failed_count += 1
-            
-            await self.db.commit()
-            
+                    # If _process_stripe_refund's own except already flagged this refund
+                    # FAILED (a pure Python/Stripe-API error), persist that in its own
+                    # commit. If instead a real SQL error corrupted the transaction, this
+                    # commit itself fails - roll back so the next refund in the batch
+                    # doesn't inherit a poisoned session.
+                    try:
+                        await self.db.commit()
+                    except Exception as commit_error:
+                        logger.error(f"Failed to persist failure state for refund {refund.id}: {commit_error}")
+                        await self.db.rollback()
+
             return {
                 "processed": processed_count,
                 "failed": failed_count,

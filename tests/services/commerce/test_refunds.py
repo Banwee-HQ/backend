@@ -337,3 +337,69 @@ class TestProcessAuto:
         service = RefundService(db_session)
         result = await service.process_auto()
         assert result["total"] == 0
+
+    async def test_one_failure_does_not_lose_a_sibling_success_in_the_batch(
+        self, db_session, test_user, delivered_order, requested_refund, variant, mocker
+    ):
+        """Regression test: process_auto() used to accumulate all per-refund changes
+        in memory and commit them once at the very end. If any refund's processing
+        left the session in a bad state, that single commit could discard every
+        other refund's already-successful work along with it. Verifies a failing
+        refund (no matching payment transaction) and a succeeding one (mocked
+        Stripe success) in the same batch are each durably persisted independently."""
+        mocker.patch(
+            "stripe.Refund.create",
+            return_value=mocker.Mock(id=f"re_{uuid4().hex[:16]}", status="succeeded"),
+        )
+
+        # Refund #1: will fail - no Transaction exists for its order.
+        result = await db_session.execute(select(Refund).where(Refund.id == requested_refund.id))
+        failing_refund = result.scalar_one()
+        failing_refund.status = RefundStatus.APPROVED
+        failing_refund.auto_approved = True
+        failing_refund.approved_amount = failing_refund.requested_amount
+
+        # Refund #2: will succeed - has a matching succeeded payment Transaction.
+        order2 = Order(
+            id=uuid7(), order_number=f"ORD-{uuid4().hex[:10].upper()}", user_id=test_user.id,
+            order_status=OrderStatus.DELIVERED, payment_status=PaymentStatus.PAID,
+            fulfillment_status=FulfillmentStatus.FULFILLED,
+            subtotal=Decimal("39.98"), shipping_cost=Decimal("10.00"), tax_amount=Decimal("4.00"),
+            total_amount=Decimal("53.98"),
+            billing_address={"street": "1 Test St"}, shipping_address={"street": "1 Test St"},
+        )
+        db_session.add(order2)
+        await db_session.flush()
+        item2 = OrderItem(
+            id=uuid7(), order_id=order2.id, variant_id=variant.id,
+            quantity=2, price_per_unit=Decimal("19.99"), total_price=Decimal("39.98"),
+        )
+        db_session.add(item2)
+        await db_session.flush()
+        order2.item_id = item2.id
+
+        service = RefundService(db_session)
+        succeeding_response = await service.request(test_user.id, order2.id, make_request(order2))
+        result = await db_session.execute(select(Refund).where(Refund.id == succeeding_response.id))
+        succeeding_refund = result.scalar_one()
+        succeeding_refund.status = RefundStatus.APPROVED
+        succeeding_refund.auto_approved = True
+        succeeding_refund.approved_amount = succeeding_refund.requested_amount
+
+        txn = Transaction(
+            id=uuid7(), user_id=test_user.id, order_id=order2.id,
+            stripe_payment_intent_id=f"pi_test_{uuid4().hex[:16]}", amount=Decimal("53.98"),
+            currency="USD", status="succeeded", transaction_type="payment",
+        )
+        db_session.add(txn)
+        await db_session.commit()
+
+        result = await service.process_auto()
+        assert result["processed"] == 1
+        assert result["failed"] == 1
+
+        await db_session.refresh(failing_refund)
+        assert failing_refund.status == RefundStatus.FAILED
+
+        await db_session.refresh(succeeding_refund)
+        assert succeeding_refund.status == RefundStatus.COMPLETED
