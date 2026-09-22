@@ -15,6 +15,10 @@ class PromocodeService:
 
     async def create(self, promocode_data: PromocodeCreate) -> Promocode:
         """Create a new promocode"""
+        existing = await self.db.scalar(select(Promocode).where(Promocode.code == promocode_data.code))
+        if existing:
+            raise APIException(status_code=400, message=f"Promocode '{promocode_data.code}' already exists")
+
         new_promocode = Promocode(
             id=uuid7(),
             **promocode_data.dict(exclude_unset=True)

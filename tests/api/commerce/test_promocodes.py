@@ -43,6 +43,17 @@ class TestPromocodeEndpoints:
         })
         assert response.status_code == 403
 
+    async def test_create_duplicate_code_rejected(self, async_client: AsyncClient, admin_headers, created_promo):
+        """POST /v1/promocodes/ - Re-using an existing code returns 400, not a raw DB-constraint 500."""
+        response = await async_client.post("/v1/promocodes/", headers=admin_headers, json={
+            "code": created_promo["code"], "discount_type": "percentage", "value": 5
+        })
+        assert response.status_code == 400
+
+    async def test_list_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/promocodes/")
+        assert response.status_code == 401
+
     async def test_get_by_id(self, async_client: AsyncClient, admin_headers, created_promo):
         """GET /v1/promocodes/{id} - Get a promocode."""
         response = await async_client.get(f"/v1/promocodes/{created_promo['id']}/", headers=admin_headers)
@@ -52,6 +63,17 @@ class TestPromocodeEndpoints:
         """GET /v1/promocodes/{id} - Unknown ID returns 404."""
         response = await async_client.get(f"/v1/promocodes/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
+
+    async def test_regular_user_cannot_view_inactive_promo(self, async_client: AsyncClient, admin_headers, auth_headers, created_promo):
+        """GET /v1/promocodes/{id} - A non-admin can't view a deactivated promocode."""
+        await async_client.patch(f"/v1/promocodes/{created_promo['id']}/",
+            headers=admin_headers, json={"is_active": False}
+        )
+        response = await async_client.get(f"/v1/promocodes/{created_promo['id']}/", headers=auth_headers)
+        assert response.status_code == 404
+
+        admin_view = await async_client.get(f"/v1/promocodes/{created_promo['id']}/", headers=admin_headers)
+        assert admin_view.status_code == 200
 
     async def test_update_as_admin(self, async_client: AsyncClient, admin_headers, created_promo):
         """PATCH /v1/promocodes/{id} - Update promocode (admin)."""

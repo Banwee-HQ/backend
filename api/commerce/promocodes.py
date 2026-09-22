@@ -99,6 +99,10 @@ async def validate(
                 "code": request.code,
                 "message": error_message or "Invalid promocode"
             }, status_code=status.HTTP_200_OK)
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -284,6 +288,10 @@ async def trigger_cleanup(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Promocode cleanup failed: {result.get('error', 'Unknown error')}"
             )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error triggering promocode cleanup: {e}")
         raise APIException(
