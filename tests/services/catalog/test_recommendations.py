@@ -248,3 +248,127 @@ class TestGetSmartRecommendations:
         service = RecommendationService(db_session)
         results = await service.get_smart_recommendations(source.id, limit=5)
         assert len(results) >= 1
+
+    async def test_falls_back_when_all_three_algorithms_find_nothing(self, db_session):
+        """When a product is genuinely alone (no orders, no other same-category products with
+        variants, no reviews), _combine_and_rank has nothing to rank at all - the empty-ranked
+        path (as opposed to the previous test, where the behavioral algorithm still finds a
+        same-category product and returns a non-empty, if zero-scored, list)."""
+        category = await make_category(db_session)
+        source = await make_product(db_session, category_id=category.id)
+        await make_variant(db_session, source.id)
+        elsewhere_category = await make_category(db_session)
+        elsewhere = await make_product(db_session, category_id=elsewhere_category.id)
+
+        service = RecommendationService(db_session)
+        results = await service.get_smart_recommendations(source.id, limit=5)
+        # Falls through to _get_fallback_recommendations's "no products in category" branch,
+        # which further falls back to any active product - i.e. it must not come back empty.
+        assert len(results) >= 1
+
+    async def test_malformed_product_id_degrades_to_empty_instead_of_raising(self, db_session):
+        """The outer try/except is meant to keep a bad request from ever 500ing the
+        recommendations endpoint. A non-UUID id can't be caught by validation once it's already
+        past the API layer (e.g. called directly, as here), so it reaches the DB as a genuine
+        error - this exercises that resilience without mocking anything."""
+        service = RecommendationService(db_session)
+        assert await service.get_smart_recommendations("not-a-uuid") == []
+        await db_session.rollback()
+
+
+class TestCombineAndRank:
+    """Direct unit tests for the pure ranking/weighting logic - synchronous and DB-free, so a
+    plain None stands in for the db session (it's never touched by this method)."""
+
+    def test_applies_algorithm_weights(self):
+        service = RecommendationService(None)
+        p1, p2 = uuid4(), uuid4()
+        ranked = service._combine_and_rank(
+            complementary=[(p1, 1.0)],
+            similar=[(p2, 1.0)],
+            behavioral=[],
+            limit=10,
+        )
+        ranked_map = dict(ranked)
+        assert ranked_map[p1] == pytest.approx(service.weights["complementary"])
+        assert ranked_map[p2] == pytest.approx(service.weights["similar"])
+
+    def test_scores_accumulate_across_algorithms_for_the_same_product(self):
+        service = RecommendationService(None)
+        p1 = uuid4()
+        ranked = service._combine_and_rank(
+            complementary=[(p1, 1.0)],
+            similar=[(p1, 1.0)],
+            behavioral=[(p1, 1.0)],
+            limit=10,
+        )
+        assert len(ranked) == 1
+        assert ranked[0][0] == p1
+        assert ranked[0][1] == pytest.approx(sum(service.weights.values()))
+
+    def test_sorts_descending_by_combined_score(self):
+        service = RecommendationService(None)
+        low, high = uuid4(), uuid4()
+        ranked = service._combine_and_rank(
+            complementary=[(low, 0.1), (high, 0.9)],
+            similar=[],
+            behavioral=[],
+            limit=10,
+        )
+        assert [pid for pid, _ in ranked] == [high, low]
+
+    def test_respects_the_limit(self):
+        service = RecommendationService(None)
+        ids = [uuid4() for _ in range(5)]
+        ranked = service._combine_and_rank(
+            complementary=[(pid, 0.5) for pid in ids],
+            similar=[],
+            behavioral=[],
+            limit=2,
+        )
+        assert len(ranked) == 2
+
+    def test_no_signal_from_any_algorithm_returns_empty(self):
+        service = RecommendationService(None)
+        assert service._combine_and_rank([], [], [], limit=10) == []
+
+
+class TestAlgorithmFailureIsolation:
+    """Each private algorithm swallows its own errors and returns [] rather than raising -
+    exercised here via genuinely malformed input (not mocking), since none of these can be
+    triggered by valid application data."""
+
+    async def test_complementary_products_malformed_id_returns_empty(self, db_session):
+        service = RecommendationService(db_session)
+        assert await service._get_complementary_products("not-a-uuid", limit=10) == []
+        await db_session.rollback()
+
+    async def test_similar_products_malformed_source_id_returns_empty(self, db_session):
+        category = await make_category(db_session)
+        source = await make_product(db_session, category_id=category.id)
+        source.id = "not-a-uuid"  # in-memory mutation only, not committed
+
+        service = RecommendationService(db_session)
+        assert await service._get_similar_products(source, limit=10) == []
+        await db_session.rollback()
+
+    async def test_behavioral_products_malformed_id_returns_empty(self, db_session):
+        service = RecommendationService(db_session)
+        assert await service._get_behavioral_products("not-a-uuid", limit=10) == []
+        await db_session.rollback()
+
+    async def test_behavioral_products_product_with_no_category_returns_empty(self, db_session):
+        """Covers the `if not category_id: return []` branch distinctly from the malformed-id
+        exception branch above: this is an existing product that's simply uncategorized."""
+        product = await make_product(db_session, category_id=None)
+        service = RecommendationService(db_session)
+        assert await service._get_behavioral_products(product.id, limit=10) == []
+
+    async def test_fallback_recommendations_malformed_source_id_returns_empty(self, db_session):
+        category = await make_category(db_session)
+        source = await make_product(db_session, category_id=category.id)
+        source.id = "not-a-uuid"
+
+        service = RecommendationService(db_session)
+        assert await service._get_fallback_recommendations(source, limit=10) == []
+        await db_session.rollback()

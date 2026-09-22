@@ -956,16 +956,23 @@ class AnalyticsService:
                 )
             )
 
+            # Validate the status filter once, up front - reused below for both the
+            # order count and revenue queries so an unrecognized value is skipped
+            # consistently everywhere instead of only in some of the queries.
+            validated_status = None
+            if status:
+                try:
+                    validated_status = OrderStatus(status.lower())
+                except ValueError:
+                    pass  # Unrecognized status value - skip the filter rather than erroring
+
             # Get total orders with optional status filter (filtered by date range)
             order_conditions = [
                 Order.created_at >= start_date,
                 Order.created_at < end_date_exclusive
             ]
-            if status:
-                try:
-                    order_conditions.append(Order.order_status == OrderStatus(status.lower()))
-                except ValueError:
-                    pass  # Unrecognized status value - skip the filter rather than erroring
+            if validated_status:
+                order_conditions.append(Order.order_status == validated_status)
 
             total_orders = await self.db.scalar(
                 select(func.count(Order.id)).where(and_(*order_conditions))
@@ -997,8 +1004,8 @@ class AnalyticsService:
 
             # Get revenue data (include confirmed, processing, shipped, and delivered orders)
             revenue_conditions = [Order.order_status.in_(['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'])]
-            if status:
-                revenue_conditions.append(Order.order_status == status)
+            if validated_status:
+                revenue_conditions.append(Order.order_status == validated_status)
 
             total_revenue = await self.db.scalar(
                 select(func.coalesce(func.sum(Order.total_amount), 0)).where(and_(*revenue_conditions))

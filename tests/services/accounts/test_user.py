@@ -205,6 +205,21 @@ class TestSearch:
         results = await service._search_simple(f"roled{marker}".lower(), limit=20, role_filter=UserRole.ADMIN.value)
         assert results == []
 
+    async def test_search_with_role_filter_falls_back_cleanly(self, db_session):
+        """search() -> _search_with_similarity(role_filter=...) builds its role_filter SQL
+        fragment (base_conditions.append(...)) before the pg_trgm-dependent query runs;
+        this DB has no pg_trgm extension installed (verified via pg_extension), so the
+        query itself always fails and search() falls back to _search_simple - but the
+        role_filter branch inside _search_with_similarity must still run first."""
+        marker = uuid4().hex[:8]
+        await make_user(db_session, firstname=f"RoleSearch{marker}", role=UserRole.CUSTOMER)
+        service = UserService(db_session)
+        results = await service.search(f"rolesearch{marker}", role_filter=UserRole.CUSTOMER.value)
+        assert any(r["firstname"] == f"RoleSearch{marker}" for r in results)
+
+        no_results = await service.search(f"rolesearch{marker}", role_filter=UserRole.ADMIN.value)
+        assert no_results == []
+
 
 class TestAdminStatusManagement:
 
@@ -296,3 +311,17 @@ class TestResetPasswordDeactivateActivate:
         with pytest.raises(APIException) as exc_info:
             await service.activate(uuid4())
         assert exc_info.value.status_code == 404
+
+    async def test_reset_password_email_failure_hits_generic_exception(self, db_session, mocker):
+        """Email-sending is the one allowed-to-mock external side effect here: a real SMTP/
+        Brevo outage after the token was already committed must surface as a 500, not crash
+        the process - exercising reset_password()'s generic exception fallback."""
+        mocker.patch(
+            "services.accounts.email.EmailService.send_password_reset_email",
+            side_effect=Exception("Brevo is down"),
+        )
+        user = await make_user(db_session)
+        service = UserService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.reset_password(user.id)
+        assert exc_info.value.status_code == 500

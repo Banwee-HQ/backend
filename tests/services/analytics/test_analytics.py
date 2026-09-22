@@ -5,6 +5,7 @@ from uuid import uuid4
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
+from fastapi import HTTPException
 
 from core.utils.uuid_utils import uuid7
 from services.analytics.analytics import AnalyticsService
@@ -362,3 +363,155 @@ class TestGetAdminOverview:
         service = AnalyticsService(db_session)
         result = await service.get_admin_overview()
         assert result["platform_overview"]["active_products"] >= 1
+
+    async def test_db_error_is_wrapped_as_http_exception(self, db_session, mocker):
+        service = AnalyticsService(db_session)
+        mocker.patch.object(db_session, "scalar", side_effect=RuntimeError("boom"))
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_admin_overview()
+        assert exc_info.value.status_code == 500
+
+
+class TestTrackEventErrors:
+
+    async def test_fk_violation_on_order_id_rolls_back_and_reraises(self, db_session, test_user):
+        """order_id has a real FK to commerce.orders.id - a random UUID that isn't a
+        real order fails at the DB level. track_event() must roll back and re-raise
+        rather than swallow it."""
+        service = AnalyticsService(db_session)
+        with pytest.raises(Exception):
+            await service.track_event(
+                session_id=f"sess-{uuid4().hex[:12]}",
+                event_type=EventType.PAGE_VIEW,
+                user_id=test_user.id,
+                order_id=uuid4(),
+            )
+
+
+class TestServiceMethodsWrapDbErrors:
+    """Passing a non-datetime start_date makes every one of these fail at the DB
+    driver level (it can't adapt the value for a timestamptz comparison) - a real,
+    unmocked error that each method's try/except must translate into a clean
+    HTTPException(500) instead of leaking a raw driver exception."""
+
+    async def test_conversion_metrics(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_conversion_metrics("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_cart_abandonment_metrics(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_cart_abandonment_metrics("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_time_to_purchase_metrics(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_time_to_purchase_metrics("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_refund_rate_metrics(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_refund_rate_metrics("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_repeat_customer_metrics(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_repeat_customer_metrics("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_comprehensive_dashboard_data_wraps_downstream_failure(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_comprehensive_dashboard_data("not-a-date", "not-a-date")
+        assert "dashboard data" in exc_info.value.detail
+
+    async def test_users_growth_trend(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_users_growth_trend("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_sales_trend_data(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_sales_trend_data("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_sales_overview_data(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_sales_overview_data("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+    async def test_revenue_metrics(self, db_session):
+        service = AnalyticsService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_revenue_metrics("not-a-date", "not-a-date")
+        assert exc_info.value.status_code == 500
+
+
+class TestUpdateSessionMetricsErrors:
+
+    async def test_db_error_is_logged_and_swallowed(self, db_session, mocker):
+        """_update_session_metrics() is a best-effort side-channel update called from
+        inside track_event() - a failure here must not blow up event tracking."""
+        service = AnalyticsService(db_session)
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("boom"))
+        await service._update_session_metrics("some-session-id")  # must not raise
+
+
+class TestUpdateConversionFunnelErrors:
+
+    async def test_db_error_is_logged_and_swallowed(self, db_session, test_user, mocker):
+        service = AnalyticsService(db_session)
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("boom"))
+        await service._update_conversion_funnel("sess-x", test_user.id, EventType.PAGE_VIEW)  # must not raise
+
+
+class TestGetSalesOverviewDataGranularity:
+
+    async def test_weekly_granularity_uses_week_truncated_periods(self, db_session, order):
+        service = AnalyticsService(db_session)
+        start = datetime.now(timezone.utc) - timedelta(days=7)
+        end = datetime.now(timezone.utc) + timedelta(days=1)
+        result = await service.get_sales_overview_data(start, end, granularity="weekly")
+        assert result["period"]["granularity"] == "weekly"
+
+    async def test_monthly_granularity_uses_month_truncated_periods(self, db_session, order):
+        service = AnalyticsService(db_session)
+        start = datetime.now(timezone.utc) - timedelta(days=30)
+        end = datetime.now(timezone.utc) + timedelta(days=1)
+        result = await service.get_sales_overview_data(start, end, granularity="monthly")
+        assert result["period"]["granularity"] == "monthly"
+
+
+class TestGetAdminStatsErrorPaths:
+
+    async def test_malformed_date_from_falls_back_to_default_window(self, db_session, order):
+        service = AnalyticsService(db_session)
+        result = await service.get_admin_stats(date_from="not-a-date")
+        assert "users" in result
+
+    async def test_malformed_date_to_falls_back_to_default_window(self, db_session, order):
+        service = AnalyticsService(db_session)
+        result = await service.get_admin_stats(date_to="not-a-date")
+        assert "users" in result
+
+    async def test_unrecognized_status_value_is_ignored_not_raised(self, db_session, order):
+        """OrderStatus(status.lower()) raises ValueError for a status string that isn't
+        a real order status - the filter is skipped rather than the request failing."""
+        service = AnalyticsService(db_session)
+        result = await service.get_admin_stats(status="not_a_real_status")
+        assert result["orders"]["total"] >= 1
+
+    async def test_db_error_is_wrapped_as_http_exception(self, db_session, mocker):
+        service = AnalyticsService(db_session)
+        mocker.patch.object(db_session, "scalar", side_effect=RuntimeError("boom"))
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_admin_stats()
+        assert exc_info.value.status_code == 500

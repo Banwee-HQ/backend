@@ -151,6 +151,50 @@ class TestSendDirect:
         mock_send.side_effect = Exception("Brevo down")
         await service._send_direct("verification", "a@example.com", firstname="Ada", verification_token="tok")
 
+    async def test_order_confirmation_context_branch(self, service, mock_send):
+        await service._send_direct(
+            "order_confirmation", "a@example.com", customer_name="Ada",
+            order_number="ORD-1", order_total=49.99, items=[{"name": "Widget"}],
+        )
+        mock_send.assert_awaited_once()
+        assert "ORD-1" in mock_send.call_args.kwargs["subject"]
+
+    async def test_shipping_update_context_branch(self, service, mock_send):
+        """Without an estimated_delivery kwarg, the context carries "" (not a datetime),
+        which the template's date formatting can't handle - a real (unmocked) rendering
+        failure that exercises _send_direct's except-and-fall-back-to-simple-HTML path,
+        and the send still goes out instead of raising."""
+        await service._send_direct(
+            "shipping_update", "a@example.com", customer_name="Ada",
+            order_number="ORD-1", tracking_number="TRACK123", carrier="UPS",
+        )
+        mock_send.assert_awaited_once()
+        assert "ORD-1" in mock_send.call_args.kwargs["subject"]
+
+    async def test_password_reset_context_branch(self, service, mock_send):
+        await service._send_direct(
+            "password_reset", "a@example.com", customer_name="Ada",
+            reset_token="tok123", reset_link="https://example.com/reset",
+        )
+        mock_send.assert_awaited_once()
+        assert "Reset" in mock_send.call_args.kwargs["subject"]
+
+    async def test_order_delivered_context_branch(self, service, mock_send):
+        await service._send_direct(
+            "order_delivered", "a@example.com", customer_name="Ada",
+            order_id="1", order_number="ORD-1", tracking_number="TRACK123",
+        )
+        mock_send.assert_awaited_once()
+        assert "ORD-1" in mock_send.call_args.kwargs["subject"]
+
+    async def test_mail_type_with_template_but_no_context_branch(self, service, mock_send):
+        """"payment_receipt" is in template_map (so template_name is truthy) but has no
+        dedicated if/elif context branch in _send_direct - it renders with just the base
+        context, a distinct path from both the known-branch and the no-template-found cases."""
+        await service._send_direct("payment_receipt", "a@example.com", customer_name="Ada")
+        mock_send.assert_awaited_once()
+        assert mock_send.call_args.kwargs["to_email"] == "a@example.com"
+
 
 class TestQueueingHelpers:
     """send_shipping_update / send_verification / send_order_delivered queue a

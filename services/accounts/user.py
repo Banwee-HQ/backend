@@ -45,6 +45,7 @@ class UserService:
             lastname=user_data.lastname,
             hashed_password=hashed_password,
             role=user_data.role,
+            phone=getattr(user_data, "phone", None),
             verification_token=verification_token,
             token_expiration=token_expiration
         )

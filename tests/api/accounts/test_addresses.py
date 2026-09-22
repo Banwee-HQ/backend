@@ -106,3 +106,23 @@ class TestAddressEndpoints:
         response = await async_client.get(f"/v1/addresses/?search={sample_address_data['city']}", headers=auth_headers)
         assert response.status_code == 200
         assert len(response.json()["data"]) >= 1
+
+    async def test_create_with_overlong_field_returns_500(self, async_client: AsyncClient, auth_headers, sample_address_data):
+        """POST /v1/addresses/ - AddressCreate doesn't validate string length, so a city
+        longer than the DB column (String(100)) triggers a real DataError at commit,
+        exercising the endpoint's generic exception fallback."""
+        payload = dict(sample_address_data)
+        payload["city"] = "x" * 150
+        response = await async_client.post("/v1/addresses/", headers=auth_headers, json=payload)
+        assert response.status_code == 500
+
+    async def test_update_with_overlong_field_returns_500(self, async_client: AsyncClient, auth_headers, sample_address_data):
+        """PATCH /v1/addresses/{id} - Same DataError path as create, via AddressService.update()'s
+        bulk UPDATE statement."""
+        create_resp = await async_client.post("/v1/addresses/", headers=auth_headers, json=sample_address_data)
+        address_id = create_resp.json()["data"]["id"]
+
+        response = await async_client.patch(f"/v1/addresses/{address_id}/",
+            headers=auth_headers, json={"city": "x" * 150}
+        )
+        assert response.status_code == 500

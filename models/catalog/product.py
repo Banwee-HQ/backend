@@ -152,8 +152,11 @@ class Product(Base):
 
         if include_seo:
             data["seo"] = {
-                "meta_title": self.meta_title,
-                "meta_description": self.meta_description,
+                # meta_title/meta_description aren't real columns on this model - guard
+                # with getattr instead of direct access, which raised AttributeError for
+                # every caller (this method has no other users today, so it went unnoticed).
+                "meta_title": getattr(self, "meta_title", None),
+                "meta_description": getattr(self, "meta_description", None),
                 "canonical_url": f"https://www.banwee.com/products/{self.slug}",
                 "og_image": self.primary_variant.primary_image.url if self.primary_variant and self.primary_variant.primary_image else None,
             }

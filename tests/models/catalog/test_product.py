@@ -5,7 +5,11 @@ so getting the "any variant available" vs "all variants" logic wrong is a real
 storefront bug, not just cosmetic.
 """
 
-from models.catalog.product import Product, ProductVariant, ProductStatus, AvailabilityStatus
+from uuid import uuid4
+from datetime import datetime, timezone
+
+from models.catalog.product import Product, ProductVariant, ProductImage, ProductStatus, AvailabilityStatus
+from models.catalog.category import Category
 from models.catalog.inventories import Inventory
 
 
@@ -169,3 +173,117 @@ class TestVariantCurrentPriceAndDiscount:
 
     def test_stock_is_zero_without_inventory(self):
         assert make_variant(base_price=10).stock == 0
+
+
+class TestVariantToDictIncludeProduct:
+
+    def test_includes_product_name_and_description_when_requested(self):
+        variant = make_variant(base_price=10)
+        product = Product()
+        product.name = "Parent Product"
+        product.description = "Parent description"
+        variant.product = product
+
+        data = variant.to_dict(include_product=True)
+        assert data["product_name"] == "Parent Product"
+        assert data["product_description"] == "Parent description"
+
+    def test_omits_product_fields_when_not_requested(self):
+        variant = make_variant(base_price=10)
+        product = Product()
+        product.name = "Parent Product"
+        variant.product = product
+
+        data = variant.to_dict(include_product=False)
+        assert "product_name" not in data
+
+
+def make_full_product(**overrides) -> Product:
+    product = Product()
+    product.id = uuid4()
+    product.name = "Widget"
+    product.slug = "widget"
+    product.description = "A widget"
+    product.short_description = "short"
+    product.category_id = None
+    product.category = None
+    product.product_status = ProductStatus.ACTIVE
+    product.rating_average = 4.5
+    product.rating_count = 2
+    product.review_count = 2
+    product.is_featured = True
+    product.is_bestseller = False
+    product.published_at = None
+    product.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    product.updated_at = None
+    product.product_metadata = None
+    product.variants = []
+    for key, value in overrides.items():
+        setattr(product, key, value)
+    return product
+
+
+class TestProductToDict:
+    """Product.to_dict() isn't used by the current API/service layer (which builds its
+    response manually), so it had zero test coverage and a live bug: include_seo
+    referenced self.meta_title/meta_description, columns that don't exist on this
+    model, which raised AttributeError for any caller. Fixed to use getattr(..., None)."""
+
+    def test_returns_expected_shape_without_category_or_variants(self):
+        product = make_full_product()
+        data = product.to_dict()
+        assert data["name"] == "Widget"
+        assert data["category"] is None
+        assert data["created_at"] == "2024-01-01T00:00:00+00:00"
+        assert data["is_featured"] is True
+        assert "variants" not in data
+        assert "seo" not in data
+
+    def test_includes_category_dict_when_present(self):
+        category = Category()
+        category.id = uuid4()
+        category.name = "Cat"
+        category.slug = "cat"
+        category.description = None
+        category.parent_id = None
+        category.is_active = True
+        category.sort_order = 0
+        category.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        category.updated_at = None
+        product = make_full_product(category=category, category_id=category.id)
+
+        data = product.to_dict()
+        assert data["category"]["slug"] == "cat"
+
+    def test_include_variants_serializes_each_variant(self):
+        variant = make_variant(base_price=10, quantity_available=5)
+        variant.id = uuid4()
+        variant.product_id = uuid4()
+        variant.sku = "SKU-1"
+        variant.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        variant.updated_at = None
+        product = make_full_product(variants=[variant])
+
+        data = product.to_dict(include_variants=True)
+        assert len(data["variants"]) == 1
+        assert data["variants"][0]["sku"] == "SKU-1"
+
+    def test_include_seo_falls_back_to_none_for_missing_meta_fields(self):
+        product = make_full_product()
+        data = product.to_dict(include_seo=True)
+        assert data["seo"]["meta_title"] is None
+        assert data["seo"]["meta_description"] is None
+        assert data["seo"]["canonical_url"] == "https://www.banwee.com/products/widget"
+        assert data["seo"]["og_image"] is None
+
+    def test_include_seo_uses_primary_variants_primary_image(self):
+        variant = make_variant(base_price=10)
+        variant.id = uuid4()
+        image = ProductImage()
+        image.url = "https://example.com/a.jpg"
+        image.is_primary = True
+        variant.images = [image]
+        product = make_full_product(variants=[variant])
+
+        data = product.to_dict(include_seo=True)
+        assert data["seo"]["og_image"] == "https://example.com/a.jpg"

@@ -107,6 +107,21 @@ class TestDelete:
         assert exc_info.value.status_code == 400
 
 
+class TestListParentFilter:
+
+    async def test_filters_by_parent_id(self, db_session):
+        service = CategoryService(db_session)
+        parent = await service.create(make_create(name="Parent"))
+        other_parent = await service.create(make_create(name="Other Parent"))
+        await service.create(make_create(name="Child", parent_id=parent.id))
+        await service.create(make_create(name="Other Child", parent_id=other_parent.id))
+
+        categories, total = await service.list(parent_id=parent.id)
+        names = [c.name for c in categories]
+        assert names == ["Child"]
+        assert total == 1
+
+
 class TestTree:
 
     async def test_tree_returns_only_top_level_with_nested_children(self, db_session):

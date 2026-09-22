@@ -4,6 +4,17 @@ import pytest
 from httpx import AsyncClient
 from uuid import uuid4
 
+from core.exceptions import APIException
+from services.catalog.category import CategoryService
+
+
+def _async_raiser(exc):
+    """Build an async function that always raises `exc` - used to monkeypatch a
+    CategoryService method so a specific endpoint's except-clause body actually runs."""
+    async def _raise(*args, **kwargs):
+        raise exc
+    return _raise
+
 
 @pytest.fixture
 async def created_category(async_client: AsyncClient, admin_headers):
@@ -113,3 +124,24 @@ class TestCategoryEndpoints:
         assert response.status_code == 200
         ids = [c["id"] for c in response.json()["data"]]
         assert created_category["id"] not in ids
+
+    async def test_list_wraps_api_exception(self, async_client: AsyncClient, monkeypatch):
+        """A CategoryService.list() failure that is already an APIException passes through as-is."""
+        monkeypatch.setattr(CategoryService, "list", _async_raiser(APIException(status_code=418, message="teapot")))
+        response = await async_client.get("/v1/categories/")
+        assert response.status_code == 418
+
+    async def test_list_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(CategoryService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/categories/")
+        assert response.status_code == 500
+
+    async def test_tree_wraps_api_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(CategoryService, "tree", _async_raiser(APIException(status_code=418, message="teapot")))
+        response = await async_client.get("/v1/categories/tree/")
+        assert response.status_code == 418
+
+    async def test_tree_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(CategoryService, "tree", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/categories/tree/")
+        assert response.status_code == 500

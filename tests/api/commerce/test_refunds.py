@@ -1,12 +1,14 @@
 """Tests for api/commerce/refunds.py - /v1/refunds endpoints."""
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
 
 from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus
 from core.utils.uuid_utils import uuid7
+from services.commerce.refunds import RefundService
 
 
 @pytest.fixture
@@ -60,6 +62,20 @@ class TestRefundEndpoints:
         response = await async_client.get("/v1/refunds/", headers=auth_headers)
         assert response.status_code == 200
 
+    async def test_list_generic_failure_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        """An unexpected error from the service must be wrapped as a 500, not leak raw."""
+        mocker.patch.object(RefundService, "list", side_effect=RuntimeError("boom"))
+        response = await async_client.get("/v1/refunds/", headers=auth_headers)
+        assert response.status_code == 500
+        assert "Failed to retrieve refunds" in response.json()["message"]
+
+    async def test_list_httpexception_from_service_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        """An HTTPException raised by the service must propagate with its own status
+        code, not get rewrapped into a generic 500 by the route's except Exception."""
+        mocker.patch.object(RefundService, "list", side_effect=HTTPException(status_code=418, detail="teapot"))
+        response = await async_client.get("/v1/refunds/", headers=auth_headers)
+        assert response.status_code == 418
+
     async def test_create_for_nonexistent_order(self, async_client: AsyncClient, auth_headers):
         """POST /v1/refunds/ - A nonexistent order returns 404."""
         response = await async_client.post("/v1/refunds/", headers=auth_headers, json={
@@ -67,6 +83,26 @@ class TestRefundEndpoints:
             "items": [{"order_item_id": str(uuid4()), "quantity": 1}],
         })
         assert response.status_code == 404
+
+    async def test_create_missing_order_id(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/refunds/ - Missing order_id is a 400 raised directly by the route,
+        not a generic 500 (the route builds and re-raises its own APIException)."""
+        response = await async_client.post("/v1/refunds/", headers=auth_headers, json={
+            "reason": "changed_mind",
+            "items": [{"order_item_id": str(uuid4()), "quantity": 1}],
+        })
+        assert response.status_code == 400
+        assert "order_id" in response.json()["message"]
+
+    async def test_create_invalid_order_id_format(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/refunds/ - A non-UUID order_id fails UUID(...) parsing before reaching
+        the service; that raw ValueError is caught by the generic except and wrapped as 400."""
+        response = await async_client.post("/v1/refunds/", headers=auth_headers, json={
+            "order_id": "not-a-uuid", "reason": "changed_mind",
+            "items": [{"order_item_id": str(uuid4()), "quantity": 1}],
+        })
+        assert response.status_code == 400
+        assert "Failed to create refund" in response.json()["message"]
 
     async def test_create_success(self, async_client: AsyncClient, auth_headers, refundable_order):
         """POST /v1/refunds/ - A real refund request against an eligible order.
@@ -101,10 +137,40 @@ class TestRefundEndpoints:
         )
         assert response.status_code == 200
 
+    async def test_request_via_order_path_not_found(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/refunds/orders/{order_id}/request - A nonexistent order's HTTPException(404)
+        from the service must pass through the route's except HTTPException, not become a 400."""
+        response = await async_client.post(f"/v1/refunds/orders/{uuid4()}/request/",
+            headers=auth_headers, json={
+                "reason": "changed_mind",
+                "items": [{"order_item_id": str(uuid4()), "quantity": 1}],
+            }
+        )
+        assert response.status_code == 404
+
+    async def test_request_via_order_path_generic_failure_returns_400(
+        self, async_client: AsyncClient, auth_headers, refundable_order, mocker
+    ):
+        mocker.patch.object(RefundService, "request", side_effect=RuntimeError("boom"))
+        response = await async_client.post(f"/v1/refunds/orders/{refundable_order.id}/request/",
+            headers=auth_headers, json={
+                "reason": "changed_mind",
+                "items": [{"order_item_id": str(refundable_order.item_id), "quantity": 1}],
+            }
+        )
+        assert response.status_code == 400
+        assert "Failed to request refund" in response.json()["message"]
+
     async def test_get_by_id_not_found(self, async_client: AsyncClient, auth_headers):
         """GET /v1/refunds/{id} - Unknown ID returns 404."""
         response = await async_client.get(f"/v1/refunds/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
+
+    async def test_get_generic_failure_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch.object(RefundService, "get", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/refunds/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 500
+        assert "Failed to retrieve refund" in response.json()["message"]
 
     async def test_get_by_id_as_owner(self, async_client: AsyncClient, auth_headers, refundable_order):
         created = await async_client.post("/v1/refunds/", headers=auth_headers, json={
@@ -162,6 +228,22 @@ class TestRefundEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["admin_notes"] == "Reviewed manually"
 
+    async def test_patch_not_found_as_admin(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/refunds/{id} - Unknown refund returns 404 for an admin (the service's
+        HTTPException(404) must pass through the route's except HTTPException)."""
+        response = await async_client.patch(f"/v1/refunds/{uuid4()}/",
+            headers=admin_headers, json={"admin_notes": "x"}
+        )
+        assert response.status_code == 404
+
+    async def test_patch_generic_failure_returns_500(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch.object(RefundService, "patch", side_effect=RuntimeError("boom"))
+        response = await async_client.patch(f"/v1/refunds/{uuid4()}/",
+            headers=admin_headers, json={"admin_notes": "x"}
+        )
+        assert response.status_code == 500
+        assert "Failed to update refund" in response.json()["message"]
+
     async def test_patch_requires_admin(self, async_client: AsyncClient, auth_headers, refundable_order):
         created = await async_client.post("/v1/refunds/", headers=auth_headers, json={
             "order_id": str(refundable_order.id), "reason": "changed_mind",
@@ -184,6 +266,28 @@ class TestRefundEndpoints:
             headers=auth_headers, json={"status": "approved"}
         )
         assert response.status_code == 403
+
+    async def test_update_status_success_as_admin(self, async_client: AsyncClient, auth_headers, admin_headers, refundable_order):
+        """PUT /v1/refunds/{id}/status - A real status transition on an existing refund."""
+        created = await async_client.post("/v1/refunds/", headers=auth_headers, json={
+            "order_id": str(refundable_order.id), "reason": "changed_mind",
+            "items": [{"order_item_id": str(refundable_order.item_id), "quantity": 2}],
+        })
+        refund_id = created.json()["data"]["id"]
+
+        response = await async_client.put(f"/v1/refunds/{refund_id}/status/",
+            headers=admin_headers, json={"status": "approved", "admin_notes": "Looks good"}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "approved"
+
+    async def test_update_status_generic_failure_returns_500(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch.object(RefundService, "update_status", side_effect=RuntimeError("boom"))
+        response = await async_client.put(f"/v1/refunds/{uuid4()}/status/",
+            headers=admin_headers, json={"status": "approved"}
+        )
+        assert response.status_code == 500
+        assert "Failed to update refund status" in response.json()["message"]
 
     async def test_update_status_as_admin_not_found(self, async_client: AsyncClient, admin_headers):
         """PUT /v1/refunds/{id}/status - Unknown refund returns 404 for an admin.

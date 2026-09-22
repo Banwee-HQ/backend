@@ -16,15 +16,18 @@ or marked failed/cancelled by webhook in production.
 import json
 import pytest
 from uuid import uuid4
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 import stripe
+from fastapi import HTTPException
 
+from core.utils.uuid_utils import uuid7
 from services.commerce.webhooks import WebhookService, WebhookSecurityError, verify_stripe_webhook_request
+from services.commerce.payment_failure_handler import PaymentFailureHandler
 from services.accounts.auth import AuthService
 from models.accounts.user import User, UserRole
 from models.commerce.orders import Order, OrderStatus, PaymentStatus
-from models.commerce.payments import Transaction, PaymentIntent
+from models.commerce.payments import Transaction, PaymentIntent, PaymentFailureReason
 
 
 async def make_user(db_session) -> User:
@@ -113,6 +116,31 @@ class TestVerifyStripeWebhookRequest:
                 request=MagicMock(), db=db_session, signature_header="sig", payload=b"{}"
             )
 
+    async def test_unexpected_error_is_also_wrapped_as_security_error(self, db_session, mocker):
+        """Any other exception from Stripe's SDK (not ValueError, not a signature error)
+        must still be caught and surfaced as a WebhookSecurityError, not raise raw."""
+        mocker.patch("stripe.Webhook.construct_event", side_effect=RuntimeError("stripe sdk boom"))
+        with pytest.raises(WebhookSecurityError, match="Verification failed"):
+            await verify_stripe_webhook_request(
+                request=MagicMock(), db=db_session, signature_header="sig", payload=b"{}"
+            )
+
+
+class TestMergeTransactionMetadata:
+
+    async def test_malformed_existing_metadata_is_discarded_not_crashed(self, db_session):
+        """transaction_metadata is a JSON-serialized string; if it somehow holds
+        non-JSON garbage, merging must fall back to an empty base rather than raise."""
+        user = await make_user(db_session)
+        transaction = await make_transaction(db_session, user.id, transaction_metadata="not-valid-json{")
+        service = WebhookService(db_session)
+
+        await service._handle_payment_succeeded({"id": transaction.stripe_payment_intent_id})
+
+        await db_session.refresh(transaction)
+        metadata = json.loads(transaction.transaction_metadata)
+        assert "webhook_confirmed_at" in metadata
+
 
 class TestHandlePaymentSucceeded:
 
@@ -177,6 +205,62 @@ class TestHandlePaymentFailed:
         result = await service._handle_payment_failed({"id": "pi_does_not_exist"})
         assert result["warning"] == "transaction_not_found"
 
+    async def test_comprehensive_failure_handling_when_payment_intent_exists(self, db_session):
+        """When a PaymentIntent row exists for the failed payment, the webhook must run
+        PaymentFailureHandler.handle_failure and surface its guidance, not just mark the
+        transaction/order failed."""
+        user = await make_user(db_session)
+        order = await make_order(db_session, user.id)
+        pi_id = f"pi_{uuid4().hex[:16]}"
+        transaction = await make_transaction(db_session, user.id, order_id=order.id, stripe_payment_intent_id=pi_id)
+        intent = PaymentIntent(
+            id=uuid7(), stripe_payment_intent_id=pi_id, user_id=user.id,
+            amount_breakdown={"total": 100.0}, currency="USD", status="requires_payment_method",
+        )
+        db_session.add(intent)
+        await db_session.commit()
+
+        service = WebhookService(db_session)
+        result = await service._handle_payment_failed({
+            "id": pi_id,
+            "last_payment_error": {
+                "message": "Your card was declined.", "code": "card_declined",
+                "decline_code": "generic_decline",
+            },
+        })
+
+        assert result["action"] == "payment_failed_comprehensive"
+        assert result["failure_handling"]["status"] == "failed"
+        assert result["failure_handling"]["failure_reason"] == PaymentFailureReason.CARD_DECLINED.value
+
+        await db_session.refresh(intent)
+        assert intent.status == "failed"
+        assert intent.failure_reason == PaymentFailureReason.CARD_DECLINED.value
+
+    async def test_comprehensive_failure_handling_error_falls_back_to_plain_result(self, db_session, mocker):
+        """If PaymentFailureHandler itself blows up, the webhook must still return a
+        usable "payment_failed" result rather than 500 the whole webhook."""
+        user = await make_user(db_session)
+        order = await make_order(db_session, user.id)
+        pi_id = f"pi_{uuid4().hex[:16]}"
+        transaction = await make_transaction(db_session, user.id, order_id=order.id, stripe_payment_intent_id=pi_id)
+        intent = PaymentIntent(
+            id=uuid7(), stripe_payment_intent_id=pi_id, user_id=user.id,
+            amount_breakdown={"total": 100.0}, currency="USD", status="requires_payment_method",
+        )
+        db_session.add(intent)
+        await db_session.commit()
+
+        mocker.patch.object(PaymentFailureHandler, "handle_failure", AsyncMock(side_effect=RuntimeError("boom")))
+
+        service = WebhookService(db_session)
+        result = await service._handle_payment_failed({
+            "id": pi_id, "last_payment_error": {"message": "Card declined"},
+        })
+
+        assert result["action"] == "payment_failed"
+        assert "failure_handling" not in result
+
 
 class TestHandlePaymentCanceled:
 
@@ -229,3 +313,87 @@ class TestProcessWebhookEventDispatch:
             "data": {"object": {"id": "ch_123"}},
         })
         assert result == {"action": "refund_processed", "charge_id": "ch_123"}
+
+    async def test_dispatches_to_payment_failed(self, db_session):
+        user = await make_user(db_session)
+        transaction = await make_transaction(db_session, user.id)
+        service = WebhookService(db_session)
+
+        result = await service._process_webhook_event({
+            "type": "payment_intent.payment_failed",
+            "data": {"object": {"id": transaction.stripe_payment_intent_id}},
+        })
+        assert result["action"] == "payment_failed"
+
+    async def test_dispatches_to_payment_canceled(self, db_session):
+        user = await make_user(db_session)
+        transaction = await make_transaction(db_session, user.id)
+        service = WebhookService(db_session)
+
+        result = await service._process_webhook_event({
+            "type": "payment_intent.canceled",
+            "data": {"object": {"id": transaction.stripe_payment_intent_id}},
+        })
+        assert result["action"] == "payment_cancelled"
+
+
+class TestHandleStripeWebhook:
+    """Tests for the top-level orchestrating method: verify -> process -> log -> envelope."""
+
+    async def test_verified_event_returns_success_envelope(self, db_session, mocker):
+        fake_event = {
+            "id": "evt_full", "type": "customer.created", "created": 12345,
+            "data": {"object": {}},
+        }
+        mocker.patch("stripe.Webhook.construct_event", return_value=fake_event)
+        service = WebhookService(db_session)
+
+        result = await service.handle_stripe_webhook(request=MagicMock(), request_body=b"{}", signature="sig")
+
+        assert result["status"] == "success"
+        assert result["event_id"] == "evt_full"
+        assert result["event_type"] == "customer.created"
+        assert result["result"] == {"status": "ignored", "reason": "unhandled_event_type"}
+        assert isinstance(result["processing_time"], float)
+
+    async def test_invalid_signature_raises_401(self, db_session, mocker):
+        mocker.patch(
+            "stripe.Webhook.construct_event",
+            side_effect=stripe.error.SignatureVerificationError("bad sig", "sig_header"),
+        )
+        service = WebhookService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.handle_stripe_webhook(request=MagicMock(), request_body=b"{}", signature="bad")
+        assert exc_info.value.status_code == 401
+
+    async def test_processing_error_after_verification_raises_500(self, db_session, mocker):
+        """A verified event that's malformed enough to blow up _process_webhook_event
+        (missing "type") must still come back as a clean 500, not an unhandled KeyError."""
+        malformed_event = {"id": "evt_bad", "created": 1}
+        mocker.patch("stripe.Webhook.construct_event", return_value=malformed_event)
+        service = WebhookService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.handle_stripe_webhook(request=MagicMock(), request_body=b"{}", signature="sig")
+        assert exc_info.value.status_code == 500
+
+
+class TestLogWebhookEvent:
+
+    async def test_logs_without_raising(self, db_session):
+        service = WebhookService(db_session)
+        await service._log_webhook_event(
+            {"id": "evt_1", "type": "payment_intent.succeeded"},
+            {"status": "success"},
+            {"signature_verified": True},
+        )
+
+    async def test_logging_failure_is_swallowed(self, db_session, mocker):
+        """The comment on this method is explicit: a logging failure must never fail
+        the webhook it's trying to log about."""
+        mocker.patch("services.commerce.webhooks.logger.info", side_effect=RuntimeError("log boom"))
+        service = WebhookService(db_session)
+        await service._log_webhook_event(
+            {"id": "evt_1", "type": "payment_intent.succeeded"},
+            {"status": "success"},
+            {"signature_verified": True},
+        )

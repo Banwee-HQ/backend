@@ -110,6 +110,15 @@ class TestUserEndpoints:
         )
         assert response.status_code == 403
 
+    async def test_patch_with_overlong_field_returns_500(self, async_client: AsyncClient, auth_headers, test_user):
+        """PATCH /v1/users/{id} - UserUpdate doesn't validate string length, so a phone
+        longer than the DB column (String(20)) triggers a real DataError at commit,
+        exercising the endpoint's generic exception fallback."""
+        response = await async_client.patch(f"/v1/users/{test_user.id}/",
+            headers=auth_headers, json={"phone": "1" * 30}
+        )
+        assert response.status_code == 500
+
     async def test_patch_sensitive_field_is_silently_ignored(self, async_client: AsyncClient, auth_headers, test_user):
         """PATCH /v1/users/{id} - UserUpdate has no role/status fields, so they're dropped, not applied."""
         response = await async_client.patch(f"/v1/users/{test_user.id}/",
@@ -211,3 +220,31 @@ class TestUserEndpoints:
     async def test_deactivate_not_found(self, async_client: AsyncClient, admin_headers):
         response = await async_client.post(f"/v1/users/{uuid4()}/deactivate/", headers=admin_headers)
         assert response.status_code == 404
+
+    async def test_activate_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post(f"/v1/users/{uuid4()}/activate/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_reset_password_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post(f"/v1/users/{uuid4()}/reset-password/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_patch_unknown_id_as_admin_returns_404(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/users/{id} - Admin hits an unknown user - UserService.update() returns
+        None, which the endpoint must turn into a 404 rather than a bare success/None."""
+        response = await async_client.patch(f"/v1/users/{uuid4()}/",
+            headers=admin_headers, json={"firstname": "Nope"}
+        )
+        assert response.status_code == 404
+
+    async def test_create_with_duplicate_email_as_admin(self, async_client: AsyncClient, admin_headers, test_user):
+        """POST /v1/users/ - UserService.create() has no duplicate-email precheck (unlike the
+        public register() -> AuthService.create() path), so a duplicate email hits a real,
+        unmocked IntegrityError at commit and falls through to the generic exception handler."""
+        response = await async_client.post("/v1/users/", headers=admin_headers, json={
+            "email": test_user.email,
+            "password": "SecurePass123!",
+            "firstname": "Dup",
+            "lastname": "User",
+        })
+        assert response.status_code == 500

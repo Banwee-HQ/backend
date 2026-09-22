@@ -95,6 +95,17 @@ class TestHandleFailure:
         result = await handler.handle_failure(payment_intent_id=intent.id)
         assert result["failure_reason"] == PaymentFailureReason.UNKNOWN.value
 
+    async def test_db_error_degrades_to_generic_error_response(self, db_session):
+        """A real, unexpected DB failure (here: a malformed UUID the GUID column type
+        can't cast, so Postgres itself rejects the query) must be caught and turned
+        into a safe generic response - not raised out to the caller (webhooks.py and
+        payments.py both call this without expecting it to ever throw)."""
+        handler = PaymentFailureHandler(db_session)
+        result = await handler.handle_failure(payment_intent_id="not-a-valid-uuid")
+        assert result["status"] == "error"
+        assert result["user_message"]
+        assert result["next_steps"]
+
 
 class TestMapFailureReason:
 

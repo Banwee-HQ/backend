@@ -1,8 +1,22 @@
 """Tests for api/catalog/products.py - /v1/products endpoints."""
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from uuid import uuid4
+
+from core.exceptions import APIException
+from services.catalog.products import ProductService
+from services.catalog.category import CategoryService
+
+
+def _async_raiser(exc):
+    """Build an async function that always raises `exc` - used to monkeypatch a
+    service method so a specific endpoint's except-clause body actually runs,
+    matching the pattern in tests/api/commerce/test_payments.py."""
+    async def _raise(*args, **kwargs):
+        raise exc
+    return _raise
 
 
 @pytest.fixture
@@ -446,3 +460,297 @@ class TestVariantSyncViaProductUpdate:
             headers=admin_headers, json={"variants": [{"id": other["id"]}]}
         )
         assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestErrorHandlingBranches:
+    """Every endpoint wraps a lower-level call in try/except APIException/HTTPException/
+    Exception. The known-error paths (404s etc) are exercised elsewhere via real service
+    behavior; these tests drive the pass-through and generic-500 branches, which need a
+    genuinely unexpected failure - simulated here by monkeypatching the service method,
+    the same pattern used in tests/api/commerce/test_payments.py."""
+
+    async def test_home_falls_back_when_optional_fetches_fail(self, async_client: AsyncClient, monkeypatch):
+        """home() treats the popular/deals sub-fetches as optional - a failure there
+        is logged and swallowed, not surfaced as a 500."""
+        monkeypatch.setattr(ProductService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/products/home/")
+        assert response.status_code == 200
+        assert response.json()["data"]["popular"] == []
+
+    async def test_home_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(CategoryService, "list", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/products/home/")
+        assert response.status_code == 403
+
+    async def test_home_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(CategoryService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/products/home/")
+        assert response.status_code == 500
+
+    async def test_list_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/products/")
+        assert response.status_code == 403
+
+    async def test_list_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/products/")
+        assert response.status_code == 500
+
+    async def test_featured_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "featured", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/products/featured/")
+        assert response.status_code == 403
+
+    async def test_featured_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "featured", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/products/featured/")
+        assert response.status_code == 500
+
+    async def test_deals_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/products/deals/")
+        assert response.status_code == 403
+
+    async def test_deals_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/products/deals/")
+        assert response.status_code == 500
+
+    async def test_recommended_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "recommended", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/products/{uuid4()}/recommendations/")
+        assert response.status_code == 403
+
+    async def test_recommended_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "recommended", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/products/{uuid4()}/recommendations/")
+        assert response.status_code == 500
+
+    async def test_get_product_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "get", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/products/{uuid4()}/")
+        assert response.status_code == 403
+
+    async def test_get_product_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "get", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/products/{uuid4()}/")
+        assert response.status_code == 500
+
+    async def test_create_wraps_api_exception(self, async_client: AsyncClient, admin_headers, sample_product_data, created_category, monkeypatch):
+        sample_product_data["category_id"] = created_category["id"]
+        monkeypatch.setattr(ProductService, "create", _async_raiser(APIException(status_code=418, message="teapot")))
+        response = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
+        assert response.status_code == 418
+
+    async def test_create_wraps_http_exception(self, async_client: AsyncClient, admin_headers, sample_product_data, created_category, monkeypatch):
+        sample_product_data["category_id"] = created_category["id"]
+        monkeypatch.setattr(ProductService, "create", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
+        assert response.status_code == 403
+
+    async def test_create_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, sample_product_data, created_category, monkeypatch):
+        sample_product_data["category_id"] = created_category["id"]
+        monkeypatch.setattr(ProductService, "create", _async_raiser(RuntimeError("boom")))
+        response = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
+        assert response.status_code == 500
+
+    async def test_update_wraps_api_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "update", _async_raiser(APIException(status_code=418, message="teapot")))
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/", headers=admin_headers, json={"name": "X"})
+        assert response.status_code == 418
+
+    async def test_update_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "update", _async_raiser(RuntimeError("boom")))
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/", headers=admin_headers, json={"name": "X"})
+        assert response.status_code == 500
+
+    async def test_delete_wraps_api_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "delete", _async_raiser(APIException(status_code=418, message="teapot")))
+        response = await async_client.delete(f"/v1/products/{created_product['id']}/", headers=admin_headers)
+        assert response.status_code == 418
+
+    async def test_delete_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "delete", _async_raiser(RuntimeError("boom")))
+        response = await async_client.delete(f"/v1/products/{created_product['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_create_variant_unknown_product_is_404(self, async_client: AsyncClient, admin_headers):
+        """Real trigger: ProductService.create_variant() raises a genuine APIException(404)."""
+        response = await async_client.post(f"/v1/products/{uuid4()}/variants/",
+            headers=admin_headers, json={"name": "Large", "base_price": 10.0, "sale_price": 8.0}
+        )
+        assert response.status_code == 404
+
+    async def test_create_variant_wraps_http_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "create_variant", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.post(f"/v1/products/{created_product['id']}/variants/",
+            headers=admin_headers, json={"name": "Large", "base_price": 10.0, "sale_price": 8.0}
+        )
+        assert response.status_code == 403
+
+    async def test_create_variant_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "create_variant", _async_raiser(RuntimeError("boom")))
+        response = await async_client.post(f"/v1/products/{created_product['id']}/variants/",
+            headers=admin_headers, json={"name": "Large", "base_price": 10.0, "sale_price": 8.0}
+        )
+        assert response.status_code == 500
+
+    async def test_get_variant_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "get_variant", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/products/variants/{uuid4()}/")
+        assert response.status_code == 403
+
+    async def test_get_variant_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "get_variant", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/products/variants/{uuid4()}/")
+        assert response.status_code == 500
+
+    async def test_list_variants_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list_variants", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/products/{uuid4()}/variants/")
+        assert response.status_code == 403
+
+    async def test_list_variants_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list_variants", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/products/{uuid4()}/variants/")
+        assert response.status_code == 500
+
+    async def test_patch_variant_unknown_is_404(self, async_client: AsyncClient, admin_headers):
+        """Real trigger: ProductService.update_variant() raises a genuine APIException(404)."""
+        response = await async_client.patch(f"/v1/products/variants/{uuid4()}/",
+            headers=admin_headers, json={"name": "X"}
+        )
+        assert response.status_code == 404
+
+    async def test_patch_variant_wraps_http_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        monkeypatch.setattr(ProductService, "update_variant", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.patch(f"/v1/products/variants/{variant_id}/", headers=admin_headers, json={"name": "X"})
+        assert response.status_code == 403
+
+    async def test_patch_variant_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        monkeypatch.setattr(ProductService, "update_variant", _async_raiser(RuntimeError("boom")))
+        response = await async_client.patch(f"/v1/products/variants/{variant_id}/", headers=admin_headers, json={"name": "X"})
+        assert response.status_code == 500
+
+    async def test_delete_variant_wraps_http_exception(self, async_client: AsyncClient, admin_headers, monkeypatch):
+        monkeypatch.setattr(ProductService, "delete_variant", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.delete(f"/v1/products/variants/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 403
+
+    async def test_delete_variant_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, monkeypatch):
+        monkeypatch.setattr(ProductService, "delete_variant", _async_raiser(RuntimeError("boom")))
+        response = await async_client.delete(f"/v1/products/variants/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_create_image_unknown_variant_is_404(self, async_client: AsyncClient, admin_headers):
+        """Real trigger: ProductService.create_image() raises a genuine APIException(404)."""
+        response = await async_client.post(f"/v1/products/variants/{uuid4()}/images/",
+            headers=admin_headers, json={"url": "https://example.com/a.jpg"}
+        )
+        assert response.status_code == 404
+
+    async def test_create_image_wraps_http_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        monkeypatch.setattr(ProductService, "create_image", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=admin_headers, json={"url": "https://example.com/a.jpg"}
+        )
+        assert response.status_code == 403
+
+    async def test_create_image_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        monkeypatch.setattr(ProductService, "create_image", _async_raiser(RuntimeError("boom")))
+        response = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=admin_headers, json={"url": "https://example.com/a.jpg"}
+        )
+        assert response.status_code == 500
+
+    async def test_get_image_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "get_image", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/products/images/{uuid4()}/")
+        assert response.status_code == 403
+
+    async def test_get_image_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "get_image", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/products/images/{uuid4()}/")
+        assert response.status_code == 500
+
+    async def test_list_images_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list_images", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/products/variants/{uuid4()}/images/")
+        assert response.status_code == 403
+
+    async def test_list_images_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ProductService, "list_images", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/products/variants/{uuid4()}/images/")
+        assert response.status_code == 500
+
+    async def test_patch_image_wraps_http_exception(self, async_client: AsyncClient, admin_headers, monkeypatch):
+        monkeypatch.setattr(ProductService, "update_image", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.patch(f"/v1/products/images/{uuid4()}/", headers=admin_headers, json={"alt_text": "X"})
+        assert response.status_code == 403
+
+    async def test_patch_image_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, monkeypatch):
+        monkeypatch.setattr(ProductService, "update_image", _async_raiser(RuntimeError("boom")))
+        response = await async_client.patch(f"/v1/products/images/{uuid4()}/", headers=admin_headers, json={"alt_text": "X"})
+        assert response.status_code == 500
+
+    async def test_delete_image_wraps_http_exception(self, async_client: AsyncClient, admin_headers, monkeypatch):
+        monkeypatch.setattr(ProductService, "delete_image", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.delete(f"/v1/products/images/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 403
+
+    async def test_delete_image_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, monkeypatch):
+        monkeypatch.setattr(ProductService, "delete_image", _async_raiser(RuntimeError("boom")))
+        response = await async_client.delete(f"/v1/products/images/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_moderate_unknown_product_is_404(self, async_client: AsyncClient, admin_headers):
+        """Real trigger: ProductService.moderate() raises a genuine APIException(404)."""
+        response = await async_client.patch(f"/v1/products/{uuid4()}/moderate/",
+            headers=admin_headers, json={"status": "approved"}
+        )
+        assert response.status_code == 404
+
+    async def test_moderate_wraps_http_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "moderate", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/moderate/",
+            headers=admin_headers, json={"status": "approved"}
+        )
+        assert response.status_code == 403
+
+    async def test_moderate_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "moderate", _async_raiser(RuntimeError("boom")))
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/moderate/",
+            headers=admin_headers, json={"status": "approved"}
+        )
+        assert response.status_code == 500
+
+    async def test_feature_unknown_product_is_404(self, async_client: AsyncClient, admin_headers):
+        """Real trigger: ProductService.set_featured() raises a genuine APIException(404)."""
+        response = await async_client.patch(f"/v1/products/{uuid4()}/feature/",
+            headers=admin_headers, params={"featured": True}
+        )
+        assert response.status_code == 404
+
+    async def test_feature_wraps_http_exception(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "set_featured", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/feature/",
+            headers=admin_headers, params={"featured": True}
+        )
+        assert response.status_code == 403
+
+    async def test_feature_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, admin_headers, created_product, monkeypatch):
+        monkeypatch.setattr(ProductService, "set_featured", _async_raiser(RuntimeError("boom")))
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/feature/",
+            headers=admin_headers, params={"featured": True}
+        )
+        assert response.status_code == 500

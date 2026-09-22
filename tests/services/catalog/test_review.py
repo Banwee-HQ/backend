@@ -17,6 +17,15 @@ from models.catalog.product import Product
 from models.accounts.user import User, UserRole
 
 
+def _async_raiser(exc):
+    """Build an async function that always raises `exc` - used to monkeypatch an
+    internal collaborator so a specific except-clause body actually runs, matching
+    the pattern in tests/services/commerce/test_payments.py."""
+    async def _raise(*args, **kwargs):
+        raise exc
+    return _raise
+
+
 async def make_product(db_session, **overrides) -> Product:
     fields = {
         "id": uuid4(),
@@ -88,6 +97,22 @@ class TestCreate:
             await service.create(ReviewCreate(product_id=product.id, rating=1), user.id)
         assert exc_info.value.status_code == 400
 
+    async def test_create_succeeds_even_if_rating_aggregation_fails(self, db_session, monkeypatch):
+        """create() deliberately doesn't fail the request if the post-write rating
+        recompute blows up - the review itself is already committed and more
+        important than the aggregate staying perfectly in sync."""
+        product = await make_product(db_session)
+        user = await make_user(db_session)
+        service = ReviewService(db_session)
+        monkeypatch.setattr(service, "_update_product_rating", _async_raiser(RuntimeError("boom")))
+
+        result = await service.create(ReviewCreate(product_id=product.id, rating=5, comment="Still works"), user.id)
+        assert result["rating"] == 5
+
+        # The review itself was really persisted despite the rating update failing.
+        found = await service.get(result["id"])
+        assert found is not None
+
 
 class TestGet:
 
@@ -134,6 +159,16 @@ class TestList:
         await service.create(ReviewCreate(product_id=product.id, rating=4), user.id)
 
         result = await service.list(product_id=product.id, sort_by="not_a_real_field_desc")
+        assert result["total"] == 1
+
+    async def test_sort_by_invalid_order_falls_back_to_default(self, db_session):
+        """sort_field is valid ('rating') but the trailing direction isn't asc/desc."""
+        product = await make_product(db_session)
+        user = await make_user(db_session)
+        service = ReviewService(db_session)
+        await service.create(ReviewCreate(product_id=product.id, rating=4), user.id)
+
+        result = await service.list(product_id=product.id, sort_by="rating_sideways")
         assert result["total"] == 1
 
     async def test_sort_by_rating_ascending(self, db_session):
@@ -226,6 +261,22 @@ class TestDelete:
         with pytest.raises(APIException) as exc_info:
             await service.delete(created["id"], other.id)
         assert exc_info.value.status_code == 403
+
+
+class TestUpdateProductRatingInternal:
+
+    async def test_reraises_after_logging_on_failure(self, db_session, monkeypatch):
+        """_update_product_rating logs and re-raises rather than swallowing - it's
+        create() (the only caller that tolerates a failed aggregate) that decides
+        to swallow it; update()/delete() let it propagate."""
+        product = await make_product(db_session)
+        user = await make_user(db_session)
+        service = ReviewService(db_session)
+        await service.create(ReviewCreate(product_id=product.id, rating=4), user.id)
+
+        monkeypatch.setattr(db_session, "commit", _async_raiser(RuntimeError("boom")))
+        with pytest.raises(RuntimeError):
+            await service._update_product_rating(product.id)
 
 
 class TestRecalcRatings:

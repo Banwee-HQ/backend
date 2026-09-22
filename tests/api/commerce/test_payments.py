@@ -11,6 +11,7 @@ collides on that uniqueness constraint.
 import os
 import pytest
 import stripe
+from fastapi import HTTPException
 from httpx import AsyncClient
 from uuid import uuid4
 
@@ -24,12 +25,33 @@ def fresh_stripe_payment_method_id() -> str:
     return stripe.PaymentMethod.create(type="card", card={"token": "tok_visa"}).id
 
 
+def _async_raiser(exc):
+    """Build an async function that always raises `exc` - used to monkeypatch a
+    PaymentService method so a specific endpoint's except-clause body actually runs."""
+    async def _raise(*args, **kwargs):
+        raise exc
+    return _raise
+
+
+def _async_returner(value):
+    """Build an async function that always returns `value` regardless of arguments -
+    used to monkeypatch a PaymentService method's return shape."""
+    async def _return(*args, **kwargs):
+        return value
+    return _return
+
+
 @pytest.fixture
 async def created_method(async_client: AsyncClient, auth_headers):
+    stripe_id = fresh_stripe_payment_method_id()
     response = await async_client.post("/v1/payments/methods/", headers=auth_headers, json={
-        "type": "card", "stripe_payment_method_id": fresh_stripe_payment_method_id(), "is_default": True
+        "type": "card", "stripe_payment_method_id": stripe_id, "is_default": True
     })
-    return response.json()["data"]
+    data = response.json()["data"]
+    # MethodResponse doesn't echo stripe_payment_method_id back, but some tests need the
+    # value they created it with (e.g. to attempt reusing it on another account).
+    data["_stripe_payment_method_id"] = stripe_id
+    return data
 
 
 @pytest.fixture
@@ -339,7 +361,7 @@ class TestCreateMethodErrors:
 
     async def test_same_stripe_id_for_different_account_is_conflict(self, async_client: AsyncClient, auth_headers, other_auth_headers, created_method):
         response = await async_client.post("/v1/payments/methods/", headers=other_auth_headers, json={
-            "type": "card", "stripe_payment_method_id": created_method["stripe_payment_method_id"],
+            "type": "card", "stripe_payment_method_id": created_method["_stripe_payment_method_id"],
         })
         assert response.status_code == 409
 
@@ -545,3 +567,393 @@ class TestFailureHandlingErrors:
             params={"new_payment_method_id": str(uuid4())},
         )
         assert response.status_code == 404
+
+
+# --------------------------------------------------------------------------- Generic error-handling wrapper contract ---------------------------------------------------------------------------
+# Every endpoint below wraps its call to PaymentService in the same shape:
+#     except APIException: raise
+#     except HTTPException: raise
+#     except Exception as e: raise APIException(500, ...)
+# The "except APIException: raise" body is dead code for every endpoint tested here:
+# PaymentService itself never raises the APIException subclass (only plain HTTPException
+# or bare Exception), so that branch's *body* can never execute via any call through the
+# service layer - only the header is ever reached (evaluated, not matched) as part of
+# exception dispatch. The tests below instead verify the two branches that ARE part of
+# the real contract: a plain HTTPException raised by the service must pass through
+# unchanged (not get relabeled as a 500), and any other exception must be converted into
+# a clean APIException 500 rather than leaking a raw error to the client. Since the real
+# PaymentService methods used here (get/list/update/delete/etc.) have no legitimate way
+# to raise an arbitrary HTTPException or bare Exception through normal use, the service
+# method itself is monkeypatched for the duration of a single test - mirroring the
+# project's own established technique in TestOverviewBranches above.
+
+@pytest.mark.api
+class TestGetMethodErrorPassthrough:
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, created_method, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "get", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/payments/methods/{created_method['id']}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, created_method, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "get", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/payments/methods/{created_method['id']}/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListMethodsErrorPassthrough:
+
+    async def test_unexpected_shape_falls_back_to_raw_data(self, async_client, auth_headers, monkeypatch):
+        """Defensive branch: if the service ever returned something other than the
+        {"data":..., "pagination":...} shape, the endpoint must still respond instead
+        of crashing on the isinstance/key checks."""
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list", _async_returner(["not", "the", "expected", "shape"]))
+        response = await async_client.get("/v1/payments/methods/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"] == ["not", "the", "expected", "shape"]
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/payments/methods/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/payments/methods/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestCreateMethodGenericException:
+
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, monkeypatch):
+        """The service call itself already has real 400/409 tests (declined card,
+        cross-account conflict); this covers the remaining generic-Exception fallback,
+        which in practice can only be triggered by something after the service call
+        (e.g. response serialization) blowing up."""
+        import api.commerce.payments as payments_api
+        monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
+        response = await async_client.post("/v1/payments/methods/", headers=auth_headers, json={
+            "type": "card", "stripe_payment_method_id": fresh_stripe_payment_method_id(),
+        })
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestPatchMethodErrorPassthrough:
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, created_method, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "update", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.patch(f"/v1/payments/methods/{created_method['id']}/", headers=auth_headers, json={"is_default": True})
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, created_method, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "update", _async_raiser(RuntimeError("boom")))
+        response = await async_client.patch(f"/v1/payments/methods/{created_method['id']}/", headers=auth_headers, json={"is_default": True})
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestDeleteMethodGenericException:
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, created_method, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "delete", _async_raiser(RuntimeError("boom")))
+        response = await async_client.delete(f"/v1/payments/methods/{created_method['id']}/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetIntentErrorPassthrough:
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
+        intent_id = create.json()["data"]["id"]
+        monkeypatch.setattr(PaymentService, "get_intent", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/payments/intents/{intent_id}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
+        intent_id = create.json()["data"]["id"]
+        monkeypatch.setattr(PaymentService, "get_intent", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/payments/intents/{intent_id}/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListIntentsErrorPassthrough:
+
+    async def test_unexpected_shape_falls_back_to_raw_data(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list_intents", _async_returner({"no": "items key here"}))
+        response = await async_client.get("/v1/payments/intents/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"] == {"no": "items key here"}
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list_intents", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/payments/intents/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list_intents", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/payments/intents/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetTransactionSuccessAndErrorPassthrough:
+
+    async def test_get_own_transaction_succeeds(self, async_client, auth_headers, succeeded_intent):
+        """No existing test actually fetched a transaction successfully by ID -
+        every prior test either listed transactions or hit the not-found path."""
+        txn_list = await async_client.get("/v1/payments/transactions/", headers=auth_headers)
+        txn_id = txn_list.json()["data"][0]["id"]
+        response = await async_client.get(f"/v1/payments/transactions/{txn_id}/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == txn_id
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "get_transaction", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/payments/transactions/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "get_transaction", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/payments/transactions/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListTransactionsErrorPassthrough:
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "transactions", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/payments/transactions/", headers=auth_headers)
+        assert response.status_code == 403
+
+
+@pytest.mark.api
+class TestListAllTransactionsErrorPassthrough:
+
+    async def test_httpexception_from_service_passes_through(self, async_client, admin_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "all_transactions", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/payments/admin/transactions/", headers=admin_headers)
+        assert response.status_code == 403
+
+
+@pytest.mark.api
+class TestGetRefundErrorPassthrough:
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "get_refund", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/payments/refunds/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "get_refund", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/payments/refunds/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListRefundsErrorPassthrough:
+
+    async def test_unexpected_shape_falls_back_to_raw_data(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list_refunds", _async_returner({"no": "items key here"}))
+        response = await async_client.get("/v1/payments/refunds/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"] == {"no": "items key here"}
+
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list_refunds", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/payments/refunds/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "list_refunds", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/payments/refunds/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestConfirmIntentSuccessAndGenericException:
+
+    async def test_confirming_a_fresh_intent_hits_a_real_schema_bug(self, async_client, auth_headers):
+        """Documents a genuine, currently-live bug rather than papering over it:
+        IntentResponse.payment_method_id (schemas/commerce/payments.py) is typed
+        Optional[UUID], but confirm_intent() (services/commerce/payments.py) always
+        stores the raw Stripe payment_method id string (e.g. "pm_xxx") into that same
+        column - see the "payment_method_id stores the Stripe string id, not our
+        internal PaymentMethod row's UUID" comment already in services/commerce/
+        payments.py's retry(). Since confirm_intent() sets payment_method_id
+        unconditionally (success or requires_action) before returning, the
+        IntentResponse.model_validate(...) call on line 410 of api/commerce/
+        payments.py's confirm_intent endpoint ALWAYS raises a pydantic
+        ValidationError for any real confirmation - meaning that endpoint's success
+        response (200) is unreachable in production today. Fixing this requires
+        changing schemas/commerce/payments.py (out of scope for this test file per
+        this task's constraints), so this test instead pins the actual, current
+        behavior and flags it for a follow-up fix. See the final coverage report."""
+        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 12.0})
+        intent_id = create.json()["data"]["id"]
+        response = await async_client.post(
+            f"/v1/payments/intents/{intent_id}/confirm/", headers=auth_headers,
+            params={"payment_method_id": fresh_stripe_payment_method_id()},
+        )
+        assert response.status_code == 500
+        assert "payment_method_id" in response.json()["message"]
+
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, monkeypatch):
+        import api.commerce.payments as payments_api
+        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 12.0})
+        intent_id = create.json()["data"]["id"]
+        monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
+        response = await async_client.post(
+            f"/v1/payments/intents/{intent_id}/confirm/", headers=auth_headers,
+            params={"payment_method_id": fresh_stripe_payment_method_id()},
+        )
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestSetDefaultMethodErrorPassthrough:
+
+    async def test_real_db_conflict_passes_through_as_500(self, async_client, auth_headers, other_auth_headers, other_user, created_method, db_session):
+        """Mirrors TestSetDefaultExceptionHandling at the service level: stage an
+        unrelated, unflushed row (added to the same session backing this request)
+        that violates the stripe_payment_method_id uniqueness constraint, so
+        set_default()'s own commit() surfaces a real DB error - exercised here
+        through the API layer's HTTPException passthrough."""
+        from models.commerce.payments import PaymentMethod
+        conflicting = PaymentMethod(
+            user_id=other_user.id, type="card", provider="stripe",
+            stripe_payment_method_id=created_method["_stripe_payment_method_id"], is_active=True,
+        )
+        db_session.add(conflicting)
+        response = await async_client.post(f"/v1/payments/methods/{created_method['id']}/default/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, created_method, monkeypatch):
+        import api.commerce.payments as payments_api
+        monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
+        response = await async_client.post(f"/v1/payments/methods/{created_method['id']}/default/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestProcessPaymentGenericException:
+
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, created_method, monkeypatch):
+        import api.commerce.payments as payments_api
+        monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
+        response = await async_client.post("/v1/payments/process/", headers=auth_headers, params={
+            "amount": 5.0, "payment_method_id": created_method["id"],
+        })
+        assert response.status_code == 500
+
+
+# --------------------------------------------------------------------------- failure/retry/list_failures - genuine success paths and a real HTTPException trigger ---------------------------------------------------------------------------
+
+@pytest.fixture
+async def own_failed_intent(db_session, test_user):
+    """A failed intent with a valid, retryable failure reason - for exercising the
+    success paths of failure_status/retry (as opposed to the not-found/corrupted-data
+    tests already covered elsewhere)."""
+    from models.commerce.payments import PaymentIntent, PaymentFailureReason
+    from core.utils.uuid_utils import uuid7
+    from datetime import datetime
+    intent = PaymentIntent(
+        id=uuid7(), stripe_payment_intent_id=f"pi_test_{uuid4().hex[:16]}", user_id=test_user.id,
+        amount_breakdown={"total": 10.0, "currency": "USD"}, currency="USD", status="failed",
+        failed_at=datetime.utcnow(), failure_reason=PaymentFailureReason.CARD_DECLINED.value,
+        failure_metadata={"retry_count": 0},
+    )
+    db_session.add(intent)
+    await db_session.commit()
+    await db_session.refresh(intent)
+    return intent
+
+
+@pytest.mark.api
+class TestFailureStatusSuccess:
+
+    async def test_reports_failure_details(self, async_client, auth_headers, own_failed_intent):
+        response = await async_client.get(f"/v1/payments/failures/{own_failed_intent.id}/status/", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["is_failed"] is True
+        assert data["failure_reason"] == "card_declined"
+
+
+@pytest.mark.api
+class TestRetryPaymentSuccessAndGenericException:
+
+    async def test_resets_a_failed_intent_for_retry(self, async_client, auth_headers, own_failed_intent):
+        response = await async_client.post(f"/v1/payments/failures/{own_failed_intent.id}/retry/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "ready_for_retry"
+
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, own_failed_intent, monkeypatch):
+        import api.commerce.payments as payments_api
+        monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
+        response = await async_client.post(f"/v1/payments/failures/{own_failed_intent.id}/retry/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListFailuresErrorPassthrough:
+
+    async def test_unexpected_shape_falls_back_to_raw_data(self, async_client, auth_headers, monkeypatch):
+        from services.commerce.payments import PaymentService
+        monkeypatch.setattr(PaymentService, "failed_payments", _async_returner(["not", "the", "expected", "shape"]))
+        response = await async_client.get("/v1/payments/failures/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"] == ["not", "the", "expected", "shape"]
+
+    async def test_corrupted_failure_reason_is_a_real_httpexception_passthrough(self, async_client, auth_headers, db_session, test_user):
+        """Unlike the other list endpoints, this HTTPException is genuine (no
+        monkeypatch needed): failed_payments() itself catches the raw ValueError from
+        an invalid stored failure_reason and converts it to HTTPException(500), which
+        this endpoint must then pass through unchanged."""
+        from models.commerce.payments import PaymentIntent
+        from core.utils.uuid_utils import uuid7
+        from datetime import datetime
+        intent = PaymentIntent(
+            id=uuid7(), stripe_payment_intent_id=f"pi_test_{uuid4().hex[:16]}", user_id=test_user.id,
+            amount_breakdown={"total": 10.0, "currency": "USD"}, currency="USD", status="failed",
+            failed_at=datetime.utcnow(), failure_reason="not_a_real_failure_reason",
+        )
+        db_session.add(intent)
+        await db_session.commit()
+
+        response = await async_client.get("/v1/payments/failures/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, monkeypatch):
+        import api.commerce.payments as payments_api
+        monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
+        response = await async_client.get("/v1/payments/failures/", headers=auth_headers)
+        assert response.status_code == 500

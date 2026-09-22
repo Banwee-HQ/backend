@@ -1,6 +1,7 @@
 # Consolidated payment routes with 5 standard APIs per entity
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import status as http_status  # alias: list_all_transactions has a `status` query param that shadows the module above
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from uuid import UUID
@@ -315,7 +316,7 @@ async def list_all_transactions(
     except HTTPException:
         raise
     except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list transactions: {str(e)}")
+        raise APIException(status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list transactions: {str(e)}")
 
 
 # --- REFUNDS - Create & List Only (immutable after processing) ---

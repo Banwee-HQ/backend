@@ -111,6 +111,16 @@ class TestLocationEndpoints:
         response = await async_client.delete(f"/v1/inventory/locations/{created_location['id']}/", headers=admin_headers)
         assert response.status_code == 400
 
+    async def test_update_name_to_null_is_a_server_error(self, async_client: AsyncClient, admin_headers, created_location):
+        """PATCH /v1/inventory/locations/{id} - name is NOT NULL at the DB level but the update
+        schema allows an explicit null (only "unset" fields are excluded); the resulting
+        constraint violation is a real, un-mocked way to exercise the endpoint's generic
+        exception handler (a raw DB error, not one of the service's deliberate APIExceptions)."""
+        response = await async_client.patch(f"/v1/inventory/locations/{created_location['id']}/",
+            headers=admin_headers, json={"name": None}
+        )
+        assert response.status_code == 500
+
 
 @pytest.mark.api
 @pytest.mark.inventory
@@ -213,10 +223,34 @@ class TestInventoryItemEndpoints:
         })
         assert response.status_code == 404
 
+    async def test_create_unknown_location_is_a_server_error(self, async_client: AsyncClient, admin_headers, created_variant):
+        """POST /v1/inventory/ - The service validates variant_id but not location_id; a
+        location_id with no matching row is a real (un-mocked) way to trigger a foreign-key
+        violation on commit, exercising the endpoint's generic exception handler."""
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        inventory_id = listed.json()["data"][0]["id"]
+        await async_client.delete(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
+
+        response = await async_client.post("/v1/inventory/", headers=admin_headers, json={
+            "variant_id": created_variant["id"], "location_id": str(uuid4()), "quantity": 5
+        })
+        assert response.status_code == 500
+
     async def test_update_not_found(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/inventory/{id} - Unknown ID returns 404."""
         response = await async_client.patch(f"/v1/inventory/{uuid4()}/", headers=admin_headers, json={"quantity": 1})
         assert response.status_code == 404
+
+    async def test_update_with_unknown_location_id_is_a_server_error(self, async_client: AsyncClient, admin_headers, created_variant):
+        """PATCH /v1/inventory/{id} - Directly setting location_id (as opposed to
+        location_name) skips the get-or-create lookup entirely, so a non-existent location_id
+        reaches the DB as a real foreign-key violation."""
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        inventory_id = listed.json()["data"][0]["id"]
+
+        response = await async_client.patch(f"/v1/inventory/{inventory_id}/",
+            headers=admin_headers, json={"location_id": str(uuid4())})
+        assert response.status_code == 500
 
     async def test_list_filters(self, async_client: AsyncClient, admin_headers, created_variant):
         """GET /v1/inventory/ - in_stock/out_of_stock/search/location_name/sort_by all return 200."""
@@ -247,6 +281,20 @@ class TestAdjustmentEndpoints:
             "variant_id": created_variant["id"], "quantity_change": 10, "reason": "Restock"
         })
         assert response.status_code == 403
+
+    async def test_create_insufficient_stock_returns_400(self, async_client: AsyncClient, admin_headers, created_variant):
+        """POST /v1/inventory/adjustments/ - Reducing below zero is rejected (would oversell)."""
+        response = await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json={
+            "variant_id": created_variant["id"], "quantity_change": -(created_variant["stock"] + 1), "reason": "Sold"
+        })
+        assert response.status_code == 400
+
+    async def test_create_unknown_variant_returns_404(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/inventory/adjustments/ - Unknown variant_id returns 404."""
+        response = await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json={
+            "variant_id": str(uuid4()), "quantity_change": 1, "reason": "Restock"
+        })
+        assert response.status_code == 404
 
     async def test_list_requires_admin(self, async_client: AsyncClient, auth_headers):
         """GET /v1/inventory/adjustments/ - Non-admin is forbidden."""

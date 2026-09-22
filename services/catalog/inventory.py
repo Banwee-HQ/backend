@@ -1053,7 +1053,13 @@ class InventoryService:
                 "updated_count": len(results),
                 "results": results
             }
-            
+
+        except APIException:
+            # atomic_bulk_stock_update already raises a deliberate status code (e.g. 404 for an
+            # unknown variant, 400 for insufficient stock) - propagate it as-is instead of
+            # relabeling every failure as a 500 below, matching the pattern used by
+            # _perform_stock_adjustment/_perform_increment_stock in this same file.
+            raise
         except Exception as e:
             logger.error(f"Failed bulk stock update: {e}")
             raise APIException(

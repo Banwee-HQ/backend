@@ -30,6 +30,12 @@ def fresh_stripe_payment_method_id() -> str:
     return stripe.PaymentMethod.create(type="card", card={"token": "tok_visa"}).id
 
 
+def _async_raiser(exc):
+    async def _raise(*args, **kwargs):
+        raise exc
+    return _raise
+
+
 @pytest.fixture
 async def payment_method(db_session, test_user):
     service = PaymentService(db_session)
@@ -1363,3 +1369,290 @@ class TestRecordPaymentFailure:
             user_id=test_user.id, order_id=None, error_code="x", error_message="x",
             failure_reason=NotAnEnum(),
         )
+
+
+# --------------------------------------------------------------------------- create_method - legacy-token customer recovery, and the non-card brand-normalization fallback ---------------------------------------------------------------------------
+
+class TestCreateMethodLegacyTokenCustomerRecovery:
+
+    async def test_recovers_from_stale_customer_id(self, db_session, test_user):
+        """Parity with TestCreateMethodStripeDeclineAtAttach's modern-path version:
+        the legacy stripe_token branch has its own separate copy of the
+        retrieve-or-recreate-customer logic, which must behave the same way."""
+        test_user.stripe_customer_id = "cus_does_not_exist_anymore"
+        await db_session.commit()
+        service = PaymentService(db_session)
+        pm = await service.create_method(user_id=test_user.id, stripe_token="tok_visa")
+        assert pm is not None
+        await db_session.refresh(test_user)
+        assert test_user.stripe_customer_id != "cus_does_not_exist_anymore"
+
+
+class TestCreateMethodNonCardBrandFallback:
+
+    async def test_non_card_payment_method_brand_defaults_to_none(self, db_session, test_user, monkeypatch):
+        """Exercises the `elif payment_method_data:` branch of the brand-determination
+        block (stripe_pm.card is falsy for a non-card payment method) and its
+        `except Exception: brand_value = UNKNOWN` fallback, via a `payment_method_data`
+        argument that has no `.get()` method. Note: the computed brand_value is only
+        ever actually assigned to the row inside the `if stripe_pm.type == "card"`
+        block further down - for a non-card method it's silently discarded, so
+        `.brand` stays at the column's real default (None) either way. This is a
+        low-risk piece of dead computation (brand only affects a display attribute
+        for non-card methods, which don't have a "brand" in the card sense to begin
+        with) - flagged in the final report rather than treated as a bug to fix.
+
+        A real non-card Stripe PaymentMethod (e.g. us_bank_account) can be CREATED
+        in test mode, but Stripe refuses to ATTACH it to a customer until it's been
+        verified - a real verification flow isn't practical to drive from a unit
+        test. stripe.PaymentMethod.retrieve/.attach are monkeypatched here (unlike
+        the rest of this file) purely to get a non-card `.type` past that
+        verification gate; nothing about our own brand-normalization logic under
+        test is mocked."""
+        class _FakePM:
+            id = "pm_fake_bank_12345"
+            type = "bank_account"  # a real PaymentType enum value (see models/commerce/payments.py)
+            card = None
+
+        monkeypatch.setattr(stripe.PaymentMethod, "retrieve", lambda *a, **k: _FakePM())
+        monkeypatch.setattr(stripe.PaymentMethod, "attach", lambda *a, **k: _FakePM())
+
+        class NotADict:
+            """Deliberately has no .get() - forces the elif branch's attribute
+            access to raise, exercising the except Exception fallback."""
+            def __bool__(self):
+                return True
+
+        service = PaymentService(db_session)
+        pm = await service.create_method(
+            user_id=test_user.id, stripe_payment_method_id=_FakePM.id, payment_method_data=NotADict(),
+        )
+        assert pm.type == "bank_account"
+        assert pm.brand is None
+        assert pm.last_four is None
+
+
+# --------------------------------------------------------------------------- create_method - TOCTOU race between the pre-check and the insert-commit ---------------------------------------------------------------------------
+# The existing TestCreateMethodDeduplication.test_concurrent_insert_race_is_handled_without_crashing
+# simulates a race with a merely *staged* (uncommitted) racing row, which gets rolled
+# back together with the failed insert - so the recovery re-check finds nothing and the
+# method surfaces a 500. The tests below simulate a race that's actually *won* by the
+# other writer (a row that's already durably present by the time of the actual insert),
+# which is the scenario the recovery block (existing_pm found, after the duplicate-key
+# exception) is actually meant to handle. True multi-connection concurrency isn't needed
+# to reproduce this deterministically: the conflicting row is committed normally (via
+# this same db_session, exactly like any other fixture), and the method's own pre-check
+# query is made to miss it exactly once - which is the real, legitimate race window
+# under real concurrent load (the pre-check ran before the conflicting write landed).
+
+class TestCreateMethodTrueRaceRecovery:
+
+    @staticmethod
+    async def _create_with_blind_precheck(service, db_session, **kwargs):
+        """Calls create_method with its own pre-check (the first SELECT against
+        PaymentMethod.stripe_payment_method_id) forced to return no rows exactly
+        once, regardless of what's actually in the table - simulating the real
+        TOCTOU window between that pre-check and the insert-commit that follows it.
+        Every other query (including the recovery re-check inside the except
+        handler) uses the real, unpatched execute."""
+        from sqlalchemy import select
+        from models.commerce.payments import PaymentMethod
+        real_execute = db_session.execute
+        state = {"skipped": False}
+        # Match ONLY create_method's own pre-check (a plain equality filter on
+        # stripe_payment_method_id, no locking clause) - not the separate
+        # `.with_for_update()` "unset other defaults" query that also targets this
+        # table and runs earlier whenever is_default=True is passed.
+        target_marker = "payment_methods.stripe_payment_method_id ="
+
+        async def flaky_execute(statement, *args, **kw):
+            if not state["skipped"] and target_marker in str(statement).lower():
+                state["skipped"] = True
+                return await real_execute(select(PaymentMethod).where(PaymentMethod.id == None), *args, **kw)
+            return await real_execute(statement, *args, **kw)
+
+        db_session.execute = flaky_execute
+        try:
+            return await service.create_method(**kwargs)
+        finally:
+            db_session.execute = real_execute
+
+    async def test_same_user_race_reuses_and_can_promote_to_default(self, db_session, test_user, payment_method):
+        """`payment_method` (already default=True for test_user) stands in for a
+        pre-existing default, so promoting the recovered row also exercises the
+        "unset the other default(s)" loop inside the recovery block, not just the
+        promotion assignment itself."""
+        from models.commerce.payments import PaymentMethod
+        stripe_id = fresh_stripe_payment_method_id()
+        existing = PaymentMethod(
+            user_id=test_user.id, type="card", provider="stripe",
+            stripe_payment_method_id=stripe_id, is_active=True, is_default=False,
+        )
+        db_session.add(existing)
+        await db_session.commit()
+        await db_session.refresh(existing)
+
+        service = PaymentService(db_session)
+        result = await self._create_with_blind_precheck(
+            service, db_session, user_id=test_user.id, stripe_payment_method_id=stripe_id, is_default=True,
+        )
+        assert result.id == existing.id
+        await db_session.refresh(existing)
+        await db_session.refresh(payment_method)
+        assert existing.is_default is True
+        assert payment_method.is_default is False
+
+    async def test_different_user_race_still_conflicts(self, db_session, test_user, second_user):
+        """Regression test for a real bug this coverage work found and fixed: the
+        `raise HTTPException(409, ...)` for a cross-account race used to be raised
+        from inside a try block whose own `except Exception: pass` (meant only to
+        protect the best-effort re-check query) swallowed it too, since HTTPException
+        is an Exception subclass - falling through to re-raise the original raw
+        IntegrityError as an unhandled 500 instead. Fixed in services/commerce/
+        payments.py's create_method by adding an `except HTTPException: raise`
+        before that catch-all. This test would fail with status_code 500 (leaking
+        the raw DB error) against the pre-fix code."""
+        from models.commerce.payments import PaymentMethod
+        stripe_id = fresh_stripe_payment_method_id()
+        existing = PaymentMethod(
+            user_id=second_user.id, type="card", provider="stripe",
+            stripe_payment_method_id=stripe_id, is_active=True,
+        )
+        db_session.add(existing)
+        await db_session.commit()
+
+        service = PaymentService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await self._create_with_blind_precheck(
+                service, db_session, user_id=test_user.id, stripe_payment_method_id=stripe_id,
+            )
+        assert exc_info.value.status_code == 409
+
+
+# --------------------------------------------------------------------------- process() - RateLimitError / CardError branches, and the two structurally-dead-in-practice fallbacks ---------------------------------------------------------------------------
+# create_intent() and confirm_intent() (the two Stripe-calling steps _process_payment_internal
+# drives) each already catch stripe.error.StripeError themselves and convert it to an
+# HTTPException before it can ever propagate back up to process(). Since RateLimitError and
+# CardError are both StripeError subclasses, process()'s own `except stripe.error.RateLimitError`
+# and `except stripe.error.CardError` clauses can never actually be reached via a real Stripe
+# call through the normal call chain - see the final report. To verify this retry-loop
+# handling code is nonetheless correct (in case that call chain ever changes), these tests
+# monkeypatch _process_payment_internal directly to raise the target error, isolating
+# process()'s own dispatch/retry/rollback logic from the (already-tested-elsewhere) question
+# of what create_intent/confirm_intent do with a real Stripe error.
+
+class TestProcessRateLimitAndCardErrorBranches:
+
+    async def test_rate_limit_on_final_attempt_returns_429(self, db_session, test_user, payment_method, monkeypatch):
+        service = PaymentService(db_session)
+        monkeypatch.setattr(
+            service, "_process_payment_internal",
+            _async_raiser(stripe.error.RateLimitError("Too many requests")),
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=1)
+        assert exc_info.value.status_code == 429
+
+    async def test_rate_limit_retries_before_final_attempt(self, db_session, test_user, payment_method, monkeypatch):
+        """Exercises the continue-and-backoff branch (not just the final-attempt
+        429): succeeds on the second attempt after one simulated rate limit."""
+        service = PaymentService(db_session)
+        calls = {"n": 0}
+
+        async def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise stripe.error.RateLimitError("Too many requests")
+            return {"status": "succeeded", "payment_intent_id": str(uuid4()), "requires_action": False, "client_secret": None}
+
+        monkeypatch.setattr(service, "_process_payment_internal", flaky)
+
+        async def instant_sleep(*args, **kwargs):
+            return None
+        import services.commerce.payments as payments_service_module
+        monkeypatch.setattr(payments_service_module.asyncio, "sleep", instant_sleep)
+
+        result = await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=2)
+        assert result["status"] == "succeeded"
+        assert calls["n"] == 2
+
+    async def test_card_error_records_failure_and_returns_400(self, db_session, test_user, payment_method, monkeypatch):
+        service = PaymentService(db_session)
+        card_error = stripe.error.CardError(message="Your card was declined.", param=None, code="card_declined")
+        monkeypatch.setattr(service, "_process_payment_internal", _async_raiser(card_error))
+
+        recorded = {}
+        original_record = service._record_payment_failure
+
+        async def spy_record(**kwargs):
+            recorded.update(kwargs)
+            return await original_record(**kwargs)
+        monkeypatch.setattr(service, "_record_payment_failure", spy_record)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=1)
+        assert exc_info.value.status_code == 400
+        assert recorded["error_code"] == "card_declined"
+        assert recorded["failure_reason"] == PaymentFailureReason.CARD_DECLINED
+
+
+class TestProcessDeadCodeDefensiveFallbacks:
+
+    async def test_max_retries_zero_hits_the_should_never_reach_here_fallback(self, db_session, test_user, payment_method):
+        """The only way to reach process()'s trailing `raise HTTPException(...
+        "Payment processing failed unexpectedly")` is for the retry loop's body to
+        never execute at all - i.e. max_retries=0 (range(0) is empty). Every real
+        exception branch inside the loop already raises on its own final attempt, so
+        this line is otherwise unreachable."""
+        service = PaymentService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=0)
+        assert exc_info.value.status_code == 500
+        assert "unexpectedly" in exc_info.value.detail.lower()
+
+    async def test_process_internal_raising_a_bare_exception_is_wrapped_as_500(self, db_session, test_user, payment_method, monkeypatch):
+        """process()'s own bare `except Exception` fallback is, in the current
+        implementation, dead in practice too: _process_payment_internal already
+        converts every non-HTTPException exception it sees into an HTTPException
+        before it can escape (see its own try/except). This monkeypatches
+        _process_payment_internal itself (bypassing its real conversion logic) to
+        confirm process()'s own defensive final fallback still behaves correctly
+        if that invariant were ever broken."""
+        service = PaymentService(db_session)
+        monkeypatch.setattr(service, "_process_payment_internal", _async_raiser(ValueError("internal boom")))
+        with pytest.raises(HTTPException) as exc_info:
+            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=1)
+        assert exc_info.value.status_code == 500
+        assert "after 1 attempts" in exc_info.value.detail
+
+
+# --------------------------------------------------------------------------- process_idempotent - Stripe's "previously used" payment-method-reuse error ---------------------------------------------------------------------------
+
+class TestProcessIdempotentPreviouslyUsedPaymentMethod:
+
+    async def test_deactivates_the_payment_method_and_returns_400(self, db_session, test_user, payment_method, order, monkeypatch):
+        """Real trigger not practical to reproduce via Stripe's test API on demand
+        (it depends on payment-method-type-specific single-use restrictions), so
+        stripe.PaymentIntent.confirm is monkeypatched for this one call to return
+        Stripe's actual documented error text for this case - verifying our own
+        string-matching + is_active-flip + 400 logic, which is the real business
+        logic this branch is responsible for."""
+        error = stripe.error.InvalidRequestError(
+            message="This PaymentMethod was previously used with a PaymentIntent without Customer attachment, and may not be used again.",
+            param="payment_method",
+        )
+
+        def raise_previously_used(*args, **kwargs):
+            raise error
+        monkeypatch.setattr(stripe.PaymentIntent, "confirm", raise_previously_used)
+
+        service = PaymentService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.process_idempotent(
+                user_id=test_user.id, order_id=order.id, amount=49.98,
+                payment_method_id=payment_method.id, idempotency_key=f"idem-{uuid4().hex[:12]}",
+            )
+        assert exc_info.value.status_code == 400
+        assert "no longer usable" in exc_info.value.detail.lower()
+        await db_session.refresh(payment_method)
+        assert payment_method.is_active is False

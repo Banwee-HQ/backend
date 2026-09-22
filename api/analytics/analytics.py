@@ -657,7 +657,7 @@ async def revenue(
 async def admin_stats(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    order_status: Optional[str] = Query(None, alias="status"),
     category: Optional[str] = Query(None),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -668,7 +668,7 @@ async def admin_stats(
         stats = await analytics_service.get_admin_stats(
             date_from=date_from,
             date_to=date_to,
-            status=status,
+            status=order_status,
             category=category
         )
         return Response.success(data=stats)
@@ -687,7 +687,7 @@ async def admin_stats(
 async def admin_dashboard(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    order_status: Optional[str] = Query(None, alias="status"),
     category: Optional[str] = Query(None),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)

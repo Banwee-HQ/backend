@@ -118,6 +118,14 @@ class TestGet:
         service = ShippingTrackingService(db_session)
         assert await service.get(str(uuid4())) is None
 
+    async def test_malformed_id_raises_500_not_unhandled(self, db_session):
+        """A malformed UUID string is a real asyncpg DataError at the DB level, not a
+        mocked failure - it must be caught and reported, not crash unhandled."""
+        service = ShippingTrackingService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.get("not-a-valid-uuid")
+        assert exc_info.value.status_code == 500
+
 
 class TestListByOrder:
 
@@ -130,6 +138,12 @@ class TestListByOrder:
     async def test_returns_empty_for_unknown_order(self, db_session):
         service = ShippingTrackingService(db_session)
         assert await service.list_by_order(str(uuid4())) == []
+
+    async def test_malformed_order_id_raises_500_not_unhandled(self, db_session):
+        service = ShippingTrackingService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.list_by_order("not-a-valid-uuid")
+        assert exc_info.value.status_code == 500
 
 
 class TestUpdate:
@@ -187,6 +201,15 @@ class TestTrackShipment:
             await service.track_shipment("NOPE", "not-a-real-carrier")
         assert exc_info.value.status_code == 400
 
+    async def test_no_integration_available_for_carrier_raises_400(self, db_session, shipment, carrier):
+        """The carrier is a real, active row (unlike test_unknown_carrier_raises_404)
+        but isn't one of the 8 carriers with a real API integration - a distinct
+        failure mode from "carrier doesn't exist"."""
+        service = ShippingTrackingService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.track_shipment(shipment.tracking_number, carrier.code)
+        assert exc_info.value.status_code == 400
+
 
 class TestUpdateShipmentFromTrackingData:
 
@@ -233,3 +256,90 @@ class TestProcessTrackingEvents:
         await service._process_tracking_events(shipment, [{"event_type": "shipped"}])
         result = await service.get(str(shipment.id))
         assert result["tracking_events"] == []
+
+    async def test_skips_duplicate_event_by_timestamp(self, db_session, shipment):
+        """A carrier API may resend the same event on a later poll - it must not be
+        duplicated in tracking history."""
+        service = ShippingTrackingService(db_session)
+        ts = datetime.now(timezone.utc).isoformat()
+        await service._process_tracking_events(shipment, [
+            {"timestamp": ts, "event_type": "shipped", "description": "First"}
+        ])
+        # Re-processing the exact same timestamp must be a no-op (the `continue` branch).
+        await service._process_tracking_events(shipment, [
+            {"timestamp": ts, "event_type": "shipped", "description": "Duplicate"}
+        ])
+        result = await service.get(str(shipment.id))
+        assert len(result["tracking_events"]) == 1
+        assert result["tracking_events"][0]["event_description"] == "First"
+
+
+class TestCreateWithShippedAt:
+
+    async def test_shipped_at_creates_initial_tracking_event(self, db_session, carrier, provider, order):
+        """Passing shipped_at at creation time should seed a "shipped" tracking event."""
+        service = ShippingTrackingService(db_session)
+        shipment = await service.create({
+            "order_id": order.id, "carrier": carrier.code, "tracking_number": f"TRACK{uuid4().hex[:8]}",
+            "shipped_at": datetime.now(timezone.utc),
+        })
+        result = await service.get(str(shipment.id))
+        assert len(result["tracking_events"]) == 1
+        assert result["tracking_events"][0]["event_type"] == "shipped"
+
+
+class TestTrackShipmentErrors:
+
+    async def test_no_matching_shipment_raises_404(self, db_session):
+        """A valid, active carrier but an unknown tracking number is a 404, not the
+        "carrier not found" 400 covered by test_unknown_carrier_raises_404."""
+        service = ShippingTrackingService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.track_shipment("NO-SUCH-TRACKING-NUMBER", "ups")
+        assert exc_info.value.status_code == 404
+
+    async def test_carrier_api_failure_marks_sync_status_error(self, db_session, order, mocker):
+        """If the carrier's API call blows up, the shipment must be marked sync_status=
+        "error" and the failure surfaced as a 500 - not silently swallowed."""
+        mocker.patch(
+            "services.commerce.carrier_integrations.UPSIntegration.track_shipment",
+            side_effect=RuntimeError("carrier API is down"),
+        )
+        service = ShippingTrackingService(db_session)
+        ups_carrier = await service._get_active_carrier("ups")
+        db_session.add(ShippingProvider(
+            id=uuid7(), name="UPS Test Provider 2", carrier_id=ups_carrier.id, is_active=True,
+            api_url="https://example.com/api", tracking_url_template="https://example.com/track/{tracking_number}",
+        ))
+        await db_session.commit()
+        shipment = await service.create({
+            "order_id": order.id, "carrier": "ups", "tracking_number": f"TRACK{uuid4().hex[:8]}",
+        })
+
+        with pytest.raises(APIException) as exc_info:
+            await service.track_shipment(shipment.tracking_number, "ups")
+        assert exc_info.value.status_code == 500
+        assert shipment.sync_status == "error"
+
+
+class TestUpdateErrors:
+
+    async def test_non_serializable_event_data_is_a_500_not_a_silent_success(self, db_session, shipment):
+        """event_data flows straight into a JSON column (event_location) - a value the
+        DB driver can't serialize must surface as a clean error, not corrupt data or
+        crash unhandled outside the try/except."""
+        service = ShippingTrackingService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.update(str(shipment.id), TrackingStatus.IN_TRANSIT, {
+                "description": "bad event", "location": {1, 2, 3},  # a set is not JSON-serializable
+            })
+        assert exc_info.value.status_code == 500
+
+
+class TestUpdateShipmentFromTrackingDataErrors:
+
+    async def test_invalid_actual_delivery_date_is_ignored(self, db_session, shipment):
+        service = ShippingTrackingService(db_session)
+        original = shipment.actual_delivery
+        await service._update_shipment_from_tracking_data(shipment, {"actual_delivery": "not-a-date"})
+        assert shipment.actual_delivery == original

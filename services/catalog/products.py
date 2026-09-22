@@ -176,7 +176,10 @@ class ProductService:
                 name=getattr(product, 'name', ''),
                 slug=getattr(product, 'slug', None),
                 description=getattr(product, 'description', ''),
-                featured=getattr(product, 'is_featured', False),
+                # NOTE: was `featured=...` - ProductResponse has no `featured` field (it's
+                # `is_featured`), so pydantic silently ignored the kwarg and this fallback
+                # always reported is_featured=False regardless of the product's real value.
+                is_featured=getattr(product, 'is_featured', False),
                 rating=getattr(product, 'rating_average', 0.0),
                 review_count=getattr(product, 'review_count', 0),
                 origin=getattr(product, 'origin', ''),
@@ -1035,8 +1038,20 @@ class ProductService:
         await self.db.commit()
         logger.info(f"Product {product_id} updated successfully")
 
-        # Return the updated product
+        # Return the updated product. invalidate_product() needs product.slug read
+        # *before* the expire_all() below - expiring first would require a fresh
+        # (sync, un-awaited) DB round trip to repopulate it and blow up with
+        # MissingGreenlet under the async driver.
         invalidate_product(product_id, product.slug)
+
+        # `product.variants` (and each variant's `images`/`inventory`) were already
+        # eager-loaded by the initial SELECT above, and a variant/image/inventory row
+        # added afterwards via a raw self.db.add(...) (not the ORM collection API)
+        # doesn't get reflected into that already-loaded in-memory state - so without
+        # this, self.get() below would reuse the same identity-mapped, now-stale
+        # objects and silently omit a brand-new variant (or its stock/images) from
+        # the response, even though it's already committed to the DB.
+        self.db.expire_all()
         return await self.get(product_id)
 
     async def moderate(self, product_id: UUID, action: str, notes: Optional[str] = None) -> ProductResponse:
