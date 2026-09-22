@@ -68,3 +68,31 @@ class TestAddressEndpoints:
 
         response = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
         assert response.status_code == 404
+
+    async def test_cannot_update_another_users_address(self, async_client: AsyncClient, auth_headers,
+                                                          admin_headers, sample_address_data):
+        create_resp = await async_client.post("/v1/addresses/", headers=admin_headers, json=sample_address_data)
+        address_id = create_resp.json()["data"]["id"]
+
+        response = await async_client.patch(f"/v1/addresses/{address_id}/",
+            headers=auth_headers, json={"city": "Hacked City"}
+        )
+        assert response.status_code == 404
+
+    async def test_cannot_delete_another_users_address(self, async_client: AsyncClient, auth_headers,
+                                                          admin_headers, sample_address_data):
+        create_resp = await async_client.post("/v1/addresses/", headers=admin_headers, json=sample_address_data)
+        address_id = create_resp.json()["data"]["id"]
+
+        response = await async_client.delete(f"/v1/addresses/{address_id}/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_update_not_found(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.patch(f"/v1/addresses/{uuid4()}/",
+            headers=auth_headers, json={"city": "Nowhere"}
+        )
+        assert response.status_code == 404
+
+    async def test_delete_not_found(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.delete(f"/v1/addresses/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 404
