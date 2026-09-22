@@ -1,6 +1,6 @@
 """Consolidated subscription models, with partial indexes for active subscriptions/products."""
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Numeric, JSON, Text, Integer, Date, func, Index, Column
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import relationship, backref, Mapped, mapped_column
 from core.db import Base, GUID
 from core.utils.uuid_utils import uuid7
 from typing import Dict, Any, Optional
@@ -176,11 +176,20 @@ class Subscription(Base):
     # --- Products & variants ---
     variant_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     subscription_products = relationship("SubscriptionProduct", back_populates="subscription", lazy="select")
+    # This many-to-many view and SubscriptionProductAssociation both read/write the
+    # same subscription_product_association table - services/commerce/subscriptions.py
+    # (add_products/remove_products) intentionally writes through the association
+    # model directly and then expires+reloads `products` rather than mutating this
+    # collection in place, so the two staying in sync isn't a concern in practice.
     products = relationship(
         "ProductVariant",
         secondary="commerce.subscription_product_association",
-        backref="subscriptions_containing",
-        lazy="selectin"
+        backref=backref(
+            "subscriptions_containing",
+            overlaps="subscription,variant_associations,product_variant,subscription_associations"
+        ),
+        lazy="selectin",
+        overlaps="subscription,variant_associations,product_variant,subscription_associations"
     )
 
     # --- Metadata ---

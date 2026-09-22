@@ -1024,14 +1024,13 @@ class ProductService:
                                 await self.db.execute(delete(StockAdjustment).where(StockAdjustment.inventory_id == variant.inventory.id))
                                 logger.info(f"Deleting inventory for variant {variant.id}, inventory_id: {variant.inventory.id}")
                                 await self.db.execute(delete(Inventory).where(Inventory.id == variant.inventory.id))
-                            # Delete variant using delete statement
+                            # Delete the variant itself via the ORM (Product.variants has
+                            # cascade="all, delete-orphan"), not a raw delete() statement -
+                            # issuing both was redundant and left SQLAlchemy warning that it
+                            # couldn't also cascade-delete an object no longer in the session.
                             logger.info(f"Deleting variant {variant.id}")
-                            await self.db.execute(delete(ProductVariant).where(ProductVariant.id == variant.id))
-                            # Remove from in-memory collection to sync with database state
                             product.variants.remove(variant)
-                            # Expunge from session to prevent any further tracking
-                            self.db.expunge(variant)
-                            logger.info(f"Successfully removed variant {variant.id} from collection and session")
+                            logger.info(f"Successfully removed variant {variant.id} from collection")
                         except Exception as e:
                             logger.error(f"Error deleting variant {variant.id}: {e}")
                             raise
