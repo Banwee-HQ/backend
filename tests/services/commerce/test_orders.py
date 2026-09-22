@@ -37,9 +37,7 @@ from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus,
 from tests.conftest import TestingSessionLocal
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Fixtures ---------------------------------------------------------------------------
 
 @pytest.fixture
 async def variant(db_session) -> ProductVariant:
@@ -110,10 +108,7 @@ async def variant_without_inventory(db_session) -> ProductVariant:
     db_session.add_all([category, product, v])
     await db_session.flush()
     await db_session.commit()
-    # Preload .product into the identity map (like the `variant` fixture above) so a
-    # later lazy access from a freshly-queried OrderItem resolves from memory instead
-    # of attempting a real lazy-load, which would crash with MissingGreenlet in this
-    # async context.
+    # Preload .product into the identity map (like the `variant` fixture above) so a later lazy access from a freshly-queried OrderItem resolves from memory instead of attempting a real lazy-load, which would crash with MissingGreenlet in this async context.
     result = await db_session.execute(
         select(ProductVariant).where(ProductVariant.id == v.id).options(selectinload(ProductVariant.product))
     )
@@ -165,9 +160,7 @@ async def existing_order(db_session, test_user, variant) -> Order:
     return order
 
 
-# ---------------------------------------------------------------------------
-# get_currency_from_address (module-level helper)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- get_currency_from_address (module-level helper) ---------------------------------------------------------------------------
 
 class TestGetCurrencyFromAddress:
 
@@ -187,9 +180,7 @@ class TestGetCurrencyFromAddress:
         assert get_currency_from_address(None) == "USD"
 
 
-# ---------------------------------------------------------------------------
-# calc_pricing
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- calc_pricing ---------------------------------------------------------------------------
 
 class TestCalcPricing:
 
@@ -246,9 +237,7 @@ class TestCalcPricing:
         assert result["discount_amount"] == Decimal("0.00")
 
 
-# ---------------------------------------------------------------------------
-# validate_checkout
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- validate_checkout ---------------------------------------------------------------------------
 
 class TestValidateCheckout:
 
@@ -294,9 +283,7 @@ class TestValidateCheckout:
         assert any(w["type"] == "price_mismatch" for w in result["warnings"])
 
 
-# ---------------------------------------------------------------------------
-# create() (checkout)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- create() (checkout) ---------------------------------------------------------------------------
 
 class TestCreate:
 
@@ -533,9 +520,7 @@ class TestCreate:
                 await cleanup_session.commit()
 
 
-# ---------------------------------------------------------------------------
-# list
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- list ---------------------------------------------------------------------------
 
 class TestList:
 
@@ -582,9 +567,7 @@ class TestList:
         assert not any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
 
 
-# ---------------------------------------------------------------------------
-# get
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- get ---------------------------------------------------------------------------
 
 class TestGet:
 
@@ -603,9 +586,7 @@ class TestGet:
         assert result.id == existing_order.id
 
 
-# ---------------------------------------------------------------------------
-# cancel
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- cancel ---------------------------------------------------------------------------
 
 class TestCancel:
 
@@ -631,9 +612,7 @@ class TestCancel:
         assert exc_info.value.status_code == 400
 
 
-# ---------------------------------------------------------------------------
-# update_status / deliver / ship
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- update_status / deliver / ship ---------------------------------------------------------------------------
 
 class TestUpdateStatus:
 
@@ -676,9 +655,7 @@ class TestUpdateStatus:
         mock.assert_called_once()
 
     async def test_auto_populates_carrier_from_shipping_method(self, db_session, existing_order):
-        # A method name unique to this test - "Standard" collides with rows
-        # left behind by other tests, and lookup-by-name has no ordering
-        # guarantee, so a shared name could resolve to the wrong row.
+        # A method name unique to this test - "Standard" collides with rows left behind by other tests, and lookup-by-name has no ordering guarantee, so a shared name could resolve to the wrong row.
         unique_name = f"Method-{uuid4().hex[:8]}"
         existing_order.shipping_method = unique_name
         db_session.add(ShippingMethod(id=uuid7(), name=unique_name, price=Decimal("10.00"),
@@ -700,9 +677,7 @@ class TestUpdateStatus:
         assert result.tracking_number == "TRACK1"
 
 
-# ---------------------------------------------------------------------------
-# tracking / payments / tracking_public
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- tracking / payments / tracking_public ---------------------------------------------------------------------------
 
 class TestTracking:
 
@@ -767,9 +742,7 @@ class TestTrackingPublic:
         assert "payment_failed" not in statuses
 
 
-# ---------------------------------------------------------------------------
-# reorder
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- reorder ---------------------------------------------------------------------------
 
 class TestReorder:
 
@@ -793,9 +766,7 @@ class TestReorder:
         assert exc_info.value.status_code == 400
 
 
-# ---------------------------------------------------------------------------
-# invoice
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- invoice ---------------------------------------------------------------------------
 
 class TestInvoice:
 
@@ -817,9 +788,7 @@ class TestInvoice:
         assert exc_info.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# notes CRUD
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- notes CRUD ---------------------------------------------------------------------------
 
 class TestNotes:
 
@@ -874,9 +843,7 @@ class TestNotes:
         assert exc_info.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# get_statistics
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- get_statistics ---------------------------------------------------------------------------
 
 class TestGetStatistics:
 
@@ -899,9 +866,7 @@ class TestGetStatistics:
         assert "total_orders" in stats
 
 
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Private helpers ---------------------------------------------------------------------------
 
 class TestCalculateDiscountAmount:
 
@@ -942,9 +907,7 @@ class TestGetTaxRate:
         assert await service._get_tax_rate(None) == 0.0
 
     async def test_state_specific_rate_found(self, db_session):
-        # flush (not commit) - the row only needs to be visible to this
-        # session's own SELECT, and db_session's teardown rollback then
-        # discards it instead of polluting the DB for every future test run.
+        # flush (not commit) - the row only needs to be visible to this session's own SELECT, and db_session's teardown rollback then discards it instead of polluting the DB for every future test run.
         db_session.add(TaxRate(
             id=uuid7(), country_code="XA", country_name="Test Country", province_code="TS",
             province_name="Test State", tax_rate=Decimal("0.0725"), tax_name="Sales Tax", is_active=True,
@@ -1091,9 +1054,7 @@ class TestFormatOrderResponse:
         assert abs(response.total_amount - 49.98) < 0.01
 
 
-# ---------------------------------------------------------------------------
-# calc_pricing discount edge cases (maximum cap, never-negative floor, resilience)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- calc_pricing discount edge cases (maximum cap, never-negative floor, resilience) ---------------------------------------------------------------------------
 
 class TestCalcPricingDiscountEdgeCases:
 
@@ -1130,9 +1091,7 @@ class TestCalcPricingDiscountEdgeCases:
         assert result["discount_amount"] == Decimal("0.00")
 
 
-# ---------------------------------------------------------------------------
-# validate_checkout edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- validate_checkout edge cases ---------------------------------------------------------------------------
 
 class TestValidateCheckoutEdgeCases:
 
@@ -1161,9 +1120,7 @@ class TestValidateCheckoutEdgeCases:
         assert any(e.get("type") == "system_error" for e in result["errors"])
 
 
-# ---------------------------------------------------------------------------
-# create() edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- create() edge cases ---------------------------------------------------------------------------
 
 class TestCreateEdgeCases:
 
@@ -1247,9 +1204,7 @@ class TestCreateEdgeCases:
         assert "Order creation failed due to system error" in exc_info.value.detail["message"]
 
 
-# ---------------------------------------------------------------------------
-# list() edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- list() edge cases ---------------------------------------------------------------------------
 
 class TestListEdgeCases:
 
@@ -1281,9 +1236,7 @@ class TestListEdgeCases:
             await service.list(user_id=test_user.id)
 
 
-# ---------------------------------------------------------------------------
-# get() edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- get() edge cases ---------------------------------------------------------------------------
 
 class TestGetEdgeCases:
 
@@ -1294,9 +1247,7 @@ class TestGetEdgeCases:
             await service.get(existing_order.id, test_user.id)
 
 
-# ---------------------------------------------------------------------------
-# cancel() edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- cancel() edge cases ---------------------------------------------------------------------------
 
 class TestCancelEdgeCases:
 
@@ -1334,9 +1285,7 @@ class TestCancelEdgeCases:
         assert existing_order.order_status != OrderStatus.CANCELLED
 
 
-# ---------------------------------------------------------------------------
-# update_status() edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- update_status() edge cases ---------------------------------------------------------------------------
 
 class TestUpdateStatusEdgeCases:
 
@@ -1355,9 +1304,7 @@ class TestUpdateStatusEdgeCases:
         assert mock.call_args.kwargs["delivery_address"] == "Your delivery address"
 
 
-# ---------------------------------------------------------------------------
-# _format_order_response edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _format_order_response edge cases ---------------------------------------------------------------------------
 
 class TestFormatOrderResponseEdgeCases:
 
@@ -1408,9 +1355,7 @@ class TestFormatOrderResponseEdgeCases:
         assert response.tracking_url == "https://track.example.com/TRACK123"
 
 
-# ---------------------------------------------------------------------------
-# _validate_and_recalculate_prices edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _validate_and_recalculate_prices edge cases ---------------------------------------------------------------------------
 
 class TestValidateAndRecalculatePricesEdgeCases:
 
@@ -1423,9 +1368,7 @@ class TestValidateAndRecalculatePricesEdgeCases:
         assert "Price validation failed" in result["message"]
 
 
-# ---------------------------------------------------------------------------
-# _calculate_final_order_total edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _calculate_final_order_total edge cases ---------------------------------------------------------------------------
 
 class TestCalculateFinalOrderTotalEdgeCases:
 
@@ -1437,9 +1380,7 @@ class TestCalculateFinalOrderTotalEdgeCases:
         assert exc_info.value.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# _get_tax_rate edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _get_tax_rate edge cases ---------------------------------------------------------------------------
 
 class TestGetTaxRateEdgeCases:
 
@@ -1449,9 +1390,7 @@ class TestGetTaxRateEdgeCases:
         assert result == 0.0
 
 
-# ---------------------------------------------------------------------------
-# _send_order_events_with_idempotency edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _send_order_events_with_idempotency edge cases ---------------------------------------------------------------------------
 
 class TestSendOrderEventsWithIdempotencyEdgeCases:
 
@@ -1468,9 +1407,7 @@ class TestSendOrderEventsWithIdempotencyEdgeCases:
             await service._send_order_events_with_idempotency(existing_order, test_user.id, validated_items)
 
 
-# ---------------------------------------------------------------------------
-# tracking / payments / tracking_public / reorder / invoice - generic error edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- tracking / payments / tracking_public / reorder / invoice - generic error edge cases ---------------------------------------------------------------------------
 
 class TestTrackingEdgeCases:
 
@@ -1535,9 +1472,7 @@ class TestInvoiceEdgeCases:
         assert exc_info.value.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# Notes CRUD edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Notes CRUD edge cases ---------------------------------------------------------------------------
 
 class TestNotesEdgeCases:
 
@@ -1622,9 +1557,7 @@ class TestNotesEdgeCases:
         assert exc_info.value.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# _calculate_estimated_delivery (pure/sync helper)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _calculate_estimated_delivery (pure/sync helper) ---------------------------------------------------------------------------
 
 class TestCalculateEstimatedDelivery:
 
@@ -1678,9 +1611,7 @@ class TestCalculateEstimatedDelivery:
         assert service._calculate_estimated_delivery(order) is None
 
 
-# ---------------------------------------------------------------------------
-# get_statistics date_to edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- get_statistics date_to edge cases ---------------------------------------------------------------------------
 
 class TestGetStatisticsEdgeCases:
 

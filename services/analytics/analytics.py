@@ -929,9 +929,7 @@ class AnalyticsService:
             else:
                 end_date = today
 
-            # Compare as explicit UTC datetimes, not bare dates: a bare date cast to
-            # timestamptz resolves in the DB session's timezone, which can silently
-            # shift the boundary and exclude rows created later "today" in UTC.
+            # Compare as explicit UTC datetimes, not bare dates: a bare date cast to timestamptz resolves in the DB session's timezone, which can silently shift the boundary and exclude rows created later "today" in UTC.
             start_date = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
             end_date_exclusive = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
 

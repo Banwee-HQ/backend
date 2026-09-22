@@ -577,9 +577,7 @@ class ProductService:
                 setattr(variant, field, value)
 
         if update_data.stock is not None:
-            # Query directly rather than the variant.inventory relationship, which can
-            # hold a stale (pre-existence) cached value if this session touched the
-            # variant earlier in the same request.
+            # Query directly rather than the variant.inventory relationship, which can hold a stale (pre-existence) cached value if this session touched the variant earlier in the same request.
             inventory_result = await self.db.execute(select(Inventory).where(Inventory.variant_id == variant.id))
             inventory = inventory_result.scalar_one_or_none()
             if inventory:
@@ -1024,10 +1022,7 @@ class ProductService:
                                 await self.db.execute(delete(StockAdjustment).where(StockAdjustment.inventory_id == variant.inventory.id))
                                 logger.info(f"Deleting inventory for variant {variant.id}, inventory_id: {variant.inventory.id}")
                                 await self.db.execute(delete(Inventory).where(Inventory.id == variant.inventory.id))
-                            # Delete the variant itself via the ORM (Product.variants has
-                            # cascade="all, delete-orphan"), not a raw delete() statement -
-                            # issuing both was redundant and left SQLAlchemy warning that it
-                            # couldn't also cascade-delete an object no longer in the session.
+                            # Delete the variant itself via the ORM (Product.variants has cascade="all, delete-orphan"), not a raw delete() statement - issuing both was redundant and left SQLAlchemy warning that it couldn't also cascade-delete an object no longer in the session.
                             logger.info(f"Deleting variant {variant.id}")
                             product.variants.remove(variant)
                             logger.info(f"Successfully removed variant {variant.id} from collection")

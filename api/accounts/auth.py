@@ -335,11 +335,7 @@ async def update(
             except ValueError:
                 raise APIException(status_code=400, message="Invalid date_of_birth format. Use ISO format: YYYY-MM-DD")
 
-        # Only a fixed, self-service-safe set of fields may be updated here - the raw
-        # dict above previously let a caller setattr() ANY column that exists on the
-        # User model (role, account_status, verification_status, stripe_customer_id,
-        # etc.), which is a privilege-escalation hole. Privileged fields go through
-        # the admin-only user management endpoints instead.
+        # Only a fixed, self-service-safe set of fields may be updated here - the raw dict above previously let a caller setattr() ANY column that exists on the User model (role, account_status, verification_status, stripe_customer_id, etc.), which is a privilege-escalation hole. Privileged fields go through the admin-only user management endpoints instead.
         ALLOWED_PROFILE_FIELDS = {
             "firstname", "lastname", "phone", "date_of_birth", "gender",
             "country", "language", "timezone", "avatar_url", "preferences",

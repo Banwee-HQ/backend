@@ -281,13 +281,7 @@ class TestFailureHandlingEndpoints:
         assert response.status_code == 200
 
 
-# ---------------------------------------------------------------------------
-# overview() - the optional service.overview() hook and its fallback branches.
-# PaymentService has no `overview` method today, so hasattr() is always False in
-# normal operation; monkeypatch is used here (not to mock Stripe or the DB, just
-# to exercise this API-layer optional-hook branch) to add/remove that attribute
-# for the duration of a single test.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- overview() - the optional service.overview() hook and its fallback branches. PaymentService has no `overview` method today, so hasattr() is always False in normal operation; monkeypatch is used here (not to mock Stripe or the DB, just to exercise this API-layer optional-hook branch) to add/remove that attribute for the duration of a single test. ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestOverviewBranches:
@@ -328,9 +322,7 @@ class TestOverviewBranches:
         monkeypatch.setattr(payments_api.Response, "success", staticmethod(original_success))
 
 
-# ---------------------------------------------------------------------------
-# create_method - Stripe-error and conflict branches
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- create_method - Stripe-error and conflict branches ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestCreateMethodErrors:
@@ -349,10 +341,7 @@ class TestCreateMethodErrors:
         assert response.status_code == 409
 
 
-# ---------------------------------------------------------------------------
-# Non-owner access - a user must never be able to read another user's payment
-# records via a raw id, even when it definitely exists.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Non-owner access - a user must never be able to read another user's payment records via a raw id, even when it definitely exists. ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestNonOwnerAccessIsDenied:
@@ -397,9 +386,7 @@ class TestNonOwnerAccessIsDenied:
         assert response.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# create_intent - real Stripe rejection and a real FK violation
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- create_intent - real Stripe rejection and a real FK violation ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestCreateIntentErrors:
@@ -418,9 +405,7 @@ class TestCreateIntentErrors:
         assert response.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# Transactions - malformed metadata must not crash the listing endpoints
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Transactions - malformed metadata must not crash the listing endpoints ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestTransactionListingResilience:
@@ -459,9 +444,7 @@ class TestTransactionListingResilience:
         assert response.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# Refunds - Stripe error and a malformed-record 500
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Refunds - Stripe error and a malformed-record 500 ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestRefundErrors:
@@ -488,9 +471,7 @@ class TestRefundErrors:
         assert response.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# process_payment - Stripe decline and non-existent payment method
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- process_payment - Stripe decline and non-existent payment method ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestProcessPaymentErrors:
@@ -508,10 +489,7 @@ class TestProcessPaymentErrors:
         assert response.status_code == 401
 
 
-# ---------------------------------------------------------------------------
-# Failure handling endpoints - malformed failure_reason must not crash the API
-# with a raw ValueError.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Failure handling endpoints - malformed failure_reason must not crash the API with a raw ValueError. ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestFailureHandlingErrors:

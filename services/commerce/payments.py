@@ -853,11 +853,7 @@ class PaymentService:
                 except Exception:
                     # If parsing fails, continue and let stripe/API errors surface later
                     is_expired = False
-                # Raised outside the try/except above: HTTPException is itself an
-                # Exception subclass, so raising it from inside that block would be
-                # silently swallowed by the broad `except Exception` (as it previously
-                # was, alongside the naive/aware datetime TypeError it always raised -
-                # together these two bugs meant expired cards were never rejected here).
+                # Raised outside the try/except above: HTTPException is itself an Exception subclass, so raising it from inside that block would be silently swallowed by the broad `except Exception` (as it previously was, alongside the naive/aware datetime TypeError it always raised - together these two bugs meant expired cards were never rejected here).
                 if is_expired:
                     raise HTTPException(
                         status_code=400,

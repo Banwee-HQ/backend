@@ -106,9 +106,7 @@ async def transaction(db_session, test_user):
     return txn
 
 
-# ---------------------------------------------------------------------------
-# Payment methods
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Payment methods ---------------------------------------------------------------------------
 
 class TestGet:
 
@@ -188,9 +186,7 @@ class TestDelete:
         assert exc_info.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# Payment intents
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Payment intents ---------------------------------------------------------------------------
 
 class TestCreateIntent:
 
@@ -264,9 +260,7 @@ class TestIntentCRUD:
         assert await service.delete_intent(uuid4(), test_user.id) is False
 
 
-# ---------------------------------------------------------------------------
-# process_idempotent - the flow OrderService.create() drives checkout through
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- process_idempotent - the flow OrderService.create() drives checkout through ---------------------------------------------------------------------------
 
 class TestProcessIdempotent:
 
@@ -313,9 +307,7 @@ class TestProcessIdempotent:
         assert exc_info.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# Transactions
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Transactions ---------------------------------------------------------------------------
 
 class TestTransactions:
 
@@ -388,9 +380,7 @@ class TestTransactions:
         assert await service.delete_transaction(uuid4(), test_user.id) is False
 
 
-# ---------------------------------------------------------------------------
-# Refunds
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Refunds ---------------------------------------------------------------------------
 
 class TestRefund:
 
@@ -455,9 +445,7 @@ class TestRefundCRUD:
         assert await service.delete_refund(refund_transaction.id, test_user.id) is True
 
 
-# ---------------------------------------------------------------------------
-# Failure handling - retry / failure_status / failed_payments
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Failure handling - retry / failure_status / failed_payments ---------------------------------------------------------------------------
 
 class TestRetry:
 
@@ -528,9 +516,7 @@ class TestFailedPayments:
         assert entry["can_retry"] is True
 
 
-# ---------------------------------------------------------------------------
-# Pure-logic helpers
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Pure-logic helpers ---------------------------------------------------------------------------
 
 class TestCategorizeStripeError:
 
@@ -596,10 +582,7 @@ class TestGetNextSteps:
             assert isinstance(service._get_next_steps(reason), list)
 
 
-# ---------------------------------------------------------------------------
-# create_method - legacy token API, direct payment_method_data, dedup/conflict
-# handling, and Stripe-declined-at-attach-time behavior.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- create_method - legacy token API, direct payment_method_data, dedup/conflict handling, and Stripe-declined-at-attach-time behavior. ---------------------------------------------------------------------------
 
 class TestCreateMethodLegacyTokenAPI:
 
@@ -752,11 +735,7 @@ class TestCreateMethodDeduplication:
         service = PaymentService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.create_method(user_id=test_user.id, stripe_payment_method_id=stripe_id)
-        # The racing row is rolled back along with the failed insert (it was never
-        # durably committed), so the post-rollback re-check finds nothing to recover
-        # and the original IntegrityError is re-raised, surfacing as a 500 - not the
-        # cleaner 409 a pre-existing, already-committed conflict would produce. This
-        # documents the actual current behavior of that fallback path.
+        # The racing row is rolled back along with the failed insert (it was never durably committed), so the post-rollback re-check finds nothing to recover and the original IntegrityError is re-raised, surfacing as a 500 - not the cleaner 409 a pre-existing, already-committed conflict would produce. This documents the actual current behavior of that fallback path.
         assert exc_info.value.status_code == 500
         assert "duplicate" in exc_info.value.detail.lower() or "unique" in exc_info.value.detail.lower()
 
@@ -830,9 +809,7 @@ class TestCreateMethodStripeDeclineAtAttach:
         assert exc_info.value.status_code == 400
 
 
-# ---------------------------------------------------------------------------
-# update() / set_default() - additional edge cases
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- update() / set_default() - additional edge cases ---------------------------------------------------------------------------
 
 class TestUpdateEdgeCases:
 
@@ -879,9 +856,7 @@ class TestDeleteStripeErrorHandling:
         assert exc_info.value.status_code == 400
 
 
-# ---------------------------------------------------------------------------
-# create_intent / confirm_intent - Stripe errors, 3DS, failure-handler resilience
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- create_intent / confirm_intent - Stripe errors, 3DS, failure-handler resilience ---------------------------------------------------------------------------
 
 class TestCreateIntentStripeError:
 
@@ -938,21 +913,10 @@ class TestConfirmIntentDeclineAndFailureHandler:
         assert "Payment failed" in exc_info.value.detail
 
 
-# ---------------------------------------------------------------------------
-# process() - timeout/retry control flow and non-retryable errors
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- process() - timeout/retry control flow and non-retryable errors ---------------------------------------------------------------------------
 
 class TestProcessTimeoutAndRetry:
-    # Note on what's NOT covered here: with max_retries=1, a real short timeout on a
-    # freshly-created session reliably produces a clean 408 (test below) - but with
-    # max_retries>=2, retrying a SECOND real attempt against the SAME session after
-    # the first was cancelled by asyncio.wait_for empirically raises a totally
-    # unrelated `MissingGreenlet` error from SQLAlchemy's asyncpg dialect instead of
-    # a clean second timeout - i.e. reusing a session after a cancelled in-flight DB
-    # operation is not safe. So the exponential-backoff retry-and-try-again path
-    # (services/commerce/payments.py's `wait_time = 2 ** attempt` branch) is not
-    # exercised, to avoid a test that can corrupt its own db_session. See the final
-    # report.
+    # Note on what's NOT covered here: with max_retries=1, a real short timeout on a freshly-created session reliably produces a clean 408 (test below) - but with max_retries>=2, retrying a SECOND real attempt against the SAME session after the first was cancelled by asyncio.wait_for empirically raises a totally unrelated `MissingGreenlet` error from SQLAlchemy's asyncpg dialect instead of a clean second timeout - i.e. reusing a session after a cancelled in-flight DB operation is not safe. So the exponential-backoff retry-and-try-again path (services/commerce/payments.py's `wait_time = 2 ** attempt` branch) is not exercised, to avoid a test that can corrupt its own db_session. See the final report.
 
     async def test_single_attempt_timeout_raises_408(self, db_session, test_user, payment_method):
         """A real (not simulated) timeout: a short timeout_seconds guarantees
@@ -1041,9 +1005,7 @@ class TestProcessTimeoutAndRetry:
         assert result["status"] == "succeeded"
 
 
-# ---------------------------------------------------------------------------
-# process_idempotent() - customer bootstrap edge cases and attach-error handling
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- process_idempotent() - customer bootstrap edge cases and attach-error handling ---------------------------------------------------------------------------
 
 class TestProcessIdempotentCustomerBootstrap:
 
@@ -1102,12 +1064,7 @@ class TestProcessIdempotentCustomerBootstrap:
         await db_session.refresh(pm)
 
         service = PaymentService(db_session)
-        # The attach step itself tolerates Stripe's "already attached to a customer"
-        # error and proceeds - but the PM is still, in Stripe's own records, attached
-        # to `other_customer` rather than this user's new customer, so the *confirm*
-        # step correctly refuses to charge it against the wrong customer. This is
-        # real, correct Stripe behavior (not a bug): tolerating the attach conflict
-        # doesn't - and shouldn't - retroactively fix the mismatch.
+        # The attach step itself tolerates Stripe's "already attached to a customer" error and proceeds - but the PM is still, in Stripe's own records, attached to `other_customer` rather than this user's new customer, so the *confirm* step correctly refuses to charge it against the wrong customer. This is real, correct Stripe behavior (not a bug): tolerating the attach conflict doesn't - and shouldn't - retroactively fix the mismatch.
         with pytest.raises(HTTPException) as exc_info:
             await service.process_idempotent(
                 user_id=test_user.id, order_id=order.id, amount=49.98,
@@ -1191,9 +1148,7 @@ class TestProcessIdempotentCustomerBootstrap:
         assert exc_info.value.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# Transactions - malformed metadata resilience and admin filtering
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Transactions - malformed metadata resilience and admin filtering ---------------------------------------------------------------------------
 
 class TestTransactionsMetadataHandling:
 
@@ -1263,9 +1218,7 @@ class TestUpdateTransactionMetadata:
         assert json.loads(updated.transaction_metadata) == {"note": "x"}
 
 
-# ---------------------------------------------------------------------------
-# Refunds - Stripe-error path and CRUD not-found branches
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Refunds - Stripe-error path and CRUD not-found branches ---------------------------------------------------------------------------
 
 class TestRefundStripeError:
 
@@ -1305,9 +1258,7 @@ class TestRefundCRUDNotFound:
         assert await service.delete_refund(uuid4(), test_user.id) is False
 
 
-# ---------------------------------------------------------------------------
-# retry() / failed_payments() - malformed data resilience
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- retry() / failed_payments() - malformed data resilience ---------------------------------------------------------------------------
 
 class TestRetryEdgeCases:
 
@@ -1352,9 +1303,7 @@ class TestFailedPaymentsCorruptedReason:
         assert exc_info.value.status_code == 500
 
 
-# ---------------------------------------------------------------------------
-# _categorize_stripe_error - remaining error-code branches
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- _categorize_stripe_error - remaining error-code branches ---------------------------------------------------------------------------
 
 class TestCategorizeStripeErrorMoreCodes:
 

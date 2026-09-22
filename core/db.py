@@ -105,13 +105,7 @@ class DatabaseManager:
             pool_timeout=30,
         )
 
-        # Set search_path and session timezone on every new connection. The timezone
-        # matters beyond just SELECT display formatting: any naive Python datetime
-        # bound as a timestamptz parameter (or written via a raw SQL literal) gets
-        # interpreted as being in *this* session timezone before conversion to UTC
-        # for storage, silently shifting it by the offset if this isn't UTC. App
-        # code should always pass timezone-aware UTC datetimes regardless - this is
-        # the defense-in-depth backstop for the times it doesn't.
+        # Set search_path and session timezone on every new connection. The timezone matters beyond just SELECT display formatting: any naive Python datetime bound as a timestamptz parameter (or written via a raw SQL literal) gets interpreted as being in *this* session timezone before conversion to UTC for storage, silently shifting it by the offset if this isn't UTC. App code should always pass timezone-aware UTC datetimes regardless - this is the defense-in-depth backstop for the times it doesn't.
         @event.listens_for(engine_db.sync_engine, "connect")
         def set_search_path(dbapi_conn, connection_record):
             cursor = dbapi_conn.cursor()

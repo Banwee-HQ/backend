@@ -165,9 +165,7 @@ async def patch(
     """Partially update a user. Admin can update any user, users can only update themselves."""
     try:
         is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
-        # Non-admins may only touch their own record. UserUpdate itself only exposes
-        # plain profile fields (role/account_status/is_active/etc. aren't declared on
-        # it, so Pydantic already strips them - there's nothing sensitive left to gate).
+        # Non-admins may only touch their own record. UserUpdate itself only exposes plain profile fields (role/account_status/is_active/etc. aren't declared on it, so Pydantic already strips them - there's nothing sensitive left to gate).
         if not is_admin and current_user.id != user_id:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,

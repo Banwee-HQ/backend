@@ -284,16 +284,7 @@ class SubscriptionScheduler:
             
             logger.info(f"✅ Payment succeeded for subscription {subscription.id}, creating order...")
 
-            # --- STEP 2 onward: FINALIZE ORDER (only after successful payment) ---
-            # Stripe has already been charged and that Transaction record is durably
-            # committed (process_idempotent() commits it internally). Everything from
-            # here on is its own failure domain: if any of it raises, we must NOT let
-            # the generic except below roll back to a state where next_billing_date
-            # was never advanced - that would leave this subscription "due" again on
-            # the next scheduler run with a fresh idempotency key, charging the
-            # customer a second time for the same period. On failure here we pause
-            # the subscription instead, so it stops being auto-billed until a human
-            # reconciles the already-successful charge with its stuck order.
+            # --- STEP 2 onward: FINALIZE ORDER (only after successful payment) --- Stripe has already been charged and that Transaction record is durably committed (process_idempotent() commits it internally). Everything from here on is its own failure domain: if any of it raises, we must NOT let the generic except below roll back to a state where next_billing_date was never advanced - that would leave this subscription "due" again on the next scheduler run with a fresh idempotency key, charging the customer a second time for the same period. On failure here we pause the subscription instead, so it stops being auto-billed until a human reconciles the already-successful charge with its stuck order.
             try:
                 # Fill in the placeholder order created before payment with its real totals/status.
                 order.order_status = OrderStatus.CONFIRMED
@@ -373,9 +364,7 @@ class SubscriptionScheduler:
                     f"Subscription {subscription_id} was charged successfully but order "
                     f"finalization failed - pausing to prevent a duplicate charge on retry: {finalize_error}"
                 )
-                # Re-fetch by the original subscription_id param: the rollback above
-                # expired every attribute on the (now stale) `subscription` object,
-                # so reading subscription.id here would itself crash.
+                # Re-fetch by the original subscription_id param: the rollback above expired every attribute on the (now stale) `subscription` object, so reading subscription.id here would itself crash.
                 sub_result = await self.db.execute(select(Subscription).where(Subscription.id == subscription_id))
                 subscription = sub_result.scalar_one()
                 subscription.status = "paused"

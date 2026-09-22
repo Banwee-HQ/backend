@@ -467,9 +467,7 @@ class InventoryService:
         new_inventory = Inventory(id=uuid7(), **data)
         self.db.add(new_inventory)
         await self.db.commit()
-        # location_id is set but the relationship itself was never loaded on this
-        # brand-new object - request it explicitly so model_validate() below doesn't
-        # trigger a lazy load outside of an awaitable context.
+        # location_id is set but the relationship itself was never loaded on this brand-new object - request it explicitly so model_validate() below doesn't trigger a lazy load outside of an awaitable context.
         await self.db.refresh(new_inventory, attribute_names=["location"])
         return InventoryResponse.model_validate(new_inventory)
 

@@ -162,9 +162,7 @@ class TestGetRefundRateMetrics:
         assert result["by_reason"][0]["reason"] == "changed_mind"
 
     async def test_no_refunds_returns_zero_rate(self, db_session, order):
-        # Wide window + before/after delta, matching the pattern above -
-        # narrow windows can still catch a neighboring test's order when the
-        # full file runs and tests execute back-to-back within the same second.
+        # Wide window + before/after delta, matching the pattern above - narrow windows can still catch a neighboring test's order when the full file runs and tests execute back-to-back within the same second.
         service = AnalyticsService(db_session)
         start = datetime.now(timezone.utc) - timedelta(days=1)
         end = datetime.now(timezone.utc) + timedelta(days=1)

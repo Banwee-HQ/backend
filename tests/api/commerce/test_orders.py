@@ -422,12 +422,7 @@ class TestOrderEndpoints:
         assert response.json()["data"]["can_proceed"] is False
 
 
-# ---------------------------------------------------------------------------
-# Thin-wrapper exception-handling branches: every endpoint's try/except
-# preserves APIException/HTTPException status codes as-is and maps any other
-# unexpected exception to a documented status code. Verified via mocker since
-# OrderService itself never raises bare exceptions for most of these calls.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Thin-wrapper exception-handling branches: every endpoint's try/except preserves APIException/HTTPException status codes as-is and maps any other unexpected exception to a documented status code. Verified via mocker since OrderService itself never raises bare exceptions for most of these calls. ---------------------------------------------------------------------------
 
 @pytest.mark.api
 class TestStatisticsEdgeCases:

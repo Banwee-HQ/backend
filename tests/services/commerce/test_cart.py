@@ -716,9 +716,7 @@ class TestGetCartEdgeCases:
         product, variant = await make_stocked_variant(db_session)
         db_session.add(ProductImage(id=uuid7(), variant_id=variant.id, url="https://example.com/a.jpg", is_primary=True))
         await db_session.commit()
-        # variant.images was already cached as [] (lazy="selectin" populates eagerly on
-        # load) by the time this fixture's variant object was first created, before the
-        # image row above existed - expire it so a later query reloads the relationship.
+        # variant.images was already cached as [] (lazy="selectin" populates eagerly on load) by the time this fixture's variant object was first created, before the image row above existed - expire it so a later query reloads the relationship.
         db_session.expire(variant, ["images"])
         service = CartService(db_session)
         await service.add_to_cart(user.id, variant.id, quantity=1)

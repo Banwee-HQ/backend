@@ -176,11 +176,7 @@ class Subscription(Base):
     # --- Products & variants ---
     variant_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     subscription_products = relationship("SubscriptionProduct", back_populates="subscription", lazy="select")
-    # This many-to-many view and SubscriptionProductAssociation both read/write the
-    # same subscription_product_association table - services/commerce/subscriptions.py
-    # (add_products/remove_products) intentionally writes through the association
-    # model directly and then expires+reloads `products` rather than mutating this
-    # collection in place, so the two staying in sync isn't a concern in practice.
+    # This many-to-many view and SubscriptionProductAssociation both read/write the same subscription_product_association table - services/commerce/subscriptions.py (add_products/remove_products) intentionally writes through the association model directly and then expires+reloads `products` rather than mutating this collection in place, so the two staying in sync isn't a concern in practice.
     products = relationship(
         "ProductVariant",
         secondary="commerce.subscription_product_association",

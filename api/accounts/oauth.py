@@ -229,9 +229,7 @@ async def find_or_create_user(db: AsyncSession, provider: str, user_info: dict, 
     )
 
     auth_service = AuthService(db)
-    # auth_service.create() returns a UserResponse, not the ORM row - re-fetch the
-    # real User to set fields UserCreate has no place for (verification_status,
-    # avatar_url), since the provider already verified this email.
+    # auth_service.create() returns a UserResponse, not the ORM row - re-fetch the real User to set fields UserCreate has no place for (verification_status, avatar_url), since the provider already verified this email.
     await auth_service.create(user_data, background_tasks=background_tasks)
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one()
