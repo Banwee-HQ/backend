@@ -760,7 +760,9 @@ class SubscriptionService:
     async def delete(self, subscription_id: UUID, user_id: UUID) -> bool:
         # Fetch subscription without loading relationships for deletion
         result = await self.db.execute(
-            select(Subscription).where(Subscription.id == subscription_id)
+            select(Subscription).where(
+                Subscription.id == subscription_id, Subscription.user_id == user_id
+            )
         )
         subscription = result.scalar_one_or_none()
         if not subscription:

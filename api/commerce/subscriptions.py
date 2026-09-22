@@ -41,6 +41,10 @@ async def trigger_order_processing(
         scheduler = SubscriptionScheduler(db)
         result = await scheduler.process_due_subscriptions()
         return Response.success(data=result, message="Subscription order processing triggered successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error triggering subscription order processing: {e}")
         raise APIException(
@@ -134,6 +138,10 @@ async def list_due(
         subscription_service = SubscriptionService(db)
         due = await subscription_service.list_due()
         return Response.success(data=[s.to_dict() for s in due])
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -199,7 +207,11 @@ async def calculate(
             },
             message="Subscription cost calculated successfully"
         )
-        
+
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error calculating subscription cost: {e}")
         raise APIException(
@@ -602,8 +614,8 @@ async def cancel(
         raise
     except Exception as e:
         raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message=f"Subscription not found or failed to cancel: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to cancel subscription: {str(e)}"
         )
 @router.delete("/{subscription_id}/")
 async def delete(

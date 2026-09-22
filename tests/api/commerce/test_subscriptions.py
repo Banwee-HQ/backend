@@ -83,6 +83,34 @@ class TestSubscriptionEndpoints:
         })
         assert response.status_code == 400
 
+    async def test_create_empty_variant_ids_is_rejected(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/subscriptions/", headers=auth_headers, json={
+            "name": "Bad Sub", "variant_ids": [],
+        })
+        assert response.status_code == 400
+
+    async def test_create_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.post("/v1/subscriptions/", json={"name": "Bad Sub", "variant_ids": []})
+        assert response.status_code == 401
+
+    async def test_list_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/subscriptions/")
+        assert response.status_code == 401
+
+    async def test_plans_is_public(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/subscriptions/plans/")
+        assert response.status_code == 200
+        ids = [p["id"] for p in response.json()["data"]]
+        assert {"monthly", "quarterly", "yearly"} <= set(ids)
+
+    async def test_trigger_notifications_requires_admin(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_trigger_notifications_as_admin(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
+        assert response.status_code == 200
+
     async def test_list_returns_own_subscription(self, async_client: AsyncClient, auth_headers, created_subscription):
         response = await async_client.get("/v1/subscriptions/", headers=auth_headers)
         assert response.status_code == 200
@@ -267,3 +295,31 @@ class TestSubscriptionEndpoints:
 
         get_after = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)
         assert get_after.status_code == 404
+
+    async def test_cannot_delete_another_users_subscription(self, async_client: AsyncClient, admin_headers, created_subscription):
+        """DELETE /v1/subscriptions/{id} - A different user can't delete someone else's subscription."""
+        response = await async_client.delete(f"/v1/subscriptions/{created_subscription['id']}/", headers=admin_headers)
+        assert response.status_code == 404
+
+        still_there = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/", headers=admin_headers)
+        assert still_there.status_code == 200
+
+    async def test_cannot_cancel_another_users_subscription(self, async_client: AsyncClient, admin_headers, created_subscription):
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/cancel/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_cannot_update_another_users_subscription(self, async_client: AsyncClient, admin_headers, created_subscription):
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/",
+            headers=admin_headers, json={"name": "Hacked"})
+        assert response.status_code == 404
+
+    async def test_remove_single_product(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant):
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/products/",
+            headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+
+        response = await async_client.delete(
+            f"/v1/subscriptions/{created_subscription['id']}/products/{second_variant['id']}/", headers=auth_headers
+        )
+        assert response.status_code == 200
+        variant_ids = [p["variant_id"] for p in response.json()["data"]["products"]]
+        assert second_variant["id"] not in variant_ids
