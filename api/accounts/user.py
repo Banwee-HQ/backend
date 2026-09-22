@@ -159,28 +159,20 @@ async def list(
 async def patch(
     user_id: UUID,
     payload: UserUpdate,
-    current_user: AuthUser = Depends(require_admin),
+    current_user: AuthUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Partially update a user. Admin can update any user, users can only update themselves."""
     try:
-        # Check if user is admin or updating their own data
-        if current_user.id != user_id:
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        # Non-admins may only touch their own record. UserUpdate itself only exposes
+        # plain profile fields (role/account_status/is_active/etc. aren't declared on
+        # it, so Pydantic already strips them - there's nothing sensitive left to gate).
+        if not is_admin and current_user.id != user_id:
             raise APIException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 message="You can only update your own user data"
             )
-        # Regular users cannot change role or sensitive fields
-        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            # Prevent non-admins from changing role, account_status, etc.
-            forbidden_fields = ['role', 'account_status', 'verification_status', 'is_active', 'verified']
-            update_dict = payload.model_dump(exclude_unset=True)
-            for field in forbidden_fields:
-                if field in update_dict:
-                    raise APIException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        message=f"You cannot modify the '{field}' field"
-                    )
         service = UserService(db)
         updated_user = await service.update(user_id, payload)
         if not updated_user:

@@ -78,7 +78,9 @@ class Update(BaseModel):
     country: Optional[str] = None
     language: Optional[str] = None
     timezone: Optional[str] = None
-    is_active: Optional[bool] = None
+    # is_active deliberately excluded: it's a read-only property on the User model
+    # (derived from account_status), so setattr()'ing it here would raise. Status
+    # changes go through PUT /{user_id}/status/ -> UserService.update_status().
 
 
 # Admin user management schemas

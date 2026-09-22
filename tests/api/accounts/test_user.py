@@ -91,12 +91,33 @@ class TestUserEndpoints:
         })
         assert response.status_code == 403
 
-    async def test_patch_self_forbidden_for_non_admin(self, async_client: AsyncClient, auth_headers, test_user):
-        """PATCH /v1/users/{id} - Blocked for non-admins by require_admin, even on their own ID."""
+    async def test_patch_self_allowed_for_non_admin(self, async_client: AsyncClient, auth_headers, test_user):
+        """PATCH /v1/users/{id} - A regular user can update their own record."""
         response = await async_client.patch(f"/v1/users/{test_user.id}/",
             headers=auth_headers, json={"firstname": "Updated"}
         )
+        assert response.status_code == 200
+        assert response.json()["data"]["firstname"] == "Updated"
+
+    async def test_patch_unauthenticated(self, async_client: AsyncClient, test_user):
+        response = await async_client.patch(f"/v1/users/{test_user.id}/", json={"firstname": "Updated"})
+        assert response.status_code == 401
+
+    async def test_patch_other_user_forbidden_for_non_admin(self, async_client: AsyncClient, auth_headers, admin_user):
+        """PATCH /v1/users/{id} - A regular user can't update someone else's record."""
+        response = await async_client.patch(f"/v1/users/{admin_user.id}/",
+            headers=auth_headers, json={"firstname": "Hacked"}
+        )
         assert response.status_code == 403
+
+    async def test_patch_sensitive_field_is_silently_ignored(self, async_client: AsyncClient, auth_headers, test_user):
+        """PATCH /v1/users/{id} - UserUpdate has no role/status fields, so they're dropped, not applied."""
+        response = await async_client.patch(f"/v1/users/{test_user.id}/",
+            headers=auth_headers, json={"firstname": "StillMe", "role": "admin"}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["firstname"] == "StillMe"
+        assert response.json()["data"]["role"] == "customer"
 
     async def test_patch_as_admin(self, async_client: AsyncClient, admin_headers, admin_user):
         """PATCH /v1/users/{id} - Admin updates their own record."""
@@ -106,12 +127,13 @@ class TestUserEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["firstname"] == "Updated"
 
-    async def test_patch_other_user_forbidden(self, async_client: AsyncClient, admin_headers, test_user):
-        """PATCH /v1/users/{id} - Even an admin can only update their own record here."""
+    async def test_patch_other_user_allowed_for_admin(self, async_client: AsyncClient, admin_headers, test_user):
+        """PATCH /v1/users/{id} - An admin can update any user's record."""
         response = await async_client.patch(f"/v1/users/{test_user.id}/",
             headers=admin_headers, json={"firstname": "Updated"}
         )
-        assert response.status_code == 403
+        assert response.status_code == 200
+        assert response.json()["data"]["firstname"] == "Updated"
 
     async def test_delete_requires_admin(self, async_client: AsyncClient, auth_headers):
         """DELETE /v1/users/{id} - Non-admin is forbidden."""
