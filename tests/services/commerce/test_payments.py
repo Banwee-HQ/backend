@@ -317,6 +317,31 @@ class TestTransactions:
         result = await service.all_transactions(status="succeeded")
         assert all(t["status"] == "succeeded" for t in result["transactions"])
 
+    async def test_all_transactions_filters_by_date_range(self, db_session, transaction):
+        service = PaymentService(db_session)
+        today = datetime.utcnow().date().isoformat()
+        result = await service.all_transactions(date_from=today, date_to=today)
+        assert any(t["id"] == str(transaction.id) for t in result["transactions"])
+
+        yesterday = (datetime.utcnow().date() - timedelta(days=2)).isoformat()
+        two_days_ago = (datetime.utcnow().date() - timedelta(days=4)).isoformat()
+        excluded = await service.all_transactions(date_from=two_days_ago, date_to=yesterday)
+        assert not any(t["id"] == str(transaction.id) for t in excluded["transactions"])
+
+    async def test_all_transactions_filters_by_search(self, db_session, test_user, transaction):
+        service = PaymentService(db_session)
+        result = await service.all_transactions(search=test_user.email)
+        assert any(t["id"] == str(transaction.id) for t in result["transactions"])
+
+        result_none = await service.all_transactions(search="nobody-matches-this-xyz")
+        assert not any(t["id"] == str(transaction.id) for t in result_none["transactions"])
+
+    async def test_all_transactions_ignores_invalid_date_filters(self, db_session, transaction):
+        """Malformed date_from/date_to are silently ignored rather than raising."""
+        service = PaymentService(db_session)
+        result = await service.all_transactions(date_from="not-a-date", date_to="also-not-a-date")
+        assert any(t["id"] == str(transaction.id) for t in result["transactions"])
+
     async def test_get_transaction(self, db_session, test_user, transaction):
         service = PaymentService(db_session)
         result = await service.get_transaction(transaction.id, test_user.id)
