@@ -74,6 +74,10 @@ async def list_locations(
         if isinstance(result, dict) and "data" in result and "pagination" in result:
             return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Warehouse locations retrieved successfully")
         return Response.success(data=result, message="Warehouse locations retrieved successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching locations: {e}", exc_info=True)
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to fetch locations")
@@ -197,6 +201,10 @@ async def list_adj(
         if isinstance(result, dict) and "data" in result and "pagination" in result:
             return Response.success(data=result.get("data", []), pagination=result.get("pagination"), message="Stock adjustments retrieved successfully")
         return Response.success(data=result, message="Stock adjustments retrieved successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustments: {e}")
 
@@ -283,6 +291,10 @@ async def list(
             }
             return Response.success(data=items.get("data", []), pagination=pagination, message="Inventory items retrieved successfully")
         return Response.success(data=items, message="Inventory items retrieved successfully")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching inventory items: {e}", exc_info=True)
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to fetch inventory items")
@@ -343,6 +355,10 @@ async def sync_all(
             data=result,
             message=result.get("message", "Inventory sync completed")
         )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
