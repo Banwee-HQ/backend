@@ -1,0 +1,36 @@
+{% extends "base_banwee.html" %}
+
+{% block title %}⚠️ Low Stock Alert: {{ product_name | default('Product') }}{% endblock %}
+
+{% block content %}
+<div class="content">
+            <p>Hi there,</p>
+            <p>
+                An item in your catalog is running low on stock and may need to be restocked soon.
+            </p>
+
+            <div class="alert-box">
+                <h3>Low Stock Details</h3>
+                <p><strong style="color: #253d4e; font-weight: bold;">{{ product_name | default('Product') }}</strong>
+                   {% if variant_name %}({{ variant_name }}){% endif %}
+                   {% if location_name %}at <strong style="color: #253d4e; font-weight: bold;">{{ location_name }}</strong>{% endif %}
+                </p>
+                <p>Current stock: <strong style="color: #e67e22;">{{ current_stock | default(0) }}</strong>
+                   (threshold: {{ threshold | default(0) }})</p>
+            </div>
+
+            <p>
+                Please review inventory and restock this item if needed to avoid running out of stock.
+            </p>
+
+            <div class="button-container">
+                <a href="{{ admin_inventory_link | default('#') }}" class="button">View Inventory</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>
+                &copy; {{ current_year | default("2025") }} {{ company_name | default("Banwee") }}. All rights reserved.<br>
+                Contact us: <a href="mailto:{{ support_email | default('support@banwee.com') }}">{{ support_email | default("support@banwee.com") }}</a>
+            </p>
+{% endblock %}
