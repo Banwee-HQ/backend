@@ -135,6 +135,34 @@ class TestProductEndpoints:
         get_resp = await async_client.get(f"/v1/products/{created_product['id']}/")
         assert get_resp.status_code == 404
 
+    async def test_update_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/",
+            headers=auth_headers, json={"name": "Hacked"}
+        )
+        assert response.status_code == 403
+
+    async def test_delete_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        response = await async_client.delete(f"/v1/products/{created_product['id']}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_delete_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.delete(f"/v1/products/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_recommendations_unknown_product(self, async_client: AsyncClient):
+        response = await async_client.get(f"/v1/products/{uuid4()}/recommendations/")
+        assert response.status_code == 200
+        assert response.json()["data"] == []
+
+    async def test_variants_unknown_product(self, async_client: AsyncClient):
+        response = await async_client.get(f"/v1/products/{uuid4()}/variants/")
+        assert response.status_code == 200
+        assert response.json()["data"] == []
+
+    async def test_get_variant_not_found(self, async_client: AsyncClient):
+        response = await async_client.get(f"/v1/products/variants/{uuid4()}/")
+        assert response.status_code == 404
+
     async def test_create_variant(self, async_client: AsyncClient, admin_headers, created_product):
         """POST /v1/products/{id}/variants - Create variant (admin)."""
         variant_data = {"name": "Large", "base_price": 99.99, "sale_price": 89.99, "stock": 100}
@@ -164,6 +192,24 @@ class TestProductEndpoints:
 
         response = await async_client.delete(f"/v1/products/variants/{variant_id}/", headers=admin_headers)
         assert response.status_code == 200
+
+    async def test_delete_variant_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.delete(f"/v1/products/variants/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_create_variant_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        response = await async_client.post(f"/v1/products/{created_product['id']}/variants/",
+            headers=auth_headers, json={"name": "Large", "base_price": 99.99}
+        )
+        assert response.status_code == 403
+
+    async def test_update_variant_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        response = await async_client.patch(f"/v1/products/variants/{variant_id}/",
+            headers=auth_headers, json={"sale_price": 1.0}
+        )
+        assert response.status_code == 403
 
     async def test_create_image(self, async_client: AsyncClient, admin_headers, created_product):
         """POST /v1/products/variants/{id}/images - Create image (admin)."""
@@ -242,6 +288,12 @@ class TestProductEndpoints:
         )
         assert response.status_code == 200
 
+    async def test_moderate_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/moderate/",
+            headers=auth_headers, json={"status": "approved"}
+        )
+        assert response.status_code == 403
+
     async def test_feature(self, async_client: AsyncClient, admin_headers, created_product):
         """PATCH /v1/products/{id}/feature - Feature product (admin)."""
         response = await async_client.patch(f"/v1/products/{created_product['id']}/feature/",
@@ -249,3 +301,27 @@ class TestProductEndpoints:
         )
         assert response.status_code == 200
         assert response.json()["data"]["is_featured"] is True
+
+    async def test_feature_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        response = await async_client.patch(f"/v1/products/{created_product['id']}/feature/",
+            headers=auth_headers, params={"featured": True}
+        )
+        assert response.status_code == 403
+
+    async def test_create_image_requires_admin(self, async_client: AsyncClient, auth_headers, created_product):
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        response = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=auth_headers, json={"url": "https://example.com/img.jpg"}
+        )
+        assert response.status_code == 403
+
+    async def test_update_image_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.patch(f"/v1/products/images/{uuid4()}/",
+            headers=admin_headers, json={"alt_text": "Nowhere"}
+        )
+        assert response.status_code == 404
+
+    async def test_delete_image_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.delete(f"/v1/products/images/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
