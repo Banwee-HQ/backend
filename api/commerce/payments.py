@@ -508,8 +508,15 @@ async def list_failures(
     db: AsyncSession = Depends(get_db)
 ):
     """List user's failed payments"""
-    service = PaymentService(db)
-    result = await service.failed_payments(current_user.id, page=page, limit=limit)
-    if isinstance(result, dict) and "pagination" in result:
-        return Response.success(data=result.get("failed_payments", []), pagination=result.get("pagination"))
-    return Response.success(data=result)
+    try:
+        service = PaymentService(db)
+        result = await service.failed_payments(current_user.id, page=page, limit=limit)
+        if isinstance(result, dict) and "pagination" in result:
+            return Response.success(data=result.get("failed_payments", []), pagination=result.get("pagination"))
+        return Response.success(data=result)
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list failed payments: {str(e)}")

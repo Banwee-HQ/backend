@@ -113,6 +113,18 @@ class TestPaymentMethodEndpoints:
         })
         assert response.status_code == 200
 
+    async def test_list_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/payments/methods/")
+        assert response.status_code == 401
+
+    async def test_create_unauthenticated(self, async_client: AsyncClient):
+        response = await async_client.post("/v1/payments/methods/", json={"type": "card"})
+        assert response.status_code == 401
+
+    async def test_list_with_search(self, async_client: AsyncClient, auth_headers, created_method):
+        response = await async_client.get("/v1/payments/methods/?search=4242", headers=auth_headers)
+        assert response.status_code == 200
+
 
 @pytest.mark.api
 class TestPaymentIntentEndpoints:
@@ -196,6 +208,10 @@ class TestRefundEndpoints:
         response = await async_client.post("/v1/payments/refunds/", headers=admin_headers, json={
             "payment_intent_id": str(uuid4())
         })
+        assert response.status_code == 404
+
+    async def test_get_not_found(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get(f"/v1/payments/refunds/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
 
 
