@@ -84,3 +84,32 @@ class TestCategoryEndpoints:
 
         response = await async_client.delete(f"/v1/categories/{created_category['id']}/", headers=admin_headers)
         assert response.status_code == 400
+
+    async def test_update_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.patch(f"/v1/categories/{uuid4()}/",
+            headers=admin_headers, json={"name": "Nowhere"}
+        )
+        assert response.status_code == 404
+
+    async def test_update_requires_admin(self, async_client: AsyncClient, auth_headers, created_category):
+        response = await async_client.patch(f"/v1/categories/{created_category['id']}/",
+            headers=auth_headers, json={"name": "Hacked"}
+        )
+        assert response.status_code == 403
+
+    async def test_delete_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.delete(f"/v1/categories/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_delete_requires_admin(self, async_client: AsyncClient, auth_headers, created_category):
+        response = await async_client.delete(f"/v1/categories/{created_category['id']}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_list_active_only(self, async_client: AsyncClient, admin_headers, created_category):
+        await async_client.patch(f"/v1/categories/{created_category['id']}/",
+            headers=admin_headers, json={"is_active": False}
+        )
+        response = await async_client.get("/v1/categories/?active_only=true")
+        assert response.status_code == 200
+        ids = [c["id"] for c in response.json()["data"]]
+        assert created_category["id"] not in ids
