@@ -150,6 +150,15 @@ class TestUserEndpoints:
         response = await async_client.delete(f"/v1/users/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
 
+    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, test_user):
+        """DELETE /v1/users/{id} - Admin can delete a different user (soft delete by default)."""
+        response = await async_client.delete(f"/v1/users/{test_user.id}/", headers=admin_headers)
+        assert response.status_code == 200
+
+        get_after = await async_client.get(f"/v1/users/{test_user.id}/", headers=admin_headers)
+        assert get_after.status_code == 200
+        assert get_after.json()["data"]["account_status"] == "inactive"
+
     async def test_update_status(self, async_client: AsyncClient, admin_headers, test_user):
         """PUT /v1/users/{id}/status - Update active status (admin)."""
         response = await async_client.put(f"/v1/users/{test_user.id}/status/",
@@ -182,3 +191,23 @@ class TestUserEndpoints:
         """GET /v1/users/{id}/activity - Get user activity log (admin)."""
         response = await async_client.get(f"/v1/users/{test_user.id}/activity/", headers=admin_headers)
         assert response.status_code == 200
+
+    async def test_list_filters_by_role(self, async_client: AsyncClient, admin_headers, admin_user):
+        response = await async_client.get("/v1/users/?role=admin", headers=admin_headers)
+        assert response.status_code == 200
+        ids = [u["id"] for u in response.json()["data"]]
+        assert str(admin_user.id) in ids
+
+    async def test_update_status_requires_admin(self, async_client: AsyncClient, auth_headers, test_user):
+        response = await async_client.put(f"/v1/users/{test_user.id}/status/",
+            headers=auth_headers, json={"is_active": False}
+        )
+        assert response.status_code == 403
+
+    async def test_verify_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.put(f"/v1/users/{uuid4()}/verify/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_deactivate_not_found(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post(f"/v1/users/{uuid4()}/deactivate/", headers=admin_headers)
+        assert response.status_code == 404

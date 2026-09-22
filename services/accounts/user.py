@@ -392,7 +392,7 @@ class UserService:
         user = result.scalar_one_or_none()
 
         if not user:
-            return None
+            raise APIException(status_code=404, message="User not found")
 
         user.verification_status = VerificationStatus.VERIFIED
         await self.db.commit()

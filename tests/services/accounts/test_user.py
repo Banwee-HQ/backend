@@ -226,9 +226,12 @@ class TestAdminStatusManagement:
         verified = await service.verify_user_account(user.id)
         assert verified.verification_status == VerificationStatus.VERIFIED
 
-    async def test_verify_user_account_unknown_id_returns_none(self, db_session):
+    async def test_verify_user_account_unknown_id_raises_404(self, db_session):
+        """Matches activate()/deactivate()'s behavior for an unknown user."""
         service = UserService(db_session)
-        assert await service.verify_user_account(uuid4()) is None
+        with pytest.raises(APIException) as exc_info:
+            await service.verify_user_account(uuid4())
+        assert exc_info.value.status_code == 404
 
     async def test_get_activity_log_returns_empty_stub(self, db_session):
         service = UserService(db_session)
