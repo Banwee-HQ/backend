@@ -185,35 +185,35 @@ async def verify(
 ):
     """Verify user email with token."""
     try:
-        print(f"🔧 DEBUG: Raw token received: '{token}'")
-        print(f"🔧 DEBUG: Token length: {len(token)}")
-        print(f"🔧 DEBUG: Token type: {type(token)}")
-        
         # Handle case where token might be embedded in HTML (frontend issue)
         if token.startswith('<!DOCTYPE') or token.startswith('<!doctype'):
             # Extract token from HTML - look for token parameter in URL
             token_match = re.search(r'token=([^&"\s]+)', token)
             if token_match:
                 token = token_match.group(1)
-                print(f"🔧 Debug: Extracted token from HTML: {token}")
             else:
                 raise APIException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message="Invalid verification token format"
                 )
-        
-        print(f"🔧 Debug: Processing verification token: {token}")
+
         logger.info(f"Email verification attempt with token: {token[:20]}...")
-        
+
         user_service = UserService(db)
         await user_service.verify(token, background_tasks=background_tasks)
-        
+
         logger.info(f"Email verification successful for token: {token[:20]}...")
         return Response.success(message="Email verified successfully")
     except APIException:
         raise
     except HTTPException:
         raise
+    except Exception as e:
+        logger.error(f"Error verifying email: {e}")
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message="Invalid or expired verification token"
+        )
 
 # Simple in-memory rate limiter (in production, use Redis)
 _resend_requests = {}
@@ -335,9 +335,17 @@ async def update(
             except ValueError:
                 raise APIException(status_code=400, message="Invalid date_of_birth format. Use ISO format: YYYY-MM-DD")
 
-        # Update user fields
+        # Only a fixed, self-service-safe set of fields may be updated here - the raw
+        # dict above previously let a caller setattr() ANY column that exists on the
+        # User model (role, account_status, verification_status, stripe_customer_id,
+        # etc.), which is a privilege-escalation hole. Privileged fields go through
+        # the admin-only user management endpoints instead.
+        ALLOWED_PROFILE_FIELDS = {
+            "firstname", "lastname", "phone", "date_of_birth", "gender",
+            "country", "language", "timezone", "avatar_url", "preferences",
+        }
         for field, value in user_data.items():
-            if hasattr(current_user, field) and field not in ['id', 'hashed_password', 'created_at']:
+            if field in ALLOWED_PROFILE_FIELDS:
                 setattr(current_user, field, value)
         
         await db.commit()

@@ -141,7 +141,29 @@ class TestAuthEndpoints:
             headers=auth_headers,
             json={"first_name": "Updated", "last_name": "Name"}
         )
-        assert response.status_code in [200, 400]
+        assert response.status_code == 200
+        assert response.json()["data"]["firstname"] == "Updated"
+        assert response.json()["data"]["lastname"] == "Name"
+
+    async def test_update_profile_cannot_escalate_role(self, async_client: AsyncClient, auth_headers):
+        """PATCH /v1/auth/me - A regular user can't grant themselves admin via arbitrary fields."""
+        response = await async_client.patch("/v1/auth/me/",
+            headers=auth_headers,
+            json={
+                "role": "admin",
+                "account_status": "active",
+                "verification_status": "verified",
+                "is_active": True,
+                "firstname": "StillMe",
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["role"] == "customer"
+        assert data["firstname"] == "StillMe"
+
+        me = await async_client.get("/v1/auth/me/", headers=auth_headers)
+        assert me.json()["data"]["role"] == "customer"
 
     async def test_change_password(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/auth/me/password - Change password."""
