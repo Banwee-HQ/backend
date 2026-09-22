@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from core.utils.uuid_utils import uuid7
 from services.commerce.subscriptions import SubscriptionService
-from services.commerce.subscriptions_scheduler import SubscriptionScheduler
+from services.commerce.subscriptions_scheduler import SubscriptionScheduler, process_subscription_shipments
 from models.commerce.subscriptions import Subscription
 from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
 from models.catalog.category import Category
@@ -181,6 +181,76 @@ class TestProcessSubscription:
         assert result["success"] is False
         assert "No products" in result["error"]
 
+    async def test_variant_ids_pointing_to_nonexistent_variants_fails_gracefully(self, db_session, subscription):
+        """variant_ids is a plain JSON list with no FK enforcement, so it can
+        reference variants that were since deleted - process_subscription must
+        report this rather than crashing on an empty query result."""
+        subscription.variant_ids = [str(uuid4())]
+        await db_session.commit()
+        scheduler = SubscriptionScheduler(db_session)
+        result = await scheduler.process_subscription(subscription.id)
+        assert result["success"] is False
+        assert "No valid variants" in result["error"]
+
+    async def test_unknown_subscription_id_reports_not_found(self, db_session):
+        scheduler = SubscriptionScheduler(db_session)
+        result = await scheduler.process_subscription(uuid4())
+        assert result["success"] is False
+        assert "not found" in result["message"].lower()
+
+    async def test_second_payment_failure_schedules_retry_in_24_hours(self, db_session, test_user, variant, subscription, mocker):
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "failed", "error": "Card declined"},
+        )
+        pm = PaymentMethod(
+            id=uuid7(), user_id=test_user.id, type=PaymentType.CARD, provider=PaymentProvider.STRIPE,
+            last_four="0002", expiry_month=12, expiry_year=2099, brand=CardBrand.VISA,
+            stripe_payment_method_id=f"pm_test_{uuid4().hex[:16]}", is_default=True, is_active=True,
+        )
+        db_session.add(pm)
+        subscription.payment_retry_count = 1
+        await db_session.commit()
+
+        scheduler = SubscriptionScheduler(db_session)
+        result = await scheduler.process_subscription(subscription.id)
+        assert result["success"] is False
+        assert result["retry_count"] == 2
+
+        await db_session.refresh(subscription)
+        assert subscription.status == "payment_failed"
+        assert subscription.next_retry_date is not None
+        hours_until_retry = (subscription.next_retry_date - datetime.now(timezone.utc)).total_seconds() / 3600
+        assert 23.9 <= hours_until_retry <= 24.1
+
+    async def test_pause_email_notification_failure_does_not_block_pausing(self, db_session, test_user, variant, subscription, mocker):
+        """The 3rd-failure pause path tries to email the customer - if that
+        email send itself blows up, the subscription must still end up paused
+        rather than the whole request failing."""
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "failed", "error": "Card declined"},
+        )
+        mocker.patch(
+            "services.accounts.email.EmailService.send_subscription_payment_failed",
+            side_effect=Exception("smtp unavailable"),
+        )
+        pm = PaymentMethod(
+            id=uuid7(), user_id=test_user.id, type=PaymentType.CARD, provider=PaymentProvider.STRIPE,
+            last_four="0002", expiry_month=12, expiry_year=2099, brand=CardBrand.VISA,
+            stripe_payment_method_id=f"pm_test_{uuid4().hex[:16]}", is_default=True, is_active=True,
+        )
+        db_session.add(pm)
+        subscription.payment_retry_count = 2
+        await db_session.commit()
+
+        scheduler = SubscriptionScheduler(db_session)
+        result = await scheduler.process_subscription(subscription.id)
+        assert result["success"] is False
+
+        await db_session.refresh(subscription)
+        assert subscription.status == "paused"
+
 
 class TestProcessDueSubscriptions:
 
@@ -222,6 +292,26 @@ class TestProcessDueSubscriptions:
         by_id = {r["subscription_id"]: r for r in result["results"]}
         assert by_id[subscription_id]["status"] == "success"
         assert by_id[no_pm_sub_id]["status"] == "failed"
+
+    async def test_an_unexpected_raise_from_process_subscription_is_caught_per_item(
+        self, db_session, test_user, variant, payment_method, subscription, mocker
+    ):
+        """process_subscription() itself catches virtually everything and returns
+        a failure dict - but the batch loop in process_due_subscriptions() has its
+        own safety net in case a subscription blows up in some way process_subscription
+        can't turn into a dict (e.g. it raising directly). This is only reachable by
+        forcing that failure mode directly."""
+        mocker.patch.object(
+            SubscriptionScheduler, "process_subscription", side_effect=Exception("totally unexpected"),
+        )
+        scheduler = SubscriptionScheduler(db_session)
+        result = await scheduler.process_due_subscriptions()
+
+        assert result["failed_count"] >= 1
+        assert result["processed_count"] == 0
+        entry = next(r for r in result["results"] if r["subscription_id"] == str(subscription.id))
+        assert entry["status"] == "failed"
+        assert "totally unexpected" in entry["reason"]
 
 
 class TestGenerateOrderNumber:
@@ -286,3 +376,30 @@ class TestUpdateBillingDates:
         scheduler = SubscriptionScheduler(db_session)
         await scheduler._update_billing_dates(subscription)
         assert subscription.subscription_metadata["orders_created_count"] == 3
+
+
+class TestProcessSubscriptionShipmentsTask:
+    """Tests for the standalone process_subscription_shipments() background-task
+    wrapper, which pulls its own session from core.db.get_db() rather than
+    receiving one - substitute get_db with a fake generator yielding the test's
+    own db_session so it runs against the real, rolled-back-at-teardown DB."""
+
+    async def test_runs_the_scheduler_and_returns_its_result(self, db_session, test_user, variant, payment_method, subscription, mocker):
+        async def fake_get_db():
+            yield db_session
+        mocker.patch("services.commerce.subscriptions_scheduler.get_db", fake_get_db)
+
+        result = await process_subscription_shipments()
+        assert result["total_due"] >= 1
+
+    async def test_propagates_and_logs_scheduler_failure(self, db_session, mocker):
+        async def fake_get_db():
+            yield db_session
+        mocker.patch("services.commerce.subscriptions_scheduler.get_db", fake_get_db)
+        mocker.patch.object(
+            SubscriptionScheduler, "process_due_subscriptions",
+            side_effect=Exception("scheduler blew up"),
+        )
+
+        with pytest.raises(Exception, match="scheduler blew up"):
+            await process_subscription_shipments()

@@ -10,8 +10,9 @@ import pytest
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 
+from core.exceptions import APIException
 from services.commerce.promocode import PromocodeService
-from schemas.commerce.promos import Create as PromocodeCreate
+from schemas.commerce.promos import Create as PromocodeCreate, Update as PromocodeUpdate
 
 
 def make_create(code=None, value=10.0, usage_limit=None, valid_from=None, valid_until=None) -> PromocodeCreate:
@@ -102,3 +103,47 @@ class TestIncUsage:
         created = await service.create(make_create(usage_limit=5))
         updated = await service.inc_usage(created.id)
         assert updated.is_active is True
+
+    async def test_unknown_id_raises_404(self, db_session):
+        service = PromocodeService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.inc_usage(uuid4())
+        assert exc_info.value.status_code == 404
+
+
+class TestGet:
+
+    async def test_requires_id_or_code(self, db_session):
+        """get() with neither promocode_id nor code raises rather than silently
+        returning None - callers rely on the ValueError, not a None/empty result."""
+        service = PromocodeService(db_session)
+        with pytest.raises(ValueError):
+            await service.get()
+
+
+class TestUpdate:
+
+    async def test_updates_fields(self, db_session):
+        service = PromocodeService(db_session)
+        created = await service.create(make_create())
+        updated = await service.update(created.id, PromocodeUpdate(value=99))
+        assert updated.value == 99
+
+    async def test_unknown_id_raises_404(self, db_session):
+        service = PromocodeService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.update(uuid4(), PromocodeUpdate(value=1))
+        assert exc_info.value.status_code == 404
+
+
+class TestDelete:
+
+    async def test_deletes_existing_promocode(self, db_session):
+        service = PromocodeService(db_session)
+        created = await service.create(make_create())
+        assert await service.delete(created.id) is True
+        assert await service.get(created.id) is None
+
+    async def test_unknown_id_returns_false(self, db_session):
+        service = PromocodeService(db_session)
+        assert await service.delete(uuid4()) is False

@@ -125,3 +125,76 @@ class TestPromocodeEndpoints:
         """POST /v1/promocodes/trigger-cleanup - Admin can trigger cleanup."""
         response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
         assert response.status_code == 200
+
+    async def test_delete_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
+        """DELETE /v1/promocodes/{id} - Unknown ID returns 404, not a silent success."""
+        response = await async_client.delete(f"/v1/promocodes/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 404
+
+    async def test_update_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
+        """PATCH /v1/promocodes/{id} - service.update() raises APIException(404), which
+        this endpoint's `except APIException: raise` must pass straight through."""
+        response = await async_client.patch(f"/v1/promocodes/{uuid4()}/", headers=admin_headers, json={"value": 1})
+        assert response.status_code == 404
+
+
+@pytest.mark.api
+@pytest.mark.promocodes
+class TestUnexpectedErrorsBecomeSafe500s:
+    """As with subscriptions, every route here shares the same
+    try/except APIException/except HTTPException/except Exception->500 shape.
+    These force an unexpected failure from the service layer to verify the
+    generic safety net actually works, rather than only exercising the
+    well-trodden success/404 paths."""
+
+    async def test_list(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.promocode.PromocodeService.list", side_effect=Exception("boom"))
+        response = await async_client.get("/v1/promocodes/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_validate(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.promocode.PromocodeService.validate", side_effect=Exception("boom"))
+        response = await async_client.post("/v1/promocodes/validate/", headers=auth_headers, json={"code": "X"})
+        assert response.status_code == 500
+
+    async def test_get(self, async_client: AsyncClient, admin_headers, created_promo, mocker):
+        mocker.patch("services.commerce.promocode.PromocodeService.get", side_effect=Exception("boom"))
+        response = await async_client.get(f"/v1/promocodes/{created_promo['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_create(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.promocode.PromocodeService.create", side_effect=Exception("boom"))
+        response = await async_client.post("/v1/promocodes/", headers=admin_headers,
+            json={"code": f"ERR{uuid4().hex[:6].upper()}", "discount_type": "percentage", "value": 5})
+        assert response.status_code == 500
+
+    async def test_update(self, async_client: AsyncClient, admin_headers, created_promo, mocker):
+        mocker.patch("services.commerce.promocode.PromocodeService.update", side_effect=Exception("boom"))
+        response = await async_client.patch(f"/v1/promocodes/{created_promo['id']}/",
+            headers=admin_headers, json={"value": 1})
+        assert response.status_code == 500
+
+    async def test_delete(self, async_client: AsyncClient, admin_headers, created_promo, mocker):
+        mocker.patch("services.commerce.promocode.PromocodeService.delete", side_effect=Exception("boom"))
+        response = await async_client.delete(f"/v1/promocodes/{created_promo['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_trigger_cleanup_reports_scheduler_failure_as_500(self, async_client: AsyncClient, admin_headers, mocker):
+        """update_promocode_statuses() itself never raises (it catches its own
+        errors and returns success=False) - this exercises the endpoint's own
+        `if not result.get('success')` branch, distinct from the generic
+        except Exception safety net below it."""
+        mocker.patch(
+            "services.commerce.promocode_scheduler.PromoCodeScheduler.update_promocode_statuses",
+            return_value={"success": False, "error": "simulated scheduler failure"},
+        )
+        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_trigger_cleanup_unexpected_exception(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.commerce.promocode_scheduler.PromoCodeScheduler.update_promocode_statuses",
+            side_effect=Exception("boom"),
+        )
+        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
+        assert response.status_code == 500

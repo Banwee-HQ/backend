@@ -8,7 +8,9 @@ quantity-limit issues), and saved-for-later items.
 """
 
 import pytest
+from types import SimpleNamespace
 from uuid import uuid4
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -16,10 +18,14 @@ from fastapi import HTTPException
 
 from services.commerce.cart import CartService
 from services.accounts.auth import AuthService
+from services.commerce.tax import TaxService
+from services.catalog.inventory import InventoryService
 from models.accounts.user import User, UserRole
-from models.catalog.product import Product, ProductVariant, ProductStatus
+from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage
 from models.catalog.inventories import Inventory
 from models.commerce.promocode import Promocode
+from models.commerce.tax_rates import TaxRate
+from core.utils.uuid_utils import uuid7
 
 
 async def make_user(db_session) -> User:
@@ -234,6 +240,22 @@ class TestUpdateItem:
         service = CartService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.update_item(user.id, uuid4(), quantity=1)
+        assert exc_info.value.status_code == 404
+
+    async def test_missing_variant_raises_404(self, db_session):
+        """Defensive check against an orphaned variant reference (not reachable through
+        normal use given the NOT NULL FK on CartItem.variant_id), simulated by clearing
+        the relationship in-memory on the identity-mapped item."""
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, stock=50)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+        cart = await service.get_or_create(user.id)
+        item_id = cart.items[0].id
+        cart.items[0].variant = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_item(user.id, item_id, quantity=2)
         assert exc_info.value.status_code == 404
 
     async def test_insufficient_stock_raises_400(self, db_session):
@@ -465,6 +487,25 @@ class TestCalcTotals:
         assert result["total_amount"] == pytest.approx(27.5)
 
 
+class TestCheckoutSummary:
+
+    async def test_can_checkout_true_when_cart_has_value(self, db_session):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, price=20.0)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+
+        result = await service.checkout_summary(user.id)
+        assert result["can_checkout"] is True
+        assert result["checkout_url"] == "/checkout"
+
+    async def test_can_checkout_false_for_empty_cart(self, db_session):
+        user = await make_user(db_session)
+        service = CartService(db_session)
+        result = await service.checkout_summary(user.id)
+        assert result["can_checkout"] is False
+
+
 class TestSavedItems:
 
     async def test_save_later_and_move_back(self, db_session):
@@ -489,3 +530,238 @@ class TestSavedItems:
         with pytest.raises(HTTPException) as exc_info:
             await service.save_later(user.id, uuid4())
         assert exc_info.value.status_code == 404
+
+    async def test_save_later_db_failure_raises_500(self, db_session, mocker):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+        cart = await service.get_or_create(user.id)
+        item_id = cart.items[0].id
+
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
+        with pytest.raises(HTTPException) as exc_info:
+            await service.save_later(user.id, item_id)
+        assert exc_info.value.status_code == 500
+
+    async def test_move_to_cart_unknown_item_raises_404(self, db_session):
+        user = await make_user(db_session)
+        service = CartService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.move_to_cart(user.id, uuid4())
+        assert exc_info.value.status_code == 404
+
+    async def test_move_to_cart_db_failure_raises_500(self, db_session, mocker):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+        cart = await service.get_or_create(user.id)
+        item_id = cart.items[0].id
+        await service.save_later(user.id, item_id)
+
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
+        with pytest.raises(HTTPException) as exc_info:
+            await service.move_to_cart(user.id, item_id)
+        assert exc_info.value.status_code == 500
+
+    async def test_saved_items_failure_raises_500(self, db_session, mocker):
+        mocker.patch.object(CartService, "get_or_create", side_effect=RuntimeError("db down"))
+        service = CartService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.saved_items(uuid4())
+        assert exc_info.value.status_code == 500
+
+
+class TestUnauthenticatedGuards:
+    """`update_item`, `remove_item`, and `clear_cart` must reject a missing user_id
+    with 401 rather than a raw 500 from failing to query the DB with a null id."""
+
+    async def test_update_item_requires_auth(self, db_session):
+        service = CartService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_item(None, uuid4(), quantity=1)
+        assert exc_info.value.status_code == 401
+
+    async def test_remove_item_requires_auth(self, db_session):
+        service = CartService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.remove_item(None, uuid4())
+        assert exc_info.value.status_code == 401
+
+    async def test_clear_cart_requires_auth(self, db_session):
+        service = CartService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.clear_cart(None)
+        assert exc_info.value.status_code == 401
+
+
+class TestShippingOptionsEdgeCases:
+
+    async def test_db_failure_falls_back_to_default_options(self, db_session, mocker):
+        user = await make_user(db_session)
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("db down"))
+        service = CartService(db_session)
+        result = await service.shipping_options(user.id)
+        assert len(result["shipping_options"]) >= 1
+        assert result["shipping_options"][0]["id"] == "standard"
+
+
+class TestValidateCartItemEdgeCases:
+    """Direct unit tests of `_validate_cart_item`, targeting branches not reachable
+    (or not reachable cleanly) through a full `validate_cart` call."""
+
+    async def test_inactive_product_is_flagged_even_when_variant_is_active(self, db_session):
+        user = await make_user(db_session)
+        product = await make_product(db_session, status=ProductStatus.DRAFT)
+        variant = await make_variant(db_session, product.id, is_active=True)
+        await make_inventory(db_session, variant.id, quantity_available=10)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+
+        result = await service.validate_cart(user.id)
+        assert any(i["type"] == "inactive_product" for i in result["issues"])
+
+    async def test_stock_check_failure_does_not_block_validation(self, db_session, mocker):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, stock=10)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+
+        mocker.patch.object(InventoryService, "check_stock", side_effect=RuntimeError("inventory service down"))
+        result = await service.validate_cart(user.id)
+        assert not any(i["type"] == "insufficient_stock" for i in result["issues"])
+
+    async def test_zero_quantity_item_is_flagged_invalid(self, db_session):
+        service = CartService(db_session)
+        fake_variant = SimpleNamespace(id=uuid4(), is_active=True, name="Widget")
+        fake_item = SimpleNamespace(
+            id=uuid4(), variant=fake_variant, variant_id=fake_variant.id,
+            product=None, product_id=uuid4(), quantity=0,
+        )
+        issues = await service._validate_cart_item(fake_item)
+        assert any(i["type"] == "invalid_quantity" for i in issues)
+
+    async def test_quantity_over_100_is_flagged_as_warning(self, db_session):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, stock=200)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+        cart = await service.get_or_create(user.id)
+        cart.items[0].quantity = 150
+        await db_session.commit()
+
+        result = await service.validate_cart(user.id)
+        warning = next((i for i in result["issues"] if i["type"] == "quantity_limit_exceeded"), None)
+        assert warning is not None
+        assert warning["severity"] == "warning"
+
+    async def test_unexpected_error_is_caught_as_validation_error(self, db_session):
+        class ExplodingVariant:
+            @property
+            def is_active(self):
+                raise RuntimeError("boom")
+
+        service = CartService(db_session)
+        fake_item = SimpleNamespace(id=uuid4(), variant=ExplodingVariant(), variant_id=uuid4())
+        issues = await service._validate_cart_item(fake_item)
+        assert any(i["type"] == "validation_error" for i in issues)
+
+
+class TestCalculateCartPricingEdgeCases:
+    """Direct unit tests of `_calculate_cart_pricing` for branches that are
+    impractical to reach through a full cart (an item with no resolvable variant,
+    malformed quantity data, and tax-lookup success/failure)."""
+
+    async def test_skips_item_with_missing_variant(self, db_session):
+        service = CartService(db_session)
+        fake_item = SimpleNamespace(id=uuid4(), variant=None, variant_id=uuid4(), quantity=1)
+        result = await service._calculate_cart_pricing([fake_item], "US", None)
+        assert result["subtotal"] == 0.0
+
+    async def test_malformed_quantity_is_caught_and_skipped(self, db_session):
+        service = CartService(db_session)
+        fake_variant = SimpleNamespace(sale_price=None, base_price=Decimal("10.00"))
+        fake_item = SimpleNamespace(id=uuid4(), variant=fake_variant, variant_id=uuid4(), quantity=None)
+        result = await service._calculate_cart_pricing([fake_item], "US", None)
+        assert result["subtotal"] == 0.0
+
+    async def test_tax_is_calculated_when_a_matching_rate_exists(self, db_session):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, price=100.0)
+        db_session.add(TaxRate(id=uuid7(), country_code="ZZ", country_name="Test Country",
+                                tax_rate=Decimal("0.10"), is_active=True))
+        await db_session.flush()
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+
+        result = await service.get_cart(user.id, country_code="ZZ")
+        assert result["tax_amount"] == pytest.approx(10.0)
+
+    async def test_tax_lookup_failure_is_swallowed(self, db_session, mocker):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session, price=100.0)
+        mocker.patch.object(TaxService, "rate", side_effect=RuntimeError("tax service down"))
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+
+        result = await service.get_cart(user.id, country_code="US")
+        assert result["tax_amount"] == 0.0
+
+
+class TestGetCartEdgeCases:
+
+    async def test_item_with_images_includes_image_list(self, db_session):
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session)
+        db_session.add(ProductImage(id=uuid7(), variant_id=variant.id, url="https://example.com/a.jpg", is_primary=True))
+        await db_session.commit()
+        # variant.images was already cached as [] (lazy="selectin" populates eagerly on
+        # load) by the time this fixture's variant object was first created, before the
+        # image row above existed - expire it so a later query reloads the relationship.
+        db_session.expire(variant, ["images"])
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+
+        result = await service.get_cart(user.id)
+        assert len(result["items"][0]["variant"]["images"]) == 1
+        assert result["items"][0]["variant"]["images"][0]["url"] == "https://example.com/a.jpg"
+
+    async def test_item_with_missing_variant_is_skipped(self, db_session):
+        """Defensive check against an orphaned variant reference (not reachable through
+        normal use given the NOT NULL FK on CartItem.variant_id, but guarded regardless).
+        Simulated by clearing the relationship in-memory on the identity-mapped item."""
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+        cart = await service.get_or_create(user.id)
+        cart.items[0].variant = None
+
+        result = await service.get_cart(user.id)
+        assert result["items"] == []
+
+    async def test_item_with_missing_product_is_skipped(self, db_session):
+        """Same defensive check, for an orphaned product reference."""
+        user = await make_user(db_session)
+        product, variant = await make_stocked_variant(db_session)
+        service = CartService(db_session)
+        await service.add_to_cart(user.id, variant.id, quantity=1)
+        cart = await service.get_or_create(user.id)
+        cart.items[0].product = None
+
+        result = await service.get_cart(user.id)
+        assert result["items"] == []
+
+    async def test_reloaded_cart_with_no_items_returns_empty_response(self, db_session, mocker):
+        """Defensive re-check: get_or_create() reports a non-empty cart, but the
+        follow-up eager-loaded re-query (used to build response detail) legitimately
+        finds no items - covers get_cart()'s second empty-cart guard."""
+        user = await make_user(db_session)
+        real_cart = await CartService(db_session).get_or_create(user.id)  # genuinely empty in DB
+        fake_populated_cart = SimpleNamespace(id=real_cart.id, items=[SimpleNamespace()])
+        mocker.patch.object(CartService, "get_or_create", return_value=fake_populated_cart)
+
+        service = CartService(db_session)
+        result = await service.get_cart(user.id)
+        assert result["items"] == []

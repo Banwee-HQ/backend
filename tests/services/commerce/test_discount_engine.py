@@ -12,17 +12,36 @@ get_applicable_discounts, list, and create.
 """
 
 import pytest
+from sqlalchemy import text
 from uuid import uuid4
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 
+from core.utils.uuid_utils import uuid7
 from services.commerce.discounts import DiscountEngine
-from models.commerce.discounts import DiscountType
+from models.commerce.discounts import DiscountType, SubscriptionDiscount
+from models.commerce.subscriptions import Subscription, SubscriptionStatus
 
 
 def date_range(days_valid=30):
     now = datetime.now(timezone.utc)
     return now - timedelta(days=1), now + timedelta(days=days_valid)
+
+
+async def make_subscription(db_session, user_id, **overrides) -> Subscription:
+    fields = {
+        "id": uuid7(),
+        "user_id": user_id,
+        "name": "Discount Engine Test Subscription",
+        "status": SubscriptionStatus.ACTIVE.value,
+        "variant_ids": [],
+    }
+    fields.update(overrides)
+    subscription = Subscription(**fields)
+    db_session.add(subscription)
+    await db_session.commit()
+    await db_session.refresh(subscription)
+    return subscription
 
 
 class TestCreate:
@@ -37,6 +56,21 @@ class TestCreate:
         assert discount.code == discount.code.upper()
         assert discount.is_active is True
         assert discount.used_count == 0
+
+    async def test_duplicate_code_raises_and_rolls_back(self, db_session):
+        engine = DiscountEngine(db_session)
+        valid_from, valid_until = date_range()
+        code = f"dup{uuid4().hex[:8]}"
+        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value,
+                             value=10, valid_from=valid_from, valid_until=valid_until)
+
+        with pytest.raises(Exception):
+            await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value,
+                                 value=20, valid_from=valid_from, valid_until=valid_until)
+
+        # Session must still be usable after the rollback in the except block.
+        result = await db_session.execute(text("SELECT 1"))
+        assert result.scalar() == 1
 
 
 class TestValidateDiscountCode:
@@ -114,6 +148,37 @@ class TestValidateDiscountCode:
         result = await engine.validate_discount_code(code, subtotal=Decimal("150.00"))
         assert result["is_valid"] is True
 
+    async def test_already_applied_to_subscription_is_rejected(self, db_session, test_user):
+        engine = DiscountEngine(db_session)
+        valid_from, valid_until = date_range()
+        code = f"dupe{uuid4().hex[:8]}"
+        discount = await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=10,
+                                        valid_from=valid_from, valid_until=valid_until)
+        subscription = await make_subscription(db_session, test_user.id)
+        db_session.add(SubscriptionDiscount(
+            id=uuid7(), subscription_id=subscription.id, discount_id=discount.id,
+            discount_amount=Decimal("10.00"),
+        ))
+        await db_session.commit()
+
+        result = await engine.validate_discount_code(code, subscription_id=str(subscription.id))
+        assert result["is_valid"] is False
+        assert "already applied" in result["error_message"]
+
+    async def test_db_error_is_caught_and_returns_generic_message(self, db_session):
+        """A malformed subscription_id (not a valid UUID) blows up the
+        SubscriptionDiscount lookup at the DB level rather than at the Python
+        level - this must be caught, not surfaced as a raw 500."""
+        engine = DiscountEngine(db_session)
+        valid_from, valid_until = date_range()
+        code = f"dberr{uuid4().hex[:8]}"
+        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=10,
+                             valid_from=valid_from, valid_until=valid_until)
+
+        result = await engine.validate_discount_code(code, subscription_id="not-a-valid-uuid")
+        assert result["is_valid"] is False
+        assert result["error_message"] == "Error validating discount code"
+
 
 class TestSelectOptimalDiscount:
 
@@ -135,6 +200,33 @@ class TestSelectOptimalDiscount:
         assert best.id == big.id
         assert calculation["discount_amount"] == Decimal("20")
 
+    async def test_no_discount_offers_any_savings_returns_none_pair(self, db_session):
+        engine = DiscountEngine(db_session)
+        valid_from, valid_until = date_range()
+        zero_value = await engine.create(
+            code=f"zero{uuid4().hex[:8]}", discount_type=DiscountType.FIXED_AMOUNT.value,
+            value=0, valid_from=valid_from, valid_until=valid_until,
+        )
+        best, calculation = await engine.select_optimal_discount([zero_value], subtotal=Decimal("100.00"))
+        assert best is None
+        assert calculation is None
+
+    async def test_unexpected_error_during_selection_is_handled(self, db_session, mocker):
+        """calculate_discount_amount() documents that it never raises, but the
+        surrounding loop still needs a safety net for anything unforeseen -
+        verified here by forcing it to fail."""
+        engine = DiscountEngine(db_session)
+        valid_from, valid_until = date_range()
+        discount = await engine.create(
+            code=f"boom{uuid4().hex[:8]}", discount_type=DiscountType.FIXED_AMOUNT.value,
+            value=5, valid_from=valid_from, valid_until=valid_until,
+        )
+        mocker.patch.object(DiscountEngine, "calculate_discount_amount", side_effect=Exception("simulated failure"))
+
+        best, calculation = await engine.select_optimal_discount([discount], subtotal=Decimal("100.00"))
+        assert best is None
+        assert calculation is None
+
 
 class TestGetApplicableDiscounts:
 
@@ -154,6 +246,12 @@ class TestGetApplicableDiscounts:
         ids = [d.id for d in results]
         assert applicable.id in ids
         assert too_expensive.id not in ids
+
+    async def test_db_error_returns_empty_list_instead_of_raising(self, db_session, mocker):
+        engine = DiscountEngine(db_session)
+        mocker.patch.object(db_session, "execute", side_effect=Exception("simulated query failure"))
+        results = await engine.get_applicable_discounts(subtotal=Decimal("50.00"))
+        assert results == []
 
 
 class TestList:
@@ -181,6 +279,12 @@ class TestList:
 
         result = await engine.list(is_active=False)
         assert any(d.code == code.upper() for d in result["items"])
+
+    async def test_db_error_returns_empty_result_shape(self, db_session, mocker):
+        engine = DiscountEngine(db_session)
+        mocker.patch.object(db_session, "execute", side_effect=Exception("simulated query failure"))
+        result = await engine.list(page=2, limit=5)
+        assert result == {"items": [], "total": 0, "page": 2, "limit": 5, "pages": 0}
 
 
 class TestRemoveExpiredDiscounts:
@@ -214,3 +318,75 @@ class TestRemoveExpiredDiscounts:
         assert code.upper() in result["expired_codes"]
         await db_session.refresh(discount)
         assert discount.is_active is False
+
+    async def test_notifies_owners_of_affected_subscriptions(self, db_session, test_user, mocker):
+        """When an expired discount is actually applied to a subscription, the
+        owner's email is looked up and notified - the zero-affected-subscriptions
+        path above never exercises this branch at all."""
+        send_mock = mocker.patch("services.commerce.discounts.send_email_by_type", return_value=None)
+        engine = DiscountEngine(db_session)
+        now = datetime.now(timezone.utc)
+        code = f"notify{uuid4().hex[:8]}"
+        discount = await engine.create(
+            code=code, discount_type=DiscountType.PERCENTAGE.value, value=10,
+            valid_from=now - timedelta(days=10), valid_until=now + timedelta(days=10),
+        )
+        subscription = await make_subscription(db_session, test_user.id)
+        db_session.add(SubscriptionDiscount(
+            id=uuid7(), subscription_id=subscription.id, discount_id=discount.id,
+            discount_amount=Decimal("10.00"),
+        ))
+        discount.valid_until = now - timedelta(days=1)
+        await db_session.commit()
+
+        result = await engine.remove_expired_discounts()
+
+        assert result["affected_subscriptions"] >= 1
+        assert result["notifications_sent"] >= 1
+        send_mock.assert_any_call(
+            to_email=test_user.email, mail_type="discount_expired", context={"company_name": "Banwee"}
+        )
+
+    async def test_notification_failure_is_swallowed_per_recipient(self, db_session, test_user, mocker):
+        """A single failed email send must not prevent the discount cleanup
+        itself from being reported as successful."""
+        mocker.patch("services.commerce.discounts.send_email_by_type", side_effect=Exception("smtp down"))
+        engine = DiscountEngine(db_session)
+        now = datetime.now(timezone.utc)
+        code = f"failmail{uuid4().hex[:8]}"
+        discount = await engine.create(
+            code=code, discount_type=DiscountType.PERCENTAGE.value, value=10,
+            valid_from=now - timedelta(days=10), valid_until=now + timedelta(days=10),
+        )
+        subscription = await make_subscription(db_session, test_user.id)
+        db_session.add(SubscriptionDiscount(
+            id=uuid7(), subscription_id=subscription.id, discount_id=discount.id,
+            discount_amount=Decimal("10.00"),
+        ))
+        discount.valid_until = now - timedelta(days=1)
+        await db_session.commit()
+
+        result = await engine.remove_expired_discounts()
+
+        assert result["expired_discounts_count"] >= 1
+        assert result["notifications_sent"] == 0
+
+    async def test_db_error_is_caught_and_rolled_back(self, db_session, mocker):
+        engine = DiscountEngine(db_session)
+        now = datetime.now(timezone.utc)
+        code = f"dberr{uuid4().hex[:8]}"
+        discount = await engine.create(
+            code=code, discount_type=DiscountType.PERCENTAGE.value, value=10,
+            valid_from=now - timedelta(days=10), valid_until=now + timedelta(days=10),
+        )
+        discount.valid_until = now - timedelta(days=1)
+        await db_session.commit()
+
+        mocker.patch.object(db_session, "commit", side_effect=Exception("simulated commit failure"))
+        rollback_spy = mocker.spy(db_session, "rollback")
+
+        result = await engine.remove_expired_discounts()
+
+        assert result["expired_discounts_count"] == 0
+        assert "error" in result
+        rollback_spy.assert_called_once()

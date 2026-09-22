@@ -22,6 +22,7 @@ from core.utils.uuid_utils import uuid7
 from core.utils.encryption import PasswordManager
 from services.commerce.orders import OrderService, get_currency_from_address
 from services.commerce.discounts import DiscountEngine
+from services.commerce.cart import CartService
 from schemas.commerce.orders import Checkout
 from models.commerce.discounts import DiscountType
 from models.catalog.category import Category
@@ -96,6 +97,25 @@ async def cart_with_item(db_session, test_user, variant) -> Cart:
         select(Cart).where(Cart.id == cart.id).options(
             selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.product)
         )
+    )
+    return result.scalar_one()
+
+
+@pytest.fixture
+async def variant_without_inventory(db_session) -> ProductVariant:
+    """A variant with no Inventory row at all (distinct from a zero-quantity one)."""
+    category = Category(id=uuid7(), name="Cat", slug=f"cat-{uuid4().hex[:8]}")
+    product = Product(id=uuid7(), name="No Inventory Widget", slug=f"widget-{uuid4().hex[:8]}", category_id=category.id)
+    v = ProductVariant(id=uuid7(), product_id=product.id, sku=f"SKU-{uuid4().hex[:8]}", name="Default", base_price=Decimal("9.99"))
+    db_session.add_all([category, product, v])
+    await db_session.flush()
+    await db_session.commit()
+    # Preload .product into the identity map (like the `variant` fixture above) so a
+    # later lazy access from a freshly-queried OrderItem resolves from memory instead
+    # of attempting a real lazy-load, which would crash with MissingGreenlet in this
+    # async context.
+    result = await db_session.execute(
+        select(ProductVariant).where(ProductVariant.id == v.id).options(selectinload(ProductVariant.product))
     )
     return result.scalar_one()
 
@@ -1069,3 +1089,608 @@ class TestFormatOrderResponse:
         service = OrderService(db_session)
         response = await service._format_order_response(order)
         assert abs(response.total_amount - 49.98) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# calc_pricing discount edge cases (maximum cap, never-negative floor, resilience)
+# ---------------------------------------------------------------------------
+
+class TestCalcPricingDiscountEdgeCases:
+
+    async def test_percentage_discount_capped_by_maximum_discount(self, db_session, cart_with_item, address, shipping_method):
+        engine = DiscountEngine(db_session)
+        now = datetime.now(timezone.utc)
+        code = f"maxcap{uuid4().hex[:6]}"
+        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=50,
+                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10),
+                             maximum_discount=2.00)
+        service = OrderService(db_session)
+        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
+        # 50% of the 39.98 subtotal is 19.99, but the code's maximum_discount caps it at 2.00
+        assert result["discount_amount"] == Decimal("2.00")
+
+    async def test_total_amount_never_goes_negative(self, db_session, cart_with_item, address, shipping_method):
+        """A discount larger than subtotal+shipping+tax must floor the total at 0.00,
+        not go negative (which would mean paying the customer instead of charging them)."""
+        engine = DiscountEngine(db_session)
+        now = datetime.now(timezone.utc)
+        code = f"huge{uuid4().hex[:6]}"
+        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=1000,
+                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
+        service = OrderService(db_session)
+        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
+        assert result["total_amount"] == Decimal("0.00")
+
+    async def test_discount_engine_error_is_swallowed_not_raised(self, db_session, cart_with_item, address, shipping_method, mocker):
+        """calc_pricing must degrade gracefully (no discount applied) rather than
+        failing checkout entirely if the discount engine itself errors out."""
+        mocker.patch.object(DiscountEngine, "validate_discount_code", side_effect=RuntimeError("discount service down"))
+        service = OrderService(db_session)
+        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code="ANYCODE")
+        assert result["discount_amount"] == Decimal("0.00")
+
+
+# ---------------------------------------------------------------------------
+# validate_checkout edge cases
+# ---------------------------------------------------------------------------
+
+class TestValidateCheckoutEdgeCases:
+
+    async def test_no_orderable_items_despite_cart_being_checkoutable(self, db_session, test_user, checkout_request, mocker):
+        """Defensive check: guards against CartService ever reporting can_checkout=True
+        for a cart whose items are all unorderable (out of stock/inactive). Not reachable
+        via CartService.validate_cart's real invariants today, but exercised in isolation
+        via a mocked cart_service.validate_cart result."""
+        fake_cart = SimpleNamespace(items=[])
+        mocker.patch.object(
+            CartService, "validate_cart",
+            return_value={"valid": True, "can_checkout": True, "cart": fake_cart, "issues": [], "summary": {}},
+        )
+        service = OrderService(db_session)
+        result = await service.validate_checkout(test_user.id, checkout_request)
+        assert result["valid"] is False
+        assert result["can_proceed"] is False
+        assert any(e.get("type") == "cart_validation" for e in result["errors"])
+
+    async def test_unexpected_error_is_caught_and_returns_invalid(self, db_session, test_user, checkout_request, mocker):
+        mocker.patch.object(CartService, "validate_cart", side_effect=RuntimeError("db exploded"))
+        service = OrderService(db_session)
+        result = await service.validate_checkout(test_user.id, checkout_request)
+        assert result["valid"] is False
+        assert result["can_proceed"] is False
+        assert any(e.get("type") == "system_error" for e in result["errors"])
+
+
+# ---------------------------------------------------------------------------
+# create() edge cases
+# ---------------------------------------------------------------------------
+
+class TestCreateEdgeCases:
+
+    async def test_cart_missing_at_creation_time_raises_400(self, db_session, test_user, checkout_request, mocker):
+        """Defensive re-check inside create(): even if validate_checkout is bypassed/mocked
+        to report success, a genuinely missing cart at the fetch-for-order-creation step
+        must still fail cleanly with 400 rather than crash."""
+        mocker.patch.object(
+            OrderService, "validate_checkout",
+            return_value={"can_proceed": True, "valid": True, "errors": [], "warnings": [],
+                          "pricing": {"total": 0, "subtotal": 0, "shipping": {"cost": 0},
+                                      "tax": {"amount": 0, "rate": 0}, "currency": "USD"}},
+        )
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.create(test_user.id, checkout_request, BackgroundTasks())
+        assert exc_info.value.status_code == 400
+        assert "Cart not found" in str(exc_info.value.detail)
+
+    async def test_cart_with_no_orderable_items_at_creation_time_raises_400(
+        self, db_session, test_user, out_of_stock_variant, checkout_request, mocker
+    ):
+        """Same defensive re-check, but for a cart that exists yet contains only a
+        quantity-0 (unorderable) item."""
+        cart = Cart(id=uuid7(), user_id=test_user.id)
+        db_session.add(cart)
+        await db_session.flush()
+        db_session.add(CartItem(
+            id=uuid7(), cart_id=cart.id, product_id=out_of_stock_variant.product_id,
+            variant_id=out_of_stock_variant.id, quantity=0, price_per_unit=out_of_stock_variant.base_price,
+        ))
+        await db_session.commit()
+
+        mocker.patch.object(
+            OrderService, "validate_checkout",
+            return_value={"can_proceed": True, "valid": True, "errors": [], "warnings": [],
+                          "pricing": {"total": 0, "subtotal": 0, "shipping": {"cost": 0},
+                                      "tax": {"amount": 0, "rate": 0}, "currency": "USD"}},
+        )
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.create(test_user.id, checkout_request, BackgroundTasks())
+        assert exc_info.value.status_code == 400
+        assert "no items available" in str(exc_info.value.detail)
+
+    async def test_background_email_scheduling_failure_does_not_fail_the_order(
+        self, db_session, test_user, variant, cart_with_item, checkout_request, mocker
+    ):
+        """The order is already paid and committed by the time background email
+        scheduling runs - a failure there must not surface as an error to the caller."""
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, background_tasks=None)
+        assert order.payment_status == "paid"
+        assert order.order_status == "confirmed"
+
+    async def test_validation_failure_raises_400(self, db_session, test_user, cart_with_item, address, shipping_method):
+        """The real (non-mocked) validate_checkout path: an unknown payment method
+        makes can_proceed False, and create() must surface that as a clean 400."""
+        req = Checkout(shipping_address_id=address.id, shipping_method_id=shipping_method.id, payment_method_id=uuid4())
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.create(test_user.id, req, BackgroundTasks())
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail["message"] == "Checkout validation failed"
+
+    async def test_unexpected_payment_service_error_returns_500(
+        self, db_session, test_user, cart_with_item, checkout_request, mocker
+    ):
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            side_effect=RuntimeError("Stripe connection timeout"),
+        )
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.create(test_user.id, checkout_request, BackgroundTasks())
+        assert exc_info.value.status_code == 500
+        assert "Order creation failed due to system error" in exc_info.value.detail["message"]
+
+
+# ---------------------------------------------------------------------------
+# list() edge cases
+# ---------------------------------------------------------------------------
+
+class TestListEdgeCases:
+
+    async def test_invalid_date_from_is_ignored(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        result = await service.list(user_id=test_user.id, date_from="not-a-date")
+        assert any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
+
+    async def test_invalid_date_to_is_ignored(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        result = await service.list(user_id=test_user.id, date_to="not-a-date")
+        assert any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
+
+    async def test_valid_date_to_filters_results(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        result = await service.list(user_id=test_user.id, date_to=future)
+        assert any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
+
+    async def test_sort_by_status(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        result = await service.list(user_id=test_user.id, sort_by="status")
+        assert result["orders"]
+
+    async def test_db_error_propagates(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(db_session, "scalar", side_effect=RuntimeError("connection lost"))
+        service = OrderService(db_session)
+        with pytest.raises(RuntimeError):
+            await service.list(user_id=test_user.id)
+
+
+# ---------------------------------------------------------------------------
+# get() edge cases
+# ---------------------------------------------------------------------------
+
+class TestGetEdgeCases:
+
+    async def test_db_error_propagates(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("connection lost"))
+        service = OrderService(db_session)
+        with pytest.raises(RuntimeError):
+            await service.get(existing_order.id, test_user.id)
+
+
+# ---------------------------------------------------------------------------
+# cancel() edge cases
+# ---------------------------------------------------------------------------
+
+class TestCancelEdgeCases:
+
+    async def test_item_with_no_inventory_record_is_skipped(self, db_session, test_user, variant_without_inventory):
+        order = Order(
+            id=uuid7(), order_number=f"ORD-{uuid4().hex[:10].upper()}", user_id=test_user.id,
+            order_status=OrderStatus.PENDING, payment_status=PaymentStatus.PAID,
+            fulfillment_status=FulfillmentStatus.UNFULFILLED,
+            subtotal=Decimal("9.99"), shipping_cost=Decimal("0.00"), tax_amount=Decimal("0.00"),
+            total_amount=Decimal("9.99"),
+            billing_address={"street": "1 Test St"}, shipping_address={"street": "1 Test St"},
+        )
+        db_session.add(order)
+        await db_session.flush()
+        db_session.add(OrderItem(id=uuid7(), order_id=order.id, variant_id=variant_without_inventory.id,
+                                  quantity=1, price_per_unit=Decimal("9.99"), total_price=Decimal("9.99")))
+        await db_session.commit()
+
+        service = OrderService(db_session)
+        result = await service.cancel(order.id, test_user.id)
+        assert result.order_status == OrderStatus.CANCELLED
+
+    async def test_inventory_increment_failure_rolls_back_and_raises_500(
+        self, db_session, test_user, existing_order, mocker
+    ):
+        mocker.patch(
+            "services.catalog.inventory.InventoryService.increment",
+            side_effect=RuntimeError("lock timeout"),
+        )
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.cancel(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 500
+        await db_session.refresh(existing_order)
+        assert existing_order.order_status != OrderStatus.CANCELLED
+
+
+# ---------------------------------------------------------------------------
+# update_status() edge cases
+# ---------------------------------------------------------------------------
+
+class TestUpdateStatusEdgeCases:
+
+    async def test_cancelled_status_sets_cancelled_at(self, db_session, existing_order):
+        service = OrderService(db_session)
+        order = await service.update_status(existing_order.id, "cancelled")
+        assert order.order_status == OrderStatus.CANCELLED
+        assert order.cancelled_at is not None
+
+    async def test_delivered_email_handles_non_dict_shipping_address(self, db_session, existing_order, mocker):
+        mock = mocker.patch("services.accounts.email.EmailService.send_order_delivered", return_value=None)
+        existing_order.shipping_address = "123 Main St, Somewhere"
+        await db_session.commit()
+        service = OrderService(db_session)
+        await service.update_status(existing_order.id, "delivered", background_tasks=BackgroundTasks())
+        assert mock.call_args.kwargs["delivery_address"] == "Your delivery address"
+
+
+# ---------------------------------------------------------------------------
+# _format_order_response edge cases
+# ---------------------------------------------------------------------------
+
+class TestFormatOrderResponseEdgeCases:
+
+    async def test_missing_variant_on_item_logs_warning_and_uses_fallback(self, db_session, existing_order):
+        service = OrderService(db_session)
+        result = await db_session.execute(
+            select(Order).where(Order.id == existing_order.id).options(
+                selectinload(Order.items).selectinload(OrderItem.variant)
+            )
+        )
+        order = result.scalar_one()
+        order.items[0].variant = None  # simulate an orphaned/deleted variant reference, in-memory only
+        response = await service._format_order_response(order)
+        assert response.items[0].variant is None
+
+    async def test_total_correction_db_write_failure_still_returns_corrected_total(
+        self, db_session, existing_order, mocker
+    ):
+        existing_order.total_amount = Decimal("1.00")
+        await db_session.commit()
+        result = await db_session.execute(
+            select(Order).where(Order.id == existing_order.id).options(
+                selectinload(Order.items).selectinload(OrderItem.variant)
+            )
+        )
+        order = result.scalar_one()
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db write failed"))
+        service = OrderService(db_session)
+        response = await service._format_order_response(order)
+        # Even though persisting the correction failed, the response still reflects it
+        assert abs(response.total_amount - 49.98) < 0.01
+
+    async def test_tracking_url_is_built_from_template(self, db_session, existing_order):
+        unique_name = f"Method-{uuid4().hex[:8]}"
+        existing_order.shipping_method = unique_name
+        existing_order.tracking_number = "TRACK123"
+        db_session.add(ShippingMethod(id=uuid7(), name=unique_name, price=Decimal("10.00"), estimated_days=5,
+                                       is_active=True, tracking_url_template="https://track.example.com/{tracking_number}"))
+        await db_session.commit()
+        result = await db_session.execute(
+            select(Order).where(Order.id == existing_order.id).options(
+                selectinload(Order.items).selectinload(OrderItem.variant)
+            )
+        )
+        order = result.scalar_one()
+        service = OrderService(db_session)
+        response = await service._format_order_response(order)
+        assert response.tracking_url == "https://track.example.com/TRACK123"
+
+
+# ---------------------------------------------------------------------------
+# _validate_and_recalculate_prices edge cases
+# ---------------------------------------------------------------------------
+
+class TestValidateAndRecalculatePricesEdgeCases:
+
+    async def test_missing_variant_reference_is_caught(self, db_session):
+        fake_item = SimpleNamespace(saved_for_later=False, variant=None)
+        fake_cart = SimpleNamespace(items=[fake_item])
+        service = OrderService(db_session)
+        result = await service._validate_and_recalculate_prices(fake_cart)
+        assert result["valid"] is False
+        assert "Price validation failed" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# _calculate_final_order_total edge cases
+# ---------------------------------------------------------------------------
+
+class TestCalculateFinalOrderTotalEdgeCases:
+
+    async def test_malformed_address_raises_500(self, db_session, shipping_method):
+        service = OrderService(db_session)
+        validated_items = [{"variant_id": uuid4(), "quantity": 1, "backend_total": 50.0}]
+        with pytest.raises(HTTPException) as exc_info:
+            await service._calculate_final_order_total(validated_items, shipping_method, None)
+        assert exc_info.value.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# _get_tax_rate edge cases
+# ---------------------------------------------------------------------------
+
+class TestGetTaxRateEdgeCases:
+
+    async def test_malformed_address_returns_zero(self, db_session):
+        service = OrderService(db_session)
+        result = await service._get_tax_rate(12345)  # neither a dict nor an object exposing .get
+        assert result == 0.0
+
+
+# ---------------------------------------------------------------------------
+# _send_order_events_with_idempotency edge cases
+# ---------------------------------------------------------------------------
+
+class TestSendOrderEventsWithIdempotencyEdgeCases:
+
+    async def test_email_failure_propagates(self, db_session, test_user, existing_order, mocker):
+        """Unlike create()'s best-effort email scheduling, this method must propagate
+        failures rather than swallow them."""
+        mocker.patch(
+            "services.accounts.email.EmailService.send_order_confirmation_email",
+            side_effect=RuntimeError("smtp down"),
+        )
+        service = OrderService(db_session)
+        validated_items = [{"product_name": "Widget", "quantity": 1, "backend_price": 10.0}]
+        with pytest.raises(RuntimeError):
+            await service._send_order_events_with_idempotency(existing_order, test_user.id, validated_items)
+
+
+# ---------------------------------------------------------------------------
+# tracking / payments / tracking_public / reorder / invoice - generic error edge cases
+# ---------------------------------------------------------------------------
+
+class TestTrackingEdgeCases:
+
+    async def test_db_error_returns_500(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.tracking(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 500
+
+
+class TestPaymentsInfoEdgeCases:
+
+    async def test_db_error_returns_500(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(APIException) as exc_info:
+            await service.payments(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 500
+
+
+class TestTrackingPublicEdgeCases:
+
+    async def test_db_error_returns_404(self, db_session, existing_order, mocker):
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.tracking_public(str(existing_order.id))
+        assert exc_info.value.status_code == 404
+
+
+class TestReorderEdgeCases:
+
+    async def test_unexpected_error_returns_500(self, db_session, test_user, existing_order, variant, mocker):
+        mocker.patch.object(CartService, "clear_cart", side_effect=RuntimeError("boom"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.reorder(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 500
+
+
+class TestInvoiceEdgeCases:
+
+    async def test_missing_system_library_returns_503(self, db_session, test_user, existing_order, mocker):
+        mocker.patch(
+            "core.utils.invoice_generator.InvoiceGenerator.generate_invoice",
+            side_effect=OSError("dyld: Library not loaded: libgobject-2.0.dylib"),
+        )
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.invoice(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 503
+
+    async def test_generic_invoice_failure_returns_500(self, db_session, test_user, existing_order, mocker):
+        mocker.patch(
+            "core.utils.invoice_generator.InvoiceGenerator.generate_invoice",
+            side_effect=RuntimeError("unexpected renderer crash"),
+        )
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.invoice(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# Notes CRUD edge cases
+# ---------------------------------------------------------------------------
+
+class TestNotesEdgeCases:
+
+    async def test_second_note_is_appended_not_overwritten(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        await service.add_note(existing_order.id, test_user.id, "First")
+        result = await service.add_note(existing_order.id, test_user.id, "Second")
+        assert "First" in result["all_notes"]
+        assert "Second" in result["all_notes"]
+
+    async def test_add_note_unknown_order_raises_404(self, db_session, test_user):
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.add_note(uuid4(), test_user.id, "x")
+        assert exc_info.value.status_code == 404
+
+    async def test_add_note_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.add_note(existing_order.id, test_user.id, "x")
+        assert exc_info.value.status_code == 500
+
+    async def test_notes_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.notes(existing_order.id, test_user.id)
+        assert exc_info.value.status_code == 500
+
+    async def test_get_note_failure_raises_500(self, db_session, test_user, existing_order, mocker):
+        mocker.patch.object(OrderService, "notes", side_effect=RuntimeError("boom"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_note(existing_order.id, test_user.id, 0)
+        assert exc_info.value.status_code == 500
+
+    async def test_update_note_unknown_order_raises_404(self, db_session, test_user):
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_note(uuid4(), test_user.id, 0, "x")
+        assert exc_info.value.status_code == 404
+
+    async def test_update_note_preserves_other_notes(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        await service.add_note(existing_order.id, test_user.id, "Keep me")
+        await service.add_note(existing_order.id, test_user.id, "Change me")
+        await service.update_note(existing_order.id, test_user.id, 1, "Changed")
+        notes = await service.notes(existing_order.id, test_user.id)
+        assert notes["notes"][0]["note"] == "Keep me"
+        assert notes["notes"][1]["note"] == "Changed"
+
+    async def test_update_note_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
+        await OrderService(db_session).add_note(existing_order.id, test_user.id, "x")
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_note(existing_order.id, test_user.id, 0, "y")
+        assert exc_info.value.status_code == 500
+
+    async def test_delete_note_unknown_order_raises_404(self, db_session, test_user):
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.delete_note(uuid4(), test_user.id, 0)
+        assert exc_info.value.status_code == 404
+
+    async def test_delete_note_preserves_other_notes(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        await service.add_note(existing_order.id, test_user.id, "Delete me")
+        await service.add_note(existing_order.id, test_user.id, "Keep me")
+        assert await service.delete_note(existing_order.id, test_user.id, 0) is True
+        notes = await service.notes(existing_order.id, test_user.id)
+        assert notes["total_notes"] == 1
+        assert notes["notes"][0]["note"] == "Keep me"
+
+    async def test_delete_note_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
+        await OrderService(db_session).add_note(existing_order.id, test_user.id, "x")
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
+        service = OrderService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.delete_note(existing_order.id, test_user.id, 0)
+        assert exc_info.value.status_code == 500
+
+
+# ---------------------------------------------------------------------------
+# _calculate_estimated_delivery (pure/sync helper)
+# ---------------------------------------------------------------------------
+
+class TestCalculateEstimatedDelivery:
+
+    def test_delivered_order_uses_delivered_at(self, db_session):
+        service = OrderService(db_session)
+        delivered_at = datetime.now(timezone.utc)
+        order = SimpleNamespace(delivered_at=delivered_at, order_status="delivered", id=uuid4())
+        assert service._calculate_estimated_delivery(order) == delivered_at.isoformat()
+
+    def test_cancelled_order_has_no_estimate(self, db_session):
+        service = OrderService(db_session)
+        order = SimpleNamespace(delivered_at=None, order_status="cancelled", id=uuid4())
+        assert service._calculate_estimated_delivery(order) is None
+
+    def test_express_shipping_uses_one_day(self, db_session):
+        service = OrderService(db_session)
+        shipped_at = datetime.now(timezone.utc)
+        order = SimpleNamespace(delivered_at=None, order_status="shipped", shipping_method="Express Overnight",
+                                 shipped_at=shipped_at, confirmed_at=None, created_at=shipped_at, id=uuid4())
+        result = service._calculate_estimated_delivery(order)
+        assert result == (shipped_at + timedelta(days=1)).isoformat()
+
+    def test_priority_shipping_uses_two_days(self, db_session):
+        service = OrderService(db_session)
+        shipped_at = datetime.now(timezone.utc)
+        order = SimpleNamespace(delivered_at=None, order_status="shipped", shipping_method="Priority 2-Day",
+                                 shipped_at=shipped_at, confirmed_at=None, created_at=shipped_at, id=uuid4())
+        result = service._calculate_estimated_delivery(order)
+        assert result == (shipped_at + timedelta(days=2)).isoformat()
+
+    def test_economy_shipping_uses_seven_days(self, db_session):
+        service = OrderService(db_session)
+        confirmed_at = datetime.now(timezone.utc)
+        order = SimpleNamespace(delivered_at=None, order_status="confirmed", shipping_method="Economy",
+                                 shipped_at=None, confirmed_at=confirmed_at, created_at=confirmed_at, id=uuid4())
+        result = service._calculate_estimated_delivery(order)
+        assert result == (confirmed_at + timedelta(days=9)).isoformat()  # 7 base + 2 processing
+
+    def test_confirmed_only_adds_processing_time(self, db_session):
+        service = OrderService(db_session)
+        confirmed_at = datetime.now(timezone.utc)
+        order = SimpleNamespace(delivered_at=None, order_status="confirmed", shipping_method=None,
+                                 shipped_at=None, confirmed_at=confirmed_at, created_at=confirmed_at, id=uuid4())
+        result = service._calculate_estimated_delivery(order)
+        assert result == (confirmed_at + timedelta(days=7)).isoformat()  # 5 base + 2
+
+    def test_exception_is_caught_and_returns_none(self, db_session):
+        service = OrderService(db_session)
+        order = SimpleNamespace(delivered_at=None, order_status="pending", shipping_method=None,
+                                 shipped_at=None, confirmed_at=None, created_at=None, id=uuid4())
+        assert service._calculate_estimated_delivery(order) is None
+
+
+# ---------------------------------------------------------------------------
+# get_statistics date_to edge cases
+# ---------------------------------------------------------------------------
+
+class TestGetStatisticsEdgeCases:
+
+    async def test_valid_date_to_filters_results(self, db_session, existing_order):
+        service = OrderService(db_session)
+        future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        stats = await service.get_statistics(date_to=future)
+        assert stats["total_orders"] >= 1
+
+    async def test_invalid_date_to_is_ignored(self, db_session, existing_order):
+        service = OrderService(db_session)
+        stats = await service.get_statistics(date_to="not-a-date")
+        assert "total_orders" in stats

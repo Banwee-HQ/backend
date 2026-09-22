@@ -840,22 +840,29 @@ class PaymentService:
             
             # Validate payment method expiry using expiry_month/expiry_year
             if payment_method.expiry_year and payment_method.expiry_month:
+                is_expired = False
                 try:
                     y = int(payment_method.expiry_year)
                     m = int(payment_method.expiry_month)
                     if m == 12:
-                        next_month = datetime(y + 1, 1, 1)
+                        next_month = datetime(y + 1, 1, 1, tzinfo=timezone.utc)
                     else:
-                        next_month = datetime(y, m + 1, 1)
+                        next_month = datetime(y, m + 1, 1, tzinfo=timezone.utc)
                     # expires at end of expiry month
-                    if next_month <= datetime.now(timezone.utc):
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Payment method has expired. Please update your payment information."
-                        )
+                    is_expired = next_month <= datetime.now(timezone.utc)
                 except Exception:
                     # If parsing fails, continue and let stripe/API errors surface later
-                    pass
+                    is_expired = False
+                # Raised outside the try/except above: HTTPException is itself an
+                # Exception subclass, so raising it from inside that block would be
+                # silently swallowed by the broad `except Exception` (as it previously
+                # was, alongside the naive/aware datetime TypeError it always raised -
+                # together these two bugs meant expired cards were never rejected here).
+                if is_expired:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Payment method has expired. Please update your payment information."
+                    )
             
             # Create and confirm payment intent
             payment_intent = await self.create_intent(

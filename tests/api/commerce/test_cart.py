@@ -2,7 +2,11 @@
 
 import pytest
 from httpx import AsyncClient
+from fastapi import HTTPException
 from uuid import uuid4
+
+from api.commerce.cart import validate as validate_route
+from core.exceptions import APIException
 
 
 @pytest.fixture
@@ -157,3 +161,156 @@ class TestCartEndpoints:
     async def test_checkout_summary_unauthenticated(self, async_client: AsyncClient):
         response = await async_client.get("/v1/cart/checkout-summary/")
         assert response.status_code == 401
+
+
+@pytest.mark.api
+class TestCreateItemEdgeCases:
+
+    async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, created_variant, mocker):
+        mocker.patch("services.commerce.cart.CartService.add_to_cart", side_effect=RuntimeError("db down"))
+        response = await async_client.post("/v1/cart/add/", headers=auth_headers, json={
+            "variant_id": created_variant["id"], "quantity": 1
+        })
+        assert response.status_code == 400
+        assert "Failed to add item to cart" in response.json()["message"]
+
+
+@pytest.mark.api
+class TestGetCartEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.get_cart", side_effect=HTTPException(status_code=403, detail="nope"))
+        response = await async_client.get("/v1/cart/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.get_cart", side_effect=RuntimeError("db down"))
+        response = await async_client.get("/v1/cart/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestPatchItemEdgeCases:
+
+    async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, cart_with_item, mocker):
+        cart = await async_client.get("/v1/cart/", headers=auth_headers)
+        item_id = cart.json()["data"]["items"][0]["id"]
+        mocker.patch("services.commerce.cart.CartService.update_item", side_effect=RuntimeError("db down"))
+        response = await async_client.patch(f"/v1/cart/{item_id}/", headers=auth_headers, json={"quantity": 1})
+        assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestDeleteItemEdgeCases:
+
+    async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, cart_with_item, mocker):
+        cart = await async_client.get("/v1/cart/", headers=auth_headers)
+        item_id = cart.json()["data"]["items"][0]["id"]
+        mocker.patch("services.commerce.cart.CartService.remove_item", side_effect=RuntimeError("db down"))
+        response = await async_client.delete(f"/v1/cart/{item_id}/", headers=auth_headers)
+        assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestCountEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.item_count", side_effect=HTTPException(status_code=403, detail="nope"))
+        response = await async_client.get("/v1/cart/count/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.item_count", side_effect=RuntimeError("db down"))
+        response = await async_client.get("/v1/cart/count/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestValidateEdgeCases:
+
+    async def test_missing_current_user_raises_401_defensively(self, db_session):
+        """This guard is unreachable via HTTP (require_auth already rejects an
+        unauthenticated request before the route body runs), but is exercised
+        directly to confirm it still does the right thing on its own."""
+        with pytest.raises(APIException) as exc_info:
+            await validate_route(request=None, country=None, province=None, current_user=None, db=db_session)
+        assert exc_info.value.status_code == 401
+
+    async def test_empty_cart_returns_error_response(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/cart/validate/", headers=auth_headers)
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert "error(s)" in body["message"]
+
+    async def test_warnings_only_result_still_returns_success(self, async_client: AsyncClient, auth_headers, mocker):
+        """Isolated test of the endpoint's own formatting branch for a
+        warnings-only (no error-severity issues) validation result."""
+        mocker.patch(
+            "services.commerce.cart.CartService.validate_cart",
+            return_value={"valid": True, "can_checkout": False,
+                          "issues": [{"type": "quantity_limit_exceeded", "severity": "warning", "message": "heads up"}],
+                          "summary": {}},
+        )
+        response = await async_client.post("/v1/cart/validate/", headers=auth_headers)
+        assert response.status_code == 200
+        assert "warning(s)" in response.json()["message"]
+
+    async def test_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.validate_cart", side_effect=RuntimeError("db down"))
+        response = await async_client.post("/v1/cart/validate/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_no_issues_and_not_checkoutable_returns_generic_error(self, async_client: AsyncClient, auth_headers, mocker):
+        """Isolated test of the endpoint's final else-branch (can_checkout False and
+        valid False, but with no issues to report) - not reachable via CartService's
+        real validate_cart, whose can_checkout=False paths always add an issue."""
+        mocker.patch(
+            "services.commerce.cart.CartService.validate_cart",
+            return_value={"valid": False, "can_checkout": False, "issues": [], "summary": {}},
+        )
+        response = await async_client.post("/v1/cart/validate/", headers=auth_headers)
+        assert response.status_code == 400
+        assert response.json()["message"] == "Cart validation failed"
+
+
+@pytest.mark.api
+class TestCalculateEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.calc_totals", side_effect=HTTPException(status_code=403, detail="nope"))
+        response = await async_client.post("/v1/cart/calculate/", headers=auth_headers, json={})
+        assert response.status_code == 403
+
+    async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.calc_totals", side_effect=RuntimeError("db down"))
+        response = await async_client.post("/v1/cart/calculate/", headers=auth_headers, json={})
+        assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestClearEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.clear_cart", side_effect=HTTPException(status_code=403, detail="nope"))
+        response = await async_client.post("/v1/cart/clear/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.clear_cart", side_effect=RuntimeError("db down"))
+        response = await async_client.post("/v1/cart/clear/", headers=auth_headers)
+        assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestCheckoutSummaryEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.checkout_summary", side_effect=HTTPException(status_code=403, detail="nope"))
+        response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.cart.CartService.checkout_summary", side_effect=RuntimeError("db down"))
+        response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
+        assert response.status_code == 500

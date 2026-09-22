@@ -2,9 +2,11 @@
 
 import pytest
 from httpx import AsyncClient
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
 
+from core.exceptions import APIException
 from models.commerce.orders import Order, OrderStatus, PaymentStatus, FulfillmentStatus
 from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
 from core.utils.uuid_utils import uuid7
@@ -336,6 +338,75 @@ class TestOrderEndpoints:
         response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
         assert response.status_code == 200
 
+    async def test_checkout_insufficient_stock_returns_400(
+        self, async_client: AsyncClient, auth_headers, test_user, checkout_ready_cart, db_session, mocker
+    ):
+        """Real (non-mocked) flow: reduce the reserved item's stock below the cart
+        quantity and confirm checkout fails cleanly with 400, not a masked 500 -
+        this exercises the `except APIException: raise` branch in checkout()."""
+        from sqlalchemy import select
+        from models.commerce.cart import Cart, CartItem
+        from models.catalog.inventories import Inventory
+
+        cart_item = (await db_session.execute(
+            select(CartItem).join(Cart).where(Cart.user_id == test_user.id)
+        )).scalars().first()
+        inventory = (await db_session.execute(
+            select(Inventory).where(Inventory.variant_id == cart_item.variant_id)
+        )).scalar_one()
+        inventory.quantity_available = 1  # the cart wants 2
+        await db_session.commit()
+
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+        response = await async_client.post("/v1/orders/checkout/", headers=auth_headers, json=checkout_ready_cart)
+        assert response.status_code == 400
+
+    async def test_checkout_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, checkout_ready_cart, mocker):
+        mocker.patch("services.commerce.orders.OrderService.create", side_effect=RuntimeError("boom"))
+        response = await async_client.post("/v1/orders/checkout/", headers=auth_headers, json=checkout_ready_cart)
+        assert response.status_code == 500
+
+    async def test_create_alias_insufficient_stock_returns_400(
+        self, async_client: AsyncClient, auth_headers, test_user, checkout_ready_cart, db_session, mocker
+    ):
+        """POST /v1/orders (the create() alias) - real APIException-preserving
+        behavior, verified independently of /orders/checkout/."""
+        from sqlalchemy import select
+        from models.commerce.cart import Cart, CartItem
+        from models.catalog.inventories import Inventory
+
+        cart_item = (await db_session.execute(
+            select(CartItem).join(Cart).where(Cart.user_id == test_user.id)
+        )).scalars().first()
+        inventory = (await db_session.execute(
+            select(Inventory).where(Inventory.variant_id == cart_item.variant_id)
+        )).scalar_one()
+        inventory.quantity_available = 1  # the cart wants 2
+        await db_session.commit()
+
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
+        assert response.status_code == 400
+
+    async def test_create_alias_unknown_payment_method_returns_400(self, async_client: AsyncClient, auth_headers, checkout_ready_cart):
+        """POST /v1/orders (the create() alias) - same APIException-preserving
+        behavior as /orders/checkout/, verified independently since it's a
+        separate route function in the API layer."""
+        checkout_ready_cart["payment_method_id"] = str(uuid4())
+        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
+        assert response.status_code == 400
+
+    async def test_create_alias_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, checkout_ready_cart, mocker):
+        mocker.patch("services.commerce.orders.OrderService.create", side_effect=RuntimeError("boom"))
+        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
+        assert response.status_code == 400
+
     async def test_checkout_validate_empty_cart(self, async_client: AsyncClient, auth_headers):
         """POST /v1/orders/checkout/validate - Empty cart fails validation, but the
         request itself always succeeds - the result carries valid=False, not an HTTP error."""
@@ -349,3 +420,297 @@ class TestOrderEndpoints:
         )
         assert response.status_code == 200
         assert response.json()["data"]["can_proceed"] is False
+
+
+# ---------------------------------------------------------------------------
+# Thin-wrapper exception-handling branches: every endpoint's try/except
+# preserves APIException/HTTPException status codes as-is and maps any other
+# unexpected exception to a documented status code. Verified via mocker since
+# OrderService itself never raises bare exceptions for most of these calls.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.api
+class TestStatisticsEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+        assert response.status_code == 418
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=RuntimeError("boom"))
+        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetOrderEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListOrdersEdgeCases:
+
+    async def test_data_shaped_result_uses_explicit_pagination(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.list", return_value={
+            "data": [{"id": "x"}], "page": 2, "limit": 5, "total": 1, "pages": 1
+        })
+        response = await async_client.get("/v1/orders/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["pagination"]["page"] == 2
+
+    async def test_unrecognized_result_shape_falls_back_to_raw_data(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.list", return_value={})
+        response = await async_client.get("/v1/orders/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"] == {}
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.list", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.get("/v1/orders/", headers=auth_headers)
+        assert response.status_code == 418
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.list", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get("/v1/orders/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.list", side_effect=RuntimeError("boom"))
+        response = await async_client.get("/v1/orders/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestValidateEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.validate_checkout", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.post("/v1/orders/checkout/validate/", headers=auth_headers, json={
+            "shipping_address_id": str(uuid4()), "shipping_method_id": str(uuid4()), "payment_method_id": str(uuid4()),
+        })
+        assert response.status_code == 418
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.validate_checkout", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.post("/v1/orders/checkout/validate/", headers=auth_headers, json={
+            "shipping_address_id": str(uuid4()), "shipping_method_id": str(uuid4()), "payment_method_id": str(uuid4()),
+        })
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.validate_checkout", side_effect=RuntimeError("boom"))
+        response = await async_client.post("/v1/orders/checkout/validate/", headers=auth_headers, json={
+            "shipping_address_id": str(uuid4()), "shipping_method_id": str(uuid4()), "payment_method_id": str(uuid4()),
+        })
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestCancelEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.cancel", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/cancel/", headers=auth_headers)
+        assert response.status_code == 418
+
+    async def test_unexpected_error_returns_400(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.cancel", side_effect=RuntimeError("boom"))
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/cancel/", headers=auth_headers)
+        assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestInvoiceEdgeCases:
+
+    async def test_unsuccessful_generation_result_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch(
+            "core.utils.invoice_generator.InvoiceGenerator.generate_invoice",
+            return_value={"success": False, "message": "renderer unavailable"},
+        )
+        response = await async_client.get(f"/v1/orders/{created_order.id}/invoice/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.invoice", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/invoice/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestCreateNoteEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.add_note", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.post(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers, json={"note": "x"})
+        assert response.status_code == 418
+
+    async def test_unexpected_error_returns_400(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.add_note", side_effect=RuntimeError("boom"))
+        response = await async_client.post(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers, json={"note": "x"})
+        assert response.status_code == 400
+
+
+@pytest.mark.api
+class TestGetNoteEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_note", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/0/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_note", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/0/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestListNotesEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.notes", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers)
+        assert response.status_code == 418
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.notes", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetTrackingEdgeCases:
+
+    async def test_none_result_is_treated_as_not_found(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        """Defensive check: OrderService.tracking() always raises rather than
+        returning None today, but the endpoint guards against it regardless."""
+        mocker.patch("services.commerce.orders.OrderService.tracking", return_value=None)
+        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.tracking", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.tracking", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetOrderPaymentsEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.payments", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.payments", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetOrderShipmentsEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch(
+            "services.commerce.shipping_tracking.ShippingTrackingService.list_by_order",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestPublicTrackingEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, mocker):
+        mocker.patch("services.commerce.orders.OrderService.tracking_public", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.get("/v1/orders/track/ANYTHING/")
+        assert response.status_code == 418
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, mocker):
+        mocker.patch("services.commerce.orders.OrderService.tracking_public", side_effect=RuntimeError("boom"))
+        response = await async_client.get("/v1/orders/track/ANYTHING/")
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestUpdateStatusEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.update_status", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/status/", headers=admin_headers, json={"status": "confirmed"})
+        assert response.status_code == 418
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, admin_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.update_status", side_effect=RuntimeError("boom"))
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/status/", headers=admin_headers, json={"status": "confirmed"})
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestDeliverEdgeCases:
+
+    async def test_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.put(f"/v1/orders/{uuid4()}/deliver/", headers=admin_headers, json={})
+        assert response.status_code == 404
+
+    async def test_malformed_order_id_returns_500(self, async_client: AsyncClient, admin_headers):
+        """deliver() does UUID(order_id) internally - a non-UUID path segment
+        raises a bare ValueError, which the endpoint must map to a clean 500
+        instead of letting it bubble up unhandled."""
+        response = await async_client.put("/v1/orders/not-a-real-uuid/deliver/", headers=admin_headers, json={})
+        assert response.status_code == 500
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.deliver", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.put(f"/v1/orders/{created_order.id}/deliver/", headers=admin_headers, json={})
+        assert response.status_code == 418
+
+
+@pytest.mark.api
+class TestShipEdgeCases:
+
+    async def test_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post(f"/v1/orders/{uuid4()}/ship/", headers=admin_headers, json={
+            "carrier": "ups", "tracking_number": "1Z999"
+        })
+        assert response.status_code == 404
+
+    async def test_malformed_order_id_returns_500(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post("/v1/orders/not-a-real-uuid/ship/", headers=admin_headers, json={
+            "carrier": "ups", "tracking_number": "1Z999"
+        })
+        assert response.status_code == 500
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.ship", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.post(f"/v1/orders/{created_order.id}/ship/", headers=admin_headers, json={
+            "carrier": "ups", "tracking_number": "1Z999"
+        })
+        assert response.status_code == 418

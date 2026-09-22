@@ -323,3 +323,343 @@ class TestSubscriptionEndpoints:
         assert response.status_code == 200
         variant_ids = [p["variant_id"] for p in response.json()["data"]["products"]]
         assert second_variant["id"] not in variant_ids
+
+    # -- calculate-cost branches -------------------------------------------------
+
+    async def test_calculate_cost_unknown_variant_is_rejected(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={"variant_ids": [str(uuid4())]})
+        assert response.status_code == 400
+
+    async def test_calculate_cost_with_delivery_address(self, async_client: AsyncClient, auth_headers, subscription_variant, subscription_address):
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={
+                "variant_ids": [subscription_variant["id"]], "delivery_address_id": subscription_address["id"],
+            })
+        assert response.status_code == 200
+        assert "cost_breakdown" in response.json()["data"]
+
+    # -- 404s for endpoints that weren't exercised against an unknown id --------
+
+    async def test_add_products_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/products/",
+            headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+        assert response.status_code == 404
+
+    async def test_remove_products_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
+        response = await async_client.request("DELETE", f"/v1/subscriptions/{uuid4()}/products/",
+            headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+        assert response.status_code == 404
+
+    async def test_update_quantity_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
+        response = await async_client.patch(f"/v1/subscriptions/{uuid4()}/products/quantity/",
+            headers=auth_headers, json={"variant_id": second_variant["id"], "quantity": 2})
+        assert response.status_code == 404
+
+    async def test_adjust_quantity_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
+        response = await async_client.patch(f"/v1/subscriptions/{uuid4()}/products/adjust-quantity/",
+            headers=auth_headers, json={"variant_id": second_variant["id"], "change": 1})
+        assert response.status_code == 404
+
+    async def test_get_quantities_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get(f"/v1/subscriptions/{uuid4()}/products/quantities/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_toggle_auto_renew_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.patch(
+            f"/v1/subscriptions/{uuid4()}/auto-renew/?auto_renew=false", headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    async def test_pause_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/pause/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_resume_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/resume/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_resume_from_cancelled_reactivates_the_subscription(self, async_client: AsyncClient, auth_headers, created_subscription):
+        """Note: the endpoint's `action_message = "resumed" if subscription.status
+        == "active" else "activated"` is dead code - service.resume() always sets
+        status to "active" before this check runs, from either paused or cancelled,
+        so the message is always "resumed" regardless of the prior state. Cosmetic
+        only (does not affect billing/behavior), so left as-is; asserting on the
+        actual (always-"resumed") wording rather than the unreachable branch."""
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/cancel/", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/resume/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "active"
+        assert "resumed" in response.json()["message"]
+
+    async def test_skip_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/skip/", headers=auth_headers, json={})
+        assert response.status_code == 404
+
+    async def test_unskip_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/unskip/", headers=auth_headers, json={})
+        assert response.status_code == 404
+
+    async def test_remove_single_product_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
+        """remove_product() converts the service's HTTPException into an
+        APIException carrying the same status/detail - distinct conversion
+        logic from the plain re-raise other endpoints use."""
+        response = await async_client.delete(
+            f"/v1/subscriptions/{uuid4()}/products/{second_variant['id']}/", headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    async def test_apply_discount_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/discounts/",
+            headers=auth_headers, json={"discount_code": "WHATEVER"})
+        assert response.status_code == 404
+
+    async def test_apply_discount_invalid_code_is_400(self, async_client: AsyncClient, auth_headers, created_subscription):
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
+            headers=auth_headers, json={"discount_code": f"NOPE{uuid4().hex[:8]}"})
+        assert response.status_code == 400
+
+    async def test_remove_discount_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.delete(
+            f"/v1/subscriptions/{uuid4()}/discounts/{uuid4()}/", headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    async def test_remove_discount_mismatched_id_is_404(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
+        promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:6].upper()}", discount_type=DiscountType.PERCENTAGE, value=10, is_active=True)
+        db_session.add(promo)
+        await db_session.commit()
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
+            headers=auth_headers, json={"discount_code": promo.code})
+
+        response = await async_client.delete(
+            f"/v1/subscriptions/{created_subscription['id']}/discounts/{uuid4()}/", headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    async def test_details_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get(f"/v1/subscriptions/{uuid4()}/details/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_details_reflects_applied_discount(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
+        promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:6].upper()}", discount_type=DiscountType.PERCENTAGE, value=10, is_active=True)
+        db_session.add(promo)
+        await db_session.commit()
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
+            headers=auth_headers, json={"discount_code": promo.code})
+
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["discounts"][0]["code"] == promo.code
+        assert data["subscription"]["discount_amount"] > 0
+
+    async def test_details_reflects_fixed_amount_discount(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
+        promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:6].upper()}", discount_type=DiscountType.FIXED, value=5, is_active=True)
+        db_session.add(promo)
+        await db_session.commit()
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
+            headers=auth_headers, json={"discount_code": promo.code})
+
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["subscription"]["discount_amount"] == 5.0
+
+    async def test_orders_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get(f"/v1/subscriptions/{uuid4()}/orders/", headers=auth_headers)
+        assert response.status_code == 404
+
+    # -- process-shipment branches -----------------------------------------------
+
+    async def test_process_shipment_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/process-shipment/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_process_shipment_paused_subscription_is_400(self, async_client: AsyncClient, auth_headers, created_subscription):
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/pause/", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        assert response.status_code == 400
+
+    async def test_process_shipment_without_a_payment_method_is_500(self, async_client: AsyncClient, auth_headers, created_subscription):
+        """No default payment method on the account -> the scheduler's
+        process_subscription() reports a failure dict, which this endpoint
+        must translate into an error response instead of pretending success."""
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+@pytest.mark.subscriptions
+class TestUnexpectedErrorsBecomeSafe500s:
+    """Every route in this router wraps its body in the same
+    try/except APIException/except HTTPException/except Exception->500 pattern.
+    The APIException/HTTPException passthroughs are exercised throughout
+    TestSubscriptionEndpoints via real 400/404s; these tests instead force the
+    underlying service call to raise something completely unexpected, verifying
+    the final safety net turns it into a clean 500 rather than leaking a raw
+    traceback or crashing the request."""
+
+    async def test_trigger_order_processing(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions_scheduler.SubscriptionScheduler.process_due_subscriptions",
+            side_effect=Exception("boom"),
+        )
+        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_trigger_notifications(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("core.utils.response.Response.success", side_effect=Exception("boom"))
+        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_plans(self, async_client: AsyncClient, mocker):
+        mocker.patch("core.utils.response.Response.success", side_effect=Exception("boom"))
+        response = await async_client.get("/v1/subscriptions/plans/")
+        assert response.status_code == 500
+
+    async def test_list_due(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions.SubscriptionService.list_due", side_effect=Exception("boom"),
+        )
+        response = await async_client.get("/v1/subscriptions/due/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_calculate_cost(self, async_client: AsyncClient, auth_headers, subscription_variant, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions.SubscriptionService._calc_cost", side_effect=Exception("boom"),
+        )
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
+        assert response.status_code == 400
+
+    async def test_create(self, async_client: AsyncClient, auth_headers, subscription_variant, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions.SubscriptionService.create", side_effect=Exception("boom"),
+        )
+        response = await async_client.post("/v1/subscriptions/",
+            headers=auth_headers, json={"name": "X", "variant_ids": [subscription_variant["id"]]})
+        assert response.status_code == 500
+
+    async def test_list_subscriptions(self, async_client: AsyncClient, auth_headers, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.list", side_effect=Exception("boom"))
+        response = await async_client.get("/v1/subscriptions/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_get(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_update(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.update", side_effect=Exception("boom"))
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/",
+            headers=auth_headers, json={"name": "X"})
+        assert response.status_code == 500
+
+    async def test_cancel(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.cancel", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/cancel/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_delete(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.delete", side_effect=Exception("boom"))
+        response = await async_client.delete(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_add_products(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.add_products", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/products/",
+            headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+        assert response.status_code == 500
+
+    async def test_remove_products(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.remove_products", side_effect=Exception("boom"))
+        response = await async_client.request("DELETE", f"/v1/subscriptions/{created_subscription['id']}/products/",
+            headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+        assert response.status_code == 500
+
+    async def test_update_quantity(self, async_client: AsyncClient, auth_headers, created_subscription, subscription_variant, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.set_quantity", side_effect=Exception("boom"))
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/quantity/",
+            headers=auth_headers, json={"variant_id": subscription_variant["id"], "quantity": 2})
+        assert response.status_code == 500
+
+    async def test_adjust_quantity(self, async_client: AsyncClient, auth_headers, created_subscription, subscription_variant, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.adjust_quantity", side_effect=Exception("boom"))
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/adjust-quantity/",
+            headers=auth_headers, json={"variant_id": subscription_variant["id"], "change": 1})
+        assert response.status_code == 500
+
+    async def test_get_quantities(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get_quantities", side_effect=Exception("boom"))
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/products/quantities/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_toggle_auto_renew(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
+        response = await async_client.patch(
+            f"/v1/subscriptions/{created_subscription['id']}/auto-renew/?auto_renew=false", headers=auth_headers
+        )
+        assert response.status_code == 500
+
+    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_pause(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.pause", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/pause/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_resume(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.resume", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/resume/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_change_frequency(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.change_frequency", side_effect=Exception("boom"))
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/frequency/",
+            headers=auth_headers, json={"frequency": "weekly"})
+        assert response.status_code == 500
+
+    async def test_skip(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.skip_next_shipment", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/skip/", headers=auth_headers, json={})
+        assert response.status_code == 500
+
+    async def test_unskip(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.unskip_next_shipment", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/unskip/", headers=auth_headers, json={})
+        assert response.status_code == 500
+
+    async def test_remove_product(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.remove_products", side_effect=Exception("boom"))
+        response = await async_client.delete(
+            f"/v1/subscriptions/{created_subscription['id']}/products/{second_variant['id']}/", headers=auth_headers
+        )
+        assert response.status_code == 500
+
+    async def test_apply_discount(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.apply_discount", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
+            headers=auth_headers, json={"discount_code": "X"})
+        assert response.status_code == 500
+
+    async def test_remove_discount(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.remove_discount", side_effect=Exception("boom"))
+        response = await async_client.delete(
+            f"/v1/subscriptions/{created_subscription['id']}/discounts/{uuid4()}/", headers=auth_headers
+        )
+        assert response.status_code == 500
+
+    async def test_details(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_orders(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get_orders", side_effect=Exception("boom"))
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/orders/", headers=auth_headers)
+        assert response.status_code == 500

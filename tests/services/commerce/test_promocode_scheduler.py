@@ -12,7 +12,7 @@ import pytest
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 
-from services.commerce.promocode_scheduler import PromoCodeScheduler
+from services.commerce.promocode_scheduler import PromoCodeScheduler, update_promocode_statuses_task
 from models.commerce.promocode import Promocode
 
 
@@ -100,6 +100,49 @@ class TestUpdatePromocodeStatuses:
         await db_session.refresh(promo)
         assert promo.is_active is True
         assert not any(r["code"] == promo.code for r in result["results"])
+
+    async def test_db_error_is_caught_and_rolled_back(self, db_session, mocker):
+        """An unexpected failure (e.g. a commit-time DB error) is reported as a
+        failure result instead of propagating a raw exception to the scheduler's
+        caller, and the transaction is rolled back."""
+        await make_promocode(db_session, is_active=False,
+                              valid_from=datetime.now(timezone.utc) - timedelta(days=1))
+        mocker.patch.object(db_session, "commit", side_effect=Exception("simulated commit failure"))
+        rollback_spy = mocker.spy(db_session, "rollback")
+        scheduler = PromoCodeScheduler(db_session)
+
+        result = await scheduler.update_promocode_statuses()
+
+        assert result["success"] is False
+        assert "simulated commit failure" in result["error"]
+        rollback_spy.assert_called_once()
+
+
+class TestUpdatePromocodeStatusesTask:
+    """Tests for the standalone update_promocode_statuses_task() background-task
+    wrapper, which pulls its own session from core.db.get_db() rather than
+    receiving one - substitute get_db with a fake generator yielding the test's
+    own db_session so it runs against the real, rolled-back-at-teardown DB."""
+
+    async def test_runs_the_scheduler_and_returns_its_result(self, db_session, mocker):
+        async def fake_get_db():
+            yield db_session
+        mocker.patch("services.commerce.promocode_scheduler.get_db", fake_get_db)
+
+        result = await update_promocode_statuses_task()
+        assert result["success"] is True
+
+    async def test_propagates_and_logs_scheduler_failure(self, db_session, mocker):
+        async def fake_get_db():
+            yield db_session
+        mocker.patch("services.commerce.promocode_scheduler.get_db", fake_get_db)
+        mocker.patch.object(
+            PromoCodeScheduler, "update_promocode_statuses",
+            side_effect=Exception("scheduler blew up"),
+        )
+
+        with pytest.raises(Exception, match="scheduler blew up"):
+            await update_promocode_statuses_task()
 
 
 class TestList:

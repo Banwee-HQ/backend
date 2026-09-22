@@ -11,6 +11,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy.orm.attributes import set_committed_value
 from core.utils.uuid_utils import uuid7
 from services.commerce.subscriptions import SubscriptionService
 from models.commerce.subscriptions import Subscription, SubscriptionStatus
@@ -108,6 +109,72 @@ class TestCreate:
         assert sub.discount_code == promo.code
         assert sub.discount_value == 5
 
+    async def test_explicit_current_period_start_is_honored(self, db_session, test_user, variant):
+        service = SubscriptionService(db_session)
+        sub = await service.create(
+            user_id=test_user.id, name="Backdated", variant_ids=[str(variant.id)],
+            current_period_start="2026-01-15T00:00:00+00:00",
+        )
+        assert sub.current_period_start.year == 2026
+        assert sub.current_period_start.month == 1
+        assert sub.current_period_start.day == 15
+
+    async def test_zero_priced_variant_falls_back_to_minimum_price(self, db_session, test_user):
+        category = Category(id=uuid7(), name="FreeCat", slug=f"freecat-{uuid4().hex[:8]}")
+        product = Product(id=uuid7(), name="Freebie", slug=f"freebie-{uuid4().hex[:8]}", category_id=category.id)
+        free_variant = ProductVariant(id=uuid7(), product_id=product.id, sku=f"FREE-{uuid4().hex[:8]}", name="Free", base_price=Decimal("0.00"))
+        db_session.add_all([category, product, free_variant])
+        await db_session.commit()
+
+        service = SubscriptionService(db_session)
+        sub = await service.create(user_id=test_user.id, name="Free Sub", variant_ids=[str(free_variant.id)])
+        assert sub.variant_prices_at_creation[0]["price"] == pytest.approx(9.99)
+
+    async def test_currency_lookup_error_falls_back_to_cad(self, db_session, test_user, variant, address):
+        """A malformed address.country (not a string) blows up the country-to-
+        currency lookup - this must be swallowed, not surfaced as a 500 at
+        subscription creation time. set_committed_value (rather than a plain
+        attribute assignment) marks it as if freshly loaded from the DB, so it
+        isn't flushed back as a real UPDATE with a type Postgres would reject."""
+        set_committed_value(address, "country", 12345)
+        service = SubscriptionService(db_session)
+        sub = await service.create(
+            user_id=test_user.id, name="Bad Address", variant_ids=[str(variant.id)],
+            delivery_address_id=address.id,
+        )
+        assert sub.currency == "CAD"
+
+
+class TestCalculatePricingEdgeCases:
+
+    async def test_corrupt_discount_value_does_not_crash_pricing(self, db_session, test_user, variant):
+        """Defends _calculate_pricing's discount-amount computation: if the
+        promo's value can't be turned into a Decimal, pricing must still be
+        returned (with no discount applied) instead of raising mid-checkout."""
+        promo = Promocode(id=uuid7(), code=f"CORRUPT{uuid4().hex[:6].upper()}", discount_type="fixed", value=5, is_active=True)
+        db_session.add(promo)
+        await db_session.commit()
+        promo.value = None  # mutated in-memory only; the service re-fetches by code within this same session
+
+        service = SubscriptionService(db_session)
+        pricing = await service._calculate_pricing(
+            variants=[variant], variant_quantities={}, customer_address=None,
+            currency="USD", user_id=test_user.id, discount_code=promo.code,
+        )
+        assert pricing["discount"] == 0.0
+
+    async def test_malformed_customer_address_country_does_not_crash_tax_calc(self, db_session, test_user, variant):
+        """A non-string country in the address dict blows up TaxService's
+        .upper() call - this must fall back to zero tax, not raise."""
+        service = SubscriptionService(db_session)
+        pricing = await service._calculate_pricing(
+            variants=[variant], variant_quantities={},
+            customer_address={"country": 12345, "state": "ON"},
+            currency="USD", user_id=test_user.id,
+        )
+        assert pricing["tax"] == 0.0
+        assert pricing["tax_rate"] == 0.0
+
 
 class TestGetShippingCost:
 
@@ -170,6 +237,38 @@ class TestList:
         result = await service.list(user_id=test_user.id, search="My Subscription")
         assert any(s["id"] == str(subscription.id) for s in result["data"])
 
+    async def test_admin_search_matches_on_user_fields(self, db_session, test_user, subscription):
+        service = SubscriptionService(db_session)
+        result = await service.list(user_id=None, search=test_user.email)
+        assert any(s["id"] == str(subscription.id) for s in result["data"])
+
+        no_match = await service.list(user_id=None, search="nobody-matches-this-xyz")
+        assert not any(s["id"] == str(subscription.id) for s in no_match["data"])
+
+    async def test_date_filters_include_and_exclude(self, db_session, test_user, subscription):
+        service = SubscriptionService(db_session)
+        today = datetime.now(timezone.utc).date().isoformat()
+        tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat()
+        result = await service.list(user_id=test_user.id, date_from=today, date_to=tomorrow)
+        assert any(s["id"] == str(subscription.id) for s in result["data"])
+
+        future = (datetime.now(timezone.utc) + timedelta(days=2)).date().isoformat()
+        excluded = await service.list(user_id=test_user.id, date_from=future)
+        assert not any(s["id"] == str(subscription.id) for s in excluded["data"])
+
+    async def test_invalid_date_filters_are_silently_ignored(self, db_session, test_user, subscription):
+        service = SubscriptionService(db_session)
+        result = await service.list(user_id=test_user.id, date_from="not-a-date", date_to="also-not-a-date")
+        assert any(s["id"] == str(subscription.id) for s in result["data"])
+
+    async def test_sorts_by_next_billing_date_and_status(self, db_session, test_user, subscription):
+        service = SubscriptionService(db_session)
+        by_billing = await service.list(user_id=test_user.id, sort_by="next_billing_date", sort_order="asc")
+        assert any(s["id"] == str(subscription.id) for s in by_billing["data"])
+
+        by_status = await service.list(user_id=test_user.id, sort_by="status", sort_order="asc")
+        assert any(s["id"] == str(subscription.id) for s in by_status["data"])
+
 
 class TestUpdate:
 
@@ -192,6 +291,27 @@ class TestUpdate:
             await service.update(subscription.id, test_user.id, name="x")
         assert exc_info.value.status_code == 400
 
+    async def test_updates_delivery_address_shipping_method_and_auto_renew(
+        self, db_session, test_user, subscription, address, shipping_method
+    ):
+        service = SubscriptionService(db_session)
+        updated = await service.update(
+            subscription.id, test_user.id,
+            delivery_address_id=address.id, shipping_method_id=shipping_method.id, auto_renew=False,
+        )
+        assert updated.delivery_address_id == address.id
+        assert updated.shipping_method_id == shipping_method.id
+        assert updated.auto_renew is False
+
+    async def test_updates_current_period_start_and_recomputes_period_end(self, db_session, test_user, subscription):
+        service = SubscriptionService(db_session)
+        updated = await service.update(
+            subscription.id, test_user.id, current_period_start="2026-02-01T00:00:00+00:00",
+        )
+        assert updated.current_period_start.month == 2
+        assert updated.current_period_end.month == 3
+        assert updated.next_billing_date == updated.current_period_end
+
     async def test_updates_variant_ids_and_associations(self, db_session, test_user, subscription, variant):
         category = Category(id=uuid7(), name="Cat2", slug=f"cat2-{uuid4().hex[:8]}")
         product = Product(id=uuid7(), name="Gadget", slug=f"gadget-{uuid4().hex[:8]}", category_id=category.id)
@@ -204,6 +324,13 @@ class TestUpdate:
         assert updated.variant_ids == [str(new_variant.id)]
         assert len(updated.products) == 1
         assert updated.products[0].id == new_variant.id
+
+    async def test_updates_variant_quantities_metadata(self, db_session, test_user, subscription, variant):
+        service = SubscriptionService(db_session)
+        updated = await service.update(
+            subscription.id, test_user.id, variant_quantities={str(variant.id): 7},
+        )
+        assert updated.subscription_metadata["variant_quantities"][str(variant.id)] == 7
 
 
 class TestCancelPauseResume:
@@ -246,6 +373,42 @@ class TestCancelPauseResume:
         with pytest.raises(HTTPException) as exc_info:
             await service.resume(subscription.id, test_user.id)
         assert exc_info.value.status_code == 400
+
+    async def test_pause_not_found_raises_404(self, db_session, test_user):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.pause(uuid4(), test_user.id)
+        assert exc_info.value.status_code == 404
+
+    async def test_resume_not_found_raises_404(self, db_session, test_user):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.resume(uuid4(), test_user.id)
+        assert exc_info.value.status_code == 404
+
+
+class TestChangeFrequency:
+
+    async def test_not_found_raises_404(self, db_session, test_user):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.change_frequency(uuid4(), test_user.id, "weekly")
+        assert exc_info.value.status_code == 404
+
+
+class TestSkipUnskip:
+
+    async def test_skip_not_found_raises_404(self, db_session, test_user):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.skip_next_shipment(uuid4(), test_user.id)
+        assert exc_info.value.status_code == 404
+
+    async def test_unskip_not_found_raises_404(self, db_session, test_user):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.unskip_next_shipment(uuid4(), test_user.id)
+        assert exc_info.value.status_code == 404
 
 
 class TestRecalcPricing:
@@ -311,6 +474,34 @@ class TestProductManagement:
         assert len(updated.products) == 0
         assert str(variant.id) not in updated.variant_ids
 
+    async def test_adds_a_product_when_variant_ids_was_none(self, db_session, test_user, subscription, variant):
+        """add_products() must initialize variant_ids from scratch when it's None,
+        rather than assuming create() always populates it."""
+        subscription.variant_ids = None
+        await db_session.commit()
+
+        category = Category(id=uuid7(), name="Cat4", slug=f"cat4-{uuid4().hex[:8]}")
+        product = Product(id=uuid7(), name="Extra2", slug=f"extra2-{uuid4().hex[:8]}", category_id=category.id)
+        extra_variant = ProductVariant(id=uuid7(), product_id=product.id, sku=f"SKU4-{uuid4().hex[:8]}", name="Extra2", base_price=Decimal("5.00"))
+        db_session.add_all([category, product, extra_variant])
+        await db_session.commit()
+
+        service = SubscriptionService(db_session)
+        updated = await service.add_products(subscription.id, [extra_variant.id], test_user.id)
+        assert str(extra_variant.id) in updated.variant_ids
+
+    async def test_add_products_not_found_raises_404(self, db_session, test_user, variant):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.add_products(uuid4(), [variant.id], test_user.id)
+        assert exc_info.value.status_code == 404
+
+    async def test_remove_products_not_found_raises_404(self, db_session, test_user, variant):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.remove_products(uuid4(), [variant.id], test_user.id)
+        assert exc_info.value.status_code == 404
+
 
 class TestQuantityManagement:
 
@@ -340,6 +531,24 @@ class TestQuantityManagement:
         service = SubscriptionService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.get_quantities(uuid4(), test_user.id)
+        assert exc_info.value.status_code == 404
+
+    async def test_get_quantities_returns_empty_dict_when_no_metadata(self, db_session, test_user, subscription):
+        subscription.subscription_metadata = None
+        await db_session.commit()
+        service = SubscriptionService(db_session)
+        assert await service.get_quantities(subscription.id, test_user.id) == {}
+
+    async def test_set_quantity_not_found_raises_404(self, db_session, test_user, variant):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.set_quantity(uuid4(), variant.id, 2, test_user.id)
+        assert exc_info.value.status_code == 404
+
+    async def test_adjust_quantity_not_found_raises_404(self, db_session, test_user, variant):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.adjust_quantity(uuid4(), variant.id, 1, test_user.id)
         assert exc_info.value.status_code == 404
 
 

@@ -85,3 +85,18 @@ class TestFinalTotalNeverNegative:
         discount = make_discount(DiscountType.FIXED_AMOUNT.value, 1000)
         result = await engine.calculate_discount_amount(discount, subtotal=Decimal("10.00"))
         assert result["final_total"] >= Decimal("0")
+
+
+class TestCalculationErrorHandling:
+
+    async def test_non_numeric_value_falls_back_to_no_discount_instead_of_raising(self):
+        """A corrupt/non-numeric discount.value must not blow up checkout math -
+        the method swallows it and charges the customer the full, undiscounted total."""
+        engine = DiscountEngine(db=None)
+        discount = make_discount(DiscountType.PERCENTAGE.value, "not-a-number")
+        result = await engine.calculate_discount_amount(
+            discount, subtotal=Decimal("100.00"), shipping_cost=Decimal("5.00"), tax_amount=Decimal("2.00")
+        )
+        assert result["discount_amount"] == Decimal("0")
+        assert result["final_total"] == Decimal("107.00")
+        assert result["discount_type"] == DiscountType.PERCENTAGE.value
