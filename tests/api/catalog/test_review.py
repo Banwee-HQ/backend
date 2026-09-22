@@ -104,3 +104,31 @@ class TestReviewEndpoints:
         """DELETE /v1/reviews/{id} - Non-owner is forbidden."""
         response = await async_client.delete(f"/v1/reviews/{created_review['id']}/", headers=admin_headers)
         assert response.status_code == 403
+
+    async def test_create_unauthenticated(self, async_client: AsyncClient, created_product):
+        response = await async_client.post("/v1/reviews/", json={"product_id": created_product["id"], "rating": 5})
+        assert response.status_code == 401
+
+    async def test_update_unauthenticated(self, async_client: AsyncClient, created_review):
+        response = await async_client.patch(f"/v1/reviews/{created_review['id']}/", json={"rating": 1})
+        assert response.status_code == 401
+
+    async def test_update_not_found(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.patch(f"/v1/reviews/{uuid4()}/", headers=auth_headers, json={"rating": 1})
+        assert response.status_code == 404
+
+    async def test_delete_not_found(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.delete(f"/v1/reviews/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_list_filters_by_rating(self, async_client: AsyncClient, created_review):
+        response = await async_client.get("/v1/reviews/?min_rating=5&max_rating=5")
+        assert response.status_code == 200
+        assert all(r["rating"] == 5 for r in response.json()["data"])
+
+        excluded = await async_client.get("/v1/reviews/?min_rating=1&max_rating=1")
+        assert response.json()["data"] != [] and created_review["id"] not in [r["id"] for r in excluded.json()["data"]]
+
+    async def test_list_sort_by_rating_asc(self, async_client: AsyncClient, created_review):
+        response = await async_client.get("/v1/reviews/?sort_by=rating_asc")
+        assert response.status_code == 200
