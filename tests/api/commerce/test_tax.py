@@ -112,3 +112,30 @@ class TestTaxRateEndpoints:
         ])
         assert response.status_code == 200
         assert response.json()["data"]["updated_count"] == 1
+
+    async def test_bulk_update_reports_unknown_id(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[
+            {"id": str(uuid4()), "tax_rate": 0.1}
+        ])
+        assert response.status_code == 200
+        assert response.json()["data"]["updated_count"] == 0
+        assert len(response.json()["data"]["errors"]) == 1
+
+    async def test_bulk_update_requires_admin(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=auth_headers, json=[])
+        assert response.status_code == 403
+
+    async def test_list_filters_by_country_code(self, async_client: AsyncClient, created_rate):
+        response = await async_client.get(f"/v1/tax/rates/?country_code={created_rate['country_code']}")
+        assert response.status_code == 200
+        assert all(r["country_code"] == created_rate["country_code"] for r in response.json()["data"])
+
+    async def test_list_filters_by_search(self, async_client: AsyncClient, created_rate):
+        response = await async_client.get("/v1/tax/rates/?search=Testland")
+        assert response.status_code == 200
+        ids = [r["id"] for r in response.json()["data"]]
+        assert created_rate["id"] in ids
+
+    async def test_list_sort_by_tax_rate(self, async_client: AsyncClient, created_rate):
+        response = await async_client.get("/v1/tax/rates/?sort_by=tax_rate&sort_order=asc")
+        assert response.status_code == 200
