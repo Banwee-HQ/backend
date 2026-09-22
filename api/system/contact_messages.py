@@ -131,31 +131,42 @@ async def get(
     """
     Get a specific contact message by ID (admin only)
     """
-    message = await ContactMessageService.get(db, message_id)
-    
-    if not message:
-        raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message="Contact message not found"
+    try:
+        message = await ContactMessageService.get(db, message_id)
+
+        if not message:
+            raise APIException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Contact message not found"
+            )
+
+        return Response.success(
+            data={
+                "id": str(message.id),
+                "name": message.name,
+                "email": message.email,
+                "subject": message.subject,
+                "message": message.message,
+                "status": message.status,
+                "priority": message.priority,
+                "admin_notes": message.admin_notes,
+                "assigned_to": str(message.assigned_to) if message.assigned_to else None,
+                "created_at": message.created_at.isoformat() if hasattr(message.created_at, 'isoformat') else str(message.created_at),
+                "updated_at": message.updated_at.isoformat() if hasattr(message.updated_at, 'isoformat') else str(message.updated_at),
+                "resolved_at": message.resolved_at.isoformat() if message.resolved_at and hasattr(message.resolved_at, 'isoformat') else str(message.resolved_at) if message.resolved_at else None
+            },
+            message="Contact message retrieved successfully"
         )
-    
-    return Response.success(
-        data={
-            "id": str(message.id),
-            "name": message.name,
-            "email": message.email,
-            "subject": message.subject,
-            "message": message.message,
-            "status": message.status,
-            "priority": message.priority,
-            "admin_notes": message.admin_notes,
-            "assigned_to": str(message.assigned_to) if message.assigned_to else None,
-            "created_at": message.created_at.isoformat() if hasattr(message.created_at, 'isoformat') else str(message.created_at),
-            "updated_at": message.updated_at.isoformat() if hasattr(message.updated_at, 'isoformat') else str(message.updated_at),
-            "resolved_at": message.resolved_at.isoformat() if message.resolved_at and hasattr(message.resolved_at, 'isoformat') else str(message.resolved_at) if message.resolved_at else None
-        },
-        message="Contact message retrieved successfully"
-    )
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching contact message: {str(e)}")
+        raise APIException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message="Failed to fetch contact message"
+        )
 
 
 @router.patch("/{message_id}/")
