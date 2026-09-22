@@ -1,6 +1,6 @@
 """Complete OAuth implementation (what's missing to make OAuth fully functional)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import httpx
@@ -29,6 +29,7 @@ OAUTH_PROVIDERS = {
 
 @router.post("/google")
 async def google_oauth_credential(
+    background_tasks: BackgroundTasks,
     credential: str = None,
     mode: str = "login",
     db: AsyncSession = Depends(get_db)
@@ -42,7 +43,7 @@ async def google_oauth_credential(
         user_info = await verify_google_credential(credential)
 
         # Find or create user
-        user = await find_or_create_user(db, "google", user_info)
+        user = await find_or_create_user(db, "google", user_info, background_tasks)
 
         # Generate JWT tokens
         auth_service = AuthService(db)
@@ -84,6 +85,7 @@ async def google_oauth_credential(
 
 @router.post("/facebook")
 async def facebook_oauth_credential(
+    background_tasks: BackgroundTasks,
     access_token: str = None,
     user_id: str = None,
     mode: str = "login",
@@ -98,7 +100,7 @@ async def facebook_oauth_credential(
         user_info = await get_user_info("facebook", access_token)
 
         # Find or create user
-        user = await find_or_create_user(db, "facebook", user_info)
+        user = await find_or_create_user(db, "facebook", user_info, background_tasks)
 
         # Generate JWT tokens
         auth_service = AuthService(db)
@@ -180,7 +182,7 @@ async def get_user_info(provider: str, access_token: str) -> dict:
         response.raise_for_status()
         return response.json()
 
-async def find_or_create_user(db: AsyncSession, provider: str, user_info: dict) -> User:
+async def find_or_create_user(db: AsyncSession, provider: str, user_info: dict, background_tasks: BackgroundTasks) -> User:
     """Find existing user or create new one from OAuth data"""
     # Extract email from provider-specific response
     email = user_info.get("email")
@@ -220,16 +222,19 @@ async def find_or_create_user(db: AsyncSession, provider: str, user_info: dict) 
         firstname=firstname,
         lastname=lastname,
         password="",  # No password for OAuth users
-        phone_verified=True,  # OAuth users are considered verified
-        verification_status="verified"
     )
-    
+
     auth_service = AuthService(db)
-    user = await auth_service.create(user_data, background_tasks=None)
-    
-    # Set avatar after user creation
+    # auth_service.create() returns a UserResponse, not the ORM row - re-fetch the
+    # real User to set fields UserCreate has no place for (verification_status,
+    # avatar_url), since the provider already verified this email.
+    await auth_service.create(user_data, background_tasks=background_tasks)
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one()
+
+    user.verification_status = "verified"
     if avatar_url:
         user.avatar_url = avatar_url
-        await db.commit()
-    
+    await db.commit()
+
     return user
