@@ -66,6 +66,30 @@ class TestUserEndpoints:
         }
         response = await async_client.post("/v1/users/", headers=admin_headers, json=user_data)
         assert response.status_code == 201
+        assert "hashed_password" not in response.json()["data"]
+
+    async def test_create_requires_admin(self, async_client: AsyncClient):
+        """POST /v1/users/ - Regression test: this endpoint had no auth dependency
+        at all, so anyone could create an account - including one with role=admin,
+        a full unauthenticated privilege-escalation path."""
+        response = await async_client.post("/v1/users/", json={
+            "email": f"attacker_{uuid4().hex[:8]}@example.com",
+            "password": "SecurePass123!",
+            "firstname": "Attacker",
+            "lastname": "User",
+            "role": "admin",
+        })
+        assert response.status_code == 401
+
+    async def test_create_by_non_admin_is_forbidden(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/users/ - A regular authenticated user still can't use this route."""
+        response = await async_client.post("/v1/users/", headers=auth_headers, json={
+            "email": f"newuser_{uuid4().hex[:8]}@example.com",
+            "password": "SecurePass123!",
+            "firstname": "New",
+            "lastname": "User",
+        })
+        assert response.status_code == 403
 
     async def test_patch_self_forbidden_for_non_admin(self, async_client: AsyncClient, auth_headers, test_user):
         """PATCH /v1/users/{id} - Blocked for non-admins by require_admin, even on their own ID."""

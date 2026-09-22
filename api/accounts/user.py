@@ -45,12 +45,31 @@ async def profile(current_user: AuthUser = Depends(require_auth)):
 
 
 @router.post("/")
-async def create(payload: UserCreate, background_tasks: BackgroundTasks = None, db: AsyncSession = Depends(get_db)):
-    """Create a new user."""
+async def create(
+    payload: UserCreate,
+    background_tasks: BackgroundTasks = None,
+    current_user: AuthUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new user (admin only - public signup is POST /v1/auth/register/)."""
     try:
         service = UserService(db)
         user = await service.create(payload, background_tasks)
-        return Response.success(data=user, message="User created successfully", status_code=status.HTTP_201_CREATED)
+        user_data = {
+            "id": str(user.id),
+            "email": user.email,
+            "firstname": user.firstname,
+            "lastname": user.lastname,
+            "phone": user.phone,
+            "role": user.role.value if hasattr(user.role, "value") else user.role,
+            "account_status": user.account_status,
+            "verification_status": user.verification_status,
+            "verified": user.verified,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+        }
+        return Response.success(data=user_data, message="User created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
     except HTTPException:
