@@ -216,6 +216,7 @@ class ImageUpdate(BaseModel):
     url: Optional[str] = None
     alt_text: Optional[str] = None
     is_primary: Optional[bool] = None
+    sort_order: Optional[int] = None
 
 
 # Admin product management schemas

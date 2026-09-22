@@ -53,6 +53,16 @@ class TestProductEndpoints:
         response = await async_client.get("/v1/products/?q=organic")
         assert response.status_code == 200
 
+    async def test_featured(self, async_client: AsyncClient):
+        """GET /v1/products/featured - List featured products."""
+        response = await async_client.get("/v1/products/featured/")
+        assert response.status_code == 200
+
+    async def test_deals(self, async_client: AsyncClient):
+        """GET /v1/products/deals - List products on sale."""
+        response = await async_client.get("/v1/products/deals/")
+        assert response.status_code == 200
+
     async def test_get_by_id_not_found(self, async_client: AsyncClient):
         """GET /v1/products/{id} - Unknown ID returns 404."""
         response = await async_client.get(f"/v1/products/{uuid4()}/")
@@ -164,6 +174,66 @@ class TestProductEndpoints:
             headers=admin_headers, json={"url": "https://example.com/img.jpg", "alt_text": "Product image"}
         )
         assert response.status_code == 201
+
+    async def test_list_images(self, async_client: AsyncClient, admin_headers, created_product):
+        """GET /v1/products/variants/{id}/images - List images for a variant."""
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=admin_headers, json={"url": "https://example.com/img.jpg"}
+        )
+
+        response = await async_client.get(f"/v1/products/variants/{variant_id}/images/")
+        assert response.status_code == 200
+        assert len(response.json()["data"]) >= 1
+
+    async def test_get_image(self, async_client: AsyncClient, admin_headers, created_product):
+        """GET /v1/products/images/{id} - Get a specific image."""
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        created = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=admin_headers, json={"url": "https://example.com/img.jpg"}
+        )
+        image_id = created.json()["data"]["id"]
+
+        response = await async_client.get(f"/v1/products/images/{image_id}/")
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == image_id
+
+    async def test_get_image_not_found(self, async_client: AsyncClient):
+        """GET /v1/products/images/{id} - Unknown ID returns 404."""
+        response = await async_client.get(f"/v1/products/images/{uuid4()}/")
+        assert response.status_code == 404
+
+    async def test_update_image(self, async_client: AsyncClient, admin_headers, created_product):
+        """PATCH /v1/products/images/{id} - Update image (admin)."""
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        created = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=admin_headers, json={"url": "https://example.com/img.jpg"}
+        )
+        image_id = created.json()["data"]["id"]
+
+        response = await async_client.patch(f"/v1/products/images/{image_id}/",
+            headers=admin_headers, json={"alt_text": "Updated alt text"}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["alt_text"] == "Updated alt text"
+
+    async def test_delete_image(self, async_client: AsyncClient, admin_headers, created_product):
+        """DELETE /v1/products/images/{id} - Delete image (admin)."""
+        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
+        variant_id = variants_resp.json()["data"][0]["id"]
+        created = await async_client.post(f"/v1/products/variants/{variant_id}/images/",
+            headers=admin_headers, json={"url": "https://example.com/img.jpg"}
+        )
+        image_id = created.json()["data"]["id"]
+
+        response = await async_client.delete(f"/v1/products/images/{image_id}/", headers=admin_headers)
+        assert response.status_code == 200
+
+        get_after = await async_client.get(f"/v1/products/images/{image_id}/")
+        assert get_after.status_code == 404
 
     async def test_moderate(self, async_client: AsyncClient, admin_headers, created_product):
         """PATCH /v1/products/{id}/moderate - Moderate product (admin)."""
