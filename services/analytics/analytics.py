@@ -909,7 +909,7 @@ class AnalyticsService:
             logger.info(f"📊 Dashboard stats request: date_from={date_from}, date_to={date_to}, status={status}, category={category}")
 
             # Parse date filters
-            today = datetime.utcnow().date()
+            today = datetime.now(timezone.utc).date()
             last_month = today - timedelta(days=30)
 
             # Parse date_from and date_to
@@ -1082,7 +1082,7 @@ class AnalyticsService:
                     "status_filter": status,
                     "category_filter": category
                 },
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": datetime.now(timezone.utc).isoformat()
             }
 
         except Exception as e:
@@ -1152,7 +1152,7 @@ class AnalyticsService:
                     "total_subscriptions": total_subscriptions,
                     "active_subscriptions": active_subscriptions,
                 },
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": datetime.now(timezone.utc).isoformat()
             }
 
         except Exception as e:

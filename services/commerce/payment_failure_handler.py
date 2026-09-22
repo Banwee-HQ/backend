@@ -1,6 +1,6 @@
 """Payment failure handling: standardized failure categorization and recovery metadata."""
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from core.logging import get_structured_logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +41,7 @@ class PaymentFailureHandler:
             user_message, next_steps = self._user_guidance(reason)
 
             payment_intent.status = "failed"
-            payment_intent.failed_at = datetime.utcnow()
+            payment_intent.failed_at = datetime.now(timezone.utc)
             payment_intent.failure_reason = reason.value
             payment_intent.payment_intent_metadata = {
                 **(payment_intent.payment_intent_metadata or {}),

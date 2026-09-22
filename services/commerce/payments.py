@@ -9,7 +9,7 @@ from models.commerce.payments import PaymentMethod, PaymentIntent, Transaction, 
 from models.accounts.user import User
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from core.config import settings
 from core.logging import get_structured_logger
@@ -580,7 +580,7 @@ class PaymentService:
             payment_intent.payment_method_id = payment_method_id
             
             if stripe_intent.status == "succeeded":
-                payment_intent.confirmed_at = datetime.utcnow()
+                payment_intent.confirmed_at = datetime.now(timezone.utc)
                 
                 # Create transaction record
                 transaction = Transaction(
@@ -612,7 +612,7 @@ class PaymentService:
             
             # Update payment intent with basic failure info first
             payment_intent.status = "failed"
-            payment_intent.failed_at = datetime.utcnow()
+            payment_intent.failed_at = datetime.now(timezone.utc)
             payment_intent.failure_reason = str(e)
             
             if commit:
@@ -848,7 +848,7 @@ class PaymentService:
                     else:
                         next_month = datetime(y, m + 1, 1)
                     # expires at end of expiry month
-                    if next_month <= datetime.utcnow():
+                    if next_month <= datetime.now(timezone.utc):
                         raise HTTPException(
                             status_code=400,
                             detail="Payment method has expired. Please update your payment information."
@@ -1068,7 +1068,7 @@ class PaymentService:
                 request_id=request_id,
                 transaction_metadata=json.dumps({
                     "stripe_request_id": getattr(confirmed, 'request_id', None),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "payment_method_type": str(payment_method.type),
                     "frontend_amount": frontend_calculated_amount,
                     "price_validated": frontend_calculated_amount is not None
@@ -1077,7 +1077,7 @@ class PaymentService:
 
             # Update PaymentIntent record status
             payment_intent_record.status = confirmed.status
-            payment_intent_record.confirmed_at = datetime.utcnow() if confirmed.status == "succeeded" else None
+            payment_intent_record.confirmed_at = datetime.now(timezone.utc) if confirmed.status == "succeeded" else None
             if confirmed.status == "requires_action":
                 payment_intent_record.requires_action = True
             
@@ -1534,7 +1534,7 @@ class PaymentService:
             "retry_count": retry_count,
             "max_retries": max_retries,
             "next_retry_in_hours": next_retry_delay,
-            "next_retry_at": (datetime.utcnow() + timedelta(hours=next_retry_delay)).isoformat(),
+            "next_retry_at": (datetime.now(timezone.utc) + timedelta(hours=next_retry_delay)).isoformat(),
             "retry_method": "automatic" if failure_reason in [
                 PaymentFailureReason.PROCESSING_ERROR,
                 PaymentFailureReason.NETWORK_ERROR
@@ -1665,7 +1665,7 @@ class PaymentService:
             # place doesn't register as a change on a plain JSON column.
             failure_metadata = dict(payment_intent.failure_metadata or {})
             failure_metadata["retry_count"] = failure_metadata.get("retry_count", 0) + 1
-            failure_metadata["last_retry_at"] = datetime.utcnow().isoformat()
+            failure_metadata["last_retry_at"] = datetime.now(timezone.utc).isoformat()
             payment_intent.failure_metadata = failure_metadata
             
             await self.db.commit()
@@ -1846,7 +1846,7 @@ class PaymentService:
                 "error_code": error_code,
                 "error_message": error_message,
                 "failure_reason": failure_reason.value,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "retry_count": 0
             }
             

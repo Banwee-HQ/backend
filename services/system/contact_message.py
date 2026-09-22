@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import desc, or_, func, select
 from typing import Optional, List
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from models.system.contact_message import ContactMessage
 from schemas.system.contact_message import Create as ContactMessageCreate, Update as ContactMessageUpdate
@@ -117,7 +117,7 @@ class ContactMessageService:
             if update_data.status is not None:
                 message.status = update_data.status
                 if update_data.status == 'resolved':
-                    message.resolved_at = datetime.utcnow()
+                    message.resolved_at = datetime.now(timezone.utc)
             
             if update_data.priority is not None:
                 message.priority = update_data.priority
@@ -128,7 +128,7 @@ class ContactMessageService:
             if update_data.assigned_to is not None:
                 message.assigned_to = update_data.assigned_to
             
-            message.updated_at = datetime.utcnow()
+            message.updated_at = datetime.now(timezone.utc)
             
             await db.commit()
             await db.refresh(message)

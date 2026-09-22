@@ -386,7 +386,7 @@ class OrderService:
             'discount': discount_info,
             'total': float(total_amount),
             'currency': currency,
-            'calculated_at': datetime.utcnow().isoformat()
+            'calculated_at': datetime.now(timezone.utc).isoformat()
         }
         
         return PricingCalculationResult(
@@ -610,7 +610,7 @@ class OrderService:
             temp_order_id = uuid7()  # Temporary ID for payment processing
             # UUID7's leading hex chars are a shared timestamp, not random - slice from the
             # tail so concurrent checkouts don't collide.
-            order_number = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{temp_order_id.hex[-12:].upper()}"
+            order_number = f"ORD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{temp_order_id.hex[-12:].upper()}"
 
             temp_currency = get_currency_from_address(shipping_address.country) if shipping_address.country else "USD"
 
@@ -740,7 +740,7 @@ class OrderService:
                         recipient_email=user.email,
                         customer_name=getattr(user, "full_name", "Customer"),
                         order_number=order.order_number,
-                        order_date=order.created_at or datetime.utcnow(),
+                        order_date=order.created_at or datetime.now(timezone.utc),
                         total_amount=order.total_amount,
                         items=email_items,
                         shipping_address=order.shipping_address
@@ -803,7 +803,7 @@ class OrderService:
                         variant=None
                     ) for item in order_items_list
                 ],
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 updated_at=None
             )
             
@@ -1160,7 +1160,7 @@ class OrderService:
                         order_number=order.order_number or str(order.id)[:8],
                         tracking_number=order.tracking_number or "N/A",
                         carrier=order.carrier or "N/A",
-                        estimated_delivery=order.delivered_at or datetime.utcnow() + timedelta(days=3),
+                        estimated_delivery=order.delivered_at or datetime.now(timezone.utc) + timedelta(days=3),
                         tracking_url=None
                     )
                 elif status == 'delivered':
@@ -1179,7 +1179,7 @@ class OrderService:
                         order_id=str(order.id),
                         order_number=order.order_number or str(order.id)[:8],
                         tracking_number=order.tracking_number or "N/A",
-                        delivery_date=order.delivered_at or datetime.utcnow(),
+                        delivery_date=order.delivered_at or datetime.now(timezone.utc),
                         delivery_address=address_str,
                         delivery_notes=None
                     )
@@ -1300,7 +1300,7 @@ class OrderService:
             customer_notes=order.customer_notes,
             internal_notes=order.internal_notes,
             items=items,
-            created_at=order.created_at if order.created_at else datetime.utcnow(),
+            created_at=order.created_at if order.created_at else datetime.now(timezone.utc),
             updated_at=order.updated_at
         )
 
@@ -1909,10 +1909,10 @@ class OrderService:
             
             # Add note to customer_notes (append if existing)
             if order.customer_notes:
-                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 order.customer_notes += f"\n\n[{timestamp}] {note}"
             else:
-                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 order.customer_notes = f"[{timestamp}] {note}"
             
             await self.db.commit()
@@ -2010,7 +2010,7 @@ class OrderService:
             updated_notes = []
             for i, note in enumerate(notes):
                 if i == note_index:
-                    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                     updated_notes.append(f"[{timestamp}] {new_note}")
                 else:
                     updated_notes.append(f"[{note['timestamp']}] {note['note']}")
@@ -2023,7 +2023,7 @@ class OrderService:
                 "order_id": str(order_id),
                 "note_index": note_index,
                 "updated_note": new_note,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         except HTTPException:
             raise

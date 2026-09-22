@@ -9,7 +9,7 @@ from models.commerce.orders import Order, OrderStatus, PaymentStatus
 from services.commerce.payments import PaymentService
 from services.catalog.inventory import InventoryService
 from services.commerce.payment_failure_handler import PaymentFailureHandler
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 from core.config import settings
 from core.logging import get_structured_logger
@@ -82,7 +82,7 @@ class WebhookService:
         """
         Handle Stripe webhook with comprehensive security verification
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         
         try:
             # Comprehensive security verification
@@ -109,7 +109,7 @@ class WebhookService:
             await self._log_webhook_event(event, result, security_metadata)
             
             # Log processing completion
-            processing_time = (datetime.utcnow() - start_time).total_seconds()
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
             logger.info(f"Webhook processed successfully: {event['id']} in {processing_time:.3f}s")
             
             return {
@@ -168,7 +168,7 @@ class WebhookService:
             # Update transaction status atomically
             transaction.status = "succeeded"
             transaction.transaction_metadata = _merge_transaction_metadata(transaction, {
-                "webhook_confirmed_at": datetime.utcnow().isoformat(),
+                "webhook_confirmed_at": datetime.now(timezone.utc).isoformat(),
                 "stripe_charges": payment_intent_data.get("charges", {})
             })
             
@@ -182,7 +182,7 @@ class WebhookService:
                 if order:
                     # Update order status to confirmed atomically
                     order.order_status = OrderStatus.CONFIRMED
-                    order.confirmed_at = datetime.utcnow()
+                    order.confirmed_at = datetime.now(timezone.utc)
 
             
             await self.db.commit()
@@ -218,7 +218,7 @@ class WebhookService:
             transaction.status = "failed"
             transaction.failure_reason = payment_intent_data.get("last_payment_error", {}).get("message", "Payment failed")
             transaction.transaction_metadata = _merge_transaction_metadata(transaction, {
-                "webhook_failed_at": datetime.utcnow().isoformat(),
+                "webhook_failed_at": datetime.now(timezone.utc).isoformat(),
                 "failure_details": payment_intent_data.get("last_payment_error", {})
             })
             
@@ -306,7 +306,7 @@ class WebhookService:
                 order = order_result.scalar_one_or_none()
                 if order:
                     order.order_status = OrderStatus.CANCELLED
-                    order.cancelled_at = datetime.utcnow()
+                    order.cancelled_at = datetime.now(timezone.utc)
             
             await self.db.commit()
             

@@ -9,7 +9,7 @@ from schemas.catalog.review import Create as ReviewCreate, Update as ReviewUpdat
 from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import selectinload
 from core.logging import get_structured_logger
 
@@ -146,7 +146,7 @@ class ReviewService:
 
         for key, value in review_data.model_dump(exclude_unset=True).items():
             setattr(review, key, value)
-        review.updated_at = datetime.utcnow()
+        review.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(review)
 
@@ -186,7 +186,7 @@ class ReviewService:
                 product.rating_average = avg_rating if avg_rating is not None else 0.0
                 product.rating_count = review_count if review_count is not None else 0
                 product.review_count = review_count if review_count is not None else 0
-                product.updated_at = datetime.utcnow()
+                product.updated_at = datetime.now(timezone.utc)
                 await self.db.commit()
                 await self.db.refresh(product)
         except Exception as e:
@@ -210,7 +210,7 @@ class ReviewService:
                 product.rating_average = float(avg_rating) if avg_rating is not None else 0.0
                 product.rating_count = int(review_count) if review_count is not None else 0
                 product.review_count = int(review_count) if review_count is not None else 0
-                product.updated_at = datetime.utcnow()
+                product.updated_at = datetime.now(timezone.utc)
                 await self.db.commit()
                 updated_count += 1
         

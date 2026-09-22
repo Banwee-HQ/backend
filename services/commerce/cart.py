@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime
+from datetime import datetime, timezone
 from core.logging import get_structured_logger
 
 from models.commerce.cart import Cart, CartItem
@@ -229,7 +229,7 @@ class CartService:
             'tax_amount': float(tax_amount),
             'item_count': len(cart_items),
             'items_breakdown': item_breakdown,
-            'calculated_at': datetime.utcnow().isoformat(),
+            'calculated_at': datetime.now(timezone.utc).isoformat(),
             'location': f"{country_code}-{province_code}" if province_code else country_code
         }
 
@@ -442,15 +442,15 @@ class CartService:
                 "tax_amount": 0.0,
                 "item_count": 0,
                 "items_breakdown": [],
-                "calculated_at": datetime.utcnow().isoformat(),
+                "calculated_at": datetime.now(timezone.utc).isoformat(),
                 "location": f"{country_code}-{province_code}" if province_code else country_code
             },
             "subtotal": 0.0,
             "tax_amount": 0.0,
             "shipping_amount": 0.0,
             "total_amount": 0.0,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "country_code": country_code,
             "province_code": province_code,
             "item_count": 0,
@@ -821,7 +821,7 @@ class CartService:
             **cart_data,
             "shipping_amount": shipping_cost,
             "total_amount": total_amount,
-            "calculation_timestamp": datetime.utcnow().isoformat()
+            "calculation_timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 
