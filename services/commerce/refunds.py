@@ -656,7 +656,8 @@ class RefundService:
                 }
                 for item in refund.refund_items
             ] if refund.refund_items else [],
-            timeline=self._generate_refund_timeline(refund)
+            timeline=self._generate_refund_timeline(refund),
+            admin_notes=refund.admin_notes
         )
     
     async def count(

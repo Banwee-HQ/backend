@@ -95,6 +95,10 @@ async def list(
             }
             return Response.success(data=result.get("items", []), pagination=pagination)
         return Response.success(data=result)
+    except APIException:
+        raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

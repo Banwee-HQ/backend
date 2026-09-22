@@ -73,6 +73,7 @@ class Response(BaseModel):
     timeline: List[TimelineItem]
     customer_name: Optional[str] = None
     customer: Optional[dict] = None
+    admin_notes: Optional[str] = None
 
     class Config:
         from_attributes = True
