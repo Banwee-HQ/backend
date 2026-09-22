@@ -577,8 +577,13 @@ class ProductService:
                 setattr(variant, field, value)
 
         if update_data.stock is not None:
-            if variant.inventory:
-                variant.inventory.quantity_available = update_data.stock
+            # Query directly rather than the variant.inventory relationship, which can
+            # hold a stale (pre-existence) cached value if this session touched the
+            # variant earlier in the same request.
+            inventory_result = await self.db.execute(select(Inventory).where(Inventory.variant_id == variant.id))
+            inventory = inventory_result.scalar_one_or_none()
+            if inventory:
+                inventory.quantity_available = update_data.stock
             else:
                 self.db.add(Inventory(id=uuid7(), variant_id=variant.id, quantity_available=update_data.stock))
 
