@@ -77,6 +77,8 @@ async def google_oauth_credential(
             }
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -134,6 +136,8 @@ async def facebook_oauth_credential(
             }
         })
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=400,

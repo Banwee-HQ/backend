@@ -240,6 +240,11 @@ class TestOrderEndpoints:
         response = await async_client.get(f"/v1/orders/track/{created_order.order_number}/")
         assert response.status_code == 200
 
+    async def test_public_tracking_unknown_order_returns_404(self, async_client: AsyncClient):
+        """GET /v1/orders/track/{id} - Unknown order number/id returns 404, not a masked 500."""
+        response = await async_client.get(f"/v1/orders/track/NOT-A-REAL-ORDER/")
+        assert response.status_code == 404
+
     async def test_update_status_requires_admin(self, async_client: AsyncClient, auth_headers, created_order):
         """PATCH /v1/orders/{id}/status - Non-admin is forbidden."""
         response = await async_client.patch(f"/v1/orders/{created_order.id}/status/",

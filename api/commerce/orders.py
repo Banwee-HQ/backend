@@ -403,8 +403,12 @@ async def get_public_tracking(
         order_service = OrderService(db)
         tracking = await order_service.tracking_public(order_id)
         return Response.success(data=tracking, message="Public tracking information retrieved")
-    except Exception:
-        raise APIException(status_code=404, message="Order not found or tracking unavailable")
+    except APIException:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise APIException(status_code=500, message=f"Failed to retrieve tracking: {str(e)}")
 
 
 @router.patch("/{order_id}/status/")

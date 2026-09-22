@@ -199,6 +199,8 @@ async def patch(
         return Response.success(data=user_data, message="User updated successfully")
     except APIException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating user: {e}")
         raise APIException(
