@@ -1,6 +1,4 @@
-"""
-Tax calculation routes - Public API and Admin endpoints
-"""
+"""Tax calculation routes - Public API and Admin endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +25,7 @@ async def calculate_tax(
     request: Calculation,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Calculate tax amount based on subtotal, shipping, and location
-    """
+    """Calculate tax amount based on subtotal, shipping, and location."""
     try:
         logger.info(f"Calculating tax for request: subtotal={request.subtotal}, shipping={request.shipping}, country={request.country_code}")
         
@@ -84,9 +80,10 @@ async def list_rates(
     sort_order: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all tax rates with filtering and pagination."""
+    """List all tax rates with filtering and pagination (Admin only)."""
     return await _list_tax_rates_internal(
         country_code, country_name, province_code, province_name, is_active, search, sort_by, sort_order, page, per_page, db
     )

@@ -1,6 +1,4 @@
-"""
-Discount management models for subscription product management
-"""
+"""Discount management models for subscription product management."""
 from sqlalchemy import String, Boolean, DateTime, Numeric, Text, Integer, func, Index, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, GUID, UTCDateTime

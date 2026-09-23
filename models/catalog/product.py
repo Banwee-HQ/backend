@@ -1,6 +1,4 @@
-"""
-Optimized product models with strategic JSON usage
-"""
+"""Optimized product models with strategic JSON usage."""
 from sqlalchemy import String, ForeignKey, DateTime, Numeric, Boolean, Text, Integer, func, Index, JSON, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from core.db import Base, CHAR_LENGTH, GUID, UTCDateTime
@@ -152,9 +150,8 @@ class Product(Base):
 
         if include_seo:
             data["seo"] = {
-                # meta_title/meta_description aren't real columns on this model - guard
-                # with getattr instead of direct access, which raised AttributeError for
-                # every caller (this method has no other users today, so it went unnoticed).
+                # meta_title/meta_description aren't real columns on this model -
+                # guard with getattr instead of direct access to avoid AttributeError.
                 "meta_title": getattr(self, "meta_title", None),
                 "meta_description": getattr(self, "meta_description", None),
                 "canonical_url": f"https://www.banwee.com/products/{self.slug}",

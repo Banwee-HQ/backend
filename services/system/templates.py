@@ -1,6 +1,4 @@
-"""
-Jinja Template Service for rendering emails and exports
-"""
+"""Jinja Template Service for rendering emails and exports."""
 from typing import Dict, Any
 from pathlib import Path
 from datetime import datetime

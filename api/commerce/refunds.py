@@ -1,6 +1,4 @@
-"""
-Refunds API - Unified routes with role-based access
-"""
+"""Refunds API - Unified routes with role-based access."""
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional

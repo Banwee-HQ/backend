@@ -890,6 +890,9 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -1014,7 +1017,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"string\",\n  \"variant_id\": \"string\",\n  \"quantity\": 1\n}",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"string\",\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1221,7 +1224,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"user@example.com\",\n  \"firstname\": \"string\",\n  \"lastname\": \"string\",\n  \"first_name\": \"string\",\n  \"last_name\": \"string\",\n  \"role\": \"customer\",\n  \"password\": \"string\",\n  \"phone\": \"string\",\n  \"variant_id\": \"string\",\n  \"quantity\": 1\n}",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"firstname\": \"string\",\n  \"lastname\": \"string\",\n  \"first_name\": \"string\",\n  \"last_name\": \"string\",\n  \"role\": \"customer\",\n  \"password\": \"string\",\n  \"phone\": \"string\",\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1337,6 +1340,9 @@
                   "disabled": false
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -1431,7 +1437,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"string\",\n  \"quantity\": 1\n}",
+              "raw": "{\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1465,7 +1471,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"string\",\n  \"quantity\": 1\n}",
+              "raw": "{\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1746,6 +1752,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -1773,7 +1782,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"parent_id\": \"string\",\n  \"is_active\": true,\n  \"sort_order\": 0\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"parent_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"is_active\": true,\n  \"sort_order\": 0\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1806,6 +1815,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -1844,6 +1856,9 @@
                 "categories",
                 "{{category_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -1872,7 +1887,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"parent_id\": \"string\",\n  \"is_active\": \"string\",\n  \"sort_order\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"parent_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"is_active\": true,\n  \"sort_order\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1966,6 +1981,9 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -2032,7 +2050,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"string\",\n  \"priority\": \"string\",\n  \"admin_notes\": \"string\",\n  \"assigned_to\": \"string\"\n}",
+              "raw": "{\n  \"status\": \"new\",\n  \"priority\": \"low\",\n  \"admin_notes\": \"string\",\n  \"assigned_to\": \"00000000-0000-0000-0000-000000000000\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2204,7 +2222,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"string\",\n  \"location_id\": \"string\",\n  \"quantity\": 0,\n  \"low_stock_threshold\": 10\n}",
+              "raw": "{\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"location_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 0,\n  \"low_stock_threshold\": 10\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2277,7 +2295,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"string\",\n  \"product_id\": \"string\",\n  \"location_id\": \"string\",\n  \"quantity_change\": 1,\n  \"reason\": \"string\",\n  \"notes\": \"string\",\n  \"adjustment_type\": \"string\"\n}",
+              "raw": "{\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"product_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"location_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity_change\": 1,\n  \"reason\": \"string\",\n  \"notes\": \"string\",\n  \"adjustment_type\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2571,7 +2589,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"location_id\": \"string\",\n  \"location_name\": \"string\",\n  \"quantity\": \"string\",\n  \"low_stock_threshold\": \"string\"\n}",
+              "raw": "{\n  \"location_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"location_name\": \"string\",\n  \"quantity\": 1,\n  \"low_stock_threshold\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2762,7 +2780,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"shipping_address_id\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": \"string\",\n  \"idempotency_key\": \"string\"\n}",
+              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2796,7 +2814,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"shipping_address_id\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": \"string\",\n  \"idempotency_key\": \"string\"\n}",
+              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2831,7 +2849,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"shipping_address_id\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": \"string\",\n  \"idempotency_key\": \"string\"\n}",
+              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2890,6 +2908,9 @@
                 "track",
                 "{{order_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -3441,7 +3462,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 1.0,\n  \"currency\": \"USD\",\n  \"order_id\": \"string\"\n}",
+              "raw": "{\n  \"amount\": 1.0,\n  \"currency\": \"USD\",\n  \"order_id\": \"00000000-0000-0000-0000-000000000000\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3563,7 +3584,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"stripe_payment_method_id\": \"string\",\n  \"stripe_token\": \"string\",\n  \"type\": \"string\",\n  \"provider\": \"string\",\n  \"last_four\": \"string\",\n  \"expiry_month\": \"string\",\n  \"expiry_year\": \"string\",\n  \"is_default\": false,\n  \"payment_method_metadata\": \"string\"\n}",
+              "raw": "{\n  \"stripe_payment_method_id\": \"string\",\n  \"stripe_token\": \"string\",\n  \"type\": \"string\",\n  \"provider\": \"string\",\n  \"last_four\": \"string\",\n  \"expiry_month\": 1,\n  \"expiry_year\": 1,\n  \"is_default\": false,\n  \"payment_method_metadata\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3638,7 +3659,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"is_default\": \"string\",\n  \"meta_data\": \"string\"\n}",
+              "raw": "{\n  \"is_default\": true,\n  \"meta_data\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3771,7 +3792,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"payment_intent_id\": \"string\",\n  \"amount\": \"string\",\n  \"reason\": \"requested_by_customer\"\n}",
+              "raw": "{\n  \"payment_intent_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"amount\": 1.0,\n  \"reason\": \"requested_by_customer\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3977,6 +3998,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4004,7 +4028,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"string\",\n  \"variants\": \"string\",\n  \"origin\": \"string\",\n  \"is_featured\": false,\n  \"is_bestseller\": false,\n  \"base_price\": \"string\",\n  \"sale_price\": 1.0,\n  \"cost_price\": \"string\",\n  \"quantity\": 0,\n  \"sku\": \"string\",\n  \"weight_kg\": \"string\",\n  \"tags\": [],\n  \"origin_country\": \"string\",\n  \"is_active\": true\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"variants\": [\n    {\n      \"sku\": null,\n      \"name\": \"string\",\n      \"base_price\": 1.0,\n      \"sale_price\": 1.0,\n      \"stock\": 0,\n      \"attributes\": {},\n      \"specifications\": null,\n      \"dietary_tags\": {},\n      \"tags\": null,\n      \"availability_status\": \"available\",\n      \"image_urls\": []\n    }\n  ],\n  \"origin\": \"string\",\n  \"is_featured\": false,\n  \"is_bestseller\": false,\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"cost_price\": 1.0,\n  \"quantity\": 0,\n  \"sku\": \"string\",\n  \"weight_kg\": 1.0,\n  \"tags\": [],\n  \"origin_country\": \"string\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4043,6 +4067,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4070,6 +4097,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4089,6 +4119,9 @@
                 "products",
                 "home"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4129,6 +4162,9 @@
                 "images",
                 "{{image_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4158,7 +4194,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"string\",\n  \"alt_text\": \"string\",\n  \"is_primary\": \"string\",\n  \"sort_order\": \"string\"\n}",
+              "raw": "{\n  \"url\": \"string\",\n  \"alt_text\": \"string\",\n  \"is_primary\": true,\n  \"sort_order\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4204,6 +4240,9 @@
                 "variants",
                 "{{variant_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4233,7 +4272,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"string\",\n  \"sku\": \"string\",\n  \"name\": \"string\",\n  \"base_price\": \"string\",\n  \"sale_price\": \"string\",\n  \"stock\": \"string\",\n  \"attributes\": \"string\",\n  \"specifications\": \"string\",\n  \"dietary_tags\": \"string\",\n  \"tags\": \"string\",\n  \"is_active\": \"string\",\n  \"availability_status\": \"string\",\n  \"images\": \"string\"\n}",
+              "raw": "{\n  \"id\": \"00000000-0000-0000-0000-000000000000\",\n  \"sku\": \"string\",\n  \"name\": \"string\",\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"stock\": 1,\n  \"attributes\": {},\n  \"specifications\": {},\n  \"dietary_tags\": {},\n  \"tags\": \"string\",\n  \"is_active\": true,\n  \"availability_status\": \"available\",\n  \"images\": [\n    {}\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4260,6 +4299,9 @@
                 "{{variant_id}}",
                 "images"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4334,6 +4376,9 @@
                 "products",
                 "{{product_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4362,7 +4407,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"string\",\n  \"origin\": \"string\",\n  \"product_status\": \"string\",\n  \"is_featured\": \"string\",\n  \"is_bestseller\": \"string\",\n  \"variants\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"origin\": \"string\",\n  \"product_status\": \"active\",\n  \"is_featured\": true,\n  \"is_bestseller\": true,\n  \"variants\": [\n    {\n      \"id\": null,\n      \"sku\": null,\n      \"name\": null,\n      \"base_price\": null,\n      \"sale_price\": null,\n      \"stock\": null,\n      \"attributes\": null,\n      \"specifications\": null,\n      \"dietary_tags\": null,\n      \"tags\": null,\n      \"is_active\": null,\n      \"availability_status\": null,\n      \"images\": null\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4459,6 +4504,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4479,6 +4527,9 @@
                 "{{product_id}}",
                 "variants"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -4508,7 +4559,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sku\": \"string\",\n  \"name\": \"string\",\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"stock\": 0,\n  \"attributes\": {},\n  \"specifications\": \"string\",\n  \"dietary_tags\": {},\n  \"tags\": \"string\",\n  \"availability_status\": \"available\",\n  \"image_urls\": []\n}",
+              "raw": "{\n  \"sku\": \"string\",\n  \"name\": \"string\",\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"stock\": 0,\n  \"attributes\": {},\n  \"specifications\": {},\n  \"dietary_tags\": {},\n  \"tags\": \"string\",\n  \"availability_status\": \"available\",\n  \"image_urls\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4584,7 +4635,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"string\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": \"string\",\n  \"maximum_discount_amount\": \"string\",\n  \"usage_limit\": \"string\",\n  \"is_active\": true,\n  \"valid_from\": \"string\",\n  \"valid_until\": \"string\"\n}",
+              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"string\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": 1.0,\n  \"maximum_discount_amount\": 1.0,\n  \"usage_limit\": 1,\n  \"is_active\": true,\n  \"valid_from\": \"2024-01-01T00:00:00Z\",\n  \"valid_until\": \"2024-01-01T00:00:00Z\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4709,7 +4760,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"string\",\n  \"value\": \"string\",\n  \"minimum_order_amount\": \"string\",\n  \"maximum_discount_amount\": \"string\",\n  \"usage_limit\": \"string\",\n  \"is_active\": \"string\",\n  \"valid_from\": \"string\",\n  \"valid_until\": \"string\"\n}",
+              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"string\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": 1.0,\n  \"maximum_discount_amount\": 1.0,\n  \"usage_limit\": 1,\n  \"is_active\": true,\n  \"valid_from\": \"2024-01-01T00:00:00Z\",\n  \"valid_until\": \"2024-01-01T00:00:00Z\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4833,7 +4884,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refund_type\": \"full_refund\",\n  \"reason\": \"string\",\n  \"customer_reason\": \"string\",\n  \"customer_notes\": \"string\",\n  \"items\": [\n    {\n      \"order_item_id\": \"string\",\n      \"quantity\": 1,\n      \"condition_notes\": \"string\"\n    }\n  ]\n}",
+              "raw": "{\n  \"refund_type\": \"full_refund\",\n  \"reason\": \"defective_product\",\n  \"customer_reason\": \"string\",\n  \"customer_notes\": \"string\",\n  \"items\": [\n    {\n      \"order_item_id\": \"00000000-0000-0000-0000-000000000000\",\n      \"quantity\": 1,\n      \"condition_notes\": \"string\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4988,6 +5039,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5015,7 +5069,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_id\": \"string\",\n  \"user_id\": \"string\",\n  \"rating\": 1,\n  \"comment\": \"string\"\n}",
+              "raw": "{\n  \"product_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"user_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"rating\": 1,\n  \"comment\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5073,6 +5127,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5111,6 +5168,9 @@
                 "reviews",
                 "{{review_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5139,7 +5199,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_id\": \"string\",\n  \"rating\": \"string\",\n  \"comment\": \"string\"\n}",
+              "raw": "{\n  \"product_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"rating\": 1,\n  \"comment\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5178,12 +5238,15 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_amount\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"destination_country\": \"US\",\n  \"address_id\": \"string\",\n  \"items\": \"string\"\n}",
+              "raw": "{\n  \"order_amount\": 1.0,\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"destination_country\": \"US\",\n  \"address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"items\": [\n    {}\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5229,6 +5292,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5303,6 +5369,9 @@
                 "methods",
                 "{{method_id}}"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5332,7 +5401,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"description\": \"string\",\n  \"price\": \"string\",\n  \"estimated_days\": \"string\",\n  \"is_active\": \"string\",\n  \"carrier\": \"string\",\n  \"tracking_url_template\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"description\": \"string\",\n  \"price\": 1.0,\n  \"estimated_days\": 1,\n  \"is_active\": true,\n  \"carrier\": \"string\",\n  \"tracking_url_template\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5370,6 +5439,9 @@
                   "disabled": true
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5453,7 +5525,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"tracking_url_template\": \"string\",\n  \"is_active\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"tracking_url_template\": \"string\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5628,7 +5700,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_id\": \"string\",\n  \"order_item_id\": \"string\",\n  \"carrier\": \"string\",\n  \"tracking_number\": \"string\",\n  \"shipment_type\": \"standard\",\n  \"origin_address\": \"string\",\n  \"destination_address\": \"string\",\n  \"delivery_instructions\": \"string\",\n  \"package_weight\": \"string\",\n  \"package_dimensions\": \"string\",\n  \"package_value\": \"string\",\n  \"insurance_amount\": \"string\",\n  \"service_level\": \"string\",\n  \"delivery_signature_required\": false,\n  \"delivery_confirmation\": \"string\",\n  \"notes\": \"string\",\n  \"internal_notes\": \"string\",\n  \"shipped_at\": \"string\"\n}",
+              "raw": "{\n  \"order_id\": \"string\",\n  \"order_item_id\": \"string\",\n  \"carrier\": \"string\",\n  \"tracking_number\": \"string\",\n  \"shipment_type\": \"standard\",\n  \"origin_address\": {},\n  \"destination_address\": {},\n  \"delivery_instructions\": \"string\",\n  \"package_weight\": 1.0,\n  \"package_dimensions\": {},\n  \"package_value\": 1.0,\n  \"insurance_amount\": 1.0,\n  \"service_level\": \"string\",\n  \"delivery_signature_required\": false,\n  \"delivery_confirmation\": \"string\",\n  \"notes\": \"string\",\n  \"internal_notes\": \"string\",\n  \"shipped_at\": \"2024-01-01T00:00:00Z\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5684,7 +5756,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"string\",\n  \"event_description\": \"string\",\n  \"event_location\": \"string\",\n  \"contact_name\": \"string\",\n  \"contact_phone\": \"string\"\n}",
+              "raw": "{\n  \"status\": \"pending\",\n  \"event_description\": \"string\",\n  \"event_location\": {},\n  \"contact_name\": \"string\",\n  \"contact_phone\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5759,6 +5831,9 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -5859,7 +5934,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"CAD\",\n  \"discount_code\": \"string\",\n  \"plan_id\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"CAD\",\n  \"discount_code\": \"string\",\n  \"plan_id\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5893,7 +5968,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"currency\": \"CAD\"\n}",
+              "raw": "{\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"currency\": \"CAD\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5937,6 +6012,9 @@
                 "subscriptions",
                 "plans"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -6041,7 +6119,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"delivery_address_id\": \"string\",\n  \"shipping_method_id\": \"string\",\n  \"auto_renew\": \"string\",\n  \"variant_ids\": \"string\",\n  \"variant_quantities\": \"string\",\n  \"current_period_start\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"auto_renew\": true,\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"current_period_start\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6588,12 +6666,15 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"subtotal\": 1.0,\n  \"shipping\": 0.0,\n  \"shipping_address_id\": \"string\",\n  \"country_code\": \"string\",\n  \"state_code\": \"string\",\n  \"product_type\": \"string\",\n  \"currency\": \"USD\"\n}",
+              "raw": "{\n  \"subtotal\": 1.0,\n  \"shipping\": 0.0,\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"country_code\": \"string\",\n  \"state_code\": \"string\",\n  \"product_type\": \"string\",\n  \"currency\": \"USD\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -6613,6 +6694,9 @@
                 "tax",
                 "countries"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -6832,7 +6916,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"country_name\": \"string\",\n  \"province_name\": \"string\",\n  \"tax_rate\": \"string\",\n  \"tax_name\": \"string\",\n  \"is_active\": \"string\"\n}",
+              "raw": "{\n  \"country_name\": \"string\",\n  \"province_name\": \"string\",\n  \"tax_rate\": 1.0,\n  \"tax_name\": \"string\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6857,6 +6941,9 @@
                 "tax",
                 "tax-types"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -7078,7 +7165,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstname\": \"string\",\n  \"lastname\": \"string\",\n  \"email\": \"string\",\n  \"phone\": \"string\",\n  \"date_of_birth\": \"string\",\n  \"gender\": \"string\",\n  \"country\": \"string\",\n  \"language\": \"string\",\n  \"timezone\": \"string\"\n}",
+              "raw": "{\n  \"firstname\": \"string\",\n  \"lastname\": \"string\",\n  \"email\": \"user@example.com\",\n  \"phone\": \"string\",\n  \"date_of_birth\": \"2024-01-01T00:00:00Z\",\n  \"gender\": \"string\",\n  \"country\": \"string\",\n  \"language\": \"string\",\n  \"timezone\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7257,6 +7344,9 @@
                 "webhooks",
                 "health"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []
@@ -7276,6 +7366,9 @@
                 "webhooks",
                 "stripe"
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": []

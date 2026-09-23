@@ -1,6 +1,4 @@
-"""
-Brevo (formerly Sendinblue) email service
-"""
+"""Brevo (formerly Sendinblue) email service."""
 import aiohttp
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from core.config import settings

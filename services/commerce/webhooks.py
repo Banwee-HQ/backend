@@ -79,9 +79,7 @@ class WebhookService:
         request_body: bytes,
         signature: str
     ) -> Dict[str, Any]:
-        """
-        Handle Stripe webhook with comprehensive security verification
-        """
+        """Handle Stripe webhook with comprehensive security verification."""
         start_time = datetime.now(timezone.utc)
         
         try:

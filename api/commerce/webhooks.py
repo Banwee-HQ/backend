@@ -1,6 +1,4 @@
-"""
-Webhook Routes - Simple Stripe webhook handling without storage
-"""
+"""Webhook Routes - Simple Stripe webhook handling without storage."""
 from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_db

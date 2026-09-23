@@ -1,6 +1,4 @@
-"""
-Painless refund service with automatic processing and intelligent approval
-"""
+"""Painless refund service with automatic processing and intelligent approval."""
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from uuid import UUID

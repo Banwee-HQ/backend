@@ -405,9 +405,7 @@ class OrderService:
         user_id: UUID,
         request: CheckoutRequest
     ) -> Dict[str, Any]:
-        """
-        Comprehensive checkout validation with detailed error reporting
-        """
+        """Comprehensive checkout validation with detailed error reporting."""
         def _clean_result(r: dict) -> dict:
             """Ensure result is fully JSON-serializable."""
             return {
@@ -1518,9 +1516,7 @@ class OrderService:
             logger.error(f"Error getting tax rate from database: {e}")
             return 0.0
     def _generate_price_update_message(self, price_updates: List[Dict], total_change: float) -> str:
-        """
-        Generate a user-friendly message about price updates
-        """
+        """Generate a user-friendly message about price updates."""
         total_items = len(price_updates)
         
         if total_items == 1:
@@ -1541,9 +1537,7 @@ class OrderService:
                 return f"Prices updated for {total_items} items in your cart."
 
     async def _send_order_events_with_idempotency(self, order: Order, user_id: UUID, validated_cart_items: List[Dict[str, Any]]):
-        """
-        Send order-created side effects (confirmation email) after a successful checkout.
-        """
+        """Send order-created side effects (confirmation email) after a successful checkout."""
         try:
 
             # Prepare order items for the email template

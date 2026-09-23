@@ -1,6 +1,4 @@
-"""
-Refund schemas for API requests and responses
-"""
+"""Refund schemas for API requests and responses."""
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional
 from uuid import UUID

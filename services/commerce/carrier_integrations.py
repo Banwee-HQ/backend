@@ -1,6 +1,4 @@
-"""
-Carrier integrations for shipping tracking
-"""
+"""Carrier integrations for shipping tracking."""
 from typing import Dict, Any
 
 

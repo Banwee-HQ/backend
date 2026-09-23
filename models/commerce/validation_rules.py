@@ -1,6 +1,4 @@
-"""
-Validation rules models for tax and shipping fallback calculations
-"""
+"""Validation rules models for tax and shipping fallback calculations."""
 from sqlalchemy import String, Boolean, DateTime, func, Numeric, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from core.db import Base, GUID, UTCDateTime

@@ -28,9 +28,7 @@ async def create(
     message_data: Create,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Create a new contact message (public endpoint)
-    """
+    """Create a new contact message (public endpoint)."""
     try:
         message = await ContactMessageService.create(db, message_data)
         return Response.success(
@@ -69,9 +67,7 @@ async def list(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)
 ):
-    """
-    Get all contact messages with pagination and filters (admin only)
-    """
+    """Get all contact messages with pagination and filters (admin only)."""
     try:
         messages, total = await ContactMessageService.list(
             db=db,
@@ -128,9 +124,7 @@ async def get(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)
 ):
-    """
-    Get a specific contact message by ID (admin only)
-    """
+    """Get a specific contact message by ID (admin only)."""
     try:
         message = await ContactMessageService.get(db, message_id)
 
@@ -176,9 +170,7 @@ async def patch(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)
 ):
-    """
-    Update a contact message (admin only)
-    """
+    """Update a contact message (admin only)."""
     try:
         message = await ContactMessageService.update(db, message_id, update_data)
         
@@ -223,9 +215,7 @@ async def delete(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_admin)
 ):
-    """
-    Delete a contact message (admin only)
-    """
+    """Delete a contact message (admin only)."""
     try:
         success = await ContactMessageService.delete(db, message_id)
         

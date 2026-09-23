@@ -299,9 +299,7 @@ class RecommendationService:
         behavioral: List[Tuple[UUID, float]],
         limit: int
     ) -> List[Tuple[UUID, float]]:
-        """
-        Combine scores from all algorithms and rank products.
-        """
+        """Combine scores from all algorithms and rank products."""
         # Collect all unique product IDs
         all_products = {}
         
@@ -323,9 +321,7 @@ class RecommendationService:
         return ranked[:limit]
     
     async def _fetch_products(self, product_ids: List[UUID]) -> List[ProductResponse]:
-        """
-        Fetch full product data for recommended products.
-        """
+        """Fetch full product data for recommended products."""
         if not product_ids:
             return []
         

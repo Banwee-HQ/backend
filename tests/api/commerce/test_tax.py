@@ -3,13 +3,19 @@
 import pytest
 import random
 import string
+import itertools
 from httpx import AsyncClient
 from uuid import uuid4
 
+# ISO's user-assigned range, never a real country - can't collide with seeded rates.
+# Drawn without replacement so two codes issued in the same test/fixture can't collide by chance.
+_USER_ASSIGNED_CODES = ["AA", "ZZ"] + [f"X{c}" for c in string.ascii_uppercase] + [f"Q{c}" for c in "MNOPQRSTUVWXYZ"]
+random.shuffle(_USER_ASSIGNED_CODES)
+_unique_code_pool = itertools.cycle(_USER_ASSIGNED_CODES)
+
 
 def unique_code() -> str:
-    # ISO's user-assigned range ("X?"), never a real country - can't collide with seeded rates.
-    return "X" + random.choice(string.ascii_uppercase)
+    return next(_unique_code_pool)
 
 
 @pytest.fixture
@@ -83,12 +89,16 @@ class TestTaxCalculate:
 @pytest.mark.tax
 class TestTaxRateEndpoints:
 
-    async def test_list_is_public(self, async_client: AsyncClient, created_rate):
-        """GET /v1/tax/rates/ - No auth required; rates are reference data for checkout."""
-        response = await async_client.get("/v1/tax/rates/")
+    async def test_list_as_admin(self, async_client: AsyncClient, admin_headers, created_rate):
+        """GET /v1/tax/rates/ - Admin only; full rate configuration, not customer-facing."""
+        response = await async_client.get("/v1/tax/rates/", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert created_rate["id"] in ids
+
+    async def test_list_requires_admin(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get("/v1/tax/rates/", headers=auth_headers)
+        assert response.status_code == 403
 
     async def test_create(self, async_client: AsyncClient, created_rate):
         assert created_rate["country_name"] == "Testland"
@@ -162,19 +172,19 @@ class TestTaxRateEndpoints:
         response = await async_client.post("/v1/tax/rates/bulk-update/", headers=auth_headers, json=[])
         assert response.status_code == 403
 
-    async def test_list_filters_by_country_code(self, async_client: AsyncClient, created_rate):
-        response = await async_client.get(f"/v1/tax/rates/?country_code={created_rate['country_code']}")
+    async def test_list_filters_by_country_code(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get(f"/v1/tax/rates/?country_code={created_rate['country_code']}", headers=admin_headers)
         assert response.status_code == 200
         assert all(r["country_code"] == created_rate["country_code"] for r in response.json()["data"])
 
-    async def test_list_filters_by_search(self, async_client: AsyncClient, created_rate):
-        response = await async_client.get("/v1/tax/rates/?search=Testland")
+    async def test_list_filters_by_search(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get("/v1/tax/rates/?search=Testland", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert created_rate["id"] in ids
 
-    async def test_list_sort_by_tax_rate(self, async_client: AsyncClient, created_rate):
-        response = await async_client.get("/v1/tax/rates/?sort_by=tax_rate&sort_order=asc")
+    async def test_list_sort_by_tax_rate(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get("/v1/tax/rates/?sort_by=tax_rate&sort_order=asc", headers=admin_headers)
         assert response.status_code == 200
 
 
@@ -183,39 +193,39 @@ class TestTaxRateEndpoints:
 class TestListRatesFilters:
     """Filters not covered by test_list_filters_by_country_code / by_search above."""
 
-    async def test_filter_by_country_name(self, async_client: AsyncClient, created_rate):
-        response = await async_client.get("/v1/tax/rates/?country_name=Testland")
+    async def test_filter_by_country_name(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get("/v1/tax/rates/?country_name=Testland", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert created_rate["id"] in ids
 
-    async def test_filter_by_province_code(self, async_client: AsyncClient, created_rate_with_province):
+    async def test_filter_by_province_code(self, async_client: AsyncClient, admin_headers, created_rate_with_province):
         response = await async_client.get(
-            f"/v1/tax/rates/?province_code={created_rate_with_province['province_code']}"
+            f"/v1/tax/rates/?province_code={created_rate_with_province['province_code']}", headers=admin_headers
         )
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert created_rate_with_province["id"] in ids
 
-    async def test_filter_by_province_name(self, async_client: AsyncClient, created_rate_with_province):
-        response = await async_client.get("/v1/tax/rates/?province_name=Zeta-Test")
+    async def test_filter_by_province_name(self, async_client: AsyncClient, admin_headers, created_rate_with_province):
+        response = await async_client.get("/v1/tax/rates/?province_name=Zeta-Test", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert created_rate_with_province["id"] in ids
 
     async def test_filter_by_is_active_true_excludes_inactive(
-        self, async_client: AsyncClient, created_rate, inactive_rate
+        self, async_client: AsyncClient, admin_headers, created_rate, inactive_rate
     ):
-        response = await async_client.get("/v1/tax/rates/?is_active=true")
+        response = await async_client.get("/v1/tax/rates/?is_active=true", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert created_rate["id"] in ids
         assert inactive_rate["id"] not in ids
 
     async def test_filter_by_is_active_false_only_returns_inactive(
-        self, async_client: AsyncClient, created_rate, inactive_rate
+        self, async_client: AsyncClient, admin_headers, created_rate, inactive_rate
     ):
-        response = await async_client.get("/v1/tax/rates/?is_active=false")
+        response = await async_client.get("/v1/tax/rates/?is_active=false", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert inactive_rate["id"] in ids
@@ -229,52 +239,52 @@ class TestListRatesSorting:
     not just a 200 status - using two rates scoped by a unique search tag so real
     seeded rows in the shared dev DB can't interfere with the ordering assertions."""
 
-    async def test_sort_by_created_at_asc(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_created_at_asc(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates  # low created first
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=created_at&sort_order=asc")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=created_at&sort_order=asc", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert ids.index(low["id"]) < ids.index(high["id"])
 
-    async def test_sort_by_country_name_asc(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_country_name_asc(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates  # "Aland-..." < "Zland-..."
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=country_name&sort_order=asc")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=country_name&sort_order=asc", headers=admin_headers)
         assert response.status_code == 200
         names = [r["country_name"] for r in response.json()["data"]]
         assert names.index(low["country_name"]) < names.index(high["country_name"])
 
-    async def test_sort_by_country_name_desc(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_country_name_desc(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=country_name&sort_order=desc")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=country_name&sort_order=desc", headers=admin_headers)
         assert response.status_code == 200
         names = [r["country_name"] for r in response.json()["data"]]
         assert names.index(high["country_name"]) < names.index(low["country_name"])
 
-    async def test_sort_by_tax_rate_desc(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_tax_rate_desc(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates  # low=0.02, high=0.08
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=tax_rate&sort_order=desc")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=tax_rate&sort_order=desc", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert ids.index(high["id"]) < ids.index(low["id"])
 
-    async def test_sort_by_tax_name_asc_nulls_last(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_tax_name_asc_nulls_last(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates  # low has "Alpha Tax", high has tax_name=None
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=tax_name&sort_order=asc")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=tax_name&sort_order=asc", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         assert ids.index(low["id"]) < ids.index(high["id"])
 
-    async def test_sort_by_tax_name_desc_nulls_last(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_tax_name_desc_nulls_last(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=tax_name&sort_order=desc")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=tax_name&sort_order=desc", headers=admin_headers)
         assert response.status_code == 200
         ids = [r["id"] for r in response.json()["data"]]
         # nulls_last() applies in both asc and desc, so the null (high) still sorts after low.
         assert ids.index(low["id"]) < ids.index(high["id"])
 
-    async def test_sort_by_unknown_field_uses_default(self, async_client: AsyncClient, sortable_rates):
+    async def test_sort_by_unknown_field_uses_default(self, async_client: AsyncClient, admin_headers, sortable_rates):
         tag, low, high = sortable_rates
-        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=totally_bogus_field")
+        response = await async_client.get(f"/v1/tax/rates/?search={tag}&sort_by=totally_bogus_field", headers=admin_headers)
         assert response.status_code == 200
         names = [r["country_name"] for r in response.json()["data"]]
         # Default sort is (country_name, province_name) ascending.
@@ -285,13 +295,13 @@ class TestListRatesSorting:
 @pytest.mark.tax
 class TestListRatesErrors:
 
-    async def test_list_rates_error_returns_500(self, async_client: AsyncClient, monkeypatch):
+    async def test_list_rates_error_returns_500(self, async_client: AsyncClient, admin_headers, monkeypatch):
         import api.commerce.tax as tax_api
         monkeypatch.setattr(
             tax_api.Response, "success",
             staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
         )
-        response = await async_client.get("/v1/tax/rates/")
+        response = await async_client.get("/v1/tax/rates/", headers=admin_headers)
         assert response.status_code == 500
         assert "Failed to fetch tax rates" in response.json()["message"]
 

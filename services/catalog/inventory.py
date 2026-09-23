@@ -921,9 +921,7 @@ class InventoryService:
         order_id: Optional[UUID] = None,
         user_id: Optional[UUID] = None
     ) -> Dict[str, Any]:
-        """
-        Atomically increment stock when order is cancelled using distributed and database locks
-        """
+        """Atomically increment stock when order is cancelled using distributed and database locks."""
         try:
             # Use distributed lock FIRST to prevent race conditions across servers
             if self.lock_service:
@@ -1036,9 +1034,7 @@ class InventoryService:
         reason: str,
         user_id: Optional[UUID] = None
     ) -> Dict[str, Any]:
-        """
-        Atomically update multiple stock levels using SELECT ... FOR UPDATE
-        """
+        """Atomically update multiple stock levels using SELECT ... FOR UPDATE."""
         try:
             results = await atomic_bulk_stock_update(
                 db=self.db,
@@ -1055,10 +1051,8 @@ class InventoryService:
             }
 
         except APIException:
-            # atomic_bulk_stock_update already raises a deliberate status code (e.g. 404 for an
-            # unknown variant, 400 for insufficient stock) - propagate it as-is instead of
-            # relabeling every failure as a 500 below, matching the pattern used by
-            # _perform_stock_adjustment/_perform_increment_stock in this same file.
+            # atomic_bulk_stock_update already raises a deliberate status code -
+            # propagate it as-is instead of relabeling every failure as a 500 below.
             raise
         except Exception as e:
             logger.error(f"Failed bulk stock update: {e}")

@@ -110,10 +110,8 @@ class ShippingTrackingService:
                     shipment_data.get('origin_address'),
                     shipment_data['shipped_at']
                 )
-                # Keep the in-memory collection in sync (it was set to [] above to
-                # avoid a lazy-load) - otherwise this event is silently invisible to
-                # to_dict() and to any same-session selectinload re-query, since
-                # SQLAlchemy's identity map treats the relationship as already loaded.
+                # Keep the in-memory collection in sync (set to [] above to avoid a lazy-load) -
+                # otherwise this event is invisible to to_dict() since it's already "loaded".
                 shipment.tracking_events.append(initial_event)
 
             await self.db.commit()

@@ -1,6 +1,4 @@
-"""
-Standalone address endpoints at /v1/addresses
-"""
+"""Standalone address endpoints at /v1/addresses."""
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID

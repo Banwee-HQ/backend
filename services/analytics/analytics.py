@@ -956,9 +956,8 @@ class AnalyticsService:
                 )
             )
 
-            # Validate the status filter once, up front - reused below for both the
-            # order count and revenue queries so an unrecognized value is skipped
-            # consistently everywhere instead of only in some of the queries.
+            # Validate the status filter once, up front - reused below for both queries
+            # so an unrecognized value is skipped consistently everywhere.
             validated_status = None
             if status:
                 try:

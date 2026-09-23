@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import UUID, UUID as UUIDType
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin
+from core.dependencies import require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
@@ -43,10 +43,10 @@ async def create_location(
 @router.get("/locations/{location_id}/")
 async def get_location(
     location_id: UUID,
-    current_user: Optional[User] = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """Get a specific warehouse location by ID."""
+    """Get a specific warehouse location by ID (Admin only)."""
     try:
         inventory_service = InventoryService(db)
         location = await inventory_service.get_location(location_id)
@@ -65,9 +65,10 @@ async def get_location(
 async def list_locations(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all warehouse locations with pagination."""
+    """List all warehouse locations with pagination (Admin only)."""
     try:
         inventory_service = InventoryService(db)
         result = await inventory_service.list_locations(page=page, limit=limit)
@@ -233,10 +234,10 @@ async def delete_adj(
 @router.get("/{inventory_id}/")
 async def get(
     inventory_id: UUID,
-    current_user: Optional[User] = Depends(get_current_auth_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """Get a specific inventory item by ID."""
+    """Get a specific inventory item by ID (Admin only)."""
     try:
         inventory_service = InventoryService(db)
         item = await inventory_service.get(inventory_id, serialized=True)
@@ -264,9 +265,10 @@ async def list(
     out_of_stock: Optional[bool] = Query(None),
     sort_by: Optional[str] = Query(None, regex="^(updated_at|created_at|product_name|quantity|location_name)$"),
     sort_order: Optional[str] = Query(None, regex="^(asc|desc)$"),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """List inventory items with filters."""
+    """List inventory items with filters (Admin only)."""
     try:
         inventory_service = InventoryService(db)
         items = await inventory_service.list(

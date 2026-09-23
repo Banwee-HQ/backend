@@ -326,12 +326,8 @@ class PaymentService:
                             # If it belongs to a different user, do not return it — signal conflict
                             raise HTTPException(status_code=409, detail="Stripe payment method already associated with another account")
                     except HTTPException:
-                        # Let our own deliberate 409 above propagate - it must not be
-                        # swallowed by the broad `except Exception: pass` below (which
-                        # exists only to protect the best-effort re-check query itself).
-                        # Without this, a genuine cross-account race falls through to
-                        # `raise` at the bottom and leaks the raw IntegrityError as a
-                        # 500 instead of the intended clean 409.
+                        # Let our own deliberate 409 above propagate - it must not be swallowed
+                        # by the broad `except Exception: pass` below, which would otherwise leak a raw IntegrityError as a 500 instead.
                         raise
                     except Exception:
                         pass
@@ -734,9 +730,7 @@ class PaymentService:
         timeout_seconds: int = 45,
         max_retries: int = 3
     ) -> Dict[str, Any]:
-        """
-        Process payment with timeout, retry logic, and comprehensive error handling
-        """
+        """Process payment with timeout, retry logic, and comprehensive error handling."""
         for attempt in range(max_retries):
             try:
                 logger.info(f"Payment attempt {attempt + 1}/{max_retries} for user {user_id}, amount {amount}")

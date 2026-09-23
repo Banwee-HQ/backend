@@ -1,6 +1,4 @@
-"""
-UUID utilities with UUIDv7 support for better performance and ordering
-"""
+"""UUID utilities with UUIDv7 support for better performance and ordering."""
 import uuid
 import time
 import random
@@ -66,9 +64,7 @@ def extract_timestamp_from_uuid7(uuid_obj: Union[str, uuid.UUID]) -> int:
 
 
 def uuid7_from_timestamp(timestamp_ms: int) -> uuid.UUID:
-    """
-    Generate UUIDv7 with specific timestamp (for testing/migration)
-    """
+    """Generate UUIDv7 with specific timestamp (for testing/migration)."""
     # Convert timestamp to 48-bit value
     timestamp_bytes = timestamp_ms.to_bytes(6, byteorder='big')
     

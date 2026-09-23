@@ -28,10 +28,15 @@ async def created_variant(async_client: AsyncClient, admin_headers, sample_produ
 @pytest.mark.inventory
 class TestLocationEndpoints:
 
-    async def test_list(self, async_client: AsyncClient, created_location):
-        """GET /v1/inventory/locations/ - List locations."""
-        response = await async_client.get("/v1/inventory/locations/")
+    async def test_list(self, async_client: AsyncClient, admin_headers, created_location):
+        """GET /v1/inventory/locations/ - List locations (admin only)."""
+        response = await async_client.get("/v1/inventory/locations/", headers=admin_headers)
         assert response.status_code == 200
+
+    async def test_list_requires_admin(self, async_client: AsyncClient, auth_headers):
+        """GET /v1/inventory/locations/ - Non-admin is forbidden."""
+        response = await async_client.get("/v1/inventory/locations/", headers=auth_headers)
+        assert response.status_code == 403
 
     async def test_create_as_admin(self, async_client: AsyncClient, admin_headers):
         """POST /v1/inventory/locations/ - Create location (admin)."""
@@ -47,14 +52,19 @@ class TestLocationEndpoints:
         )
         assert response.status_code == 403
 
-    async def test_get_by_id(self, async_client: AsyncClient, created_location):
-        """GET /v1/inventory/locations/{id} - Get location."""
-        response = await async_client.get(f"/v1/inventory/locations/{created_location['id']}/")
+    async def test_get_by_id(self, async_client: AsyncClient, admin_headers, created_location):
+        """GET /v1/inventory/locations/{id} - Get location (admin only)."""
+        response = await async_client.get(f"/v1/inventory/locations/{created_location['id']}/", headers=admin_headers)
         assert response.status_code == 200
 
-    async def test_get_by_id_not_found(self, async_client: AsyncClient):
+    async def test_get_by_id_requires_admin(self, async_client: AsyncClient, auth_headers, created_location):
+        """GET /v1/inventory/locations/{id} - Non-admin is forbidden."""
+        response = await async_client.get(f"/v1/inventory/locations/{created_location['id']}/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_get_by_id_not_found(self, async_client: AsyncClient, admin_headers):
         """GET /v1/inventory/locations/{id} - Unknown ID returns 404."""
-        response = await async_client.get(f"/v1/inventory/locations/{uuid4()}/")
+        response = await async_client.get(f"/v1/inventory/locations/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
 
     async def test_update_as_admin(self, async_client: AsyncClient, admin_headers, created_location):

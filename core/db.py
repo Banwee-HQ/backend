@@ -51,15 +51,7 @@ class GUID(TypeDecorator):
 
 class UTCDateTime(TypeDecorator):
     """DateTime(timezone=True) that treats an accidentally-naive datetime as UTC.
-
-    asyncpg (and most DB-API drivers) interpret a naive Python datetime using the
-    *client process's local system timezone*, not UTC and not the Postgres
-    session's TimeZone setting - a naive datetime.utcnow() silently gets shifted
-    by the local offset before storage. App code should always pass timezone-aware
-    UTC datetimes (datetime.now(timezone.utc)); this is the backstop for the times
-    it doesn't, normalizing any stray naive value to UTC instead of local time
-    before it reaches the driver, and doing the same on the way back out.
-    """
+    Drivers interpret naive datetimes as local system time, not UTC - normalize before storage and on read-back."""
     impl = DateTime(timezone=True)
     cache_ok = True
 
@@ -197,13 +189,8 @@ class DatabaseManager:
                 "invalid": getattr(pool, 'invalid', lambda: 0)(),
             }
         except Exception as e:
-            # Fallback for pool types that don't support all methods. Each field is
-            # evaluated independently (rather than re-calling the same methods that
-            # may have just raised above) so one unsupported/failing metric can't
-            # blow up the whole status response - which used to happen whenever the
-            # very first field to fail in the try block above (e.g. pool.size() on
-            # a pool type that doesn't support it) was retried here unchanged and
-            # raised again, propagating out of this "fallback" uncaught.
+            # Fallback for pool types that don't support all methods - each field is
+            # evaluated independently so one unsupported metric can't blow up the whole response.
             def _safe(getter):
                 try:
                     return getter()

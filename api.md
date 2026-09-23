@@ -1,6 +1,6 @@
 # Banwee API Reference
 
-> **Source of truth:** generated from the running FastAPI application schema (`234 operations across 169 paths).
+> **Source of truth:** generated from the running FastAPI application schema (`234 operations across 169 paths`).
 
 ## Environments
 
@@ -19,7 +19,7 @@ Send the access token returned by login in the following header for protected op
 Authorization: Bearer <access_token>
 ```
 
-Registration, login, token refresh, password recovery, email verification, OAuth sign-in, health checks, and the service root do not require an access token. Authorization failures return `401`; validation failures return `422`.
+The `Auth` column below is derived from each route's actual dependencies (`require_auth` / `require_admin`), not inferred. `No` means the operation has neither dependency and can be called without a token - this includes registration, login, token refresh, password recovery, email verification, OAuth sign-in, health checks, the service root, public catalog/browsing reads (products, categories, reviews, shipping methods, tax lookups), and webhook receivers that authenticate by other means (for example the Stripe webhook validates the Stripe signature instead of a bearer token). Authorization failures return `401`; permission failures return `403`; validation failures return `422`.
 
 ## Conventions
 
@@ -59,7 +59,7 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 | `GET` | `/v1/analytics/simple-dashboard/` | Simple Dashboard | Yes | — | — | `200` |
 | `GET` | `/v1/analytics/stats/` | Admin Stats | Yes | `query:date_from`, `query:date_to`, `query:status`, `query:category` | — | `200`, `422` |
 | `GET` | `/v1/analytics/time-to-purchase/` | Time To Purchase | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
-| `POST` | `/v1/analytics/track/` | Track | Yes | — | `Event Data` (application/json) | `200`, `422` |
+| `POST` | `/v1/analytics/track/` | Track | No | — | `Event Data` (application/json) | `200`, `422` |
 | `GET` | `/v1/analytics/users-growth-trend/` | Users Growth Trend | Yes | `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/users/` | Users | Yes | `query:days` | — | `200`, `422` |
 
@@ -78,7 +78,7 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 | `POST` | `/v1/auth/register/` | Register | No | — | `UserCreate` (application/json) | `200`, `422` |
 | `POST` | `/v1/auth/resend-verification/` | Resend | No | `header:x-resend-token` | `ResendVerification` (application/json) | `200`, `422` |
 | `POST` | `/v1/auth/reset-password/` | Reset | No | — | `ResetPassword` (application/json) | `200`, `422` |
-| `POST` | `/v1/auth/revoke/` | Revoke | Yes | `query:refresh_token*` | — | `200`, `422` |
+| `POST` | `/v1/auth/revoke/` | Revoke | No | `query:refresh_token*` | — | `200`, `422` |
 | `GET` | `/v1/auth/verify-email/` | Verify | No | `query:token*` | — | `200`, `422` |
 
 ## Cart
@@ -102,11 +102,11 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/categories/` | List | Yes | `query:page`, `query:limit`, `query:active_only` | — | `200`, `422` |
+| `GET` | `/v1/categories/` | List | No | `query:page`, `query:limit`, `query:active_only` | — | `200`, `422` |
 | `POST` | `/v1/categories/` | Create | Yes | — | `schemas__catalog__category__Create` (application/json) | `201`, `422` |
-| `GET` | `/v1/categories/tree/` | Tree | Yes | `query:active_only` | — | `200`, `422` |
+| `GET` | `/v1/categories/tree/` | Tree | No | `query:active_only` | — | `200`, `422` |
 | `DELETE` | `/v1/categories/{category_id}/` | Delete | Yes | `path:category_id*` | — | `200`, `422` |
-| `GET` | `/v1/categories/{category_id}/` | Get | Yes | `path:category_id*` | — | `200`, `422` |
+| `GET` | `/v1/categories/{category_id}/` | Get | No | `path:category_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/categories/{category_id}/` | Update | Yes | `path:category_id*` | `schemas__catalog__category__Update` (application/json) | `200`, `422` |
 
 ## Contact Messages
@@ -114,7 +114,7 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/contact-messages/` | List | Yes | `query:page`, `query:page_size`, `query:status`, `query:priority`, `query:search` | — | `200`, `422` |
-| `POST` | `/v1/contact-messages/` | Create | Yes | — | `schemas__system__contact_message__Create` (application/json) | `200`, `422` |
+| `POST` | `/v1/contact-messages/` | Create | No | — | `schemas__system__contact_message__Create` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/contact-messages/{message_id}/` | Delete | Yes | `path:message_id*` | — | `200`, `422` |
 | `GET` | `/v1/contact-messages/{message_id}/` | Get | Yes | `path:message_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/contact-messages/{message_id}/` | Patch | Yes | `path:message_id*` | `schemas__system__contact_message__Update` (application/json) | `200`, `422` |
@@ -163,7 +163,7 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 | `POST` | `/v1/orders/checkout/` | Checkout | Yes | — | `Checkout` (application/json) | `200`, `422` |
 | `POST` | `/v1/orders/checkout/validate/` | Validate | Yes | — | `Checkout` (application/json) | `200`, `422` |
 | `GET` | `/v1/orders/statistics/` | Statistics | Yes | `query:date_from`, `query:date_to` | — | `200`, `422` |
-| `GET` | `/v1/orders/track/{order_id}/` | Get Public Tracking | Yes | `path:order_id*` | — | `200`, `422` |
+| `GET` | `/v1/orders/track/{order_id}/` | Get Public Tracking | No | `path:order_id*` | — | `200`, `422` |
 | `GET` | `/v1/orders/{order_id}/` | Get | Yes | `path:order_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/orders/{order_id}/cancel/` | Cancel | Yes | `path:order_id*` | — | `200`, `422` |
 | `POST` | `/v1/orders/{order_id}/cancel/` | Cancel Post | Yes | `path:order_id*` | — | `200`, `422` |
@@ -208,26 +208,26 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/products/` | List | Yes | `query:page`, `query:limit`, `query:category`, `query:q`, `query:min_price`, `query:max_price`, `query:min_rating`, `query:max_rating`, `query:sort_by`, `query:sort_order`, `query:availability`, `query:featured`, `query:is_featured`, `query:is_bestseller`, `query:popular`, `query:sale`, `query:search_mode` | — | `200`, `422` |
+| `GET` | `/v1/products/` | List | No | `query:page`, `query:limit`, `query:category`, `query:q`, `query:min_price`, `query:max_price`, `query:min_rating`, `query:max_rating`, `query:sort_by`, `query:sort_order`, `query:availability`, `query:featured`, `query:is_featured`, `query:is_bestseller`, `query:popular`, `query:sale`, `query:search_mode` | — | `200`, `422` |
 | `POST` | `/v1/products/` | Create | Yes | — | `schemas__catalog__product__Create` (application/json) | `200`, `422` |
-| `GET` | `/v1/products/deals/` | Get Deals | Yes | `query:page`, `query:limit` | — | `200`, `422` |
-| `GET` | `/v1/products/featured/` | Get Featured | Yes | `query:limit` | — | `200`, `422` |
-| `GET` | `/v1/products/home/` | Get Home Data | Yes | — | — | `200` |
+| `GET` | `/v1/products/deals/` | Get Deals | No | `query:page`, `query:limit` | — | `200`, `422` |
+| `GET` | `/v1/products/featured/` | Get Featured | No | `query:limit` | — | `200`, `422` |
+| `GET` | `/v1/products/home/` | Get Home Data | No | — | — | `200` |
 | `DELETE` | `/v1/products/images/{image_id}/` | Delete Image | Yes | `path:image_id*` | — | `200`, `422` |
-| `GET` | `/v1/products/images/{image_id}/` | Get Image | Yes | `path:image_id*` | — | `200`, `422` |
+| `GET` | `/v1/products/images/{image_id}/` | Get Image | No | `path:image_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/products/images/{image_id}/` | Patch Image | Yes | `path:image_id*` | `ImageUpdate` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/products/variants/{variant_id}/` | Delete Variant | Yes | `path:variant_id*` | — | `200`, `422` |
-| `GET` | `/v1/products/variants/{variant_id}/` | Get Variant | Yes | `path:variant_id*` | — | `200`, `422` |
+| `GET` | `/v1/products/variants/{variant_id}/` | Get Variant | No | `path:variant_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/products/variants/{variant_id}/` | Patch Variant | Yes | `path:variant_id*` | `VariantUpdate` (application/json) | `200`, `422` |
-| `GET` | `/v1/products/variants/{variant_id}/images/` | List Images | Yes | `path:variant_id*` | — | `200`, `422` |
+| `GET` | `/v1/products/variants/{variant_id}/images/` | List Images | No | `path:variant_id*` | — | `200`, `422` |
 | `POST` | `/v1/products/variants/{variant_id}/images/` | Create Image | Yes | `path:variant_id*` | `ImageCreate` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/products/{product_id}/` | Delete | Yes | `path:product_id*` | — | `200`, `422` |
-| `GET` | `/v1/products/{product_id}/` | Get Product | Yes | `path:product_id*` | — | `200`, `422` |
+| `GET` | `/v1/products/{product_id}/` | Get Product | No | `path:product_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/products/{product_id}/` | Update | Yes | `path:product_id*` | `schemas__catalog__product__Update` (application/json) | `200`, `422` |
 | `PATCH` | `/v1/products/{product_id}/feature/` | Feature | Yes | `path:product_id*`, `query:featured` | — | `200`, `422` |
 | `PATCH` | `/v1/products/{product_id}/moderate/` | Moderate | Yes | `path:product_id*` | `Request` (application/json) | `200`, `422` |
-| `GET` | `/v1/products/{product_id}/recommendations/` | Recommended | Yes | `path:product_id*`, `query:limit` | — | `200`, `422` |
-| `GET` | `/v1/products/{product_id}/variants/` | List Variants | Yes | `path:product_id*` | — | `200`, `422` |
+| `GET` | `/v1/products/{product_id}/recommendations/` | Recommended | No | `path:product_id*`, `query:limit` | — | `200`, `422` |
+| `GET` | `/v1/products/{product_id}/variants/` | List Variants | No | `path:product_id*` | — | `200`, `422` |
 | `POST` | `/v1/products/{product_id}/variants/` | Create Variant | Yes | `path:product_id*` | `VariantCreate` (application/json) | `200`, `422` |
 
 ## promocodes
@@ -257,29 +257,29 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/reviews/` | List | Yes | `query:page`, `query:limit`, `query:product_id`, `query:min_rating`, `query:max_rating`, `query:sort_by` | — | `200`, `422` |
+| `GET` | `/v1/reviews/` | List | No | `query:page`, `query:limit`, `query:product_id`, `query:min_rating`, `query:max_rating`, `query:sort_by` | — | `200`, `422` |
 | `POST` | `/v1/reviews/` | Create | Yes | — | `schemas__catalog__review__Create` (application/json) | `200`, `422` |
-| `GET` | `/v1/reviews/product/{product_id}/` | For Product | Yes | `path:product_id*`, `query:page`, `query:limit`, `query:min_rating`, `query:max_rating`, `query:sort_by` | — | `200`, `422` |
+| `GET` | `/v1/reviews/product/{product_id}/` | For Product | No | `path:product_id*`, `query:page`, `query:limit`, `query:min_rating`, `query:max_rating`, `query:sort_by` | — | `200`, `422` |
 | `DELETE` | `/v1/reviews/{review_id}/` | Delete | Yes | `path:review_id*` | — | `200`, `422` |
-| `GET` | `/v1/reviews/{review_id}/` | Get | Yes | `path:review_id*` | — | `200`, `422` |
+| `GET` | `/v1/reviews/{review_id}/` | Get | No | `path:review_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/reviews/{review_id}/` | Update | Yes | `path:review_id*` | `schemas__catalog__review__Update` (application/json) | `200`, `422` |
 
 ## shipping
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `POST` | `/v1/shipping/calculate/` | Calc Cost | Yes | — | `Calculate` (application/json) | `200`, `422` |
-| `GET` | `/v1/shipping/methods/` | List | Yes | `query:page`, `query:limit`, `query:is_active`, `query:all_methods` | — | `200`, `422` |
+| `POST` | `/v1/shipping/calculate/` | Calc Cost | No | — | `Calculate` (application/json) | `200`, `422` |
+| `GET` | `/v1/shipping/methods/` | List | No | `query:page`, `query:limit`, `query:is_active`, `query:all_methods` | — | `200`, `422` |
 | `POST` | `/v1/shipping/methods/` | Create | Yes | — | `schemas__commerce__shipping__MethodCreate` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/shipping/methods/{method_id}/` | Delete | Yes | `path:method_id*` | — | `200`, `422` |
-| `GET` | `/v1/shipping/methods/{method_id}/` | Get | Yes | `path:method_id*` | — | `200`, `422` |
+| `GET` | `/v1/shipping/methods/{method_id}/` | Get | No | `path:method_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping/methods/{method_id}/` | Patch | Yes | `path:method_id*` | `schemas__commerce__shipping__MethodUpdate` (application/json) | `200`, `422` |
 
 ## shipping-tracking
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/shipping-tracking/carriers/` | List Carriers | Yes | `query:active_only` | — | `200`, `422` |
+| `GET` | `/v1/shipping-tracking/carriers/` | List Carriers | No | `query:active_only` | — | `200`, `422` |
 | `POST` | `/v1/shipping-tracking/carriers/` | Create Carrier | Yes | — | `schemas__commerce__carrier__Create` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/shipping-tracking/carriers/{carrier_id}/` | Delete Carrier | Yes | `path:carrier_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping-tracking/carriers/{carrier_id}/` | Update Carrier | Yes | `path:carrier_id*` | `schemas__commerce__carrier__Update` (application/json) | `200`, `422` |
@@ -292,7 +292,7 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 | `GET` | `/v1/shipping-tracking/shipments/{shipment_id}/` | Get Shipment | Yes | `path:shipment_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping-tracking/shipments/{shipment_id}/status/` | Update Shipment Status | Yes | `path:shipment_id*` | `schemas__commerce__shipping_tracking__Update` (application/json) | `200`, `422` |
 | `POST` | `/v1/shipping-tracking/track/` | Track | Yes | — | `Track` (application/json) | `200`, `422` |
-| `POST` | `/v1/shipping-tracking/webhooks/{carrier}/` | Handle Carrier Webhook | Yes | `path:carrier*` | `Webhook Data` (application/json) | `200`, `422` |
+| `POST` | `/v1/shipping-tracking/webhooks/{carrier}/` | Handle Carrier Webhook | No | `path:carrier*` | `Webhook Data` (application/json) | `200`, `422` |
 
 ## subscriptions
 
@@ -302,7 +302,7 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 | `POST` | `/v1/subscriptions/` | Create | Yes | — | `schemas__commerce__subscriptions__Create` (application/json) | `200`, `422` |
 | `POST` | `/v1/subscriptions/calculate-cost/` | Calculate | Yes | — | `CostCalculation` (application/json) | `200`, `422` |
 | `GET` | `/v1/subscriptions/due/` | List Due | Yes | — | — | `200` |
-| `GET` | `/v1/subscriptions/plans/` | Plans | Yes | — | — | `200` |
+| `GET` | `/v1/subscriptions/plans/` | Plans | No | — | — | `200` |
 | `POST` | `/v1/subscriptions/trigger-notifications/` | Trigger Notifications | Yes | — | — | `200` |
 | `POST` | `/v1/subscriptions/trigger-order-processing/` | Trigger Order Processing | Yes | — | — | `200` |
 | `DELETE` | `/v1/subscriptions/{subscription_id}/` | Delete | Yes | `path:subscription_id*` | — | `200`, `422` |
@@ -331,15 +331,15 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `POST` | `/v1/tax/calculate/` | Calculate Tax | Yes | — | `Calculation` (application/json) | `200`, `422` |
-| `GET` | `/v1/tax/countries/` | Countries | Yes | — | — | `200` |
+| `POST` | `/v1/tax/calculate/` | Calculate Tax | No | — | `Calculation` (application/json) | `200`, `422` |
+| `GET` | `/v1/tax/countries/` | Countries | No | — | — | `200` |
 | `GET` | `/v1/tax/rates/` | List Rates | Yes | `query:country_code`, `query:country_name`, `query:province_code`, `query:province_name`, `query:is_active`, `query:search`, `query:sort_by`, `query:sort_order`, `query:page`, `query:per_page` | — | `200`, `422` |
 | `POST` | `/v1/tax/rates/` | Create Rate | Yes | — | `RateCreate` (application/json) | `201`, `422` |
 | `POST` | `/v1/tax/rates/bulk-update/` | Bulk Update | Yes | — | `Updates` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/tax/rates/{tax_rate_id}/` | Delete Rate | Yes | `path:tax_rate_id*` | — | `200`, `422` |
 | `GET` | `/v1/tax/rates/{tax_rate_id}/` | Get Rate | Yes | `path:tax_rate_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/tax/rates/{tax_rate_id}/` | Update Rate | Yes | `path:tax_rate_id*` | `RateUpdate` (application/json) | `200`, `422` |
-| `GET` | `/v1/tax/tax-types/` | Tax Types | Yes | — | — | `200` |
+| `GET` | `/v1/tax/tax-types/` | Tax Types | No | — | — | `200` |
 
 ## Ungrouped
 
@@ -369,8 +369,8 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/webhooks/health/` | Webhook Health | Yes | — | — | `200` |
-| `POST` | `/v1/webhooks/stripe/` | Stripe Webhook | Yes | — | — | `200` |
+| `GET` | `/v1/webhooks/health/` | Webhook Health | No | — | — | `200` |
+| `POST` | `/v1/webhooks/stripe/` | Stripe Webhook | No | — | — | `200` |
 
 ## Error responses
 
@@ -387,4 +387,4 @@ Registration, login, token refresh, password recovery, email verification, OAuth
 
 ## Keeping this reference current
 
-Regenerate this file and `postman_collection.json` after changing a route, schema, or authentication rule. The generated artifacts must match `app.openapi()` before release.
+Regenerate this file and `postman_collection.json` after changing a route, schema, or authentication rule. The generated artifacts must match `app.openapi()` before release. Run `python3 scripts/generate_api_docs.py` to regenerate both files from the live schema.

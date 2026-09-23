@@ -1,6 +1,4 @@
-"""
-Response utility for consistent API responses
-"""
+"""Response utility for consistent API responses."""
 from typing import Any, Optional, Dict
 from fastapi.responses import JSONResponse
 from fastapi import status
@@ -25,9 +23,7 @@ class Response(JSONResponse):
         errors: Optional[list] = None,
         **kwargs
     ):
-        """
-        Initialize response object that can be returned directly from FastAPI routes
-        """
+        """Initialize response object that can be returned directly from FastAPI routes."""
         # Use code parameter if provided for backward compatibility
         final_status_code = code if code is not None else status_code
 
@@ -53,9 +49,7 @@ class Response(JSONResponse):
         )
 
     def _serialize_data(self, data: Any) -> Any:
-        """
-        Convert Pydantic models, SQLAlchemy models, and other non-serializable objects to JSON-serializable format
-        """
+        """Convert Pydantic models, SQLAlchemy models, and other non-serializable objects to JSON-serializable format."""
         if data is None:
             return None
         elif isinstance(data, BaseModel):
@@ -110,9 +104,7 @@ class Response(JSONResponse):
         code: Optional[int] = None,  # For backward compatibility
         pagination: Optional[Dict[str, Any]] = None
     ) -> "Response":
-        """
-        Create a successful response
-        """
+        """Create a successful response."""
         return Response(
             success=True,
             data=data,
@@ -129,9 +121,7 @@ class Response(JSONResponse):
         data: Any = None,
         errors: Optional[list] = None
     ) -> "Response":
-        """
-        Create an error response
-        """
+        """Create an error response."""
         return Response(
             success=False,
             data=data,

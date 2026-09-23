@@ -110,9 +110,7 @@ class PromocodeService:
         return promocode
     
     async def validate(self, code: str) -> tuple[bool, Optional[str], Optional[Promocode]]:
-        """
-        Validate a promocode and return (is_valid, error_message, promocode)
-        """
+        """Validate a promocode and return (is_valid, error_message, promocode)."""
         promocode = await self.get(code=code, active_only=True)
         
         if not promocode:

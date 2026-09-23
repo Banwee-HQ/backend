@@ -1,6 +1,4 @@
-"""
-Common service result types and TypedDicts for API responses
-"""
+"""Common service result types and TypedDicts for API responses."""
 from typing import TypedDict, Dict, Any, List, Optional
 from decimal import Decimal
 from datetime import date, datetime

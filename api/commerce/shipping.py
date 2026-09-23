@@ -1,6 +1,4 @@
-"""
-Shipping routes for managing shipping methods and calculating shipping costs
-"""
+"""Shipping routes for managing shipping methods and calculating shipping costs."""
 
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
