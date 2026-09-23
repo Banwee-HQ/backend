@@ -2,7 +2,7 @@
 
 import pytest
 
-from core.utils.encryption import PasswordManager
+from core.utils.encryption import PasswordManager, hash_password, verify_password
 
 
 @pytest.fixture
@@ -55,3 +55,32 @@ class TestRandomPasswordGeneration:
         generated = manager.generate_random_password()
         hashed = manager.hash_password(generated)
         assert manager.verify_password(generated, hashed) is True
+
+
+class TestGenerateToken:
+
+    def test_default_length_produces_a_nonempty_urlsafe_token(self, manager):
+        token = manager.generate_token()
+        assert isinstance(token, str)
+        assert len(token) > 0
+
+    def test_two_calls_are_different(self, manager):
+        assert manager.generate_token() != manager.generate_token()
+
+    def test_respects_custom_length_argument(self, manager):
+        """secrets.token_urlsafe(n) derives its string length from the byte length
+        n, not a 1:1 char count, so just confirm a larger n yields a longer token."""
+        assert len(manager.generate_token(4)) < len(manager.generate_token(64))
+
+
+class TestModuleLevelConvenienceFunctions:
+    """hash_password/verify_password at module level just delegate to PasswordManager."""
+
+    def test_hash_password_delegates_to_password_manager(self):
+        hashed = hash_password("a-password")
+        assert hashed.startswith("$argon2")
+
+    def test_verify_password_delegates_to_password_manager(self):
+        hashed = hash_password("a-password")
+        assert verify_password("a-password", hashed) is True
+        assert verify_password("wrong-password", hashed) is False

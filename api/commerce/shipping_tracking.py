@@ -374,8 +374,11 @@ async def patch_provider(
 
         await db.commit()
 
-        # Re-fetch with carrier eager-loaded: committing a dirty object expires its
-        # relationships even with expire_on_commit=False, so to_dict() would otherwise crash.
+        # Re-fetch with carrier eager-loaded. With expire_on_commit=False, the already-loaded
+        # `carrier` relationship on this identity-mapped object survives the commit as-is, so
+        # a plain re-select would silently return the pre-update carrier (selectinload only
+        # populates relationships that aren't already loaded) - explicitly expire it first.
+        db.expire(provider, ["carrier"])
         result = await db.execute(
             select(ShippingProvider)
             .where(ShippingProvider.id == provider.id)

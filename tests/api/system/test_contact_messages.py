@@ -1,6 +1,7 @@
 """Tests for api/system/contact_messages.py - /v1/contact-messages endpoints."""
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from uuid import uuid4
 
@@ -90,3 +91,86 @@ class TestContactMessageEndpoints:
     async def test_delete_requires_admin(self, async_client: AsyncClient, auth_headers, created_message):
         response = await async_client.delete(f"/v1/contact-messages/{created_message['id']}/", headers=auth_headers)
         assert response.status_code == 403
+
+
+@pytest.mark.api
+class TestUnexpectedErrorsBecomeSafe500s:
+    """Every route here shares the same try/except APIException/except HTTPException/
+    except Exception->500 shape. Force an unexpected failure from the service layer
+    (the established pattern for this in tests/api/commerce/test_promocodes.py) to
+    verify the generic safety net, rather than only exercising success/404 paths."""
+
+    async def test_create(self, async_client: AsyncClient, sample_contact_message, mocker):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.create",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.post("/v1/contact-messages/", json=sample_contact_message)
+        assert response.status_code == 500
+
+    async def test_list(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.list",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.get("/v1/contact-messages/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_get_unexpected_exception(self, async_client: AsyncClient, admin_headers, created_message, mocker):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.get",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.get(f"/v1/contact-messages/{created_message['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_get_bare_http_exception_passes_through(
+        self, async_client: AsyncClient, admin_headers, created_message, mocker
+    ):
+        """A raw (non-APIException) HTTPException from a lower layer must pass through unchanged."""
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.get",
+            side_effect=HTTPException(status_code=418, detail="teapot"),
+        )
+        response = await async_client.get(f"/v1/contact-messages/{created_message['id']}/", headers=admin_headers)
+        assert response.status_code == 418
+
+    async def test_patch_unexpected_exception(self, async_client: AsyncClient, admin_headers, created_message, mocker):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.update",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.patch(
+            f"/v1/contact-messages/{created_message['id']}/", headers=admin_headers, json={"status": "resolved"}
+        )
+        assert response.status_code == 500
+
+    async def test_patch_bare_http_exception_passes_through(
+        self, async_client: AsyncClient, admin_headers, created_message, mocker
+    ):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.update",
+            side_effect=HTTPException(status_code=418, detail="teapot"),
+        )
+        response = await async_client.patch(
+            f"/v1/contact-messages/{created_message['id']}/", headers=admin_headers, json={"status": "resolved"}
+        )
+        assert response.status_code == 418
+
+    async def test_delete_unexpected_exception(self, async_client: AsyncClient, admin_headers, created_message, mocker):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.delete",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.delete(f"/v1/contact-messages/{created_message['id']}/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_delete_bare_http_exception_passes_through(
+        self, async_client: AsyncClient, admin_headers, created_message, mocker
+    ):
+        mocker.patch(
+            "services.system.contact_message.ContactMessageService.delete",
+            side_effect=HTTPException(status_code=418, detail="teapot"),
+        )
+        response = await async_client.delete(f"/v1/contact-messages/{created_message['id']}/", headers=admin_headers)
+        assert response.status_code == 418

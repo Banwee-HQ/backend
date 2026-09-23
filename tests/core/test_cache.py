@@ -1,6 +1,6 @@
 """Tests for core/utils/cache.py - in-process TTL cache for read-only display data."""
 
-from core.utils.cache import product_read_cache, invalidate_variant, invalidate_product
+from core.utils.cache import product_read_cache, invalidate_variant, invalidate_product, invalidate_all
 
 
 class TestInvalidateVariant:
@@ -47,3 +47,15 @@ class TestInvalidateProduct:
         product_read_cache[("variant", "v1")] = "cached"
         invalidate_product("p1")
         assert ("variant", "v1") in product_read_cache
+
+
+class TestInvalidateAll:
+
+    def setup_method(self):
+        product_read_cache.clear()
+
+    def test_clears_every_entry(self):
+        product_read_cache[("product", "p1")] = "cached"
+        product_read_cache[("variant", "v1")] = "cached"
+        invalidate_all()
+        assert len(product_read_cache) == 0

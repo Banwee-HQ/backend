@@ -197,12 +197,24 @@ class DatabaseManager:
                 "invalid": getattr(pool, 'invalid', lambda: 0)(),
             }
         except Exception as e:
-            # Fallback for pool types that don't support all methods
+            # Fallback for pool types that don't support all methods. Each field is
+            # evaluated independently (rather than re-calling the same methods that
+            # may have just raised above) so one unsupported/failing metric can't
+            # blow up the whole status response - which used to happen whenever the
+            # very first field to fail in the try block above (e.g. pool.size() on
+            # a pool type that doesn't support it) was retried here unchanged and
+            # raised again, propagating out of this "fallback" uncaught.
+            def _safe(getter):
+                try:
+                    return getter()
+                except Exception:
+                    return 0
+
             return {
-                "pool_size": getattr(pool, 'size', lambda: 0)(),
-                "checked_in": getattr(pool, 'checkedin', lambda: 0)(),
-                "checked_out": getattr(pool, 'checkedout', lambda: 0)(),
-                "overflow": getattr(pool, 'overflow', lambda: 0)(),
+                "pool_size": _safe(lambda: getattr(pool, 'size', lambda: 0)()),
+                "checked_in": _safe(lambda: getattr(pool, 'checkedin', lambda: 0)()),
+                "checked_out": _safe(lambda: getattr(pool, 'checkedout', lambda: 0)()),
+                "overflow": _safe(lambda: getattr(pool, 'overflow', lambda: 0)()),
                 "invalid": 0,
                 "error": f"Pool status partially unavailable: {str(e)}",
             }

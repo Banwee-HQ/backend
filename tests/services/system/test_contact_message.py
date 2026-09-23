@@ -133,3 +133,53 @@ class TestDelete:
 
     async def test_unknown_id_returns_false(self, db_session):
         assert await ContactMessageService.delete(db_session, uuid4()) is False
+
+
+class TestCreateDbError:
+
+    async def test_null_constraint_violation_rolls_back_and_reraises(self, db_session, mocker):
+        """Bypass pydantic validation (model_construct) to smuggle a None past the
+        service's own checks, so the real NOT NULL column constraint on `name`
+        fires at commit time - a genuine DB error, not a mock. Only the session's
+        own rollback() is spied on to confirm the except branch actually ran;
+        re-querying the same session afterward is deliberately avoided since a
+        raw asyncpg-level error inside this fixture's SAVEPOINT-joined session
+        leaves the low-level connection in a state where a *new* query needs a
+        fresh session, not a spurious extra thing to assert here."""
+        rollback_spy = mocker.spy(db_session, "rollback")
+        bad_data = ContactMessageCreate.model_construct(
+            name=None, email=f"bad_{uuid4().hex[:8]}@example.com", subject="Subject", message="A long enough message."
+        )
+        with pytest.raises(Exception):
+            await ContactMessageService.create(db_session, bad_data)
+
+        rollback_spy.assert_called_once()
+
+
+class TestUpdateDbError:
+
+    async def test_invalid_enum_value_rolls_back_and_reraises(self, db_session, mocker):
+        """Bypass pydantic's MessageStatus enum validation to write a status value
+        the DB's `messagestatus` enum type doesn't accept - a genuine DB-level error."""
+        created = await ContactMessageService.create(db_session, make_create())
+        rollback_spy = mocker.spy(db_session, "rollback")
+        bad_update = ContactMessageUpdate.model_construct(
+            status="not_a_real_status", priority=None, admin_notes=None, assigned_to=None
+        )
+        with pytest.raises(Exception):
+            await ContactMessageService.update(db_session, created.id, bad_update)
+
+        rollback_spy.assert_called_once()
+
+
+class TestDeleteDbError:
+
+    async def test_commit_failure_rolls_back_and_reraises(self, db_session, mocker):
+        """No FK references contact_messages, so there's no naturally-occurring DB
+        error on delete; simulate a commit-time failure (e.g. connection drop) to
+        cover the rollback/reraise branch."""
+        created = await ContactMessageService.create(db_session, make_create())
+        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("connection lost"))
+
+        with pytest.raises(RuntimeError):
+            await ContactMessageService.delete(db_session, created.id)

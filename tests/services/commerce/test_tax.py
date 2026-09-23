@@ -104,6 +104,52 @@ class TestRateLookupByName:
                                    province_name="Nowhere Province")
         assert float(rate) == 0.0
 
+    async def test_lookup_by_province_name_combined_with_country_code(self, db_session):
+        """info() has a third lookup path (lines 101-114): country_code + province_name,
+        with no province_code and no country_name given. This is distinct from the
+        by-code path (province_code+country_code) and the by-name path
+        (province_name+country_name) already covered above."""
+        code = unique_code()
+        await make_tax_rate(db_session, country_code=code, tax_rate=0.06,
+                             province_code="XZ", province_name="X Province")
+        service = TaxService(db_session)
+
+        info = await service.info(country_code=code, province_code=None,
+                                   province_name="X Province", country_name=None)
+        assert float(info["tax_rate"]) == pytest.approx(0.06)
+        assert info["province_code"] == "XZ"
+        assert info["tax_name"] is None
+
+    async def test_lookup_by_province_name_and_country_code_no_match_falls_back(self, db_session):
+        """Same call shape as above, but no matching province row exists - must fall
+        through to the country-level lookup rather than erroring or returning stale data."""
+        code = unique_code()
+        await make_tax_rate(db_session, country_code=code, tax_rate=0.03)  # country-level only
+        service = TaxService(db_session)
+
+        info = await service.info(country_code=code, province_code=None,
+                                   province_name="Nonexistent Province", country_name=None)
+        assert float(info["tax_rate"]) == pytest.approx(0.03)
+        assert info["province_code"] is None
+
+    async def test_real_db_error_is_caught_and_returns_error_dict(self, db_session):
+        """A genuine (non-mocked) DB failure - a prior failed statement poisons the
+        session so the next query raises PendingRollbackError - must be caught by
+        info()'s except block and turned into a safe fallback dict, not propagate
+        and crash the caller."""
+        from sqlalchemy import text
+
+        with pytest.raises(Exception):
+            await db_session.execute(text("SELECT * FROM this_table_does_not_exist_xyz_123"))
+
+        service = TaxService(db_session)
+        result = await service.info(country_code=unique_code())
+
+        assert result["tax_name"] == "Error"
+        assert result["tax_rate"] == 0.0
+        assert result["tax_percentage"] == 0.0
+        assert "error" in result
+
 
 class TestCalculateTax:
 

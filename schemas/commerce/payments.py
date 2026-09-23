@@ -44,7 +44,9 @@ class IntentBase(BaseModel):
     amount: float
     currency: str = "USD"
     status: str = "pending"
-    payment_method_id: Optional[UUID] = None
+    # This mirrors PaymentIntent.payment_method_id (models/commerce/payments.py), which stores
+    # the raw Stripe payment-method id (e.g. "pm_xxx"), not our internal PaymentMethod.id UUID.
+    payment_method_id: Optional[str] = None
 
 
 class IntentCreate(BaseModel):

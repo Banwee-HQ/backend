@@ -801,30 +801,25 @@ class TestListRefundsErrorPassthrough:
 @pytest.mark.api
 class TestConfirmIntentSuccessAndGenericException:
 
-    async def test_confirming_a_fresh_intent_hits_a_real_schema_bug(self, async_client, auth_headers):
-        """Documents a genuine, currently-live bug rather than papering over it:
-        IntentResponse.payment_method_id (schemas/commerce/payments.py) is typed
-        Optional[UUID], but confirm_intent() (services/commerce/payments.py) always
-        stores the raw Stripe payment_method id string (e.g. "pm_xxx") into that same
-        column - see the "payment_method_id stores the Stripe string id, not our
-        internal PaymentMethod row's UUID" comment already in services/commerce/
-        payments.py's retry(). Since confirm_intent() sets payment_method_id
-        unconditionally (success or requires_action) before returning, the
-        IntentResponse.model_validate(...) call on line 410 of api/commerce/
-        payments.py's confirm_intent endpoint ALWAYS raises a pydantic
-        ValidationError for any real confirmation - meaning that endpoint's success
-        response (200) is unreachable in production today. Fixing this requires
-        changing schemas/commerce/payments.py (out of scope for this test file per
-        this task's constraints), so this test instead pins the actual, current
-        behavior and flags it for a follow-up fix. See the final coverage report."""
+    async def test_confirming_a_fresh_intent_succeeds(self, async_client, auth_headers):
+        """Regression test for a real, previously-live bug: IntentResponse.payment_method_id
+        (schemas/commerce/payments.py) was typed Optional[UUID], but confirm_intent()
+        (services/commerce/payments.py) always stores the raw Stripe payment_method id
+        string (e.g. "pm_xxx") into that same column - see the "payment_method_id stores
+        the Stripe string id, not our internal PaymentMethod row's UUID" comment already
+        in services/commerce/payments.py's retry(). That meant every real confirmation hit
+        a pydantic ValidationError and returned 500 - the endpoint's success response (200)
+        was unreachable in production. Fixed by typing the schema field Optional[str] to
+        match what's actually stored. This test confirms the success path now actually works."""
         create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 12.0})
         intent_id = create.json()["data"]["id"]
+        pm_id = fresh_stripe_payment_method_id()
         response = await async_client.post(
             f"/v1/payments/intents/{intent_id}/confirm/", headers=auth_headers,
-            params={"payment_method_id": fresh_stripe_payment_method_id()},
+            params={"payment_method_id": pm_id},
         )
-        assert response.status_code == 500
-        assert "payment_method_id" in response.json()["message"]
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["payment_method_id"] == pm_id
 
     async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, monkeypatch):
         import api.commerce.payments as payments_api

@@ -7,13 +7,46 @@ requests instead of a clean 401, because it read `current_user.role` before chec
 
 import pytest
 from types import SimpleNamespace
+from fastapi import HTTPException
 
-from core.dependencies import require_admin, require_auth
+from core.dependencies import require_admin, require_auth, get_current_auth_user
 from core.exceptions import APIException
+from services.accounts.auth import AuthService
 
 
 def make_user(role: str):
     return SimpleNamespace(role=role)
+
+
+class TestGetCurrentAuthUser:
+    """No token at all is the majority path (covered implicitly by every
+    unauthenticated-request test elsewhere); these focus on the two error
+    branches, which nothing else in this suite reaches since every real request
+    either has no token or a token AuthService accepts cleanly."""
+
+    async def test_no_token_returns_none_without_touching_auth_service(self, mocker):
+        mock_current_user = mocker.patch.object(AuthService, "current_user")
+        result = await get_current_auth_user(token=None, db=mocker.Mock())
+        assert result is None
+        mock_current_user.assert_not_called()
+
+    async def test_expired_or_invalid_token_returns_none(self, mocker):
+        """AuthService.current_user raises HTTPException(401) for a bad token -
+        that's an expected, everyday case and must resolve to "not authenticated",
+        not blow up the request."""
+        mocker.patch.object(AuthService, "current_user", side_effect=HTTPException(status_code=401, detail="expired"))
+        result = await get_current_auth_user(token="some-token", db=mocker.Mock())
+        assert result is None
+
+    async def test_unexpected_failure_is_logged_and_treated_as_unauthenticated(self, mocker):
+        """A genuine bug or DB error resolving the user must not be silently
+        confused with "no token provided" - it's logged, but still resolves to
+        None rather than crashing every route that depends on this."""
+        mock_logger = mocker.patch("core.dependencies.logger")
+        mocker.patch.object(AuthService, "current_user", side_effect=RuntimeError("db exploded"))
+        result = await get_current_auth_user(token="some-token", db=mocker.Mock())
+        assert result is None
+        mock_logger.error.assert_called_once()
 
 
 class TestRequireAdmin:
