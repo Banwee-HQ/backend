@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 
-from models.commerce.orders import OrderStatus, PaymentStatus, FulfillmentStatus
+from models.commerce.orders import OrderStatus, PaymentStatus, FulfillmentStatus, OrderSource
 
 
 class Checkout(BaseModel):
@@ -46,9 +46,11 @@ class Response(BaseModel):
     total_amount: float
     subtotal: Optional[float] = None
     tax_amount: Optional[float] = None
+    tax_rate: Optional[float] = None
     shipping_cost: Optional[float] = None
     discount_amount: Optional[float] = None
     currency: str
+    source: Optional[OrderSource] = None
     shipping_method: Optional[str] = None
     tracking_number: Optional[str] = None
     carrier: Optional[str] = None
@@ -59,6 +61,10 @@ class Response(BaseModel):
     customer_notes: Optional[str] = None
     internal_notes: Optional[str] = None
     items: List[ItemResponse]
+    confirmed_at: Optional[datetime] = None
+    shipped_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

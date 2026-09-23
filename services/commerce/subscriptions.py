@@ -543,7 +543,7 @@ class SubscriptionService:
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
         
-        subscription.status = "cancelled"
+        subscription.status = SubscriptionStatus.CANCELLED.value
         subscription.cancelled_at = datetime.now(timezone.utc)
         subscription.auto_renew = False
         
@@ -563,7 +563,7 @@ class SubscriptionService:
         if subscription.status != "active":
             raise HTTPException(status_code=400, detail="Can only pause active subscriptions")
         
-        subscription.status = "paused"
+        subscription.status = SubscriptionStatus.PAUSED.value
         subscription.paused_at = datetime.now(timezone.utc)
         subscription.pause_reason = reason
         
@@ -580,7 +580,7 @@ class SubscriptionService:
         if subscription.status not in ["paused", "cancelled"]:
             raise HTTPException(status_code=400, detail="Can only resume paused or cancelled subscriptions")
 
-        subscription.status = "active"
+        subscription.status = SubscriptionStatus.ACTIVE.value
         subscription.paused_at = None
         subscription.pause_reason = None
         subscription.cancelled_at = None

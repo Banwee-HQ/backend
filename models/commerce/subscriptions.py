@@ -14,9 +14,7 @@ class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     CANCELLED = "cancelled"
-    PAST_DUE = "past_due"
-    UNPAID = "unpaid"
-    INCOMPLETE = "incomplete"
+    PAYMENT_FAILED = "payment_failed"
 
 
 class DeliveryType(str, Enum):

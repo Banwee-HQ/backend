@@ -9,7 +9,7 @@ from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from core.logging import get_structured_logger
 
-from models.commerce.subscriptions import Subscription
+from models.commerce.subscriptions import Subscription, SubscriptionStatus
 from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus, OrderSource
 from models.catalog.product import ProductVariant
 from models.accounts.user import User, Address
@@ -238,20 +238,20 @@ class SubscriptionScheduler:
                 if subscription.payment_retry_count == 1:
                     # First failure: retry in 6 hours
                     subscription.next_retry_date = datetime.now(timezone.utc) + timedelta(hours=6)
-                    subscription.status = "payment_failed"
+                    subscription.status = SubscriptionStatus.PAYMENT_FAILED.value
                     
                     logger.warning(f"Payment failed for subscription {subscription.id} (attempt 1/3). Retry in 6 hours.")
                     
                 elif subscription.payment_retry_count == 2:
                     # Second failure: retry in 24 hours (next day)
                     subscription.next_retry_date = datetime.now(timezone.utc) + timedelta(hours=24)
-                    subscription.status = "payment_failed"
+                    subscription.status = SubscriptionStatus.PAYMENT_FAILED.value
                     
                     logger.warning(f"Payment failed for subscription {subscription.id} (attempt 2/3). Retry in 24 hours.")
                     
                 else:
                     # Third failure: pause subscription
-                    subscription.status = "paused"
+                    subscription.status = SubscriptionStatus.PAUSED.value
                     subscription.paused_at = datetime.now(timezone.utc)
                     subscription.pause_reason = f"Payment failed after 3 attempts: {error_message}"
                     subscription.next_retry_date = None
@@ -339,7 +339,7 @@ class SubscriptionScheduler:
                     )
 
                 # --- UPDATE SUBSCRIPTION ---
-                subscription.status = "active"
+                subscription.status = SubscriptionStatus.ACTIVE.value
                 subscription.last_payment_error = None
                 subscription.payment_retry_count = 0  # Reset retry count on success
                 subscription.last_payment_attempt = datetime.now(timezone.utc)
@@ -367,7 +367,7 @@ class SubscriptionScheduler:
                 # Re-fetch by the original subscription_id param: the rollback above expired every attribute on the (now stale) `subscription` object, so reading subscription.id here would itself crash.
                 sub_result = await self.db.execute(select(Subscription).where(Subscription.id == subscription_id))
                 subscription = sub_result.scalar_one()
-                subscription.status = "paused"
+                subscription.status = SubscriptionStatus.PAUSED.value
                 subscription.paused_at = datetime.now(timezone.utc)
                 subscription.pause_reason = (
                     f"Payment succeeded but order finalization failed: {finalize_error}. "

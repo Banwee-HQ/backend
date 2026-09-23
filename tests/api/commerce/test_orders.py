@@ -709,3 +709,27 @@ class TestShipEdgeCases:
             "carrier": "ups", "tracking_number": "1Z999"
         })
         assert response.status_code == 418
+
+
+@pytest.mark.api
+class TestOrderResponseExposesStoredLifecycleFields:
+    """tax_rate, source and the lifecycle timestamps are real Order columns the admin UI
+    renders - they must come back on the order response, not just live in the database."""
+
+    async def test_lifecycle_fields_are_returned(self, async_client: AsyncClient, auth_headers,
+                                                  created_order: Order, db_session: AsyncSession):
+        from datetime import datetime, timezone
+        confirmed = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+        created_order.tax_rate = 0.08
+        created_order.confirmed_at = confirmed
+        await db_session.commit()
+
+        response = await async_client.get(f"/v1/orders/{created_order.id}/", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["tax_rate"] == 0.08
+        assert data["source"] == "web"
+        assert data["confirmed_at"].startswith("2026-01-02T03:04:05")
+        assert data["shipped_at"] is None
+        assert data["delivered_at"] is None
+        assert data["cancelled_at"] is None

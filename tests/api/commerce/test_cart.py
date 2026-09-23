@@ -50,6 +50,13 @@ class TestCartEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["items"][0]["quantity"] == 2
 
+    async def test_item_variant_exposes_stock(self, async_client: AsyncClient, auth_headers, cart_with_item):
+        """GET /v1/cart/ - Each item's variant carries live stock so the UI can cap quantities."""
+        response = await async_client.get("/v1/cart/", headers=auth_headers)
+        variant = response.json()["data"]["items"][0]["variant"]
+        assert variant["stock"] == cart_with_item["stock"]
+        assert variant["stock"] > 0
+
     async def test_add_item_unknown_variant(self, async_client: AsyncClient, auth_headers):
         """POST /v1/cart/add - Unknown variant is rejected."""
         response = await async_client.post("/v1/cart/add/", headers=auth_headers, json={

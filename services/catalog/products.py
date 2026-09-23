@@ -152,6 +152,7 @@ class ProductService:
                 name=product.name,
                 slug=getattr(product, 'slug', None),
                 description=product.description,
+                short_description=product.short_description,
                 is_featured=product.is_featured,
                 is_bestseller=product.is_bestseller,
                 rating=product.rating_average,
@@ -176,8 +177,7 @@ class ProductService:
                 name=getattr(product, 'name', ''),
                 slug=getattr(product, 'slug', None),
                 description=getattr(product, 'description', ''),
-                # NOTE: was `featured=...`, but the field is `is_featured` - pydantic silently
-                # ignored the wrong kwarg, always reporting is_featured=False.
+                short_description=getattr(product, 'short_description', None),
                 is_featured=getattr(product, 'is_featured', False),
                 rating=getattr(product, 'rating_average', 0.0),
                 review_count=getattr(product, 'review_count', 0),

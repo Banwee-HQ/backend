@@ -166,6 +166,7 @@ class Response(BaseModel):
     name: str
     slug: Optional[str] = None
     description: Optional[str]
+    short_description: Optional[str] = None
     category_id: Optional[UUID] = None
     category: Optional[CategoryBrief] = None
     is_featured: bool = False

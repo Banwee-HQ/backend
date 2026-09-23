@@ -1273,9 +1273,11 @@ class OrderService:
             total_amount=float(corrected_total),  # Use corrected total instead of order.total_amount
             subtotal=float(display_subtotal) if display_subtotal else None,
             tax_amount=float(order.tax_amount) if order.tax_amount else None,
+            tax_rate=float(order.tax_rate) if order.tax_rate is not None else None,
             shipping_cost=float(order.shipping_cost) if order.shipping_cost else None,
             discount_amount=float(order.discount_amount) if order.discount_amount else None,
             currency=order.currency,  # Use order's currency
+            source=order.source,
             shipping_method=order.shipping_method,
             tracking_number=order.tracking_number,
             carrier=order.carrier,
@@ -1286,6 +1288,10 @@ class OrderService:
             customer_notes=order.customer_notes,
             internal_notes=order.internal_notes,
             items=items,
+            confirmed_at=order.confirmed_at,
+            shipped_at=order.shipped_at,
+            delivered_at=order.delivered_at,
+            cancelled_at=order.cancelled_at,
             created_at=order.created_at if order.created_at else datetime.now(timezone.utc),
             updated_at=order.updated_at
         )

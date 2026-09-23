@@ -11,7 +11,7 @@ from sqlalchemy import select
 from core.utils.uuid_utils import uuid7
 from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler, process_subscription_shipments
-from models.commerce.subscriptions import Subscription
+from models.commerce.subscriptions import Subscription, SubscriptionStatus
 from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
 from models.catalog.category import Category
 from models.catalog.product import Product, ProductVariant
@@ -115,6 +115,8 @@ class TestProcessSubscription:
 
         await db_session.refresh(subscription)
         assert subscription.status == "payment_failed"
+        # The written status must be a declared enum member (it previously wasn't).
+        assert SubscriptionStatus(subscription.status) is SubscriptionStatus.PAYMENT_FAILED
         assert subscription.next_retry_date is not None
         hours_until_retry = (subscription.next_retry_date - datetime.now(timezone.utc)).total_seconds() / 3600
         assert 5.9 <= hours_until_retry <= 6.1

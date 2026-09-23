@@ -754,3 +754,21 @@ class TestErrorHandlingBranches:
             headers=admin_headers, params={"featured": True}
         )
         assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestShortDescriptionRoundTrip:
+    """short_description is stored and accepted on update, so it must also be returned -
+    otherwise an edit form that round-trips the product would wipe it."""
+
+    async def test_returned_on_create_and_get(self, async_client: AsyncClient, created_product):
+        assert created_product["short_description"] == "Test product"
+        response = await async_client.get(f"/v1/products/{created_product['id']}/")
+        assert response.json()["data"]["short_description"] == "Test product"
+
+    async def test_survives_unrelated_update(self, async_client: AsyncClient, admin_headers, created_product):
+        response = await async_client.patch(
+            f"/v1/products/{created_product['id']}/", headers=admin_headers, json={"name": "Renamed product"}
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["short_description"] == "Test product"
