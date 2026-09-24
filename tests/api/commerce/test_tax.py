@@ -67,14 +67,7 @@ async def sortable_rates(async_client: AsyncClient, admin_headers):
 
 @pytest.mark.api
 @pytest.mark.tax
-class TestTaxCalculate:
-
-    async def test_calculate(self, async_client: AsyncClient):
-        response = await async_client.post("/v1/tax/calculate/", json={
-            "subtotal": 100.0, "shipping": 10.0, "country_code": "US", "state_code": "CA"
-        })
-        assert response.status_code == 200
-        assert "tax_amount" in response.json()["data"]
+class TestTaxPublicLists:
 
     async def test_countries_list(self, async_client: AsyncClient):
         response = await async_client.get("/v1/tax/countries/")
@@ -346,24 +339,6 @@ class TestTaxTypesEndpoint:
         response = await async_client.get("/v1/tax/tax-types/")
         assert response.status_code == 500
         assert "Failed to fetch tax types" in response.json()["message"]
-
-
-@pytest.mark.api
-@pytest.mark.tax
-class TestCalculateTaxErrors:
-
-    async def test_calculate_error_returns_500(self, async_client: AsyncClient, monkeypatch):
-        from services.commerce.tax import TaxService
-
-        async def broken_calculate(self, amount, country_code, province_code=None):
-            raise RuntimeError("boom")
-        monkeypatch.setattr(TaxService, "calculate_tax", broken_calculate)
-
-        response = await async_client.post("/v1/tax/calculate/", json={
-            "subtotal": 10.0, "shipping": 0.0, "country_code": "US"
-        })
-        assert response.status_code == 500
-        assert "Failed to calculate tax" in response.json()["message"]
 
 
 @pytest.mark.api

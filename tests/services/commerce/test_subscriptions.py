@@ -11,7 +11,6 @@ from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy.orm.attributes import set_committed_value
 from core.utils.uuid_utils import uuid7
 from services.commerce.subscriptions import SubscriptionService
 from models.commerce.subscriptions import Subscription, SubscriptionStatus
@@ -130,20 +129,6 @@ class TestCreate:
         sub = await service.create(user_id=test_user.id, name="Free Sub", variant_ids=[str(free_variant.id)])
         assert sub.variant_prices_at_creation[0]["price"] == pytest.approx(9.99)
 
-    async def test_currency_lookup_error_falls_back_to_cad(self, db_session, test_user, variant, address):
-        """A malformed address.country (not a string) blows up the country-to-
-        currency lookup - this must be swallowed, not surfaced as a 500 at
-        subscription creation time. set_committed_value (rather than a plain
-        attribute assignment) marks it as if freshly loaded from the DB, so it
-        isn't flushed back as a real UPDATE with a type Postgres would reject."""
-        set_committed_value(address, "country", 12345)
-        service = SubscriptionService(db_session)
-        sub = await service.create(
-            user_id=test_user.id, name="Bad Address", variant_ids=[str(variant.id)],
-            delivery_address_id=address.id,
-        )
-        assert sub.currency == "CAD"
-
 
 class TestCalculatePricingEdgeCases:
 
@@ -163,17 +148,6 @@ class TestCalculatePricingEdgeCases:
         )
         assert pricing["discount"] == 0.0
 
-    async def test_malformed_customer_address_country_does_not_crash_tax_calc(self, db_session, test_user, variant):
-        """A non-string country in the address dict blows up TaxService's
-        .upper() call - this must fall back to zero tax, not raise."""
-        service = SubscriptionService(db_session)
-        pricing = await service._calculate_pricing(
-            variants=[variant], variant_quantities={},
-            customer_address={"country": 12345, "state": "ON"},
-            currency="USD", user_id=test_user.id,
-        )
-        assert pricing["tax"] == 0.0
-        assert pricing["tax_rate"] == 0.0
 
 
 class TestGetShippingCost:

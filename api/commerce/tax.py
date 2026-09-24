@@ -1,68 +1,20 @@
-"""Tax calculation routes - Public API and Admin endpoints."""
+"""Admin tax rate management; checkout applies these rates through services.commerce.tax."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from typing import Optional, List
 from uuid import UUID
-import traceback
 
 from core.db import get_db
 from core.dependencies import require_admin
-from core.exceptions import APIException
 from core.utils.response import Response
 from core.logging import get_structured_logger
-from services.commerce.tax import TaxService
-from schemas.commerce.tax import Calculation, RateCreate, RateUpdate, RateResponse
+from schemas.commerce.tax import RateCreate, RateUpdate, RateResponse
 from models.commerce.tax_rates import TaxRate
 
 logger = get_structured_logger(__name__)
 router = APIRouter(prefix="/tax", tags=["tax"])
-
-
-@router.post("/calculate/")
-async def calculate_tax(
-    request: Calculation,
-    db: AsyncSession = Depends(get_db)
-):
-    """Calculate tax amount based on subtotal, shipping, and location."""
-    try:
-        logger.info(f"Calculating tax for request: subtotal={request.subtotal}, shipping={request.shipping}, country={request.country_code}")
-        
-        tax_service = TaxService(db)
-        # Calculate tax amount
-        tax_amount = await tax_service.calculate_tax(
-            amount=request.subtotal + request.shipping,
-            country_code=request.country_code or 'US',
-            province_code=request.state_code
-        )
-        logger.info(f"Tax amount calculated: {tax_amount}")
-        
-        # Get tax rate for response
-        tax_info = await tax_service.info(
-            country_code=request.country_code or 'US',
-            province_code=request.state_code
-        )
-        tax_rate = tax_info.get("tax_rate", 0.0)
-        
-        response_data = {
-            "tax_amount": float(tax_amount),
-            "tax_rate": float(tax_rate),
-            "tax_type": tax_info.get('tax_name', 'Tax'),
-            "jurisdiction": f"{tax_info.get('province_name', tax_info.get('country_name', 'Unknown'))}",
-            "currency": request.currency,
-            "breakdown": []
-        }
-        
-        return Response.success(data=response_data)
-        
-    except Exception as e:
-        logger.error(f"Tax calculation error: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to calculate tax: {str(e)}"
-        )
 
 
 # --- Admin tax rates management routes ---

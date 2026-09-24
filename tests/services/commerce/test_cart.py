@@ -18,7 +18,6 @@ from fastapi import HTTPException
 
 from services.commerce.cart import CartService
 from services.accounts.auth import AuthService
-from services.commerce.tax import TaxService
 from services.catalog.inventory import InventoryService
 from models.accounts.user import User, UserRole
 from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage
@@ -698,15 +697,6 @@ class TestCalculateCartPricingEdgeCases:
         result = await service.get_cart(user.id, country_code="ZZ")
         assert result["tax_amount"] == pytest.approx(10.0)
 
-    async def test_tax_lookup_failure_is_swallowed(self, db_session, mocker):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session, price=100.0)
-        mocker.patch.object(TaxService, "rate", side_effect=RuntimeError("tax service down"))
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-
-        result = await service.get_cart(user.id, country_code="US")
-        assert result["tax_amount"] == 0.0
 
 
 class TestGetCartEdgeCases:

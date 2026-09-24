@@ -185,26 +185,6 @@ class Currency(str, Enum):
     AVAX = "AVAX"  # Avalanche
 
 
-# Tax Calculation Schemas
-class Calculation(BaseModel):
-    subtotal: float
-    shipping: float = 0.0
-    shipping_address_id: Optional[UUID] = None
-    country_code: Optional[str] = None
-    state_code: Optional[str] = None
-    product_type: Optional[str] = None
-    currency: Currency = Currency.USD
-
-
-class CalculationResponse(BaseModel):
-    tax_amount: float
-    tax_rate: float
-    tax_type: str
-    jurisdiction: str
-    currency: Currency
-    breakdown: list = []
-
-
 # Admin Tax Rate Management Schemas
 class RateCreate(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2, description="ISO 3166-1 alpha-2 country code")

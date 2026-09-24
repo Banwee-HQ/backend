@@ -225,24 +225,6 @@ class SubscriptionService:
         # Get shipping cost from database
         shipping_cost = await self._get_shipping_cost(shipping_method_id)
 
-        # Calculate tax
-        tax_amount = Decimal('0.00')
-        tax_rate = Decimal('0.00')
-        
-        if customer_address:
-            try:
-                tax_service = TaxService(self.db)
-                
-                country = customer_address.get('country', '')
-                state = customer_address.get('state', '')
-                
-                tax_rate_value = await tax_service.rate(country, state, state, country)
-                tax_amount = (subtotal + shipping_cost) * Decimal(str(tax_rate_value))
-                tax_rate = Decimal(str(tax_rate_value))
-                
-            except Exception as e:
-                logger.warning(f"Tax calculation failed: {e}")
-        
         # Apply discount
         discount_amount = Decimal('0.00')
         discount_id = None
@@ -276,6 +258,13 @@ class SubscriptionService:
             except Exception as e:
                 logger.warning(f"Discount application failed: {e}")
         
+        # Tax after discount, same rule as one-off orders (services.commerce.tax)
+        discount_amount = min(discount_amount, subtotal)
+        tax_rate = 0.0
+        if customer_address:
+            tax_rate = await TaxService(self.db).rate(customer_address.get('country'), customer_address.get('state'))
+        tax_amount = TaxService.amount(subtotal + shipping_cost - discount_amount, tax_rate)
+
         # Calculate total
         total = subtotal + shipping_cost + tax_amount - discount_amount
         

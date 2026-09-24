@@ -228,13 +228,58 @@ class TestCalcPricing:
                              valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
         service = OrderService(db_session)
         result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
-        assert result["shipping_cost"] == Decimal("0.00")
+        # Shipping shows at full price and is taken off once, as the discount
+        assert result["shipping_cost"] == Decimal("10.00")
         assert result["discount_amount"] == Decimal("10.00")
+        assert result["total_amount"] == result["subtotal"] + result["tax_amount"]
 
     async def test_unknown_discount_code_is_silently_ignored(self, db_session, cart_with_item, address, shipping_method):
         service = OrderService(db_session)
         result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=f"nope{uuid4().hex[:6]}")
         assert result["discount_amount"] == Decimal("0.00")
+
+
+class TestCalcPricingTax:
+    """Tax comes from the admin's rate for the shipping address and applies to goods + delivery, after discounts."""
+
+    @pytest.fixture
+    async def taxed_address(self, db_session, test_user) -> Address:
+        country = f"Taxland-{uuid4().hex[:6]}"
+        db_session.add(TaxRate(id=uuid7(), country_code="XT", country_name=country, province_code="TP",
+                               province_name="Tax Province", tax_rate=Decimal("0.13"), tax_name="HST", is_active=True))
+        a = Address(id=uuid7(), user_id=test_user.id, street="1 Tax St", city="Taxville", state="Tax Province",
+                    country=country, post_code="T1T 1T1")
+        db_session.add(a)
+        await db_session.flush()
+        return a
+
+    async def test_province_rate_applies_to_subtotal_and_shipping(self, db_session, cart_with_item, taxed_address, shipping_method):
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, taxed_address, shipping_method.id)
+        assert result["tax_rate"] == pytest.approx(0.13)
+        assert result["tax_amount"] == Decimal("6.50")  # 13% of 39.98 + 10.00
+        assert result["total_amount"] == Decimal("56.48")
+
+    async def test_discount_reduces_the_taxed_amount(self, db_session, cart_with_item, taxed_address, shipping_method):
+        now = datetime.now(timezone.utc)
+        code = f"fix{uuid4().hex[:6]}"
+        await DiscountEngine(db_session).create(code=code, discount_type=DiscountType.FIXED_AMOUNT.value, value=5,
+                                                valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, taxed_address, shipping_method.id, discount_code=code)
+        assert result["tax_amount"] == Decimal("5.85")  # 13% of 44.98
+        assert result["total_amount"] == Decimal("50.83")
+
+    async def test_free_shipping_is_not_taxed(self, db_session, cart_with_item, taxed_address, shipping_method):
+        now = datetime.now(timezone.utc)
+        code = f"ship{uuid4().hex[:6]}"
+        await DiscountEngine(db_session).create(code=code, discount_type=DiscountType.FREE_SHIPPING.value, value=0,
+                                                valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, taxed_address, shipping_method.id, discount_code=code)
+        assert result["tax_amount"] == Decimal("5.20")  # 13% of 39.98
+        assert result["total_amount"] == Decimal("45.18")
+
+    async def test_address_without_a_rate_has_no_tax(self, db_session, cart_with_item, address, shipping_method):
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, address, shipping_method.id)
+        assert result["tax_amount"] == Decimal("0.00")
 
 
 # --------------------------------------------------------------------------- validate_checkout ---------------------------------------------------------------------------
@@ -870,76 +915,6 @@ class TestGetStatistics:
 
 # --------------------------------------------------------------------------- Private helpers ---------------------------------------------------------------------------
 
-class TestCalculateDiscountAmount:
-
-    def test_no_promocode_returns_zero(self, db_session):
-        service = OrderService(db_session)
-        assert service._calculate_discount_amount(100.0, None) == 0.0
-
-    def test_inactive_promocode_returns_zero(self, db_session):
-        service = OrderService(db_session)
-        promo = SimpleNamespace(is_active=False, discount_type="percentage", value=10, maximum_discount_amount=None)
-        assert service._calculate_discount_amount(100.0, promo) == 0.0
-
-    def test_percentage_discount(self, db_session):
-        service = OrderService(db_session)
-        promo = SimpleNamespace(is_active=True, discount_type="percentage", value=10, maximum_discount_amount=None)
-        assert service._calculate_discount_amount(100.0, promo) == 10.0
-
-    def test_percentage_discount_capped_by_maximum(self, db_session):
-        service = OrderService(db_session)
-        promo = SimpleNamespace(is_active=True, discount_type="percentage", value=50, maximum_discount_amount=20)
-        assert service._calculate_discount_amount(100.0, promo) == 20.0
-
-    def test_fixed_amount_discount(self, db_session):
-        service = OrderService(db_session)
-        promo = SimpleNamespace(is_active=True, discount_type="fixed", value=15, maximum_discount_amount=None)
-        assert service._calculate_discount_amount(100.0, promo) == 15.0
-
-    def test_discount_never_exceeds_subtotal(self, db_session):
-        service = OrderService(db_session)
-        promo = SimpleNamespace(is_active=True, discount_type="fixed", value=500, maximum_discount_amount=None)
-        assert service._calculate_discount_amount(100.0, promo) == 100.0
-
-
-class TestGetTaxRate:
-
-    async def test_no_address_returns_zero(self, db_session):
-        service = OrderService(db_session)
-        assert await service._get_tax_rate(None) == 0.0
-
-    async def test_state_specific_rate_found(self, db_session):
-        # flush (not commit) - the row only needs to be visible to this session's own SELECT, and db_session's teardown rollback then discards it instead of polluting the DB for every future test run.
-        db_session.add(TaxRate(
-            id=uuid7(), country_code="XA", country_name="Test Country", province_code="TS",
-            province_name="Test State", tax_rate=Decimal("0.0725"), tax_name="Sales Tax", is_active=True,
-        ))
-        await db_session.flush()
-        service = OrderService(db_session)
-        result = await service._get_tax_rate({"country": "XA", "state": "TS"})
-        assert float(result) == 0.0725
-
-    async def test_falls_back_to_country_level_rate(self, db_session):
-        db_session.add(TaxRate(
-            id=uuid7(), country_code="XB", country_name="Test Country", province_code=None,
-            tax_rate=Decimal("0.05"), is_active=True,
-        ))
-        await db_session.flush()
-        service = OrderService(db_session)
-        result = await service._get_tax_rate({"country": "XB", "state": "NOPROVINCE"})
-        assert float(result) == 0.05
-
-    async def test_no_matching_rate_returns_zero(self, db_session):
-        service = OrderService(db_session)
-        result = await service._get_tax_rate({"country": "ZZ", "state": "NOWHERE"})
-        assert result == 0.0
-
-    async def test_accepts_address_object_not_just_dict(self, db_session, address):
-        service = OrderService(db_session)
-        result = await service._get_tax_rate(address)
-        assert result == 0.0 or isinstance(result, (float, Decimal))
-
-
 class TestGeneratePriceUpdateMessage:
 
     def test_single_item_price_increase(self, db_session):
@@ -1002,32 +977,6 @@ class TestValidateAndRecalculatePrices:
         service = OrderService(db_session)
         result = await service._validate_and_recalculate_prices(fake_cart)
         assert result["valid"] is False
-
-
-class TestCalculateFinalOrderTotal:
-
-    async def test_computes_total_with_shipping_and_tax(self, db_session, shipping_method):
-        service = OrderService(db_session)
-        validated_items = [{"variant_id": uuid4(), "quantity": 1, "backend_total": 50.0}]
-        address_dict = {"country": "US", "state": "CA", "city": "LA", "postal_code": "90001"}
-        result = await service._calculate_final_order_total(validated_items, shipping_method, address_dict)
-        assert result["subtotal"] == 50.0
-        assert result["total_amount"] >= 50.0
-
-    async def test_no_shipping_method_has_zero_shipping_cost(self, db_session):
-        service = OrderService(db_session)
-        validated_items = [{"variant_id": uuid4(), "quantity": 1, "backend_total": 50.0}]
-        address_dict = {"country": "US", "state": "CA"}
-        result = await service._calculate_final_order_total(validated_items, None, address_dict)
-        assert result["shipping_cost"] == 0.0
-
-    async def test_applies_promocode_discount(self, db_session, shipping_method):
-        service = OrderService(db_session)
-        validated_items = [{"variant_id": uuid4(), "quantity": 1, "backend_total": 100.0}]
-        address_dict = {"country": "US", "state": "CA"}
-        promo = SimpleNamespace(is_active=True, discount_type="fixed", value=10, maximum_discount_amount=None)
-        result = await service._calculate_final_order_total(validated_items, shipping_method, address_dict, promocode=promo)
-        assert result["discount_amount"] == 10.0
 
 
 class TestSendOrderEventsWithIdempotency:
@@ -1370,28 +1319,6 @@ class TestValidateAndRecalculatePricesEdgeCases:
         result = await service._validate_and_recalculate_prices(fake_cart)
         assert result["valid"] is False
         assert "Price validation failed" in result["message"]
-
-
-# --------------------------------------------------------------------------- _calculate_final_order_total edge cases ---------------------------------------------------------------------------
-
-class TestCalculateFinalOrderTotalEdgeCases:
-
-    async def test_malformed_address_raises_500(self, db_session, shipping_method):
-        service = OrderService(db_session)
-        validated_items = [{"variant_id": uuid4(), "quantity": 1, "backend_total": 50.0}]
-        with pytest.raises(HTTPException) as exc_info:
-            await service._calculate_final_order_total(validated_items, shipping_method, None)
-        assert exc_info.value.status_code == 500
-
-
-# --------------------------------------------------------------------------- _get_tax_rate edge cases ---------------------------------------------------------------------------
-
-class TestGetTaxRateEdgeCases:
-
-    async def test_malformed_address_returns_zero(self, db_session):
-        service = OrderService(db_session)
-        result = await service._get_tax_rate(12345)  # neither a dict nor an object exposing .get
-        assert result == 0.0
 
 
 # --------------------------------------------------------------------------- _send_order_events_with_idempotency edge cases ---------------------------------------------------------------------------

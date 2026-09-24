@@ -1,194 +1,47 @@
-"""Tax calculation service."""
+"""Tax rate lookup: the single place orders, subscriptions and the cart get their tax from."""
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import func, or_, select
 from models.commerce.tax_rates import TaxRate
-from core.logging import get_structured_logger
-
-logger = get_structured_logger(__name__)
 
 
 class TaxService:
     """Service for tax rate lookups and calculations"""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
-    
-    async def rate(
-        self, 
-        country_code: str, 
-        province_code: Optional[str] = None,
-        province_name: Optional[str] = None,
-        country_name: Optional[str] = None
-    ) -> float:
-        """Get tax rate (e.g. 0.0725 for 7.25%) for a location, by code or name."""
-        tax_info = await self.info(country_code, province_code, province_name, country_name)
-        return tax_info.get("tax_rate", 0.0)
-    
-    async def calculate_tax(
-        self, 
-        amount: float, 
-        country_code: str, 
-        province_code: Optional[str] = None
-    ) -> float:
-        """Calculate the tax amount for a given subtotal and location."""
-        logger.info(f"Calculating tax for amount ${amount:.2f}, country: {country_code}, province: {province_code}")
-        tax_rate = float(await self.rate(country_code, province_code))
-        tax_amount = amount * tax_rate
-        logger.info(f"Calculated tax: ${amount:.2f} × {tax_rate * 100}% = ${tax_amount:.2f}")
-        return round(tax_amount, 2)
-    
-    async def info(
-        self, 
-        country_code: str, 
-        province_code: Optional[str] = None,
-        province_name: Optional[str] = None,
-        country_name: Optional[str] = None
-    ) -> dict:
-        """Get detailed tax info (rate, name, location) for a location, by code or name."""
-        country_code = country_code.upper() if country_code else None
-        province_code = province_code.upper() if province_code else None
-        try:
-            # Try province-specific by name first
-            if province_name and country_name:
-                result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_name == country_name,
-                            TaxRate.province_name == province_name,
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                tax_rate = result.scalar_one_or_none()
-                
-                if tax_rate:
-                    return {
-                        "country_code": tax_rate.country_code,
-                        "country_name": tax_rate.country_name,
-                        "province_code": tax_rate.province_code,
-                        "province_name": tax_rate.province_name,
-                        "tax_rate": tax_rate.tax_rate,
-                        "tax_percentage": tax_rate.tax_rate * 100,
-                        "tax_name": tax_rate.tax_name,
-                    }
-            
-            # Try province-specific by code
-            if province_code and country_code:
-                result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_code == country_code,
-                            TaxRate.province_code == province_code,
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                tax_rate = result.scalar_one_or_none()
-                
-                if tax_rate:
-                    return {
-                        "country_code": tax_rate.country_code,
-                        "country_name": tax_rate.country_name,
-                        "province_code": tax_rate.province_code,
-                        "province_name": tax_rate.province_name,
-                        "tax_rate": tax_rate.tax_rate,
-                        "tax_percentage": tax_rate.tax_rate * 100,
-                        "tax_name": tax_rate.tax_name,
-                    }
-            
-            # Try province-specific by name with country code
-            if province_name and country_code:
-                result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_code == country_code,
-                            TaxRate.province_name == province_name,
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                tax_rate = result.scalar_one_or_none()
-                
-                if tax_rate:
-                    return {
-                        "country_code": tax_rate.country_code,
-                        "country_name": tax_rate.country_name,
-                        "province_code": tax_rate.province_code,
-                        "province_name": tax_rate.province_name,
-                        "tax_rate": tax_rate.tax_rate,
-                        "tax_percentage": tax_rate.tax_rate * 100,
-                        "tax_name": tax_rate.tax_name,
-                    }
-            
-            # Fall back to country-level by code
-            if country_code:
-                result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_code == country_code,
-                            TaxRate.province_code.is_(None),
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                tax_rate = result.scalar_one_or_none()
 
-                if tax_rate:
-                    return {
-                        "country_code": tax_rate.country_code,
-                        "country_name": tax_rate.country_name,
-                        "province_code": None,
-                        "province_name": None,
-                        "tax_rate": tax_rate.tax_rate,
-                        "tax_percentage": tax_rate.tax_rate * 100,
-                        "tax_name": tax_rate.tax_name,
-                    }
+    async def info(self, country: Optional[str], province: Optional[str] = None) -> dict:
+        """Active rate for a location; country and province may each be an ISO code or a full name.
+        A province rate wins over the country-wide one; no match means no tax."""
+        record = None
+        if country:
+            country_match = or_(func.upper(TaxRate.country_code) == country.strip().upper(),
+                                func.lower(TaxRate.country_name) == country.strip().lower())
+            area_match = TaxRate.province_code.is_(None)
+            if province:
+                area_match = or_(area_match,
+                                 func.upper(TaxRate.province_code) == province.strip().upper(),
+                                 func.lower(TaxRate.province_name) == province.strip().lower())
+            record = (await self.db.execute(
+                select(TaxRate)
+                .where(TaxRate.is_active.is_(True), country_match, area_match)
+                .order_by(TaxRate.province_code.is_(None))
+                .limit(1)
+            )).scalar_one_or_none()
+        if not record:
+            return {"country_code": None, "country_name": country, "province_code": None,
+                    "province_name": province, "tax_rate": 0.0, "tax_name": None}
+        return {"country_code": record.country_code, "country_name": record.country_name,
+                "province_code": record.province_code, "province_name": record.province_name,
+                "tax_rate": float(record.tax_rate), "tax_name": record.tax_name}
 
-            # Fall back to country-level by name
-            if country_name:
-                result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_name == country_name,
-                            TaxRate.province_code.is_(None),
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                tax_rate = result.scalar_one_or_none()
-                
-                if tax_rate:
-                    return {
-                        "country_code": tax_rate.country_code,
-                        "country_name": tax_rate.country_name,
-                        "province_code": None,
-                        "province_name": None,
-                        "tax_rate": tax_rate.tax_rate,
-                        "tax_percentage": tax_rate.tax_rate * 100,
-                        "tax_name": tax_rate.tax_name,
-                    }
-            
-            # No tax rate found
-            return {
-                "country_code": country_code,
-                "country_name": country_name or "Unknown",
-                "province_code": province_code,
-                "province_name": province_name,
-                "tax_rate": 0.0,
-                "tax_percentage": 0.0,
-                "tax_name": "No Tax",
-            }
+    async def rate(self, country: Optional[str], province: Optional[str] = None) -> float:
+        """Tax rate as a decimal (0.13 for 13%) for a location."""
+        return (await self.info(country, province))["tax_rate"]
 
-        except Exception as e:
-            logger.error(f"Error getting tax info: {e}")
-            return {
-                "country_code": country_code,
-                "country_name": country_name or "Unknown",
-                "province_code": province_code,
-                "province_name": province_name,
-                "tax_rate": 0.0,
-                "tax_percentage": 0.0,
-                "tax_name": "Error",
-                "error": str(e)
-            }
+    @staticmethod
+    def amount(taxable: Decimal, rate: float) -> Decimal:
+        """Tax on a taxable amount, rounded to cents; never negative."""
+        return (max(taxable, Decimal("0")) * Decimal(str(rate))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

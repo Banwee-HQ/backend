@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import datetime, timezone
 from core.logging import get_structured_logger
 
@@ -211,20 +211,10 @@ class CartService:
                 logger.error(f"Error calculating price for cart item {item.id}: {e}")
                 continue
         
-        # Calculate tax based on location
-        tax_amount = Decimal('0.00')
-        tax_rate = 0.0
-        if country_code and subtotal > 0:
-            try:
-                tax_rate = await self.tax_service.rate(country_code, province_code, province_code, country_code)
-                if tax_rate:
-                    tax_amount = (subtotal * Decimal(str(tax_rate))).quantize(
-                        Decimal('0.01'), rounding=ROUND_HALF_UP
-                    )
-                    logger.info(f"Tax calculated: {tax_rate * 100}% on ${subtotal} = ${tax_amount}")
-            except Exception as e:
-                logger.warning(f"Failed to calculate tax for {country_code}-{province_code}: {e}")
-        
+        # Estimated tax for the shopper's detected location; checkout recalculates it for the shipping address
+        tax_rate = await self.tax_service.rate(country_code, province_code) if subtotal > 0 else 0.0
+        tax_amount = TaxService.amount(subtotal, tax_rate)
+
         return {
             'subtotal': float(subtotal),
             'tax_rate': tax_rate,

@@ -1,20 +1,9 @@
-"""Tests for schemas/commerce/tax.py - Currency enum and tax rate constraints."""
+"""Tests for schemas/commerce/tax.py - tax rate constraints."""
 
 import pytest
 from pydantic import ValidationError
 
-from schemas.commerce.tax import Calculation, RateCreate, Currency
-
-
-class TestCalculation:
-
-    def test_requires_subtotal(self):
-        with pytest.raises(ValidationError):
-            Calculation()
-
-    def test_defaults_currency_to_usd(self):
-        calc = Calculation(subtotal=100.0)
-        assert calc.currency == Currency.USD
+from schemas.commerce.tax import RateCreate
 
 
 class TestRateCreateConstraints:

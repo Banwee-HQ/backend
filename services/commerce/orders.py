@@ -17,7 +17,6 @@ from models.accounts.user import User, Address
 from models.catalog.product import ProductVariant
 from models.commerce.shipping import ShippingMethod
 from models.commerce.payments import PaymentMethod, Transaction
-from models.commerce.tax_rates import TaxRate
 from schemas.commerce.orders import Response as OrderResponse, ItemResponse as OrderItemResponse, Checkout as CheckoutRequest
 from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
 from services.commerce.cart import CartService
@@ -313,23 +312,7 @@ class OrderService:
             shipping_cost = Decimal(str(shipping_method.price))
             logger.info(f"Shipping cost: ${shipping_cost} ({shipping_method.name})")
         
-        # Step 3: Calculate tax based on shipping address
-        
-        tax_rate = await self.tax_service.rate(
-            country_code=None, 
-            province_code=None, 
-            province_name=shipping_address.state,
-            country_name=shipping_address.country or "United States"
-        )
-        # Tax is calculated on subtotal only (not shipping in most jurisdictions)
-        tax_amount = (subtotal * Decimal(str(tax_rate))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        logger.info(f"Tax calculation", metadata={
-    "tax_rate_percent": tax_rate * 100,
-    "subtotal": float(subtotal),
-    "tax_amount": float(tax_amount)
-})
-        
-        # Step 4: Apply discount if provided
+        # Step 3: Apply discount if provided
         discount_amount = Decimal('0.00')
         discount_info = None
         if discount_code:
@@ -350,7 +333,6 @@ class OrderService:
                         discount_amount = min(Decimal(str(discount.value)), subtotal)
                     elif discount.type == DiscountType.FREE_SHIPPING.value:
                         discount_amount = shipping_cost
-                        shipping_cost = Decimal('0.00')
                     
                     discount_info = {
                         'code': discount.code,
@@ -362,6 +344,10 @@ class OrderService:
             except Exception as e:
                 logger.warning(f"Failed to apply discount {discount_code}: {e}")
         
+        # Step 4: Tax on what the customer actually pays for goods and delivery, at the shipping address's rate
+        tax_rate = await self.tax_service.rate(shipping_address.country, shipping_address.state)
+        tax_amount = TaxService.amount(subtotal + shipping_cost - discount_amount, tax_rate)
+
         # Step 5: Calculate final total
         total_amount = (subtotal + shipping_cost + tax_amount - discount_amount).quantize(
             Decimal('0.01'), rounding=ROUND_HALF_UP
@@ -1439,133 +1425,6 @@ class OrderService:
                 "message": f"Price validation failed: {str(e)}"
             }
 
-    async def _calculate_final_order_total(
-        self,
-        validated_items: List[Dict],
-        shipping_method,
-        shipping_address,
-        promocode=None
-    ) -> Dict[str, float]:
-        """Calculate the final order total (shipping, tax, discounts) on the backend."""
-        try:
-            # Calculate subtotal from validated backend prices
-            subtotal = sum(item["backend_total"] for item in validated_items)
-            
-            # Calculate shipping cost using simplified logic
-            shipping_cost = 0.0
-            if shipping_method:
-                # Use ShippingService for proper calculation
-                shipping_service = ShippingService(self.db)
-                
-                # Extract address info for shipping calculation
-                address_dict = {
-                    'country': shipping_address.get('country', 'US'),
-                    'state': shipping_address.get('state'),
-                    'city': shipping_address.get('city'),
-                    'postal_code': shipping_address.get('postal_code')
-                }
-                
-                shipping_cost = await shipping_service.calc_cost(
-                    cart_subtotal=subtotal,
-                    address=address_dict,
-                    shipping_method_id=shipping_method.id if hasattr(shipping_method, 'id') else None
-                )
-            
-            # Calculate tax based on shipping address (tax applies to subtotal + shipping)
-            tax_rate = await self._get_tax_rate(shipping_address)
-            taxable_amount = subtotal + shipping_cost  # Tax applies to subtotal + shipping
-            tax_amount = taxable_amount * tax_rate
-            
-            # Apply any discounts (from promocodes, etc.)
-            discount_amount = self._calculate_discount_amount(subtotal, promocode)
-            
-            # Calculate final total
-            total_amount = subtotal + shipping_cost + tax_amount - discount_amount
-            
-            return {
-                "subtotal": subtotal,
-                "shipping_cost": shipping_cost,
-                "tax_amount": tax_amount,
-                "tax_rate": tax_rate,
-                "discount_amount": discount_amount,
-                "total_amount": total_amount
-            }
-            
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to calculate order total: {str(e)}")
-
-    def _calculate_discount_amount(self, subtotal: float, promocode=None) -> float:
-        """Calculate discount amount from the cart's applied promocode, if any and still active."""
-        if not promocode or not promocode.is_active:
-            return 0.0
-
-        if promocode.discount_type == "percentage":
-            discount = (subtotal * float(promocode.value)) / 100
-        else:
-            discount = float(promocode.value)
-
-        if promocode.maximum_discount_amount is not None:
-            discount = min(discount, float(promocode.maximum_discount_amount))
-
-        return min(discount, subtotal)
-
-    async def _get_tax_rate(self, shipping_address) -> float:
-        """Get tax rate for the shipping address; returns 0.0 if none is found."""
-        try:
-            if not shipping_address:
-                logger.info("No shipping address provided, using 0.0 tax rate")
-                return 0.0
-            
-            # Get state/country from address
-            state = getattr(shipping_address, 'state', None) or shipping_address.get('state', '')
-            country = getattr(shipping_address, 'country', None) or shipping_address.get('country', 'US')
-            
-            logger.info(f"Looking up tax rate for country: {country}, state: {state}")
-            
-            # First try to find tax rate with specific province/state
-            if state:
-                tax_rate_result = await self.db.execute(
-                    select(TaxRate).where(
-                        and_(
-                            TaxRate.country_code == country.upper(),
-                            TaxRate.province_code == state.upper(),
-                            TaxRate.is_active == True
-                        )
-                    )
-                )
-                # country_code+province_code isn't unique-constrained - take the
-                # first match instead of scalar_one_or_none().
-                tax_rate_record = tax_rate_result.scalars().first()
-
-                if tax_rate_record:
-                    logger.info(f"Found state/province tax rate for {country}-{state}: {tax_rate_record.tax_rate} ({tax_rate_record.tax_name})")
-                    return float(tax_rate_record.tax_rate)
-                else:
-                    logger.info(f"No state/province tax rate found for {country}-{state}")
-
-            # If no state-specific rate found, try country-level rate
-            tax_rate_result = await self.db.execute(
-                select(TaxRate).where(
-                    and_(
-                        TaxRate.country_code == country.upper(),
-                        TaxRate.province_code.is_(None),  # Country-level rate
-                        TaxRate.is_active == True
-                    )
-                )
-            )
-            tax_rate_record = tax_rate_result.scalars().first()
-
-            if tax_rate_record:
-                logger.info(f"Found country tax rate for {country}: {tax_rate_record.tax_rate} ({tax_rate_record.tax_name})")
-                return float(tax_rate_record.tax_rate)
-            
-            # No tax rate found in database
-            logger.info(f"No tax rate found in database for {country}-{state}, using 0.0")
-            return 0.0
-            
-        except Exception as e:
-            logger.error(f"Error getting tax rate from database: {e}")
-            return 0.0
     def _generate_price_update_message(self, price_updates: List[Dict], total_change: float) -> str:
         """Generate a user-friendly message about price updates."""
         total_items = len(price_updates)
