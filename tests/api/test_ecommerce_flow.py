@@ -58,7 +58,7 @@ class TestSearchCartCheckoutFlow:
 
         # --- Customer adds it to their cart ---
         add_to_cart = await async_client.post(
-            "/v1/cart/add/", headers=auth_headers, json={"variant_id": variant_id, "quantity": 2}
+            "/v1/cart/", headers=auth_headers, json={"variant_id": variant_id, "quantity": 2}
         )
         assert add_to_cart.status_code in (200, 201), add_to_cart.text
 

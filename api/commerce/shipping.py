@@ -115,7 +115,7 @@ async def create(
         return Response.success(
             data=method_data,
             message="Shipping method created successfully",
-            code=status.HTTP_201_CREATED
+            status_code=status.HTTP_201_CREATED
         )
     except APIException:
         raise

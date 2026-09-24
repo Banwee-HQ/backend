@@ -37,6 +37,14 @@ class TestAuthEndpoints:
         assert response.status_code in [200, 201]
         assert response.json()["data"]["phone"] == "+1234567890"
 
+    @pytest.mark.parametrize("weak", ["short1", "lettersonly", "12345678", "a1" * 65])
+    async def test_register_rejects_weak_password(self, async_client: AsyncClient, weak):
+        """POST /v1/auth/register - 8-128 chars with a letter and a digit, same rule as the UI."""
+        response = await async_client.post("/v1/auth/register/", json={
+            "email": f"weak_{uuid4().hex[:8]}@example.com", "password": weak, "first_name": "W", "last_name": "P"
+        })
+        assert response.status_code == 422
+
     async def test_register_duplicate_email(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/register - Duplicate email is rejected."""
         response = await async_client.post("/v1/auth/register/", json={
@@ -90,7 +98,7 @@ class TestAuthEndpoints:
         login_resp = await async_client.post("/v1/auth/login/", json=login_data)
         refresh_token = login_resp.json()["data"]["refresh_token"]
 
-        response = await async_client.post("/v1/auth/revoke/", params={"refresh_token": refresh_token})
+        response = await async_client.post("/v1/auth/revoke/", json={"refresh_token": refresh_token})
         assert response.status_code == 200
 
     async def test_logout(self, async_client: AsyncClient, auth_headers):
@@ -170,13 +178,15 @@ class TestAuthEndpoints:
         me = await async_client.get("/v1/auth/me/", headers=auth_headers)
         assert me.json()["data"]["role"] == "customer"
 
-    async def test_change_password(self, async_client: AsyncClient, auth_headers):
+    async def test_change_password(self, async_client: AsyncClient, auth_headers, test_user):
         """PATCH /v1/auth/me/password - Change password."""
         response = await async_client.patch("/v1/auth/me/password/",
             headers=auth_headers,
             json={"current_password": "TestPassword123!", "new_password": "NewPass123!"}
         )
-        assert response.status_code in [200, 400, 422]
+        assert response.status_code == 200
+        login = await async_client.post("/v1/auth/login/", json={"email": test_user.email, "password": "NewPass123!"})
+        assert login.status_code == 200
 
     async def test_change_password_wrong_current(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/auth/me/password - Wrong current password is rejected."""
@@ -263,7 +273,7 @@ class TestAuthEndpoints:
     async def test_revoke_with_garbage_token_still_succeeds(self, async_client: AsyncClient):
         """POST /v1/auth/revoke - revoke_token() is a stateless no-op that always returns True,
         so even a garbage token reports success (documented behavior, not a bypass of anything)."""
-        response = await async_client.post("/v1/auth/revoke/", params={"refresh_token": "not-a-real-token"})
+        response = await async_client.post("/v1/auth/revoke/", json={"refresh_token": "not-a-real-token"})
         assert response.status_code == 200
 
     async def test_verify_email_html_wrapped_token_is_extracted(self, async_client: AsyncClient, db_session):
@@ -390,14 +400,26 @@ class TestAuthEndpoints:
         )
         assert response.status_code == 400
 
-    async def test_change_password_via_query_params(self, async_client: AsyncClient, auth_headers):
-        """PATCH /v1/auth/me/password - Falls back to query params when there's no JSON body."""
+    async def test_change_password_rejects_query_params(self, async_client: AsyncClient, auth_headers):
+        """PATCH /v1/auth/me/password - Passwords in the URL (logged by proxies) are not accepted."""
         response = await async_client.patch(
             "/v1/auth/me/password/",
             headers=auth_headers,
             params={"current_password": "TestPassword123!", "new_password": "ViaQueryParams123!"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 422
+
+    async def test_change_password_rejects_weak_new_password(self, async_client: AsyncClient, auth_headers):
+        """PATCH /v1/auth/me/password - The server enforces the same strength rule as the UI."""
+        response = await async_client.patch("/v1/auth/me/password/",
+            headers=auth_headers, json={"current_password": "TestPassword123!", "new_password": "short1"}
+        )
+        assert response.status_code == 422
+
+    async def test_delete_account_rejects_password_in_query(self, async_client: AsyncClient, auth_headers):
+        """DELETE /v1/auth/me - The confirmation password must come in the body, never the URL."""
+        response = await async_client.delete("/v1/auth/me/", headers=auth_headers, params={"password": "TestPassword123!"})
+        assert response.status_code == 422
 
     async def test_change_password_missing_fields_returns_422(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/auth/me/password - No body and no query params is a 422."""
@@ -406,15 +428,15 @@ class TestAuthEndpoints:
 
     async def test_delete_account_wrong_password(self, async_client: AsyncClient, auth_headers):
         """DELETE /v1/auth/me - Wrong password confirmation is rejected."""
-        response = await async_client.delete("/v1/auth/me/",
-            headers=auth_headers, params={"password": "NotMyPassword1!"}
+        response = await async_client.request("DELETE", "/v1/auth/me/",
+            headers=auth_headers, json={"password": "NotMyPassword1!"}
         )
         assert response.status_code == 400
 
     async def test_delete_account_success(self, async_client: AsyncClient, auth_headers, test_user):
         """DELETE /v1/auth/me - Correct password confirmation deletes the account."""
-        response = await async_client.delete("/v1/auth/me/",
-            headers=auth_headers, params={"password": "TestPassword123!"}
+        response = await async_client.request("DELETE", "/v1/auth/me/",
+            headers=auth_headers, json={"password": "TestPassword123!"}
         )
         assert response.status_code == 200
 
@@ -435,7 +457,7 @@ class TestAuthEndpoints:
         db_session.add(metrics)
         await db_session.commit()
 
-        response = await async_client.delete("/v1/auth/me/",
-            headers=auth_headers, params={"password": "TestPassword123!"}
+        response = await async_client.request("DELETE", "/v1/auth/me/",
+            headers=auth_headers, json={"password": "TestPassword123!"}
         )
         assert response.status_code == 400

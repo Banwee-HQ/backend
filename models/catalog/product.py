@@ -74,7 +74,7 @@ class Product(Base):
 
     @property
     def is_active(self) -> bool:
-        """Compatibility property — True when product_status is 'active'."""
+        """True when product_status is 'active'."""
         return self.product_status == "active"
 
     @property

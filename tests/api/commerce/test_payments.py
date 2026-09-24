@@ -45,7 +45,7 @@ def _async_returner(value):
 async def created_method(async_client: AsyncClient, auth_headers):
     stripe_id = fresh_stripe_payment_method_id()
     response = await async_client.post("/v1/payments/methods/", headers=auth_headers, json={
-        "type": "card", "stripe_payment_method_id": stripe_id, "is_default": True
+        "stripe_payment_method_id": stripe_id, "is_default": True
     })
     data = response.json()["data"]
     # MethodResponse doesn't echo stripe_payment_method_id back, but some tests need the
@@ -96,11 +96,6 @@ async def other_auth_headers(async_client: AsyncClient, other_user):
 @pytest.mark.api
 class TestPaymentMethodEndpoints:
 
-    async def test_overview(self, async_client: AsyncClient, auth_headers):
-        """GET /v1/payments/ - Overview endpoint."""
-        response = await async_client.get("/v1/payments/", headers=auth_headers)
-        assert response.status_code == 200
-
     async def test_list_empty(self, async_client: AsyncClient, auth_headers):
         """GET /v1/payments/methods - A new user has no payment methods."""
         response = await async_client.get("/v1/payments/methods/", headers=auth_headers)
@@ -109,7 +104,7 @@ class TestPaymentMethodEndpoints:
     async def test_create(self, async_client: AsyncClient, auth_headers):
         """POST /v1/payments/methods - Create payment method from a real Stripe test card."""
         response = await async_client.post("/v1/payments/methods/", headers=auth_headers, json={
-            "type": "card", "stripe_payment_method_id": fresh_stripe_payment_method_id(), "is_default": True
+            "stripe_payment_method_id": fresh_stripe_payment_method_id(), "is_default": True
         })
         assert response.status_code == 201
         assert response.json()["data"]["last_four"] == "4242"
@@ -172,7 +167,7 @@ class TestPaymentMethodEndpoints:
         assert response.status_code == 401
 
     async def test_create_unauthenticated(self, async_client: AsyncClient):
-        response = await async_client.post("/v1/payments/methods/", json={"type": "card"})
+        response = await async_client.post("/v1/payments/methods/", json={"stripe_payment_method_id": "pm_x"})
         assert response.status_code == 401
 
     async def test_list_with_search(self, async_client: AsyncClient, auth_headers, created_method):
@@ -306,47 +301,6 @@ class TestFailureHandlingEndpoints:
         assert response.status_code == 200
 
 
-# --------------------------------------------------------------------------- overview() - the optional service.overview() hook and its fallback branches. PaymentService has no `overview` method today, so hasattr() is always False in normal operation; monkeypatch is used here (not to mock Stripe or the DB, just to exercise this API-layer optional-hook branch) to add/remove that attribute for the duration of a single test. ---------------------------------------------------------------------------
-
-@pytest.mark.api
-class TestOverviewBranches:
-
-    async def test_uses_overview_hook_when_present(self, async_client: AsyncClient, auth_headers, monkeypatch):
-        from services.commerce.payments import PaymentService
-
-        async def fake_overview(self, user_id):
-            return {"total_spent": 42}
-        monkeypatch.setattr(PaymentService, "overview", fake_overview, raising=False)
-
-        response = await async_client.get("/v1/payments/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"] == {"total_spent": 42}
-
-    async def test_overview_hook_failure_falls_back_to_empty_dict(self, async_client: AsyncClient, auth_headers, monkeypatch):
-        from services.commerce.payments import PaymentService
-
-        async def broken_overview(self, user_id):
-            raise RuntimeError("boom")
-        monkeypatch.setattr(PaymentService, "overview", broken_overview, raising=False)
-
-        response = await async_client.get("/v1/payments/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"] == {}
-
-    async def test_outer_failure_returns_500(self, async_client: AsyncClient, auth_headers, monkeypatch):
-        import api.commerce.payments as payments_api
-
-        original_success = payments_api.Response.success
-
-        def broken_success(*args, **kwargs):
-            raise RuntimeError("response construction failed")
-        monkeypatch.setattr(payments_api.Response, "success", staticmethod(broken_success))
-
-        response = await async_client.get("/v1/payments/", headers=auth_headers)
-        assert response.status_code == 500
-        monkeypatch.setattr(payments_api.Response, "success", staticmethod(original_success))
-
-
 # --------------------------------------------------------------------------- create_method - Stripe-error and conflict branches ---------------------------------------------------------------------------
 
 @pytest.mark.api
@@ -355,13 +309,13 @@ class TestCreateMethodErrors:
     async def test_declined_card_returns_400(self, async_client: AsyncClient, auth_headers):
         declining_pm_id = stripe.PaymentMethod.create(type="card", card={"token": "tok_chargeDeclined"}).id
         response = await async_client.post("/v1/payments/methods/", headers=auth_headers, json={
-            "type": "card", "stripe_payment_method_id": declining_pm_id,
+            "stripe_payment_method_id": declining_pm_id,
         })
         assert response.status_code == 400
 
     async def test_same_stripe_id_for_different_account_is_conflict(self, async_client: AsyncClient, auth_headers, other_auth_headers, created_method):
         response = await async_client.post("/v1/payments/methods/", headers=other_auth_headers, json={
-            "type": "card", "stripe_payment_method_id": created_method["_stripe_payment_method_id"],
+            "stripe_payment_method_id": created_method["_stripe_payment_method_id"],
         })
         assert response.status_code == 409
 
@@ -640,7 +594,7 @@ class TestCreateMethodGenericException:
         import api.commerce.payments as payments_api
         monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
         response = await async_client.post("/v1/payments/methods/", headers=auth_headers, json={
-            "type": "card", "stripe_payment_method_id": fresh_stripe_payment_method_id(),
+            "stripe_payment_method_id": fresh_stripe_payment_method_id(),
         })
         assert response.status_code == 500
 

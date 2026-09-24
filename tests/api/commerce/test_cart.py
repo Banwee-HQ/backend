@@ -22,7 +22,7 @@ async def created_variant(async_client: AsyncClient, admin_headers, sample_produ
 
 @pytest.fixture
 async def cart_with_item(async_client: AsyncClient, auth_headers, created_variant):
-    await async_client.post("/v1/cart/add/", headers=auth_headers, json={
+    await async_client.post("/v1/cart/", headers=auth_headers, json={
         "variant_id": created_variant["id"], "quantity": 2
     })
     return created_variant
@@ -43,8 +43,8 @@ class TestCartEndpoints:
         assert response.status_code == 401
 
     async def test_add_item(self, async_client: AsyncClient, auth_headers, created_variant):
-        """POST /v1/cart/add - Add item to cart."""
-        response = await async_client.post("/v1/cart/add/", headers=auth_headers, json={
+        """POST /v1/cart/ - Add item to cart."""
+        response = await async_client.post("/v1/cart/", headers=auth_headers, json={
             "variant_id": created_variant["id"], "quantity": 2
         })
         assert response.status_code == 200
@@ -58,15 +58,15 @@ class TestCartEndpoints:
         assert variant["stock"] > 0
 
     async def test_add_item_unknown_variant(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/cart/add - Unknown variant is rejected."""
-        response = await async_client.post("/v1/cart/add/", headers=auth_headers, json={
+        """POST /v1/cart/ - Unknown variant is rejected."""
+        response = await async_client.post("/v1/cart/", headers=auth_headers, json={
             "variant_id": str(uuid4()), "quantity": 1
         })
         assert response.status_code == 404
 
     async def test_add_item_zero_quantity_rejected(self, async_client: AsyncClient, auth_headers, created_variant):
-        """POST /v1/cart/add - Quantity must be at least 1."""
-        response = await async_client.post("/v1/cart/add/", headers=auth_headers, json={
+        """POST /v1/cart/ - Quantity must be at least 1."""
+        response = await async_client.post("/v1/cart/", headers=auth_headers, json={
             "variant_id": created_variant["id"], "quantity": 0
         })
         assert response.status_code == 422
@@ -79,15 +79,6 @@ class TestCartEndpoints:
         response = await async_client.patch(f"/v1/cart/{item_id}/", headers=auth_headers, json={"quantity": 5})
         assert response.status_code == 200
         assert response.json()["data"]["items"][0]["quantity"] == 5
-
-    async def test_update_item_alias(self, async_client: AsyncClient, auth_headers, cart_with_item):
-        """PATCH /v1/cart/items/{item_id} - Compatibility alias."""
-        cart = await async_client.get("/v1/cart/", headers=auth_headers)
-        item_id = cart.json()["data"]["items"][0]["id"]
-
-        response = await async_client.patch(f"/v1/cart/items/{item_id}/", headers=auth_headers, json={"quantity": 3})
-        assert response.status_code == 200
-        assert response.json()["data"]["items"][0]["quantity"] == 3
 
     async def test_update_item_not_found(self, async_client: AsyncClient, auth_headers):
         """PATCH /v1/cart/{item_id} - Unknown item ID."""
@@ -115,14 +106,6 @@ class TestCartEndpoints:
         response = await async_client.delete(f"/v1/cart/{item_id}/", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["data"]["items"] == []
-
-    async def test_remove_item_alias(self, async_client: AsyncClient, auth_headers, cart_with_item):
-        """DELETE /v1/cart/items/{item_id} - Compatibility alias."""
-        cart = await async_client.get("/v1/cart/", headers=auth_headers)
-        item_id = cart.json()["data"]["items"][0]["id"]
-
-        response = await async_client.delete(f"/v1/cart/items/{item_id}/", headers=auth_headers)
-        assert response.status_code == 200
 
     async def test_count(self, async_client: AsyncClient, auth_headers, cart_with_item):
         """GET /v1/cart/count - Item count."""
@@ -175,7 +158,7 @@ class TestCreateItemEdgeCases:
 
     async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, created_variant, mocker):
         mocker.patch("services.commerce.cart.CartService.add_to_cart", side_effect=RuntimeError("db down"))
-        response = await async_client.post("/v1/cart/add/", headers=auth_headers, json={
+        response = await async_client.post("/v1/cart/", headers=auth_headers, json={
             "variant_id": created_variant["id"], "quantity": 1
         })
         assert response.status_code == 400

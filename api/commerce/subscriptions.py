@@ -234,7 +234,7 @@ async def create(
         product_variant_ids = subscription_data.variant_ids or []
         variant_quantities = subscription_data.variant_quantities
 
-        # If no variant_ids provided (e.g. plan_id based request), return 400
+        # A subscription needs at least one variant
         if not product_variant_ids:
             raise APIException(
                 status_code=status.HTTP_400_BAD_REQUEST,

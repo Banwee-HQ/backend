@@ -47,7 +47,7 @@ async def checkout_ready_cart(async_client: AsyncClient, auth_headers, admin_hea
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
     variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
     variant_id = variants.json()["data"][0]["id"]
-    await async_client.post("/v1/cart/add/", headers=auth_headers, json={"variant_id": variant_id, "quantity": 2})
+    await async_client.post("/v1/cart/", headers=auth_headers, json={"variant_id": variant_id, "quantity": 2})
 
     address = await async_client.post("/v1/addresses/", headers=auth_headers, json={
         "street": "123 Test St", "city": "Lagos", "state": "Lagos", "post_code": "100001", "country": "NG"
@@ -173,11 +173,6 @@ class TestOrderEndpoints:
         """Regression test: this used to relabel the service's 404 as a flat 400."""
         response = await async_client.patch(f"/v1/orders/{created_order.id}/cancel/", headers=admin_headers)
         assert response.status_code == 404
-
-    async def test_cancel_post_alias(self, async_client: AsyncClient, auth_headers, created_order):
-        """POST /v1/orders/{id}/cancel - Compatibility alias."""
-        response = await async_client.post(f"/v1/orders/{created_order.id}/cancel/", headers=auth_headers)
-        assert response.status_code == 200
 
     async def test_add_note(self, async_client: AsyncClient, auth_headers, created_order):
         """POST /v1/orders/{id}/notes - Add a note."""
@@ -733,3 +728,66 @@ class TestOrderResponseExposesStoredLifecycleFields:
         assert data["shipped_at"] is None
         assert data["delivered_at"] is None
         assert data["cancelled_at"] is None
+
+
+@pytest.mark.api
+class TestCancelPaidOrderRefunds:
+    """Every placed order is confirmed+paid, so cancelling must return the money, not just restock.
+    Uses Stripe's real test mode: a genuinely charged PaymentIntent is refunded and checked at Stripe."""
+
+    async def _paid_order(self, db_session: AsyncSession, test_user, amount: float = 25.0):
+        import os
+        import stripe
+        from models.commerce.payments import Transaction
+        stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+        if not stripe.api_key.startswith("sk_test_"):
+            pytest.skip("requires a Stripe test key")
+        pm = stripe.PaymentMethod.create(type="card", card={"token": "tok_visa"})
+        intent = stripe.PaymentIntent.create(
+            amount=int(amount * 100), currency="usd", payment_method=pm.id, confirm=True,
+            automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+        )
+        order = Order(
+            id=uuid7(), order_number=f"ORD-{uuid4().hex[:10].upper()}", user_id=test_user.id,
+            order_status=OrderStatus.CONFIRMED, payment_status=PaymentStatus.PAID,
+            fulfillment_status=FulfillmentStatus.UNFULFILLED, subtotal=amount, shipping_cost=0.0,
+            tax_amount=0.0, total_amount=amount,
+            billing_address={"street": "1 Test St", "city": "Lagos", "country": "NG"},
+            shipping_address={"street": "1 Test St", "city": "Lagos", "country": "NG"},
+        )
+        db_session.add(order)
+        db_session.add(Transaction(
+            user_id=test_user.id, order_id=order.id, stripe_payment_intent_id=intent.id, amount=amount,
+            currency="USD", status="succeeded", transaction_type="payment", description="Order payment",
+        ))
+        await db_session.commit()
+        return order, intent
+
+    async def test_cancel_refunds_payment_in_full(self, async_client: AsyncClient, auth_headers, db_session, test_user):
+        import stripe
+        from sqlalchemy import select
+        from models.commerce.payments import Transaction
+        order, intent = await self._paid_order(db_session, test_user)
+
+        response = await async_client.patch(f"/v1/orders/{order.id}/cancel/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["payment_status"] == "refunded"
+
+        charge = stripe.Charge.retrieve(stripe.PaymentIntent.retrieve(intent.id).latest_charge)
+        assert charge.refunded and charge.amount_refunded == intent.amount
+
+        refunds = (await db_session.execute(select(Transaction).where(
+            Transaction.order_id == order.id, Transaction.transaction_type == "refund"))).scalars().all()
+        assert len(refunds) == 1 and refunds[0].amount == -25.0
+
+    async def test_paid_order_without_payment_record_is_not_cancelled(self, async_client: AsyncClient, auth_headers,
+                                                                       db_session, created_order):
+        """A paid order we can't refund must stay as-is rather than be cancelled with the money kept."""
+        created_order.order_status = OrderStatus.CONFIRMED
+        created_order.payment_status = PaymentStatus.PAID
+        await db_session.commit()
+
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/cancel/", headers=auth_headers)
+        assert response.status_code == 400
+        await db_session.refresh(created_order)
+        assert created_order.order_status == OrderStatus.CONFIRMED

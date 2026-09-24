@@ -25,23 +25,6 @@ from schemas.commerce.payments import (
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
-@router.get("/")
-async def overview(current_user: User = Depends(require_auth), db: AsyncSession = Depends(get_db)):
-    """Overview endpoint for payments - kept for compatibility with older clients/tests."""
-    try:
-        service = PaymentService(db)
-        # Return a lightweight overview if available, otherwise empty dict
-        overview_data = {}
-        try:
-            if hasattr(service, 'overview'):
-                overview_data = await service.overview(current_user.id)
-        except Exception:
-            overview_data = {}
-        return Response.success(data=overview_data)
-    except Exception as e:
-        raise APIException(status_code=500, message=str(e))
-
-
 # --- PAYMENT METHODS - 5 Standard APIs ---
 @router.post("/methods/")
 async def create_method(
@@ -52,23 +35,13 @@ async def create_method(
     """Create a new payment method"""
     try:
         service = PaymentService(db)
-        method_data = {
-            "type": payment_method_data.type,
-            "provider": payment_method_data.provider,
-            "last_four": payment_method_data.last_four,
-            "expiry_month": payment_method_data.expiry_month,
-            "expiry_year": payment_method_data.expiry_year,
-            "payment_method_metadata": payment_method_data.payment_method_metadata,
-        }
         payment_method = await service.create_method(
             user_id=current_user.id,
             stripe_payment_method_id=payment_method_data.stripe_payment_method_id,
-            stripe_token=payment_method_data.stripe_token,
-            payment_method_data=method_data,
             is_default=payment_method_data.is_default,
             payment_method_metadata=payment_method_data.payment_method_metadata,
         )
-        return Response.success(data=MethodResponse.model_validate(payment_method), code=status.HTTP_201_CREATED, message="Payment method created successfully")
+        return Response.success(data=MethodResponse.model_validate(payment_method), status_code=status.HTTP_201_CREATED, message="Payment method created successfully")
     except APIException:
         raise
     except HTTPException:
@@ -186,7 +159,7 @@ async def create_intent(
             subscription_id=None,
             metadata={}
         )
-        return Response.success(data=IntentResponse.model_validate(payment_intent), code=status.HTTP_201_CREATED, message="Payment intent created successfully")
+        return Response.success(data=IntentResponse.model_validate(payment_intent), status_code=status.HTTP_201_CREATED, message="Payment intent created successfully")
     except APIException:
         raise
     except HTTPException:

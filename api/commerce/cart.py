@@ -38,16 +38,6 @@ async def create(
         raise APIException(status_code=400, message=f"Failed to add item to cart: {str(e)}")
 
 
-@router.post("/add/")
-async def add_item(
-    payload: Add,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Add item to cart - this is the route the frontend actually calls."""
-    return await create(payload, current_user=current_user, db=db)
-
-
 @router.get("/")
 async def get(
     request: Request,
@@ -96,12 +86,6 @@ async def patch(
         raise APIException(status_code=400, message=f"Failed to update cart item: {e}")
 
 
-@router.patch("/items/{item_id}/")
-async def patch_item(item_id: UUID, request: UpdateItem, current_user: User = Depends(require_auth), db: AsyncSession = Depends(get_db)):
-    """Compatibility: support PATCH /cart/items/{id}"""
-    return await patch(item_id=item_id, request=request, current_user=current_user, db=db)
-
-
 @router.delete("/{item_id}/")
 async def delete(
     item_id: UUID,
@@ -120,12 +104,6 @@ async def delete(
         raise APIException(status_code=e.status_code, message=e.detail)
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to remove item: {e}")
-
-
-@router.delete("/items/{item_id}/")
-async def delete_item(item_id: UUID, current_user: User = Depends(require_auth), db: AsyncSession = Depends(get_db)):
-    """Compatibility: DELETE /cart/items/{id}"""
-    return await delete(item_id=item_id, current_user=current_user, db=db)
 
 
 @router.get("/count/")

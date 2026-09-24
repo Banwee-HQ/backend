@@ -14,13 +14,7 @@ class MethodBase(BaseModel):
 
 
 class MethodCreate(BaseModel):
-    stripe_payment_method_id: Optional[str] = Field(None, description="Stripe payment method ID for modern API")
-    stripe_token: Optional[str] = Field(None, description="Stripe token for legacy API (deprecated)")
-    type: str = Field(..., description="Type of payment method (e.g., card)")
-    provider: Optional[str] = Field(None, description="Payment provider (e.g., visa, mastercard)")
-    last_four: Optional[str] = Field(None, max_length=4, description="Last four digits of the card number")
-    expiry_month: Optional[int] = Field(None, ge=1, le=12, description="Card expiry month")
-    expiry_year: Optional[int] = Field(None, ge=2000, description="Card expiry year")
+    stripe_payment_method_id: str = Field(..., description="Stripe PaymentMethod id created client-side by Stripe.js")
     is_default: bool = Field(False, description="Whether to set this as the default payment method")
     payment_method_metadata: Optional[dict] = Field(None, description="Additional metadata (e.g. cardholder name)")
 

@@ -123,12 +123,12 @@ class User(Base):
 
     @property
     def verified(self) -> bool:
-        """Compatibility property — True when verification_status is 'verified'."""
+        """True when verification_status is 'verified'."""
         return self.verification_status == VerificationStatus.VERIFIED
 
     @property
     def is_active(self) -> bool:
-        """Compatibility property — True when account_status is 'active'."""
+        """True when account_status is 'active'."""
         return self.account_status == AccountStatus.ACTIVE
 
     @property

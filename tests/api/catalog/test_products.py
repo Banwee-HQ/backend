@@ -772,3 +772,54 @@ class TestShortDescriptionRoundTrip:
         )
         assert response.status_code == 200
         assert response.json()["data"]["short_description"] == "Test product"
+
+
+@pytest.mark.api
+class TestPriceSorting:
+    """sort_by=price orders by each product's cheapest current variant price (Product has no price column)."""
+
+    async def _create(self, client, headers, category_id, data, sale_price):
+        payload = {**data, "slug": f"p-{uuid4().hex[:8]}", "sku": f"SKU-{uuid4().hex[:8]}",
+                   "category_id": category_id, "base_price": 100.0, "sale_price": sale_price}
+        response = await client.post("/v1/products/", headers=headers, json=payload)
+        return response.json()["data"]["id"]
+
+    async def test_orders_by_current_price(self, async_client: AsyncClient, admin_headers, sample_product_data, created_category):
+        cheap = await self._create(async_client, admin_headers, created_category["id"], sample_product_data, 5.0)
+        pricey = await self._create(async_client, admin_headers, created_category["id"], sample_product_data, 90.0)
+
+        async def ordered(direction):
+            response = await async_client.get(f"/v1/products/?sort_by=price&sort_order={direction}&limit=1000")
+            return [p["id"] for p in response.json()["data"] if p["id"] in (cheap, pricey)]
+
+        assert await ordered("asc") == [cheap, pricey]
+        assert await ordered("desc") == [pricey, cheap]
+
+
+@pytest.mark.api
+class TestAdminProductList:
+    """Non-active products vanish from the public list, so admins need their own listing to find them again."""
+
+    async def _draft(self, client, headers, product):
+        response = await client.patch(f"/v1/products/{product['id']}/", headers=headers, json={"product_status": "draft"})
+        assert response.json()["data"]["product_status"] == "draft"
+
+    async def test_draft_hidden_publicly_but_listed_for_admin(self, async_client: AsyncClient, admin_headers, created_product):
+        await self._draft(async_client, admin_headers, created_product)
+
+        public = await async_client.get("/v1/products/?limit=1000")
+        assert created_product["id"] not in [p["id"] for p in public.json()["data"]]
+
+        admin = await async_client.get("/v1/products/admin/?limit=1000", headers=admin_headers)
+        assert admin.status_code == 200
+        assert created_product["id"] in [p["id"] for p in admin.json()["data"]]
+        assert admin.json()["pagination"]["total"] >= 1
+
+    async def test_status_filter(self, async_client: AsyncClient, admin_headers, created_product):
+        await self._draft(async_client, admin_headers, created_product)
+        response = await async_client.get("/v1/products/admin/?status=draft&limit=1000", headers=admin_headers)
+        assert {p["product_status"] for p in response.json()["data"]} == {"draft"}
+
+    async def test_requires_admin(self, async_client: AsyncClient, auth_headers):
+        assert (await async_client.get("/v1/products/admin/")).status_code == 401
+        assert (await async_client.get("/v1/products/admin/", headers=auth_headers)).status_code == 403

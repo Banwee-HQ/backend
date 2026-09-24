@@ -32,11 +32,6 @@ class TestResponseSuccess:
         assert body["message"] == "Created"
         assert response.status_code == 201
 
-    def test_code_param_overrides_status_code(self):
-        """`code` exists for backward compatibility and should win when both are given."""
-        response = Response.success(status_code=200, code=201)
-        assert response.status_code == 201
-
     def test_pagination_included_only_when_given(self):
         without = body_of(Response.success())
         assert "pagination" not in without

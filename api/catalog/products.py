@@ -12,6 +12,7 @@ from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, Va
 from services.catalog.products import ProductService
 from services.catalog.category import CategoryService
 from models.accounts.user import User
+from models.catalog.product import ProductStatus
 
 logger = get_logger(__name__)
 
@@ -154,6 +155,27 @@ async def list(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to fetch products {str(e)}"
         )
+
+
+@router.get("/admin/")
+async def admin_list(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=1000),
+    q: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    product_status: Optional[ProductStatus] = Query(None, alias="status"),
+    sort_by: Optional[str] = Query("created_at"),
+    sort_order: Optional[str] = Query("desc"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin product list across every status (the public list only shows active products)."""
+    result = await ProductService(db).list(
+        page=page, limit=limit, filters={"q": q, "category": category},
+        sort_by=sort_by, sort_order=sort_order, status=product_status
+    )
+    pagination = {"page": result["page"], "limit": result["per_page"], "total": result["total"], "pages": result["total_pages"]}
+    return Response.success(data=result["data"], pagination=pagination)
 
 
 @router.get("/featured/")
@@ -343,7 +365,7 @@ async def create_variant(
     try:
         product_service = ProductService(db)
         variant = await product_service.create_variant(product_id, variant_data)
-        return Response.success(data=variant, message="Variant created successfully", code=status.HTTP_201_CREATED)
+        return Response.success(data=variant, message="Variant created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
     except HTTPException:
@@ -447,7 +469,7 @@ async def create_image(
             is_primary=image_data.is_primary,
             sort_order=image_data.sort_order
         )
-        return Response.success(data=image, message="Image created successfully", code=status.HTTP_201_CREATED)
+        return Response.success(data=image, message="Image created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
     except HTTPException:

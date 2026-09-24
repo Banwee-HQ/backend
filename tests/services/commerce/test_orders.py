@@ -591,7 +591,9 @@ class TestGet:
 class TestCancel:
 
     async def test_cancels_pending_order_and_restores_stock(self, db_session, test_user, variant, existing_order):
+        # Unpaid, so this exercises restocking only; paid cancellations refund (see test_orders API tests).
         existing_order.order_status = OrderStatus.PENDING
+        existing_order.payment_status = PaymentStatus.PENDING
         await db_session.commit()
         service = OrderService(db_session)
         result = await service.cancel(existing_order.id, test_user.id)
@@ -1254,7 +1256,7 @@ class TestCancelEdgeCases:
     async def test_item_with_no_inventory_record_is_skipped(self, db_session, test_user, variant_without_inventory):
         order = Order(
             id=uuid7(), order_number=f"ORD-{uuid4().hex[:10].upper()}", user_id=test_user.id,
-            order_status=OrderStatus.PENDING, payment_status=PaymentStatus.PAID,
+            order_status=OrderStatus.PENDING, payment_status=PaymentStatus.PENDING,
             fulfillment_status=FulfillmentStatus.UNFULFILLED,
             subtotal=Decimal("9.99"), shipping_cost=Decimal("0.00"), tax_amount=Decimal("0.00"),
             total_amount=Decimal("9.99"),
@@ -1277,6 +1279,8 @@ class TestCancelEdgeCases:
             "services.catalog.inventory.InventoryService.increment",
             side_effect=RuntimeError("lock timeout"),
         )
+        existing_order.payment_status = PaymentStatus.PENDING
+        await db_session.commit()
         service = OrderService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.cancel(existing_order.id, test_user.id)

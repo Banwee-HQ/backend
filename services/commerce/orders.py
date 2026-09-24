@@ -1,18 +1,22 @@
 """Order service: complete order lifecycle with backend-only price calculations."""
 import re
+import asyncio
+import json
 import traceback
+
+import stripe
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, delete, String, text, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, BackgroundTasks
 from core.exceptions import APIException
-from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus, FulfillmentStatus
+from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus, FulfillmentStatus, PaymentStatus
 from services.accounts.email import EmailService
 from models.commerce.cart import Cart, CartItem
 from models.accounts.user import User, Address
 from models.catalog.product import ProductVariant
 from models.commerce.shipping import ShippingMethod
-from models.commerce.payments import PaymentMethod
+from models.commerce.payments import PaymentMethod, Transaction
 from models.commerce.tax_rates import TaxRate
 from schemas.commerce.orders import Response as OrderResponse, ItemResponse as OrderItemResponse, Checkout as CheckoutRequest
 from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
@@ -976,6 +980,9 @@ class OrderService:
         # explicit self.db.begin() here raises "A transaction is already begun".
         try:
             now = datetime.now(tz=timezone.utc)
+            if order.payment_status == PaymentStatus.PAID:
+                await self._refund_for_cancellation(order)
+                order.payment_status = PaymentStatus.REFUNDED
             order.order_status = OrderStatus.CANCELLED
             order.fulfillment_status = FulfillmentStatus.CANCELLED
             order.cancelled_at = now
@@ -1012,11 +1019,49 @@ class OrderService:
             await self.db.commit()
             await self.db.refresh(order)
 
+        except HTTPException:
+            await self.db.rollback()
+            raise
         except Exception as e:
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Order cancellation failed: {str(e)}")
 
         return await self._format_order_response(order)
+
+    async def _refund_for_cancellation(self, order: Order) -> None:
+        """Refund a paid order in full via Stripe and record the refund transaction.
+        Raises 400 if the payment can't be refunded, so the order is left uncancelled."""
+        payment = (await self.db.execute(
+            select(Transaction).where(and_(
+                Transaction.order_id == order.id,
+                Transaction.transaction_type == "payment",
+                Transaction.status == "succeeded",
+            ))
+        )).scalars().first()
+        if not payment or not payment.stripe_payment_intent_id:
+            raise HTTPException(status_code=400, detail="Paid order has no refundable payment; contact support")
+        try:
+            stripe_refund = await asyncio.to_thread(
+                stripe.Refund.create,
+                payment_intent=payment.stripe_payment_intent_id,
+                reason="requested_by_customer",
+                metadata={"order_id": str(order.id), "reason": "order_cancelled"},
+                idempotency_key=f"order-cancel-{order.id}",
+            )
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=400, detail=f"Refund failed, order not cancelled: {e.user_message or str(e)}")
+        self.db.add(Transaction(
+            user_id=order.user_id,
+            order_id=order.id,
+            payment_intent_id=payment.payment_intent_id,
+            stripe_payment_intent_id=payment.stripe_payment_intent_id,
+            amount=-abs(payment.amount),
+            currency=payment.currency,
+            status="succeeded",
+            transaction_type="refund",
+            description="Refund for cancelled order",
+            transaction_metadata=json.dumps({"stripe_refund_id": stripe_refund.id}),
+        ))
 
     async def update_status(
         self, 

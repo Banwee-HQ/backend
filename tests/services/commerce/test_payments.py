@@ -591,102 +591,7 @@ class TestGetNextSteps:
             assert isinstance(service._get_next_steps(reason), list)
 
 
-# --------------------------------------------------------------------------- create_method - legacy token API, direct payment_method_data, dedup/conflict handling, and Stripe-declined-at-attach-time behavior. ---------------------------------------------------------------------------
-
-class TestCreateMethodLegacyTokenAPI:
-
-    async def test_creates_from_legacy_stripe_token(self, db_session, test_user):
-        """The deprecated stripe_token path (kept for backward compatibility)."""
-        service = PaymentService(db_session)
-        pm = await service.create_method(user_id=test_user.id, stripe_token="tok_visa", is_default=True)
-        assert pm.stripe_payment_method_id.startswith("pm_")
-        assert pm.last_four == "4242"
-        assert pm.is_default is True
-
-    async def test_legacy_token_unsets_previous_default(self, db_session, test_user, payment_method):
-        """payment_method fixture already created a default method via the modern API;
-        creating a new default one via the legacy token path must unset it."""
-        service = PaymentService(db_session)
-        pm2 = await service.create_method(user_id=test_user.id, stripe_token="tok_visa", is_default=True)
-        await db_session.refresh(payment_method)
-        assert pm2.is_default is True
-        assert payment_method.is_default is False
-
-    async def test_unknown_user_raises_404(self, db_session):
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.create_method(user_id=uuid4(), stripe_token="tok_visa")
-        assert exc_info.value.status_code == 404
-
-
-class TestCreateMethodDirectData:
-    """The 'direct from frontend' path (no Stripe id/token at all).
-
-    Note: `payment_method_data["provider"]` is stored as-is into PaymentMethod.provider,
-    a PaymentProvider DB enum (stripe/paypal/momo/google_pay/apple_pay/bank_transfer/
-    unknown) - but that exact same value also feeds `_normalize_brand()` for the card
-    *brand*. MethodCreate.provider's own docstring documents it as "e.g., visa,
-    mastercard" (a brand, not a provider) - passing any such brand-like value here
-    crashes with a Postgres enum violation, since "visa" isn't a valid PaymentProvider.
-    See the final report for this finding; these tests stick to values that are valid
-    PaymentProvider members so they exercise real, reachable behavior instead of a
-    guaranteed 500.
-    """
-
-    async def test_creates_from_payment_method_data_only(self, db_session, test_user):
-        service = PaymentService(db_session)
-        pm = await service.create_method(
-            user_id=test_user.id,
-            payment_method_data={"type": "card", "provider": "stripe", "last_four": "1234",
-                                  "expiry_month": 8, "expiry_year": 2030},
-        )
-        assert pm.stripe_payment_method_id is None
-        assert pm.last_four == "1234"
-        assert pm.provider.value == "stripe"
-
-    async def test_valid_provider_that_is_not_a_brand_name_maps_brand_to_other(self, db_session, test_user):
-        service = PaymentService(db_session)
-        pm = await service.create_method(
-            user_id=test_user.id,
-            payment_method_data={"type": "card", "provider": "stripe"},
-        )
-        assert pm.brand.value == "other"
-
-    async def test_missing_provider_defaults_and_brand_is_unknown(self, db_session, test_user):
-        service = PaymentService(db_session)
-        pm = await service.create_method(
-            user_id=test_user.id,
-            payment_method_data={"type": "card"},
-        )
-        assert pm.provider.value == "unknown"
-        assert pm.brand.value == "unknown"
-
-    async def test_direct_data_unsets_previous_default(self, db_session, test_user, payment_method):
-        service = PaymentService(db_session)
-        pm2 = await service.create_method(
-            user_id=test_user.id, payment_method_data={"type": "card", "provider": "stripe"}, is_default=True,
-        )
-        await db_session.refresh(payment_method)
-        assert pm2.is_default is True
-        assert payment_method.is_default is False
-
-    async def test_attaches_metadata(self, db_session, test_user):
-        service = PaymentService(db_session)
-        pm = await service.create_method(
-            user_id=test_user.id,
-            payment_method_data={"type": "card", "provider": "stripe"},
-            payment_method_metadata={"cardholder_name": "Jane Doe"},
-        )
-        assert pm.payment_method_metadata == {"cardholder_name": "Jane Doe"}
-
-    async def test_no_data_at_all_raises_400(self, db_session, test_user):
-        """Regression: calling create_method with nothing at all must be rejected,
-        not silently create a bogus payment method."""
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.create_method(user_id=test_user.id)
-        assert exc_info.value.status_code == 400
-
+# --------------------------------------------------------------------------- create_method - dedup/conflict handling and Stripe-declined-at-attach-time behavior. ---------------------------------------------------------------------------
 
 class TestCreateMethodDeduplication:
 
@@ -803,20 +708,6 @@ class TestCreateMethodStripeDeclineAtAttach:
         with pytest.raises(HTTPException) as exc_info:
             await service.create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
         assert exc_info.value.status_code == 400
-
-    async def test_legacy_token_attach_failure_other_than_already_attached_is_raised(self, db_session, test_user):
-        """Same as above, but through the legacy stripe_token branch's own separate
-        copy of the attach-error handling."""
-        deleted_customer = stripe.Customer.create(email=f"del-{uuid4().hex[:8]}@example.com")
-        stripe.Customer.delete(deleted_customer.id)
-        test_user.stripe_customer_id = deleted_customer.id
-        await db_session.commit()
-
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.create_method(user_id=test_user.id, stripe_token="tok_visa")
-        assert exc_info.value.status_code == 400
-
 
 # --------------------------------------------------------------------------- update() / set_default() - additional edge cases ---------------------------------------------------------------------------
 
@@ -1373,60 +1264,22 @@ class TestRecordPaymentFailure:
 
 # --------------------------------------------------------------------------- create_method - legacy-token customer recovery, and the non-card brand-normalization fallback ---------------------------------------------------------------------------
 
-class TestCreateMethodLegacyTokenCustomerRecovery:
-
-    async def test_recovers_from_stale_customer_id(self, db_session, test_user):
-        """Parity with TestCreateMethodStripeDeclineAtAttach's modern-path version:
-        the legacy stripe_token branch has its own separate copy of the
-        retrieve-or-recreate-customer logic, which must behave the same way."""
-        test_user.stripe_customer_id = "cus_does_not_exist_anymore"
-        await db_session.commit()
-        service = PaymentService(db_session)
-        pm = await service.create_method(user_id=test_user.id, stripe_token="tok_visa")
-        assert pm is not None
-        await db_session.refresh(test_user)
-        assert test_user.stripe_customer_id != "cus_does_not_exist_anymore"
-
-
 class TestCreateMethodNonCardBrandFallback:
 
     async def test_non_card_payment_method_brand_defaults_to_none(self, db_session, test_user, monkeypatch):
-        """Exercises the `elif payment_method_data:` branch of the brand-determination
-        block (stripe_pm.card is falsy for a non-card payment method) and its
-        `except Exception: brand_value = UNKNOWN` fallback, via a `payment_method_data`
-        argument that has no `.get()` method. Note: the computed brand_value is only
-        ever actually assigned to the row inside the `if stripe_pm.type == "card"`
-        block further down - for a non-card method it's silently discarded, so
-        `.brand` stays at the column's real default (None) either way. This is a
-        low-risk piece of dead computation (brand only affects a display attribute
-        for non-card methods, which don't have a "brand" in the card sense to begin
-        with) - flagged in the final report rather than treated as a bug to fix.
-
-        A real non-card Stripe PaymentMethod (e.g. us_bank_account) can be CREATED
-        in test mode, but Stripe refuses to ATTACH it to a customer until it's been
-        verified - a real verification flow isn't practical to drive from a unit
-        test. stripe.PaymentMethod.retrieve/.attach are monkeypatched here (unlike
-        the rest of this file) purely to get a non-card `.type` past that
-        verification gate; nothing about our own brand-normalization logic under
-        test is mocked."""
+        """A non-card Stripe PaymentMethod has no card brand/last4, so those stay unset.
+        Stripe won't attach an unverified bank account in test mode, so retrieve/attach are
+        patched only to get a non-card `.type` past that gate; our own logic is not mocked."""
         class _FakePM:
             id = "pm_fake_bank_12345"
-            type = "bank_account"  # a real PaymentType enum value (see models/commerce/payments.py)
+            type = "bank_account"
             card = None
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", lambda *a, **k: _FakePM())
         monkeypatch.setattr(stripe.PaymentMethod, "attach", lambda *a, **k: _FakePM())
 
-        class NotADict:
-            """Deliberately has no .get() - forces the elif branch's attribute
-            access to raise, exercising the except Exception fallback."""
-            def __bool__(self):
-                return True
-
         service = PaymentService(db_session)
-        pm = await service.create_method(
-            user_id=test_user.id, stripe_payment_method_id=_FakePM.id, payment_method_data=NotADict(),
-        )
+        pm = await service.create_method(user_id=test_user.id, stripe_payment_method_id=_FakePM.id)
         assert pm.type == "bank_account"
         assert pm.brand is None
         assert pm.last_four is None

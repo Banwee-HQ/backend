@@ -18,14 +18,11 @@ class Response(JSONResponse):
         data: Any = None,
         message: str = "Success",
         status_code: int = status.HTTP_200_OK,
-        code: Optional[int] = None,  # For backward compatibility
         pagination: Optional[Dict[str, Any]] = None,
         errors: Optional[list] = None,
         **kwargs
     ):
         """Initialize response object that can be returned directly from FastAPI routes."""
-        # Use code parameter if provided for backward compatibility
-        final_status_code = code if code is not None else status_code
 
         # Convert Pydantic models to dictionaries for JSON serialization
         serialized_data = self._serialize_data(data)
@@ -44,7 +41,7 @@ class Response(JSONResponse):
 
         super().__init__(
             content=response_data,
-            status_code=final_status_code,
+            status_code=status_code,
             **kwargs
         )
 
@@ -101,7 +98,6 @@ class Response(JSONResponse):
         data: Any = None,
         message: str = "Success",
         status_code: int = status.HTTP_200_OK,
-        code: Optional[int] = None,  # For backward compatibility
         pagination: Optional[Dict[str, Any]] = None
     ) -> "Response":
         """Create a successful response."""
@@ -110,7 +106,6 @@ class Response(JSONResponse):
             data=data,
             message=message,
             status_code=status_code,
-            code=code,
             pagination=pagination
         )
 

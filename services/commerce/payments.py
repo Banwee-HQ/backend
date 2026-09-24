@@ -35,13 +35,11 @@ class PaymentService:
     async def create_method(
         self,
         user_id: UUID,
-        stripe_payment_method_id: Optional[str] = None,
-        stripe_token: Optional[str] = None,
-        payment_method_data: Optional[Dict] = None,
+        stripe_payment_method_id: str,
         is_default: bool = False,
         payment_method_metadata: Optional[Dict] = None
     ) -> PaymentMethod:
-        """Create a new payment method supporting both modern and legacy Stripe APIs"""
+        """Save a Stripe PaymentMethod for the user; card details are read from Stripe, never trusted from the client."""
         try:
             # Helper: normalize raw brand strings to DB enum values
             def _normalize_brand(raw_brand: str) -> str:
@@ -132,11 +130,7 @@ class PaymentService:
                 )
                 # Determine brand value normalized to DB enum
                 try:
-                    brand_raw = None
-                    if getattr(stripe_pm, 'card', None):
-                        brand_raw = stripe_pm.card.brand
-                    elif payment_method_data:
-                        brand_raw = payment_method_data.get('provider')
+                    brand_raw = stripe_pm.card.brand if getattr(stripe_pm, 'card', None) else None
                     brand_value = _normalize_brand(brand_raw)
                 except Exception:
                     brand_value = CardBrand.UNKNOWN.value
@@ -148,123 +142,16 @@ class PaymentService:
                     payment_method.expiry_year = stripe_pm.card.exp_year
                     payment_method.brand = brand_value
             
-            # Handle legacy token API (deprecated but supported for backward compatibility)
-            elif stripe_token:
-                # Get token details from Stripe
-                stripe_token_obj = await asyncio.to_thread(stripe.Token.retrieve, stripe_token)
-
-                # Create payment method from token (this is the old way)
-                stripe_pm = await asyncio.to_thread(
-                    stripe.PaymentMethod.create,
-                    type="card",
-                    card={"token": stripe_token}
-                )
-
-                # Ensure user has a Stripe customer and attach payment method
-                user_result = await self.db.execute(select(User).where(User.id == user_id))
-                user = user_result.scalar_one_or_none()
-                if not user:
-                    raise HTTPException(status_code=404, detail="User not found")
-
-                if user.stripe_customer_id:
-                    try:
-                        await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)
-                    except stripe.error.InvalidRequestError as retrieve_error:
-                        if "No such customer" in str(retrieve_error):
-                            customer = await asyncio.to_thread(
-                                stripe.Customer.create,
-                                email=getattr(user, "email", None),
-                                name=getattr(user, "full_name", None)
-                            )
-                            user.stripe_customer_id = customer.id
-                            await self.db.commit()
-                        else:
-                            raise
-                else:
-                    customer = await asyncio.to_thread(
-                        stripe.Customer.create,
-                        email=getattr(user, "email", None),
-                        name=getattr(user, "full_name", None)
-                    )
-                    user.stripe_customer_id = customer.id
-                    await self.db.commit()
-
-                try:
-                    await asyncio.to_thread(
-                        stripe.PaymentMethod.attach,
-                        stripe_pm.id,
-                        customer=user.stripe_customer_id
-                    )
-                except stripe.error.InvalidRequestError as attach_error:
-                    message = str(attach_error).lower()
-                    if "already" not in message:
-                        raise
-                
-                # If this is set as default, unset other defaults atomically
-                if is_default:
-                    existing_defaults = await self.db.execute(
-                        select(PaymentMethod).where(
-                            and_(PaymentMethod.user_id == user_id, PaymentMethod.is_default == True)
-                        ).with_for_update()
-                    )
-                    
-                    for pm in existing_defaults.scalars().all():
-                        pm.is_default = False
-                
-                payment_method = PaymentMethod(
-                    user_id=user_id,
-                    type="card",
-                    provider="stripe",
-                    stripe_payment_method_id=stripe_pm.id,
-                    is_default=is_default,
-                    is_active=True
-                )
-                
-                # Set card details from token
-                if stripe_token_obj.card:
-                    payment_method.last_four = stripe_token_obj.card.last4
-                    payment_method.expiry_month = stripe_token_obj.card.exp_month
-                    payment_method.expiry_year = stripe_token_obj.card.exp_year
-                    payment_method.brand = _normalize_brand(stripe_token_obj.card.brand)
-            
-            # Handle direct payment method data (from frontend)
-            elif payment_method_data:
-                # If this is set as default, unset other defaults atomically
-                if is_default:
-                    existing_defaults = await self.db.execute(
-                        select(PaymentMethod).where(
-                            and_(PaymentMethod.user_id == user_id, PaymentMethod.is_default == True)
-                        ).with_for_update()
-                    )
-                    
-                    for pm in existing_defaults.scalars().all():
-                        pm.is_default = False
-                
-                payment_method = PaymentMethod(
-                    user_id=user_id,
-                    type=payment_method_data.get("type", "card"),
-                    provider=payment_method_data.get("provider", "unknown"),
-                    last_four=payment_method_data.get("last_four"),
-                    expiry_month=payment_method_data.get("expiry_month"),
-                    expiry_year=payment_method_data.get("expiry_year"),
-                    brand=_normalize_brand(payment_method_data.get("provider")),
-                    is_default=is_default,
-                    is_active=True
-                )
-            
             else:
                 raise HTTPException(
                     status_code=400, 
-                    detail="Either stripe_payment_method_id, stripe_token, or payment_method_data must be provided"
+                    detail="stripe_payment_method_id is required"
                 )
             
             # Pre-check for existing payment method with same Stripe id to avoid unique constraint errors
             existing_pm = None
             pm_lookup_id = None
-            try:
-                pm_lookup_id = stripe_payment_method_id or (getattr(stripe_pm, 'id', None) if 'stripe_pm' in locals() else None) or getattr(payment_method, 'stripe_payment_method_id', None)
-            except Exception:
-                pm_lookup_id = getattr(payment_method, 'stripe_payment_method_id', None)
+            pm_lookup_id = stripe_payment_method_id
 
             if pm_lookup_id:
                 existing = await self.db.execute(
@@ -306,7 +193,7 @@ class PaymentService:
                     await self.db.rollback()
                     try:
                         existing = await self.db.execute(
-                            select(PaymentMethod).where(PaymentMethod.stripe_payment_method_id == (stripe_payment_method_id or (getattr(stripe_pm, 'id', None) if 'stripe_pm' in locals() else None)))
+                            select(PaymentMethod).where(PaymentMethod.stripe_payment_method_id == stripe_payment_method_id)
                         )
                         existing_pm = existing.scalar_one_or_none()
                         if existing_pm:

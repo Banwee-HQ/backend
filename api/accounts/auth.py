@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from core.db import get_db
@@ -6,7 +6,7 @@ from core.dependencies import require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword
+from schemas.accounts.auth import UserCreate, Login, Refresh, ResendVerification, ForgotPassword, ResetPassword, ChangePassword, DeleteAccount
 from services.accounts.auth import AuthService
 from services.accounts.user import UserService
 from services.accounts.email import EmailService
@@ -103,13 +103,13 @@ async def refresh(
 
 @router.post("/revoke/")
 async def revoke(
-    refresh_token: str,
+    payload: Refresh,
     db: AsyncSession = Depends(get_db)
 ):
-    """Revoke a refresh token."""
+    """Revoke a refresh token; taken from the JSON body so it never lands in URLs or access logs."""
     try:
         auth_service = AuthService(db)
-        success = await auth_service.revoke_token(refresh_token)
+        success = await auth_service.revoke_token(payload.refresh_token)
         if success:
             return Response.success(message="Refresh token revoked successfully")
         else:
@@ -394,69 +394,28 @@ async def update(
 
 @router.patch("/me/password/")
 async def password(
-    req: Request,
-    current_password: str = Query(None),
-    new_password: str = Query(None),
+    payload: ChangePassword,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Change user password. Accepts JSON body or query params."""
-    try:
-        # Try to parse JSON body first
-        body_curr = None
-        body_new = None
-        try:
-            body = await req.json()
-            body_curr = body.get("current_password")
-            body_new = body.get("new_password")
-        except Exception:
-            pass
-
-        curr_pwd = body_curr or current_password or ""
-        new_pwd = body_new or new_password or ""
-
-        if not curr_pwd or not new_pwd:
-            raise APIException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                message="current_password and new_password are required"
-            )
-
-        auth_service = AuthService(db)
-        # Verify current password
-        if not auth_service.verify_password(curr_pwd, current_user.hashed_password):
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="Current password is incorrect"
-            )
-
-        # Update password
-        user_service = UserService(db)
-        hashed_password = auth_service.get_password_hash(new_pwd)
-        await user_service.update(current_user.id, {"hashed_password": hashed_password})
-
-        return Response.success(message="Password changed successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to change password - {str(e)}"
-        )
+    """Change the current user's password. Passwords are accepted only in the JSON body."""
+    auth_service = AuthService(db)
+    if not auth_service.verify_password(payload.current_password, current_user.hashed_password):
+        raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="Current password is incorrect")
+    await UserService(db).update(current_user.id, {"hashed_password": auth_service.get_password_hash(payload.new_password)})
+    return Response.success(message="Password changed successfully")
 
 
 @router.delete("/me/")
 async def delete(
-    password: str,
+    payload: DeleteAccount,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete user account with password confirmation."""
+    """Delete the current user's account; the password confirmation is taken from the JSON body."""
     try:
-        # Verify password before deletion
         auth_service = AuthService(db)
-        if not auth_service.verify_password(password, current_user.hashed_password):
+        if not auth_service.verify_password(payload.password, current_user.hashed_password):
             raise APIException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 message="Password is incorrect"

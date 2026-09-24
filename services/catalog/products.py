@@ -159,6 +159,7 @@ class ProductService:
                 review_count=product.review_count,
                 origin=getattr(product, 'origin', ''),
                 is_active=product.is_active,
+                product_status=product.product_status,
                 availability_status=product.availability_status,
                 price_range=product.price_range,
                 in_stock=product.in_stock,
@@ -183,6 +184,7 @@ class ProductService:
                 review_count=getattr(product, 'review_count', 0),
                 origin=getattr(product, 'origin', ''),
                 is_active=getattr(product, 'is_active', True),
+                product_status=getattr(product, 'product_status', ProductStatus.ACTIVE),
                 availability_status="out_of_stock",
                 price_range=PriceRange(min=0, max=0),
                 in_stock=False,
@@ -199,15 +201,14 @@ class ProductService:
         limit: int = 1000,
         filters: Optional[Dict[str, Any]] = None,
         sort_by: str = "created_at",
-        sort_order: str = "desc"
+        sort_order: str = "desc",
+        status: Optional[ProductStatus] = ProductStatus.ACTIVE
     ) -> Dict[str, Any]:
-        """Get products with filtering and pagination."""
-        print(
-            f"Getting products: page={page}, limit={limit}, filters={filters}")
+        """Get products with filtering and pagination; status=None lists every status (admin)."""
         offset = (page - 1) * limit
 
         # Build filter conditions
-        base_conditions = [Product.product_status == ProductStatus.ACTIVE]
+        base_conditions = [Product.product_status == status] if status else []
         
         if filters:
             if filters.get("q"):
@@ -295,14 +296,22 @@ class ProductService:
         # Build the main query with simpler eager loading
         query = (
             select(Product)
-            .where(and_(*base_conditions))
+            .where(*base_conditions)
             .options(
                 selectinload(Product.variants)
             )
         )
 
-        # Apply sorting
-        if hasattr(Product, sort_by):
+        # Apply sorting; "price" orders by each product's cheapest current variant price
+        if sort_by == "price":
+            min_price = (
+                select(func.min(func.coalesce(ProductVariant.sale_price, ProductVariant.base_price)))
+                .where(ProductVariant.product_id == Product.id)
+                .correlate(Product)
+                .scalar_subquery()
+            )
+            query = query.order_by(min_price.desc() if sort_order.lower() == "desc" else min_price.asc())
+        elif hasattr(Product, sort_by):
             if sort_order.lower() == "desc":
                 query = query.order_by(getattr(Product, sort_by).desc())
             else:

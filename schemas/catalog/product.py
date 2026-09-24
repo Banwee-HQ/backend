@@ -175,6 +175,7 @@ class Response(BaseModel):
     review_count: int
     origin: Optional[str]
     is_active: bool
+    product_status: ProductStatus = ProductStatus.ACTIVE
     price_range: PriceRange
     in_stock: bool
     availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE

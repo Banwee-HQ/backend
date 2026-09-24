@@ -1053,9 +1053,15 @@
           "name": "DELETE /v1/auth/me/",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
             "url": {
-              "raw": "{{baseUrl}}/v1/auth/me/?password={{password}}",
+              "raw": "{{baseUrl}}/v1/auth/me/",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1063,15 +1069,16 @@
                 "v1",
                 "auth",
                 "me"
-              ],
-              "query": [
-                {
-                  "key": "password",
-                  "value": "{{password}}",
-                  "description": "",
-                  "disabled": false
-                }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "response": []
@@ -1133,9 +1140,15 @@
           "name": "PATCH /v1/auth/me/password/",
           "request": {
             "method": "PATCH",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
             "url": {
-              "raw": "{{baseUrl}}/v1/auth/me/password/?",
+              "raw": "{{baseUrl}}/v1/auth/me/password/",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1144,21 +1157,16 @@
                 "auth",
                 "me",
                 "password"
-              ],
-              "query": [
-                {
-                  "key": "current_password",
-                  "value": "{{current_password}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "new_password",
-                  "value": "{{new_password}}",
-                  "description": "",
-                  "disabled": true
-                }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"string\",\n  \"new_password\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "response": []
@@ -1321,9 +1329,15 @@
           "name": "POST /v1/auth/revoke/",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
             "url": {
-              "raw": "{{baseUrl}}/v1/auth/revoke/?refresh_token={{refresh_token}}",
+              "raw": "{{baseUrl}}/v1/auth/revoke/",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1331,15 +1345,16 @@
                 "v1",
                 "auth",
                 "revoke"
-              ],
-              "query": [
-                {
-                  "key": "refresh_token",
-                  "value": "{{refresh_token}}",
-                  "description": "",
-                  "disabled": false
-                }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"string\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "auth": {
               "type": "noauth"
@@ -1448,40 +1463,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/cart/add/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/cart/add/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "cart",
-                "add"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
           "name": "POST /v1/cart/calculate/",
           "request": {
             "method": "POST",
@@ -1568,61 +1549,6 @@
                 "cart",
                 "count"
               ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "DELETE /v1/cart/items/{item_id}/",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/cart/items/{{item_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "cart",
-                "items",
-                "{{item_id}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "PATCH /v1/cart/items/{item_id}/",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/cart/items/{{item_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "cart",
-                "items",
-                "{{item_id}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"quantity\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "response": []
@@ -2955,26 +2881,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/orders/{order_id}/cancel/",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/orders/{{order_id}}/cancel/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "orders",
-                "{{order_id}}",
-                "cancel"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "PUT /v1/orders/{order_id}/deliver/",
           "request": {
             "method": "PUT",
@@ -3240,24 +3146,6 @@
     {
       "name": "payments",
       "item": [
-        {
-          "name": "GET /v1/payments/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments"
-              ]
-            }
-          },
-          "response": []
-        },
         {
           "name": "GET /v1/payments/admin/transactions/",
           "request": {
@@ -3584,7 +3472,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"stripe_payment_method_id\": \"string\",\n  \"stripe_token\": \"string\",\n  \"type\": \"string\",\n  \"provider\": \"string\",\n  \"last_four\": \"string\",\n  \"expiry_month\": 1,\n  \"expiry_year\": 1,\n  \"is_default\": false,\n  \"payment_method_metadata\": {}\n}",
+              "raw": "{\n  \"stripe_payment_method_id\": \"string\",\n  \"is_default\": false,\n  \"payment_method_metadata\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4034,6 +3922,69 @@
                   "language": "json"
                 }
               }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/products/admin/",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/products/admin/?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "products",
+                "admin"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "{{q}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": "{{category}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "{{status}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "sort_by",
+                  "value": "{{sort_by}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "sort_order",
+                  "value": "{{sort_order}}",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
             }
           },
           "response": []
@@ -5934,7 +5885,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"CAD\",\n  \"discount_code\": \"string\",\n  \"plan_id\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"CAD\",\n  \"discount_code\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

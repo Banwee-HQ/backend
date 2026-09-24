@@ -37,8 +37,6 @@ class Create(BaseModel):
     billing_cycle: BillingCycle = BillingCycle.MONTHLY
     currency: str = "CAD"
     discount_code: Optional[str] = None
-    # Accept plan_id for compatibility with tests
-    plan_id: Optional[str] = None
     payment_method_id: Optional[str] = None
     current_period_start: Optional[str] = None
 

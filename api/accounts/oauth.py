@@ -14,7 +14,7 @@ from schemas.accounts.user import Create as UserCreate
 from datetime import datetime, timezone
 from core.utils.response import Response
 
-# Also register social login routes for compatibility
+# Social login: exchanges a Google/Facebook access token for our own JWTs.
 router = APIRouter(prefix="/auth/social", tags=["OAuth"])
 
 # OAuth provider configurations
