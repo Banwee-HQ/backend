@@ -35,7 +35,7 @@ class Create(Base):
 
 
 class Update(BaseModel):
-    product_id: UUID = None
+    # product_id is deliberately absent: a review can't be moved to another product.
     rating: Optional[int] = Field(None, ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=1000)
 

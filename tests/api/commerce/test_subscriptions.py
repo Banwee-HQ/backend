@@ -238,6 +238,39 @@ class TestSubscriptionEndpoints:
             headers=auth_headers, json={"variant_id": subscription_variant["id"], "change": 2})
         assert response.status_code == 200
 
+    async def test_quantity_change_refreshes_displayed_pricing(self, async_client: AsyncClient, auth_headers,
+                                                               created_subscription, subscription_variant):
+        """The customer sees updated line totals right away, not only at the next charge."""
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/quantity/",
+            headers=auth_headers, json={"variant_id": subscription_variant["id"], "quantity": 3})
+        line = next(v for v in response.json()["data"]["current_variant_prices"] if v["id"] == subscription_variant["id"])
+        assert line["qty"] == 3
+
+    async def test_quantity_for_variant_not_in_subscription_is_rejected(self, async_client: AsyncClient, auth_headers,
+                                                                         created_subscription):
+        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/quantity/",
+            headers=auth_headers, json={"variant_id": str(uuid4()), "quantity": 2})
+        assert response.status_code == 400
+
+    async def test_skip_rejects_a_past_date(self, async_client: AsyncClient, auth_headers, created_subscription):
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/skip/",
+            headers=auth_headers, json={"next_shipment_date": "2000-01-01T00:00:00+00:00"})
+        assert response.status_code == 400
+
+    async def test_skip_requires_an_active_subscription(self, async_client: AsyncClient, auth_headers, created_subscription):
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/pause/", headers=auth_headers, json={})
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/skip/", headers=auth_headers, json={})
+        assert response.status_code == 400
+
+    async def test_double_skip_then_unskip_returns_to_the_original_date(self, async_client: AsyncClient, auth_headers,
+                                                                        created_subscription):
+        original_date = created_subscription["next_billing_date"]
+        url = f"/v1/subscriptions/{created_subscription['id']}"
+        await async_client.post(f"{url}/skip/", headers=auth_headers, json={})
+        await async_client.post(f"{url}/skip/", headers=auth_headers, json={})
+        unskipped = await async_client.post(f"{url}/unskip/", headers=auth_headers, json={})
+        assert unskipped.json()["data"]["next_billing_date"] == original_date
+
     async def test_toggle_auto_renew(self, async_client: AsyncClient, auth_headers, created_subscription):
         response = await async_client.patch(
             f"/v1/subscriptions/{created_subscription['id']}/auto-renew/?auto_renew=false",

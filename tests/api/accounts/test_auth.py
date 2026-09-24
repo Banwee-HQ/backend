@@ -45,6 +45,15 @@ class TestAuthEndpoints:
         })
         assert response.status_code == 422
 
+    @pytest.mark.parametrize("role", ["admin", "manager", "support"])
+    async def test_register_cannot_choose_a_privileged_role(self, async_client: AsyncClient, role):
+        """POST /v1/auth/register - Self-registration always creates a customer, whatever role is sent."""
+        email = f"escalate_{uuid4().hex[:8]}@example.com"
+        response = await async_client.post("/v1/auth/register/", json={
+            "email": email, "password": "Escalate123", "first_name": "E", "last_name": "S", "role": role})
+        assert response.status_code in (200, 201)
+        assert response.json()["data"]["role"] == "customer"
+
     async def test_register_duplicate_email(self, async_client: AsyncClient, test_user):
         """POST /v1/auth/register - Duplicate email is rejected."""
         response = await async_client.post("/v1/auth/register/", json={
@@ -101,10 +110,24 @@ class TestAuthEndpoints:
         response = await async_client.post("/v1/auth/revoke/", json={"refresh_token": refresh_token})
         assert response.status_code == 200
 
+        # A revoked refresh token can no longer mint access tokens.
+        refreshed = await async_client.post("/v1/auth/refresh/", json={"refresh_token": refresh_token})
+        assert refreshed.status_code == 401
+
     async def test_logout(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/auth/logout - Logout user."""
+        """POST /v1/auth/logout - The access token used to log out stops working immediately."""
+        assert (await async_client.get("/v1/auth/me/", headers=auth_headers)).status_code == 200
         response = await async_client.post("/v1/auth/logout/", headers=auth_headers)
         assert response.status_code == 200
+        assert (await async_client.get("/v1/auth/me/", headers=auth_headers)).status_code == 401
+
+    async def test_logout_does_not_affect_other_sessions(self, async_client: AsyncClient, test_user):
+        """Logging out one device leaves a separately issued session working."""
+        creds = {"email": test_user.email, "password": "TestPassword123!"}
+        first = (await async_client.post("/v1/auth/login/", json=creds)).json()["data"]["access_token"]
+        second = (await async_client.post("/v1/auth/login/", json=creds)).json()["data"]["access_token"]
+        await async_client.post("/v1/auth/logout/", headers={"Authorization": f"Bearer {first}"})
+        assert (await async_client.get("/v1/auth/me/", headers={"Authorization": f"Bearer {second}"})).status_code == 200
 
     async def test_get_profile(self, async_client: AsyncClient, auth_headers, test_user):
         """GET /v1/auth/me - Get user profile."""
@@ -270,11 +293,10 @@ class TestAuthEndpoints:
         })
         assert response.status_code == 400
 
-    async def test_revoke_with_garbage_token_still_succeeds(self, async_client: AsyncClient):
-        """POST /v1/auth/revoke - revoke_token() is a stateless no-op that always returns True,
-        so even a garbage token reports success (documented behavior, not a bypass of anything)."""
+    async def test_revoke_with_garbage_token_is_rejected(self, async_client: AsyncClient):
+        """POST /v1/auth/revoke - Only a valid refresh token can be revoked."""
         response = await async_client.post("/v1/auth/revoke/", json={"refresh_token": "not-a-real-token"})
-        assert response.status_code == 200
+        assert response.status_code == 400
 
     async def test_verify_email_html_wrapped_token_is_extracted(self, async_client: AsyncClient, db_session):
         """GET /v1/auth/verify-email - A frontend bug can embed the token inside an HTML page;

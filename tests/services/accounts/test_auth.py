@@ -398,11 +398,28 @@ class TestResetPwd:
 
 class TestRevokeToken:
 
-    async def test_revoke_always_reports_success(self, db_session):
-        """Stateless JWTs can't be truly revoked server-side; this is documented as a
-        client-side no-op, so even garbage input reports success."""
+    async def test_garbage_token_is_not_revoked(self, db_session):
         service = AuthService(db_session)
-        assert await service.revoke_token("anything-at-all") is True
+        assert await service.revoke_token("anything-at-all") is False
+
+    async def test_revoked_jti_is_recorded_until_expiry(self, db_session, test_user):
+        from models.accounts.tokens import RevokedToken
+        service = AuthService(db_session)
+        token = await service.make_refresh_token({"sub": str(test_user.id)})
+        jti = service.verify_token(token, "refresh")["jti"]
+        assert await service.revoke_token(token) is True
+        assert await service.revoke_token(token) is True  # idempotent
+        row = await db_session.get(RevokedToken, jti)
+        assert row is not None and row.expires_at > datetime.now(timezone.utc)
+        assert await service.is_revoked(jti) is True
+
+    async def test_expired_revocations_are_purged(self, db_session, test_user):
+        from models.accounts.tokens import RevokedToken
+        db_session.add(RevokedToken(jti="old-jti", expires_at=datetime.now(timezone.utc) - timedelta(days=1)))
+        await db_session.commit()
+        service = AuthService(db_session)
+        await service.revoke_token(await service.make_refresh_token({"sub": str(test_user.id)}))
+        assert await db_session.get(RevokedToken, "old-jti") is None
 
 
 class TestAuthServiceCreate:

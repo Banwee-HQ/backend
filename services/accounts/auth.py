@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from fastapi import HTTPException, status, BackgroundTasks
 
 from jose import JWTError, jwt
@@ -9,7 +9,8 @@ import secrets
 from core.logging import get_structured_logger
 from core.utils.uuid_utils import uuid7
 from core.config import settings
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
+from models.accounts.tokens import RevokedToken
 from schemas.accounts.user import Create as UserCreate, Response as UserResponse
 from schemas.accounts.auth import Auth as AuthResponse
 from services.accounts.user import UserService
@@ -120,6 +121,8 @@ class AuthService:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid refresh token payload"
                 )
+            if await self.is_revoked(jti):
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has been revoked")
             
             # Get user from token
             user = await self.get(user_id=user_id_from_token)
@@ -152,11 +155,24 @@ class AuthService:
                 detail="Could not refresh token"
             )
 
-    async def revoke_token(self, refresh_token: str) -> bool:
-        """Revoke a refresh token (add to blacklist)."""
-        # With stateless JWTs, we can't truly revoke a token.
-        # This method can be used to clear the token on the client side.
+    async def revoke_token(self, token: str, token_type: str = "refresh") -> bool:
+        """Revoke a token by its jti until it expires; invalid or expired tokens return False."""
+        try:
+            payload = self.verify_token(token, token_type)
+        except HTTPException:
+            return False
+        jti, exp = payload.get("jti"), payload.get("exp")
+        if not jti or not exp:
+            return False
+        now = datetime.now(timezone.utc)
+        await self.db.execute(delete(RevokedToken).where(RevokedToken.expires_at < now))
+        if not await self.db.get(RevokedToken, jti):
+            self.db.add(RevokedToken(jti=jti, expires_at=datetime.fromtimestamp(exp, tz=timezone.utc)))
+        await self.db.commit()
         return True
+
+    async def is_revoked(self, jti: Optional[str]) -> bool:
+        return bool(jti) and await self.db.get(RevokedToken, jti) is not None
 
     async def get(self, user_id: Optional[str] = None, email: Optional[str] = None) -> Optional[User]:
         """Get user by ID or email."""
@@ -179,6 +195,8 @@ class AuthService:
                 detail="Email already registered"
             )
 
+        # Self-registration is always a customer; roles are only granted by admins.
+        user_data = user_data.model_copy(update={"role": UserRole.CUSTOMER})
         user_service = UserService(self.db)
         new_user = await user_service.create(user_data, background_tasks)
 
@@ -314,6 +332,9 @@ class AuthService:
                 )
                 
         except JWTError:
+            raise credentials_exception
+
+        if await self.is_revoked(payload.get("jti")):
             raise credentials_exception
 
         # Get user from database

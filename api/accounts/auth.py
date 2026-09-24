@@ -1,8 +1,9 @@
+from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from core.db import get_db
-from core.dependencies import require_auth
+from core.dependencies import require_auth, oauth2_scheme
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
@@ -128,9 +129,12 @@ async def revoke(
 
 @router.post("/logout/")
 async def logout(
-    current_user: User = Depends(require_auth)
+    token: Optional[str] = Depends(oauth2_scheme),
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Logout user."""
+    """Log out by revoking the presented access token; clients revoke the refresh token via /revoke/."""
+    await AuthService(db).revoke_token(token, "access")
     return Response.success(message="Logged out successfully")
 
 

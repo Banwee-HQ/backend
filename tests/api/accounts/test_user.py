@@ -56,6 +56,12 @@ class TestUserEndpoints:
         response = await async_client.get(f"/v1/users/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
 
+    async def test_admin_create_rejects_weak_password(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/users - Admin-created accounts follow the same password rule as signup."""
+        response = await async_client.post("/v1/users/", headers=admin_headers, json={
+            "email": f"weak_{uuid4().hex[:8]}@example.com", "password": "short", "firstname": "W", "lastname": "P"})
+        assert response.status_code == 422
+
     async def test_create_as_admin(self, async_client: AsyncClient, admin_headers):
         """POST /v1/users/ - Create user (admin)."""
         user_data = {

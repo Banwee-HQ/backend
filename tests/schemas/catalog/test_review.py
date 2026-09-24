@@ -24,8 +24,8 @@ class TestBaseRatingConstraint:
         assert review.rating == 5
 
 
-class TestUpdateOptionalProductId:
+class TestUpdateCannotMoveReview:
 
-    def test_allows_omitting_product_id(self):
-        update = Update(rating=4)
-        assert update.product_id is None
+    def test_product_id_is_not_part_of_an_update(self):
+        update = Update(rating=4, product_id="00000000-0000-0000-0000-000000000000")
+        assert "product_id" not in update.model_dump(exclude_unset=True)

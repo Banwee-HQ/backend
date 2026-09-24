@@ -98,6 +98,19 @@ class TestReviewEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["rating"] == 3
 
+    async def test_update_cannot_move_review_to_another_product(self, async_client: AsyncClient, auth_headers,
+                                                                 created_review, admin_headers, sample_product_data):
+        """PATCH /v1/reviews/{id} - product_id is ignored, so a review stays on its product."""
+        cat = await async_client.post("/v1/categories/", headers=admin_headers, json={"name": "Other", "slug": f"other-{uuid4().hex[:8]}"})
+        other = await async_client.post("/v1/products/", headers=admin_headers, json={
+            **sample_product_data, "slug": f"other-{uuid4().hex[:8]}", "sku": f"SKU-{uuid4().hex[:8]}",
+            "category_id": cat.json()["data"]["id"]})
+        other_id = other.json()["data"]["id"]
+        await async_client.patch(f"/v1/reviews/{created_review['id']}/", headers=auth_headers,
+                                 json={"product_id": other_id, "rating": 2})
+        on_other = await async_client.get(f"/v1/reviews/product/{other_id}/")
+        assert created_review["id"] not in [r["id"] for r in on_other.json()["data"]]
+
     async def test_update_not_owner_forbidden(self, async_client: AsyncClient, admin_headers, created_review):
         """PATCH /v1/reviews/{id} - Non-owner is forbidden."""
         response = await async_client.patch(f"/v1/reviews/{created_review['id']}/",

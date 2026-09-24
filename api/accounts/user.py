@@ -7,6 +7,7 @@ from core.exceptions import APIException
 from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
+from schemas.accounts.auth import strong_password
 from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, UserStatusUpdate
 from core.dependencies import require_admin, require_auth
 from models.accounts.user import User as AuthUser, UserRole
@@ -53,6 +54,10 @@ async def create(
 ):
     """Create a new user (admin only - public signup is POST /v1/auth/register/)."""
     try:
+        try:
+            strong_password(payload.password)
+        except ValueError as e:
+            raise APIException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, message=str(e))
         service = UserService(db)
         user = await service.create(payload, background_tasks)
         user_data = {

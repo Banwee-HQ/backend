@@ -629,14 +629,23 @@ class SubscriptionService:
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
 
+        if subscription.status != SubscriptionStatus.ACTIVE.value:
+            raise HTTPException(status_code=400, detail="Only active subscriptions can skip a shipment")
+
         metadata = dict(subscription.subscription_metadata or {})
-        metadata["skipped_from_date"] = (
-            subscription.next_billing_date.isoformat() if subscription.next_billing_date else None
+        # Keep the first pre-skip date so repeated skips still undo back to the real schedule.
+        metadata.setdefault(
+            "skipped_from_date",
+            subscription.next_billing_date.isoformat() if subscription.next_billing_date else None,
         )
         subscription.subscription_metadata = metadata
 
         if next_shipment_date:
-            subscription.next_billing_date = datetime.fromisoformat(next_shipment_date).replace(tzinfo=timezone.utc)
+            chosen = datetime.fromisoformat(next_shipment_date)
+            chosen = chosen if chosen.tzinfo else chosen.replace(tzinfo=timezone.utc)
+            if chosen <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="The next shipment date must be in the future")
+            subscription.next_billing_date = chosen
         else:
             base = subscription.next_billing_date or datetime.now(timezone.utc)
             subscription.next_billing_date = compute_period_end(base, subscription.billing_cycle)
@@ -857,23 +866,30 @@ class SubscriptionService:
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
+        self._require_variant(subscription, variant_id)
         meta = dict(subscription.subscription_metadata or {})
         quantities = dict(meta.get("variant_quantities", {}))
         quantities[str(variant_id)] = quantity
         subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
-        await self.db.commit()
+        await self.recalc_pricing(subscription)
         return await self.get(subscription.id)
 
     async def adjust_quantity(self, subscription_id: UUID, variant_id: UUID, change: int, user_id: UUID) -> Subscription:
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
+        self._require_variant(subscription, variant_id)
         meta = dict(subscription.subscription_metadata or {})
         quantities = dict(meta.get("variant_quantities", {}))
         quantities[str(variant_id)] = max(1, quantities.get(str(variant_id), 1) + change)
         subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
-        await self.db.commit()
+        await self.recalc_pricing(subscription)
         return await self.get(subscription.id)
+
+    @staticmethod
+    def _require_variant(subscription: Subscription, variant_id) -> None:
+        if str(variant_id) not in [str(v) for v in (subscription.variant_ids or [])]:
+            raise HTTPException(status_code=400, detail="That product is not part of this subscription")
 
     async def get_quantities(self, subscription_id: UUID, user_id: UUID) -> Dict[str, int]:
         subscription = await self.get(subscription_id, user_id)
