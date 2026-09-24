@@ -46,8 +46,8 @@ async def own_order(db_session: AsyncSession, test_user) -> Order:
 
 
 @pytest.fixture
-async def created_shipment(async_client: AsyncClient, auth_headers, created_provider, own_order):
-    response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+async def created_shipment(async_client: AsyncClient, admin_headers, created_provider, own_order):
+    response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
         "order_id": str(own_order.id), "carrier": created_provider["carrier"],
         "tracking_number": f"TRACK{uuid4().hex[:8]}",
     })
@@ -168,6 +168,16 @@ class TestCarrierEndpoints:
 @pytest.mark.shipping
 class TestProviderEndpoints:
 
+    async def test_patch_ignores_non_editable_fields(self, async_client: AsyncClient, admin_headers, created_provider):
+        """PATCH /v1/shipping-tracking/providers/{id} - ids and timestamps can't be overwritten."""
+        response = await async_client.patch(f"/v1/shipping-tracking/providers/{created_provider['id']}/",
+            headers=admin_headers, json={"name": "Renamed", "created_at": "2000-01-01T00:00:00+00:00", "id": "x"})
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["name"] == "Renamed"
+        assert data["id"] == created_provider["id"]
+        assert data["created_at"] == created_provider["created_at"]
+
     async def test_create_as_admin(self, async_client: AsyncClient, admin_headers, created_carrier):
         """POST /v1/shipping-tracking/providers - Create provider (admin)."""
         response = await async_client.post("/v1/shipping-tracking/providers/", headers=admin_headers, json={
@@ -275,46 +285,46 @@ class TestProviderEndpoints:
 @pytest.mark.shipping
 class TestShipmentEndpoints:
 
-    async def test_create(self, async_client: AsyncClient, auth_headers, created_provider, own_order):
+    async def test_create(self, async_client: AsyncClient, admin_headers, created_provider, own_order):
         """POST /v1/shipping-tracking/shipments - Create a shipment for a real order."""
-        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
             "order_id": str(own_order.id), "carrier": created_provider["carrier"],
             "tracking_number": f"TRACK{uuid4().hex[:8]}",
         })
         assert response.status_code == 200
         assert response.json()["data"]["order_id"] == str(own_order.id)
 
-    async def test_create_unknown_carrier(self, async_client: AsyncClient, auth_headers, own_order):
+    async def test_create_unknown_carrier(self, async_client: AsyncClient, admin_headers, own_order):
         """POST /v1/shipping-tracking/shipments - Unknown carrier is rejected."""
-        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
             "order_id": str(own_order.id), "carrier": "not-a-real-carrier",
             "tracking_number": "TRACK123",
         })
         assert response.status_code == 400
 
-    async def test_create_with_order_item_id(self, async_client: AsyncClient, auth_headers, created_provider, own_order):
+    async def test_create_with_order_item_id(self, async_client: AsyncClient, admin_headers, created_provider, own_order):
         """order_id and order_item_id are both plain `str` fields converted to UUID by
         hand in the router (schemas/commerce/shipping_tracking.py has no UUID type) -
         a syntactically valid but non-existent order_item_id is a real FK violation."""
-        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
             "order_id": str(own_order.id), "carrier": created_provider["carrier"],
             "tracking_number": f"TRACK{uuid4().hex[:8]}", "order_item_id": str(uuid4()),
         })
         assert response.status_code == 500
 
-    async def test_create_with_malformed_order_id_returns_500(self, async_client: AsyncClient, auth_headers, created_provider):
-        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+    async def test_create_with_malformed_order_id_returns_500(self, async_client: AsyncClient, admin_headers, created_provider):
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
             "order_id": "not-a-valid-uuid", "carrier": created_provider["carrier"],
             "tracking_number": f"TRACK{uuid4().hex[:8]}",
         })
         assert response.status_code == 500
 
-    async def test_create_propagates_http_exception(self, async_client: AsyncClient, auth_headers, own_order, mocker):
+    async def test_create_propagates_http_exception(self, async_client: AsyncClient, admin_headers, own_order, mocker):
         mocker.patch(
             "services.commerce.shipping_tracking.ShippingTrackingService.create",
             side_effect=HTTPException(status_code=403, detail="nope"),
         )
-        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
             "order_id": str(own_order.id), "carrier": "ups", "tracking_number": "TRACK123",
         })
         assert response.status_code == 403
@@ -355,12 +365,33 @@ class TestShipmentEndpoints:
         assert response.status_code == 200
         assert response.json()["pagination"]["total"] >= 1
 
-    async def test_update_status(self, async_client: AsyncClient, auth_headers, created_shipment):
-        """PATCH /v1/shipping-tracking/shipments/{id}/status - Update tracking status."""
+    async def test_update_status(self, async_client: AsyncClient, admin_headers, created_shipment):
+        """PATCH /v1/shipping-tracking/shipments/{id}/status - Admin updates tracking status."""
         response = await async_client.patch(f"/v1/shipping-tracking/shipments/{created_shipment['id']}/status/",
-            headers=auth_headers, json={"status": "in_transit", "event_description": "Left warehouse"}
+            headers=admin_headers, json={"status": "in_transit", "event_description": "Left warehouse"}
         )
         assert response.status_code == 200
+
+    async def test_customer_cannot_update_status(self, async_client: AsyncClient, auth_headers, created_shipment):
+        """A customer must not be able to mark their (or anyone's) shipment delivered."""
+        response = await async_client.patch(f"/v1/shipping-tracking/shipments/{created_shipment['id']}/status/",
+            headers=auth_headers, json={"status": "delivered"})
+        assert response.status_code == 403
+
+    async def test_customer_cannot_create_shipments(self, async_client: AsyncClient, auth_headers, created_provider, own_order):
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=auth_headers, json={
+            "order_id": str(own_order.id), "carrier": created_provider["carrier"], "tracking_number": "TRACKX"})
+        assert response.status_code == 403
+
+    async def test_filter_by_order(self, async_client: AsyncClient, auth_headers, created_shipment):
+        own = await async_client.get(f"/v1/shipping-tracking/shipments/?order_id={created_shipment['order_id']}", headers=auth_headers)
+        assert [s["id"] for s in own.json()["data"]] == [created_shipment["id"]]
+        other = await async_client.get(f"/v1/shipping-tracking/shipments/?order_id={uuid4()}", headers=auth_headers)
+        assert other.json()["data"] == []
+
+    async def test_admin_lists_all_shipments(self, async_client: AsyncClient, admin_headers, created_shipment):
+        response = await async_client.get("/v1/shipping-tracking/shipments/?limit=100", headers=admin_headers)
+        assert created_shipment["id"] in [s["id"] for s in response.json()["data"]]
 
     async def test_track(self, async_client: AsyncClient, auth_headers, created_shipment):
         """POST /v1/shipping-tracking/track - Track a shipment via carrier integration."""
@@ -368,13 +399,3 @@ class TestShipmentEndpoints:
             "tracking_number": created_shipment["tracking_number"], "carrier": created_shipment["carrier"]
         })
         assert response.status_code in [200, 400]
-
-
-@pytest.mark.api
-@pytest.mark.shipping
-class TestWebhookEndpoint:
-
-    async def test_handle_webhook(self, async_client: AsyncClient):
-        """POST /v1/shipping-tracking/webhooks/{carrier} - No auth required."""
-        response = await async_client.post("/v1/shipping-tracking/webhooks/ups/", json={"event": "delivered"})
-        assert response.status_code == 200

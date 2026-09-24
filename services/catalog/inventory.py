@@ -631,18 +631,6 @@ class InventoryService:
             return StockAdjustmentResponse.model_validate(adjustment)
         return None
 
-    async def delete_adjustment(self, adjustment_id: UUID) -> bool:
-        """Delete a stock adjustment"""
-        result = await self.db.execute(
-            select(StockAdjustment).filter(StockAdjustment.id == adjustment_id)
-        )
-        adjustment = result.scalar_one_or_none()
-        if not adjustment:
-            return False
-        await self.db.delete(adjustment)
-        await self.db.commit()
-        return True
-
     async def is_low_stock(self, inventory_id: UUID) -> bool:
         inventory_item = await self.get(inventory_id)
         if not inventory_item:

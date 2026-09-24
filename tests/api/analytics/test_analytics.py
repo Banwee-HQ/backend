@@ -37,29 +37,12 @@ class TestTrackEvent:
 
 @pytest.mark.api
 @pytest.mark.analytics
-class TestSimpleDashboard:
-
-    async def test_requires_auth(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/analytics/simple-dashboard/")
-        assert response.status_code == 401
-
-    async def test_any_authenticated_user_can_access(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.get("/v1/analytics/simple-dashboard/", headers=auth_headers)
-        assert response.status_code == 200
-
-
-@pytest.mark.api
-@pytest.mark.analytics
 class TestAdminOnlyEndpoints:
     """These all require admin and are backed by real DB queries - a non-admin
     call and a real query error (not just "route exists") are what matter here."""
 
     ENDPOINTS = [
-        "/v1/analytics/dashboard/",
         "/v1/analytics/revenue/",
-        "/v1/analytics/orders/",
-        "/v1/analytics/products/",
-        "/v1/analytics/users/",
         "/v1/analytics/conversion-rates/",
         "/v1/analytics/cart-abandonment/",
         "/v1/analytics/time-to-purchase/",
@@ -68,10 +51,8 @@ class TestAdminOnlyEndpoints:
         "/v1/analytics/sales-trend/",
         "/v1/analytics/users-growth-trend/",
         "/v1/analytics/kpis/",
-        "/v1/analytics/sales/",
         "/v1/analytics/stats/",
         "/v1/analytics/dashboard/admin/",
-        "/v1/analytics/sales-overview/",
     ]
 
     @pytest.mark.parametrize("path", ENDPOINTS)
@@ -99,7 +80,6 @@ class TestAdminEndpointsServiceErrorHandling:
         ("/v1/analytics/repeat-customers/", "get_repeat_customer_metrics"),
         ("/v1/analytics/sales-trend/", "get_sales_trend_data"),
         ("/v1/analytics/users-growth-trend/", "get_users_growth_trend"),
-        ("/v1/analytics/sales-overview/", "get_sales_overview_data"),
         ("/v1/analytics/revenue/", "get_revenue_metrics"),
     ]
 
@@ -108,21 +88,6 @@ class TestAdminEndpointsServiceErrorHandling:
         mocker.patch(f"services.analytics.analytics.AnalyticsService.{service_method}", side_effect=RuntimeError("boom"))
         response = await async_client.get(path, headers=admin_headers)
         assert response.status_code == 500
-
-    async def test_dashboard_falls_back_gracefully_when_service_raises(self, async_client: AsyncClient, admin_headers, mocker):
-        """dashboard/ is special-cased: unlike every other analytics endpoint, a failure
-        here degrades to a 200 with fallback data instead of a 500."""
-        mocker.patch(
-            "services.analytics.analytics.AnalyticsService.get_comprehensive_dashboard_data",
-            side_effect=RuntimeError("boom"),
-        )
-        response = await async_client.get("/v1/analytics/dashboard/", headers=admin_headers)
-        assert response.status_code == 200
-        data = response.json()["data"]
-        assert data["message"] == "Dashboard data (fallback)"
-        assert "error" in data
-        assert data["metrics"]["total_users"] == 1
-
 
 @pytest.mark.api
 @pytest.mark.analytics
@@ -174,21 +139,6 @@ class TestKpisComparison:
 
 @pytest.mark.api
 @pytest.mark.analytics
-class TestSalesDateParsing:
-
-    async def test_explicit_date_range_is_parsed(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.get(
-            "/v1/analytics/sales/?start_date=2026-01-01&end_date=2026-01-31", headers=admin_headers
-        )
-        assert response.status_code == 200
-
-    async def test_malformed_date_returns_500(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.get("/v1/analytics/sales/?start_date=not-a-date", headers=admin_headers)
-        assert response.status_code == 500
-
-
-@pytest.mark.api
-@pytest.mark.analytics
 class TestSimpleQueryEndpointsErrorHandling:
     """users/, products/, orders/ build their queries inline (no AnalyticsService), so a
     DB failure is injected directly on the request's own db_session. Every request also
@@ -208,22 +158,6 @@ class TestSimpleQueryEndpointsErrorHandling:
             raise RuntimeError("boom")
 
         mocker.patch.object(db_session, "execute", side_effect=flaky_execute)
-
-    async def test_users_returns_500_on_db_error(self, async_client: AsyncClient, admin_headers, db_session, mocker):
-        self._break_execute_after_auth(db_session, mocker)
-        response = await async_client.get("/v1/analytics/users/", headers=admin_headers)
-        assert response.status_code == 500
-
-    async def test_products_returns_500_on_db_error(self, async_client: AsyncClient, admin_headers, db_session, mocker):
-        self._break_execute_after_auth(db_session, mocker)
-        response = await async_client.get("/v1/analytics/products/", headers=admin_headers)
-        assert response.status_code == 500
-
-    async def test_orders_returns_500_on_db_error(self, async_client: AsyncClient, admin_headers, db_session, mocker):
-        self._break_execute_after_auth(db_session, mocker)
-        response = await async_client.get("/v1/analytics/orders/", headers=admin_headers)
-        assert response.status_code == 500
-
 
 @pytest.mark.api
 @pytest.mark.analytics

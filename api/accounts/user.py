@@ -8,12 +8,34 @@ from core.db import get_db
 from core.logging import get_structured_logger as get_logger
 from services.accounts.user import UserService
 from schemas.accounts.auth import strong_password
-from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, UserStatusUpdate
+from schemas.accounts.user import Create as UserCreate, Update as UserUpdate, UserRoleUpdate
 from core.dependencies import require_admin, require_auth
 from models.accounts.user import User as AuthUser, UserRole
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+def _user_payload(user) -> dict:
+    """Admin-facing user shape shared by create, update and role changes."""
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "firstname": user.firstname,
+        "lastname": user.lastname,
+        "phone": user.phone,
+        "role": user.role.value if hasattr(user.role, "value") else user.role,
+        "account_status": user.account_status,
+        "verification_status": user.verification_status,
+        "verified": user.verified,
+        "is_active": user.is_active,
+        "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
+        "gender": user.gender,
+        "country": user.country,
+        "timezone": user.timezone,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
 
 
 @router.get("/me/")
@@ -60,21 +82,7 @@ async def create(
             raise APIException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, message=str(e))
         service = UserService(db)
         user = await service.create(payload, background_tasks)
-        user_data = {
-            "id": str(user.id),
-            "email": user.email,
-            "firstname": user.firstname,
-            "lastname": user.lastname,
-            "phone": user.phone,
-            "role": user.role.value if hasattr(user.role, "value") else user.role,
-            "account_status": user.account_status,
-            "verification_status": user.verification_status,
-            "verified": user.verified,
-            "is_active": user.is_active,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
-            "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-        }
-        return Response.success(data=user_data, message="User created successfully", status_code=status.HTTP_201_CREATED)
+        return Response.success(data=_user_payload(user), message="User created successfully", status_code=status.HTTP_201_CREATED)
     except APIException:
         raise
     except HTTPException:
@@ -181,25 +189,7 @@ async def patch(
         if not updated_user:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        user_data = {
-            "id": str(updated_user.id),
-            "email": updated_user.email,
-            "firstname": updated_user.firstname,
-            "lastname": updated_user.lastname,
-            "phone": updated_user.phone,
-            "role": updated_user.role.value if hasattr(updated_user.role, "value") else updated_user.role,
-            "account_status": updated_user.account_status,
-            "verification_status": updated_user.verification_status,
-            "verified": updated_user.verified,
-            "is_active": updated_user.is_active,
-            "date_of_birth": updated_user.date_of_birth.isoformat() if updated_user.date_of_birth else None,
-            "gender": updated_user.gender,
-            "country": updated_user.country,
-            "timezone": updated_user.timezone,
-            "created_at": updated_user.created_at.isoformat() if updated_user.created_at else None,
-            "updated_at": updated_user.updated_at.isoformat() if updated_user.updated_at else None,
-        }
-        return Response.success(data=user_data, message="User updated successfully")
+        return Response.success(data=_user_payload(updated_user), message="User updated successfully")
     except APIException:
         raise
     except HTTPException:
@@ -237,26 +227,6 @@ async def delete(
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to delete user: {str(e)}")
-
-
-@router.put("/{user_id}/status/")
-async def update_status(
-    user_id: UUID,
-    payload: UserStatusUpdate,
-    current_user: AuthUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update user active status (admin only)."""
-    try:
-        service = UserService(db)
-        result = await service.update_status(user_id, payload.is_active)
-        return Response.success(data=result, message="User status updated")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to update user status: {str(e)}")
 
 
 @router.post("/{user_id}/reset-password/")
@@ -335,22 +305,23 @@ async def verify(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to verify user: {str(e)}")
 
 
-@router.get("/{user_id}/activity/")
-async def activity(
+@router.put("/{user_id}/role/")
+async def update_role(
     user_id: UUID,
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    payload: UserRoleUpdate,
     current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get user activity log (admin only)."""
-    try:
-        service = UserService(db)
-        activity = await service.get_activity_log(user_id, page, limit)
-        return Response.success(data=activity)
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get user activity: {str(e)}")
+    """Change a user's role (admin/manager). Only admins grant or remove admin; nobody changes their own role."""
+    if user_id == current_user.id:
+        raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="You can't change your own role")
+    user = await db.get(AuthUser, user_id)
+    if not user:
+        raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="User not found")
+    touches_admin = UserRole.ADMIN in (payload.role, user.role)
+    if touches_admin and current_user.role != UserRole.ADMIN:
+        raise APIException(status_code=status.HTTP_403_FORBIDDEN, message="Only admins can grant or remove the admin role")
+    user.role = payload.role
+    await db.commit()
+    await db.refresh(user)
+    return Response.success(data=_user_payload(user), message="Role updated")

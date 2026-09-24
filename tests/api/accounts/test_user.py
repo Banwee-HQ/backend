@@ -174,13 +174,6 @@ class TestUserEndpoints:
         assert get_after.status_code == 200
         assert get_after.json()["data"]["account_status"] == "inactive"
 
-    async def test_update_status(self, async_client: AsyncClient, admin_headers, test_user):
-        """PUT /v1/users/{id}/status - Update active status (admin)."""
-        response = await async_client.put(f"/v1/users/{test_user.id}/status/",
-            headers=admin_headers, json={"is_active": False}
-        )
-        assert response.status_code == 200
-
     async def test_reset_password(self, async_client: AsyncClient, admin_headers, test_user, mocker):
         """POST /v1/users/{id}/reset-password - Trigger password reset email (admin)."""
         mocker.patch("services.accounts.email.EmailService.send_password_reset_email", return_value=None)
@@ -202,22 +195,11 @@ class TestUserEndpoints:
         response = await async_client.put(f"/v1/users/{test_user.id}/verify/", headers=admin_headers)
         assert response.status_code == 200
 
-    async def test_activity(self, async_client: AsyncClient, admin_headers, test_user):
-        """GET /v1/users/{id}/activity - Get user activity log (admin)."""
-        response = await async_client.get(f"/v1/users/{test_user.id}/activity/", headers=admin_headers)
-        assert response.status_code == 200
-
     async def test_list_filters_by_role(self, async_client: AsyncClient, admin_headers, admin_user):
         response = await async_client.get("/v1/users/?role=admin", headers=admin_headers)
         assert response.status_code == 200
         ids = [u["id"] for u in response.json()["data"]]
         assert str(admin_user.id) in ids
-
-    async def test_update_status_requires_admin(self, async_client: AsyncClient, auth_headers, test_user):
-        response = await async_client.put(f"/v1/users/{test_user.id}/status/",
-            headers=auth_headers, json={"is_active": False}
-        )
-        assert response.status_code == 403
 
     async def test_verify_not_found(self, async_client: AsyncClient, admin_headers):
         response = await async_client.put(f"/v1/users/{uuid4()}/verify/", headers=admin_headers)
@@ -254,3 +236,38 @@ class TestUserEndpoints:
             "lastname": "User",
         })
         assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestUserRole:
+    """PUT /v1/users/{id}/role - admins manage roles; no self-changes, no manager-made admins."""
+
+    async def _login(self, client, user, password):
+        token = (await client.post("/v1/auth/login/", json={"email": user.email, "password": password})).json()["data"]["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    async def test_admin_changes_a_role(self, async_client: AsyncClient, admin_headers, test_user):
+        response = await async_client.put(f"/v1/users/{test_user.id}/role/", headers=admin_headers, json={"role": "support"})
+        assert response.status_code == 200
+        assert response.json()["data"]["role"] == "support"
+
+    async def test_cannot_change_own_role(self, async_client: AsyncClient, admin_headers, admin_user):
+        response = await async_client.put(f"/v1/users/{admin_user.id}/role/", headers=admin_headers, json={"role": "customer"})
+        assert response.status_code == 400
+
+    async def test_manager_cannot_grant_admin(self, async_client: AsyncClient, db_session, admin_headers, admin_user, test_user):
+        from models.accounts.user import UserRole
+        await async_client.put(f"/v1/users/{test_user.id}/role/", headers=admin_headers, json={"role": "manager"})
+        manager_headers = await self._login(async_client, test_user, "TestPassword123!")
+        other = await async_client.post("/v1/users/", headers=admin_headers, json={
+            "email": f"target_{uuid4().hex[:8]}@example.com", "password": "Target1234", "firstname": "T", "lastname": "U"})
+        response = await async_client.put(f"/v1/users/{other.json()['data']['id']}/role/", headers=manager_headers, json={"role": "admin"})
+        assert response.status_code == 403
+
+    async def test_customer_cannot_change_roles(self, async_client: AsyncClient, auth_headers, admin_user):
+        response = await async_client.put(f"/v1/users/{admin_user.id}/role/", headers=auth_headers, json={"role": "customer"})
+        assert response.status_code == 403
+
+    async def test_unknown_user_is_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.put(f"/v1/users/{uuid4()}/role/", headers=admin_headers, json={"role": "support"})
+        assert response.status_code == 404

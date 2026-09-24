@@ -264,45 +264,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/analytics/dashboard/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/dashboard/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "dashboard"
-              ],
-              "query": [
-                {
-                  "key": "start_date",
-                  "value": "{{start_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "end_date",
-                  "value": "{{end_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/analytics/dashboard/admin/",
           "request": {
             "method": "GET",
@@ -458,60 +419,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/analytics/orders/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/orders/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "orders"
-              ],
-              "query": [
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/analytics/products/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/products/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "products"
-              ],
-              "query": [
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/analytics/refund-rates/",
           "request": {
             "method": "GET",
@@ -629,69 +536,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/analytics/sales-overview/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/sales-overview/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "sales-overview"
-              ],
-              "query": [
-                {
-                  "key": "start_date",
-                  "value": "{{start_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "end_date",
-                  "value": "{{end_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "granularity",
-                  "value": "{{granularity}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "categories",
-                  "value": "{{categories}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "regions",
-                  "value": "{{regions}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "sales_channels",
-                  "value": "{{sales_channels}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/analytics/sales-trend/",
           "request": {
             "method": "GET",
@@ -713,64 +557,6 @@
                   "description": "",
                   "disabled": true
                 }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/analytics/sales/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/sales/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "sales"
-              ],
-              "query": [
-                {
-                  "key": "start_date",
-                  "value": "{{start_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "end_date",
-                  "value": "{{end_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/analytics/simple-dashboard/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/simple-dashboard/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "simple-dashboard"
               ]
             }
           },
@@ -911,33 +697,6 @@
                 "v1",
                 "analytics",
                 "users-growth-trend"
-              ],
-              "query": [
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/analytics/users/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/users/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "users"
               ],
               "query": [
                 {
@@ -2227,26 +1986,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "DELETE /v1/inventory/adjustments/{adjustment_id}/",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/inventory/adjustments/{{adjustment_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "inventory",
-                "adjustments",
-                "{{adjustment_id}}"
-              ]
             }
           },
           "response": []
@@ -5621,6 +5360,12 @@
                   "value": "{{limit}}",
                   "description": "",
                   "disabled": true
+                },
+                {
+                  "key": "order_id",
+                  "value": "{{order_id}}",
+                  "description": "",
+                  "disabled": true
                 }
               ]
             }
@@ -5747,44 +5492,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST /v1/shipping-tracking/webhooks/{carrier}/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/shipping-tracking/webhooks/{{carrier}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "shipping-tracking",
-                "webhooks",
-                "{{carrier}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
             }
           },
           "response": []
@@ -7147,40 +6854,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/users/{user_id}/activity/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/users/{{user_id}}/activity/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "users",
-                "{{user_id}}",
-                "activity"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "{{page}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "limit",
-                  "value": "{{limit}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "POST /v1/users/{user_id}/deactivate/",
           "request": {
             "method": "POST",
@@ -7221,7 +6894,7 @@
           "response": []
         },
         {
-          "name": "PUT /v1/users/{user_id}/status/",
+          "name": "PUT /v1/users/{user_id}/role/",
           "request": {
             "method": "PUT",
             "header": [
@@ -7232,7 +6905,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/users/{{user_id}}/status/",
+              "raw": "{{baseUrl}}/v1/users/{{user_id}}/role/",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -7240,12 +6913,12 @@
                 "v1",
                 "users",
                 "{{user_id}}",
-                "status"
+                "role"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"is_active\": true,\n  \"reason\": \"string\"\n}",
+              "raw": "{\n  \"role\": \"guest\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

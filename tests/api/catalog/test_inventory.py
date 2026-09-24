@@ -332,30 +332,9 @@ class TestAdjustmentEndpoints:
         response = await async_client.get(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
 
-    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, created_variant):
-        """DELETE /v1/inventory/adjustments/{id} - Delete an adjustment (admin)."""
-        await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json={
-            "variant_id": created_variant["id"], "quantity_change": 5, "reason": "Restock"
-        })
-        listed = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
-        adjustment_id = listed.json()["data"][0]["id"]
-
-        response = await async_client.delete(f"/v1/inventory/adjustments/{adjustment_id}/", headers=admin_headers)
-        assert response.status_code == 200
-
-    async def test_delete_not_found(self, async_client: AsyncClient, admin_headers):
-        """DELETE /v1/inventory/adjustments/{id} - Unknown ID returns 404."""
-        response = await async_client.delete(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
-        assert response.status_code == 404
-
     async def test_get_requires_admin(self, async_client: AsyncClient, auth_headers):
         """GET /v1/inventory/adjustments/{id} - Non-admin is forbidden."""
         response = await async_client.get(f"/v1/inventory/adjustments/{uuid4()}/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_delete_requires_admin(self, async_client: AsyncClient, auth_headers):
-        """DELETE /v1/inventory/adjustments/{id} - Non-admin is forbidden."""
-        response = await async_client.delete(f"/v1/inventory/adjustments/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 403
 
     async def test_list_filtered_by_inventory_id(self, async_client: AsyncClient, admin_headers, created_variant):
@@ -403,3 +382,12 @@ class TestSyncEndpoints:
             f"/v1/inventory/sync/product/{created_variant['product_id']}/", headers=auth_headers
         )
         assert response.status_code == 403
+
+
+@pytest.mark.api
+class TestAdjustmentLedgerIsAppendOnly:
+
+    async def test_adjustments_cannot_be_deleted(self, async_client: AsyncClient, admin_headers):
+        """Deleting a ledger entry would erase history while its stock change stayed; the route is gone."""
+        response = await async_client.delete(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
+        assert response.status_code == 405

@@ -1,4 +1,5 @@
 """Shipping tracking API endpoints; integrates with multiple carriers (UPS, Royal Mail, etc.)."""
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,10 +35,10 @@ router = APIRouter(prefix="/shipping-tracking", tags=["shipping-tracking"])
 async def create_shipment(
     shipment_data: Create,
     background_tasks: BackgroundTasks,
-    current_user = Depends(require_auth),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new shipment tracking record"""
+    """Create a shipment tracking record for an order (admin only)."""
     try:
         shipping_service = ShippingTrackingService(db)
         # Convert string IDs to UUID
@@ -133,10 +134,10 @@ async def track(
 async def update_shipment_status(
     shipment_id: str,
     update_data: Update,
-    current_user = Depends(require_auth),
+    current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update shipment status and create tracking event"""
+    """Update shipment status and record a tracking event (admin only)."""
     try:
         shipping_service = ShippingTrackingService(db)
         shipment = await shipping_service.update(
@@ -239,27 +240,28 @@ async def delete_carrier(
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    order_id: Optional[UUID] = Query(None),
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """List shipments visible to the current user"""
+    """List shipments (optionally for one order): admins see every shipment, customers only their own orders'."""
     try:
         base_query = (
             select(ShipmentTracking)
             .join(Order, ShipmentTracking.order_id == Order.id)
-            .where(Order.user_id == current_user.id)
             .options(
                 selectinload(ShipmentTracking.tracking_events),
                 selectinload(ShipmentTracking.carrier),
                 selectinload(ShipmentTracking.provider),
             )
         )
-        count_query = (
-            select(func.count())
-            .select_from(ShipmentTracking)
-            .join(Order, ShipmentTracking.order_id == Order.id)
-            .where(Order.user_id == current_user.id)
-        )
+        count_query = select(func.count()).select_from(ShipmentTracking).join(Order, ShipmentTracking.order_id == Order.id)
+        if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            base_query = base_query.where(Order.user_id == current_user.id)
+            count_query = count_query.where(Order.user_id == current_user.id)
+        if order_id:
+            base_query = base_query.where(ShipmentTracking.order_id == order_id)
+            count_query = count_query.where(ShipmentTracking.order_id == order_id)
 
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
@@ -367,9 +369,10 @@ async def patch_provider(
                 raise HTTPException(status_code=404, detail="Carrier not found")
             provider.carrier_id = carrier.id
 
-        # Update remaining provider fields
+        # Only configuration fields are editable; ids and timestamps are never client-set.
+        editable = {"name", "api_key", "api_secret", "api_url", "tracking_url_template", "webhook_url", "is_active", "configuration", "rate_limits"}
         for field, value in provider_data.items():
-            if field != 'id' and hasattr(provider, field):
+            if field in editable:
                 setattr(provider, field, value)
 
         await db.commit()
@@ -443,23 +446,3 @@ async def track_shipment_background(tracking_number: str, carrier: str):
             await shipping_service.track_shipment(tracking_number, carrier)
         except Exception as e:
             logger.error(f"Background tracking failed for {tracking_number}: {e}")
-
-# Webhook endpoints for carrier notifications
-@router.post("/webhooks/{carrier}/")
-async def handle_carrier_webhook(
-    carrier: str,
-    webhook_data: dict,
-    db: AsyncSession = Depends(get_db)
-):
-    """Handle webhook notifications from shipping carriers"""
-    try:
-        # TODO: verify signature, process data, and update tracking.
-        return APIResponse.success(
-            message="Webhook processed successfully"
-        )
-    
-    except Exception as e:
-        raise APIException(
-            status_code=500,
-            message=f"Failed to process webhook: {str(e)}"
-        )

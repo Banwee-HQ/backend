@@ -6,6 +6,7 @@ import secrets
 from core.utils.uuid_utils import uuid7
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from fastapi import HTTPException
 
 from models.accounts import UserSession, TrafficSource
@@ -38,7 +39,8 @@ class AnalyticsService:
         page_title: Optional[str] = None,
         order_id: Optional[UUID] = None,
         product_id: Optional[UUID] = None,
-        revenue: Optional[float] = None
+        revenue: Optional[float] = None,
+        session_info: Optional[Dict[str, Any]] = None
     ) -> AnalyticsEvent:
         """Track an analytics event"""
         try:
@@ -46,19 +48,23 @@ class AnalyticsService:
             if not session_id:
                 session_id = secrets.token_hex(16)
 
-            # Ensure session exists (FK constraint)
-            session_result = await self.db.execute(
-                select(UserSession).where(UserSession.session_id == session_id)
-            )
-            if not session_result.scalar_one_or_none():
-                new_session = UserSession(
+            # Create the session if absent; ON CONFLICT makes concurrent first events of a visit safe.
+            info = session_info or {}
+            source = info.get("traffic_source")
+            await self.db.execute(
+                pg_insert(UserSession).values(
                     id=uuid7(),
                     session_id=session_id,
                     user_id=user_id,
                     started_at=datetime.now(timezone.utc),
-                )
-                self.db.add(new_session)
-                await self.db.flush()
+                    # Attribution is recorded once, from the first event of the session.
+                    traffic_source=TrafficSource(source) if source in {t.value for t in TrafficSource} else TrafficSource.DIRECT,
+                    referrer_url=info.get("referrer_url") or None,
+                    utm_source=info.get("utm_source"),
+                    utm_medium=info.get("utm_medium"),
+                    utm_campaign=info.get("utm_campaign"),
+                ).on_conflict_do_nothing(index_elements=["session_id"])
+            )
 
             event = AnalyticsEvent(
                 id=uuid7(),
@@ -99,196 +105,141 @@ class AnalyticsService:
         end_date: datetime,
         traffic_source: Optional[TrafficSource] = None
     ) -> Dict[str, Any]:
-        """Get conversion rate metrics - simplified to use order data"""
-        try:
-            # Use orders as sessions for now since user_sessions is empty
-            total_orders_result = await self.db.execute(
-                select(func.count(Order.id)).where(
-                    and_(
-                        Order.created_at >= start_date,
-                        Order.created_at <= end_date
-                    )
-                )
-            )
-            total_orders = total_orders_result.scalar() or 0
-            
-            # Completed orders as conversions
-            converted_orders_result = await self.db.execute(
-                select(func.count(Order.id)).where(
-                    and_(
-                        Order.created_at >= start_date,
-                        Order.created_at <= end_date,
-                        Order.order_status.in_(['DELIVERED', 'SHIPPED'])
-                    )
-                )
-            )
-            converted_orders = converted_orders_result.scalar() or 0
-            
-            # Revenue metrics
-            revenue_result = await self.db.execute(
-                select(
-                    func.sum(Order.total_amount),
-                    func.avg(Order.total_amount)
-                ).where(
-                    and_(
-                        Order.created_at >= start_date,
-                        Order.created_at <= end_date,
-                        Order.order_status.in_(['DELIVERED', 'SHIPPED', 'PROCESSING'])
-                    )
-                )
-            )
-            total_revenue, avg_order_value = revenue_result.first() or (0, 0)
-            total_revenue = float(total_revenue or 0)  # DB SUM returns Decimal; the breakdown below multiplies by float ratios
+        """Conversion from tracked sessions (a session converts when it records a purchase event)."""
+        period = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()}
+        in_period = and_(UserSession.started_at >= start_date, UserSession.started_at <= end_date)
+        if traffic_source:
+            in_period = and_(in_period, UserSession.traffic_source == traffic_source)
+        purchased = (
+            select(AnalyticsEvent.session_id)
+            .where(AnalyticsEvent.event_type == EventType.PURCHASE)
+            .distinct()
+            .scalar_subquery()
+        )
+        rows = (await self.db.execute(
+            select(
+                UserSession.traffic_source,
+                func.count(UserSession.id),
+                func.count(UserSession.id).filter(UserSession.session_id.in_(purchased)),
+            ).where(in_period).group_by(UserSession.traffic_source)
+        )).all()
 
-            # Mock sessions (assume 3x more sessions than orders)
-            total_sessions = max(total_orders * 3, 100)
-            conversion_rate = (converted_orders / total_sessions * 100) if total_sessions > 0 else 0
-            
-            return {
-                "period": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat()
-                },
-                "overall": {
-                    "total_sessions": total_sessions,
-                    "converted_sessions": converted_orders,
-                    "conversion_rate": round(conversion_rate, 2),
-                    "total_revenue": float(total_revenue or 0),
-                    "average_order_value": float(avg_order_value or 0)
-                },
-                "by_traffic_source": [
-                    {"traffic_source": "organic", "total_sessions": int(total_sessions * 0.4), "converted_sessions": int(converted_orders * 0.4), "conversion_rate": round(conversion_rate * 1.1, 2), "revenue": float((total_revenue or 0) * 0.4)},
-                    {"traffic_source": "paid", "total_sessions": int(total_sessions * 0.3), "converted_sessions": int(converted_orders * 0.3), "conversion_rate": round(conversion_rate * 0.9, 2), "revenue": float((total_revenue or 0) * 0.3)},
-                    {"traffic_source": "social", "total_sessions": int(total_sessions * 0.2), "converted_sessions": int(converted_orders * 0.2), "conversion_rate": round(conversion_rate * 0.8, 2), "revenue": float((total_revenue or 0) * 0.2)},
-                    {"traffic_source": "direct", "total_sessions": int(total_sessions * 0.1), "converted_sessions": int(converted_orders * 0.1), "conversion_rate": round(conversion_rate * 1.2, 2), "revenue": float((total_revenue or 0) * 0.1)}
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get conversion metrics: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve conversion metrics")
-    
+        revenue_rows = (await self.db.execute(
+            select(UserSession.traffic_source, func.coalesce(func.sum(AnalyticsEvent.revenue), 0))
+            .join(AnalyticsEvent, AnalyticsEvent.session_id == UserSession.session_id)
+            .where(in_period, AnalyticsEvent.event_type == EventType.PURCHASE)
+            .group_by(UserSession.traffic_source)
+        )).all()
+        revenue_by_source = {src: float(total) for src, total in revenue_rows}
+
+        orders_total, orders_avg = (await self.db.execute(
+            select(func.coalesce(func.sum(Order.total_amount), 0), func.coalesce(func.avg(Order.total_amount), 0))
+            .where(Order.created_at >= start_date, Order.created_at <= end_date, Order.order_status.in_([OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]))
+        )).one()
+
+        total_sessions = sum(r[1] for r in rows)
+        converted = sum(r[2] for r in rows)
+        rate = lambda c, t: round(c / t * 100, 2) if t else 0.0
+        return {
+            "period": period,
+            "overall": {
+                "total_sessions": total_sessions,
+                "converted_sessions": converted,
+                "conversion_rate": rate(converted, total_sessions),
+                "total_revenue": float(orders_total),
+                "average_order_value": float(orders_avg),
+            },
+            "by_traffic_source": [
+                {
+                    "traffic_source": src.value if hasattr(src, "value") else src,
+                    "total_sessions": sessions,
+                    "converted_sessions": conv,
+                    "conversion_rate": rate(conv, sessions),
+                    "revenue": revenue_by_source.get(src, 0.0),
+                }
+                for src, sessions, conv in sorted(rows, key=lambda r: -r[1])
+            ],
+        }
+
     async def get_cart_abandonment_metrics(
         self,
         start_date: datetime,
         end_date: datetime
     ) -> Dict[str, Any]:
-        """Get cart abandonment metrics - simplified mock data"""
-        try:
-            # Get order count as base
-            orders_result = await self.db.execute(
-                select(func.count(Order.id)).where(
-                    and_(
-                        Order.created_at >= start_date,
-                        Order.created_at <= end_date
-                    )
-                )
-            )
-            total_orders = orders_result.scalar() or 0
-            
-            # Mock cart sessions (assume 4x more cart adds than orders)
-            total_cart_sessions = max(total_orders * 4, 50)
-            total_checkout_sessions = max(total_orders * 2, 25)
-            total_purchase_sessions = total_orders
-            
-            # Calculate abandonment rates
-            cart_abandonment_rate = ((total_cart_sessions - total_checkout_sessions) / total_cart_sessions * 100) if total_cart_sessions > 0 else 0
-            checkout_abandonment_rate = ((total_checkout_sessions - total_purchase_sessions) / total_checkout_sessions * 100) if total_checkout_sessions > 0 else 0
-            overall_abandonment_rate = ((total_cart_sessions - total_purchase_sessions) / total_cart_sessions * 100) if total_cart_sessions > 0 else 0
-            
-            return {
-                "period": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat()
-                },
-                "abandonment_rates": {
-                    "cart_abandonment_rate": round(cart_abandonment_rate, 2),
-                    "checkout_abandonment_rate": round(checkout_abandonment_rate, 2),
-                    "overall_abandonment_rate": round(overall_abandonment_rate, 2)
-                },
-                "funnel_metrics": {
-                    "total_cart_sessions": total_cart_sessions,
-                    "total_checkout_sessions": total_checkout_sessions,
-                    "total_purchase_sessions": total_purchase_sessions
-                },
-                "conversion_funnel": [
-                    {"step": 0, "step_name": "Landing", "count": total_cart_sessions + 100},
-                    {"step": 1, "step_name": "Product View", "count": total_cart_sessions + 50},
-                    {"step": 2, "step_name": "Add to Cart", "count": total_cart_sessions},
-                    {"step": 3, "step_name": "Checkout Start", "count": total_checkout_sessions},
-                    {"step": 4, "step_name": "Purchase", "count": total_purchase_sessions}
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get cart abandonment metrics: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve cart abandonment metrics")
-    
+        """Funnel from tracked events: distinct sessions reaching each step in the period."""
+        in_period = and_(AnalyticsEvent.created_at >= start_date, AnalyticsEvent.created_at <= end_date)
+
+        async def sessions_with(*conditions) -> int:
+            return (await self.db.execute(
+                select(func.count(func.distinct(AnalyticsEvent.session_id))).where(in_period, *conditions)
+            )).scalar() or 0
+
+        landing = await sessions_with(AnalyticsEvent.event_type == EventType.PAGE_VIEW)
+        product_view = await sessions_with(AnalyticsEvent.event_type == EventType.PAGE_VIEW, AnalyticsEvent.product_id.isnot(None))
+        cart = await sessions_with(AnalyticsEvent.event_type == EventType.CART_ADD)
+        checkout = await sessions_with(AnalyticsEvent.event_type == EventType.CHECKOUT_START)
+        purchase = await sessions_with(AnalyticsEvent.event_type == EventType.PURCHASE)
+
+        drop = lambda start, end: round((start - end) / start * 100, 2) if start else 0.0
+        return {
+            "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+            "abandonment_rates": {
+                "cart_abandonment_rate": drop(cart, checkout),
+                "checkout_abandonment_rate": drop(checkout, purchase),
+                "overall_abandonment_rate": drop(cart, purchase),
+            },
+            "funnel_metrics": {
+                "total_cart_sessions": cart,
+                "total_checkout_sessions": checkout,
+                "total_purchase_sessions": purchase,
+            },
+            "conversion_funnel": [
+                {"step": 0, "step_name": "Landing", "count": landing},
+                {"step": 1, "step_name": "Product View", "count": product_view},
+                {"step": 2, "step_name": "Add to Cart", "count": cart},
+                {"step": 3, "step_name": "Checkout Start", "count": checkout},
+                {"step": 4, "step_name": "Purchase", "count": purchase},
+            ],
+        }
+
     async def get_time_to_purchase_metrics(
         self,
         start_date: datetime,
         end_date: datetime
     ) -> Dict[str, Any]:
-        """Get time to first purchase metrics - simplified mock data"""
-        try:
-            # Get first-time customers in period
-            first_purchases_result = await self.db.execute(
-                select(func.count(func.distinct(Order.user_id))).where(
-                    and_(
-                        Order.created_at >= start_date,
-                        Order.created_at <= end_date
-                    )
-                )
-            )
-            total_first_purchases = first_purchases_result.scalar() or 0
-            
-            if total_first_purchases == 0:
-                return {
-                    "period": {
-                        "start_date": start_date.isoformat(),
-                        "end_date": end_date.isoformat()
-                    },
-                    "metrics": {
-                        "total_first_purchases": 0,
-                        "average_hours": 0,
-                        "median_hours": 0,
-                        "min_hours": 0,
-                        "max_hours": 0,
-                        "average_days": 0
-                    },
-                    "distribution": []
-                }
-            
-            # Mock realistic time to purchase data
-            average_hours = 72.5  # ~3 days average
-            median_hours = 48.0   # 2 days median
-            
-            return {
-                "period": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat()
-                },
-                "metrics": {
-                    "total_first_purchases": total_first_purchases,
-                    "average_hours": average_hours,
-                    "median_hours": median_hours,
-                    "min_hours": 0.5,
-                    "max_hours": 720.0,  # 30 days max
-                    "average_days": round(average_hours / 24, 2)
-                },
-                "distribution": [
-                    {"range": "0-1 hours", "count": max(1, total_first_purchases // 10)},
-                    {"range": "1-24 hours", "count": max(1, total_first_purchases // 4)},
-                    {"range": "1-7 days", "count": max(1, total_first_purchases // 2)},
-                    {"range": "1-4 weeks", "count": max(1, total_first_purchases // 5)},
-                    {"range": "1+ months", "count": max(1, total_first_purchases // 20)}
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get time to purchase metrics: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve time to purchase metrics")
-    
+        """Hours from sign-up to first paid order, for customers whose first order falls in the period."""
+        first_orders = (
+            select(Order.user_id, func.min(Order.created_at).label("first_order_at"))
+            .where(Order.order_status.in_([OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]))
+            .group_by(Order.user_id)
+            .subquery()
+        )
+        rows = (await self.db.execute(
+            select(User.created_at, first_orders.c.first_order_at)
+            .join(first_orders, first_orders.c.user_id == User.id)
+            .where(first_orders.c.first_order_at >= start_date, first_orders.c.first_order_at <= end_date)
+        )).all()
+        hours = sorted(max(0.0, (first - signed_up).total_seconds() / 3600) for signed_up, first in rows)
+
+        buckets = [("0-1 hours", 0, 1), ("1-24 hours", 1, 24), ("1-7 days", 24, 168), ("1-4 weeks", 168, 672), ("1+ months", 672, float("inf"))]
+        count = len(hours)
+        median = (hours[count // 2] if count % 2 else (hours[count // 2 - 1] + hours[count // 2]) / 2) if count else 0
+        average = sum(hours) / count if count else 0
+        return {
+            "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+            "metrics": {
+                "total_first_purchases": count,
+                "average_hours": round(average, 2),
+                "median_hours": round(median, 2),
+                "min_hours": round(hours[0], 2) if count else 0,
+                "max_hours": round(hours[-1], 2) if count else 0,
+                "average_days": round(average / 24, 2),
+            },
+            "distribution": [
+                {"range": label, "count": sum(1 for h in hours if low <= h < high)} for label, low, high in buckets
+            ] if count else [],
+        }
+
     async def get_refund_rate_metrics(
         self,
         start_date: datetime,
@@ -383,63 +334,53 @@ class AnalyticsService:
         start_date: datetime,
         end_date: datetime
     ) -> Dict[str, Any]:
-        """Get repeat customer metrics - simplified using order data"""
-        try:
-            # Get customers with multiple orders
-            repeat_customers_result = await self.db.execute(
-                select(
-                    Order.user_id,
-                    func.count(Order.id).label('order_count')
-                ).where(
-                    Order.created_at >= start_date
-                ).group_by(Order.user_id).having(func.count(Order.id) > 1)
+        """Repeat purchasing from paid orders in the period; segments are new (1 order), returning (2-3), loyal (4+)."""
+        rows = (await self.db.execute(
+            select(
+                Order.user_id,
+                func.count(Order.id),
+                func.coalesce(func.sum(Order.total_amount), 0),
+                func.min(Order.created_at),
+                func.max(Order.created_at),
             )
-            
-            repeat_customers = repeat_customers_result.fetchall()
-            repeat_customer_count = len(repeat_customers)
-            
-            # Total customers
-            total_customers_result = await self.db.execute(
-                select(func.count(func.distinct(Order.user_id))).where(
-                    Order.created_at >= start_date
-                )
-            )
-            total_customers = total_customers_result.scalar() or 0
-            
-            repeat_rate = (repeat_customer_count / total_customers * 100) if total_customers > 0 else 0
-            
-            # Mock segments based on order counts
-            new_customers = total_customers - repeat_customer_count
-            returning_customers = repeat_customer_count
-            
+            .where(Order.created_at >= start_date, Order.created_at <= end_date, Order.order_status.in_([OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]))
+            .group_by(Order.user_id)
+        )).all()
+
+        total = len(rows)
+        repeat = [r for r in rows if r[1] > 1]
+        gaps = [(last - first).total_seconds() / 86400 / (n - 1) for _, n, _, first, last in repeat]
+        segments = {"new": [], "returning": [], "loyal": []}
+        for row in rows:
+            segments["new" if row[1] == 1 else "returning" if row[1] <= 3 else "loyal"].append(row)
+
+        def segment(name: str) -> Dict[str, Any]:
+            members = segments[name]
+            n = len(members)
             return {
-                "period": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat()
-                },
-                "overall": {
-                    "total_customers": total_customers,
-                    "repeat_customers": repeat_customer_count,
-                    "repeat_rate": round(repeat_rate, 2),
-                    "average_days_between_orders": 45.5
-                },
-                "by_segment": [
-                    {"segment": "new", "count": new_customers, "average_orders": 1.0, "average_ltv": 85.50},
-                    {"segment": "returning", "count": returning_customers, "average_orders": 2.8, "average_ltv": 245.75},
-                    {"segment": "loyal", "count": max(1, repeat_customer_count // 3), "average_orders": 5.2, "average_ltv": 520.25}
-                ],
-                "frequency_distribution": [
-                    {"order_count": 1, "customer_count": new_customers},
-                    {"order_count": 2, "customer_count": max(1, repeat_customer_count // 2)},
-                    {"order_count": 3, "customer_count": max(1, repeat_customer_count // 3)},
-                    {"order_count": 4, "customer_count": max(1, repeat_customer_count // 4)}
-                ]
+                "segment": name,
+                "count": n,
+                "average_orders": round(sum(m[1] for m in members) / n, 2) if n else 0,
+                "average_ltv": round(float(sum(m[2] for m in members)) / n, 2) if n else 0,
             }
-            
-        except Exception as e:
-            logger.error(f"Failed to get repeat customer metrics: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve repeat customer metrics")
-    
+
+        frequency: Dict[int, int] = {}
+        for row in rows:
+            key = min(row[1], 4)
+            frequency[key] = frequency.get(key, 0) + 1
+        return {
+            "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+            "overall": {
+                "total_customers": total,
+                "repeat_customers": len(repeat),
+                "repeat_rate": round(len(repeat) / total * 100, 2) if total else 0,
+                "average_days_between_orders": round(sum(gaps) / len(gaps), 1) if gaps else 0,
+            },
+            "by_segment": [segment("new"), segment("returning"), segment("loyal")],
+            # order_count 4 means "4 or more"
+            "frequency_distribution": [{"order_count": k, "customer_count": frequency.get(k, 0)} for k in (1, 2, 3, 4)],
+        }
+
     async def get_comprehensive_dashboard_data(
         self,
         start_date: datetime,
@@ -682,145 +623,6 @@ class AnalyticsService:
             logger.error(f"Failed to get sales trend data: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve sales trend data")
 
-    async def get_sales_overview_data(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "daily",
-        categories: List[str] = None,
-        regions: List[str] = None,
-        sales_channels: List[str] = None
-    ) -> Dict[str, Any]:
-        """Get comprehensive sales overview data for dashboard"""
-        try:
-            # Built once, applied to both main and previous-period queries below.
-            # OrderItem.variant_id is a ProductVariant, so the join goes through it.
-            category_filter = None
-            if categories:
-                category_filter = select(Order.id).join(OrderItem).join(
-                    ProductVariant, OrderItem.variant_id == ProductVariant.id
-                ).join(
-                    Product, ProductVariant.product_id == Product.id
-                ).where(
-                    Product.category_id.in_(
-                        select(Category.id).where(Category.slug.in_(categories))
-                    )
-                )
-
-            # Generate time series data based on granularity
-            if granularity == "daily":
-                time_format = func.date(Order.created_at)
-                date_format = "%Y-%m-%d"
-            elif granularity == "weekly":
-                time_format = func.date_trunc('week', Order.created_at)
-                date_format = "%Y-W%U"
-            else:  # monthly
-                time_format = func.date_trunc('month', Order.created_at)
-                date_format = "%Y-%m"
-            
-            # Get aggregated sales data
-            sales_query = select(
-                time_format.label('period'),
-                func.count(Order.id).label('orders'),
-                func.sum(Order.total_amount).label('revenue'),
-                func.avg(Order.total_amount).label('avg_order_value')
-            ).where(
-                and_(
-                    Order.created_at >= start_date,
-                    Order.created_at <= end_date,
-                    Order.order_status.in_(['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PROCESSING'])
-                )
-            ).group_by(time_format).order_by(time_format)
-            if category_filter is not None:
-                sales_query = sales_query.where(Order.id.in_(category_filter))
-
-            sales_result = await self.db.execute(sales_query)
-            
-            # Process chart data
-            chart_data = []
-            total_revenue = 0
-            total_orders = 0
-            
-            for row in sales_result:
-                revenue = float(row.revenue or 0)
-                orders = row.orders or 0
-                avg_order_value = float(row.avg_order_value or 0)
-                
-                # Simulate online/instore split (in real app, this would come from order data)
-                online_revenue = revenue * 0.65  # 65% online
-                instore_revenue = revenue * 0.35  # 35% in-store
-                
-                chart_data.append({
-                    "date": row.period.strftime(date_format) if row.period else "",
-                    "revenue": revenue,
-                    "orders": orders,
-                    "averageOrderValue": avg_order_value,
-                    "onlineRevenue": online_revenue,
-                    "instoreRevenue": instore_revenue
-                })
-                
-                total_revenue += revenue
-                total_orders += orders
-            
-            # Calculate metrics
-            avg_order_value = total_revenue / total_orders if total_orders > 0 else 0
-            
-            # Calculate growth rates (compare with previous period)
-            period_length = end_date - start_date
-            prev_start = start_date - period_length
-            prev_end = start_date
-            
-            prev_query = select(
-                func.count(Order.id).label('prev_orders'),
-                func.sum(Order.total_amount).label('prev_revenue')
-            ).where(
-                and_(
-                    Order.created_at >= prev_start,
-                    Order.created_at < prev_end,
-                    Order.order_status.in_(['CONFIRMED', 'SHIPPED', 'DELIVERED', 'PROCESSING'])
-                )
-            )
-            if category_filter is not None:
-                prev_query = prev_query.where(Order.id.in_(category_filter))
-
-            prev_result = await self.db.execute(prev_query)
-            prev_data = prev_result.first()
-            
-            prev_revenue = float(prev_data.prev_revenue or 0) if prev_data else 0
-            prev_orders = prev_data.prev_orders or 0 if prev_data else 0
-            
-            revenue_growth = ((total_revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
-            orders_growth = ((total_orders - prev_orders) / prev_orders * 100) if prev_orders > 0 else 0
-            
-            # Mock conversion rate (in real app, this would come from analytics events)
-            conversion_rate = 2.4 + (len(chart_data) % 3) * 0.3  # Simulate 2.4-3.0%
-            
-            return {
-                "data": chart_data,
-                "metrics": {
-                    "totalRevenue": total_revenue,
-                    "totalOrders": total_orders,
-                    "averageOrderValue": avg_order_value,
-                    "conversionRate": conversion_rate,
-                    "revenueGrowth": round(revenue_growth, 1),
-                    "ordersGrowth": round(orders_growth, 1)
-                },
-                "period": {
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat(),
-                    "granularity": granularity
-                },
-                "filters": {
-                    "categories": categories or [],
-                    "regions": regions or [],
-                    "sales_channels": sales_channels or ["online", "instore"]
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get sales overview data: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve sales overview data")
-    
     async def get_revenue_metrics(
         self,
         start_date: datetime,

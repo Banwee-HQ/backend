@@ -78,26 +78,12 @@ class Update(BaseModel):
     country: Optional[str] = None
     language: Optional[str] = None
     timezone: Optional[str] = None
-    # is_active deliberately excluded: it's a read-only property on the User model (derived from account_status), so setattr()'ing it here would raise. Status changes go through PUT /{user_id}/status/ -> UserService.update_status().
+    # is_active is derived from account_status; admins change it via POST /{user_id}/activate/ or /deactivate/.
 
 
-# Admin user management schemas
-class AdminUserUpdate(BaseModel):
-    """Admin update schema - allows updating more fields than regular users"""
-    firstname: Optional[str] = None
-    lastname: Optional[str] = None
-    email: Optional[EmailStr] = None
-    role: Optional[str] = None
-    is_active: Optional[bool] = None
-    password: Optional[str] = None
-    account_status: Optional[str] = None
-    verification_status: Optional[str] = None
-    verified: Optional[bool] = None
+class UserRoleUpdate(BaseModel):
+    role: UserRole
 
-
-class UserStatusUpdate(BaseModel):
-    is_active: bool
-    reason: Optional[str] = None
 
 
 class Response(BaseModel):

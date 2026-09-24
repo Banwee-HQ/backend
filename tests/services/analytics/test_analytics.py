@@ -93,53 +93,6 @@ class TestTrackEvent:
         assert float(session.conversion_value) == 49.98
 
 
-class TestGetConversionMetrics:
-
-    async def test_computes_conversion_rate_from_orders(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_conversion_metrics(start, end)
-        assert result["overall"]["converted_sessions"] >= 1
-        assert result["overall"]["total_revenue"] >= 49.98
-
-    async def test_empty_period_returns_zero_conversions(self, db_session):
-        service = AnalyticsService(db_session)
-        start = datetime(2020, 1, 1, tzinfo=timezone.utc)
-        end = datetime(2020, 1, 2, tzinfo=timezone.utc)
-        result = await service.get_conversion_metrics(start, end)
-        assert result["overall"]["converted_sessions"] == 0
-
-
-class TestGetCartAbandonmentMetrics:
-
-    async def test_returns_funnel_shape(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_cart_abandonment_metrics(start, end)
-        assert "abandonment_rates" in result
-        assert len(result["conversion_funnel"]) == 5
-
-
-class TestGetTimeToPurchaseMetrics:
-
-    async def test_empty_period_returns_zeroed_metrics(self, db_session):
-        service = AnalyticsService(db_session)
-        start = datetime(2020, 1, 1, tzinfo=timezone.utc)
-        end = datetime(2020, 1, 2, tzinfo=timezone.utc)
-        result = await service.get_time_to_purchase_metrics(start, end)
-        assert result["metrics"]["total_first_purchases"] == 0
-
-    async def test_nonempty_period_returns_distribution(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_time_to_purchase_metrics(start, end)
-        assert result["metrics"]["total_first_purchases"] >= 1
-        assert len(result["distribution"]) == 5
-
-
 class TestGetRefundRateMetrics:
 
     async def test_computes_refund_rate_from_real_refunds(self, db_session, test_user, order):
@@ -171,26 +124,6 @@ class TestGetRefundRateMetrics:
         # `order` has no associated refund, so total_refunds must still be
         # less than total_orders (i.e. it wasn't miscounted as a refund).
         assert result["overall"]["total_refunds"] < result["overall"]["total_orders"]
-
-
-class TestGetRepeatCustomerMetrics:
-
-    async def test_identifies_repeat_customers(self, db_session, test_user):
-        db_session.add_all([make_order(test_user.id), make_order(test_user.id)])
-        await db_session.commit()
-
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_repeat_customer_metrics(start, end)
-        assert result["overall"]["repeat_customers"] >= 1
-
-    async def test_single_order_customer_is_not_repeat(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_repeat_customer_metrics(start, end)
-        assert result["overall"]["total_customers"] >= 1
 
 
 class TestGetComprehensiveDashboardData:
@@ -291,44 +224,6 @@ class TestGetSalesTrendData:
         assert result["summary"]["growth_rate"] != 0.0
 
 
-class TestGetSalesOverviewData:
-
-    async def test_returns_chart_data(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_sales_overview_data(start, end)
-        assert result["metrics"]["totalOrders"] >= 1
-
-    async def test_category_filter_matches_real_orders(self, db_session, test_user, category, variant):
-        """Regression test: the category filter joined
-        OrderItem.variant_id == Product.id directly - variant_id references
-        ProductVariant, not Product, so this join could never match a real
-        row and the filter silently returned zero orders regardless of
-        what was actually in the category."""
-        order = make_order(test_user.id)
-        db_session.add(order)
-        await db_session.flush()
-        db_session.add(OrderItem(
-            id=uuid7(), order_id=order.id, variant_id=variant.id,
-            quantity=1, price_per_unit=Decimal("19.99"), total_price=Decimal("19.99"),
-        ))
-        await db_session.commit()
-
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_sales_overview_data(start, end, categories=[category.slug])
-        assert result["metrics"]["totalOrders"] >= 1
-
-    async def test_category_filter_excludes_unrelated_orders(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_sales_overview_data(start, end, categories=[f"nonexistent-{uuid4().hex[:8]}"])
-        assert result["metrics"]["totalOrders"] == 0
-
-
 class TestGetRevenueMetrics:
 
     async def test_computes_revenue_from_completed_orders(self, db_session, test_user):
@@ -424,34 +319,10 @@ class TestServiceMethodsWrapDbErrors:
     unmocked error that each method's try/except must translate into a clean
     HTTPException(500) instead of leaking a raw driver exception."""
 
-    async def test_conversion_metrics(self, db_session):
-        service = AnalyticsService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_conversion_metrics("not-a-date", "not-a-date")
-        assert exc_info.value.status_code == 500
-
-    async def test_cart_abandonment_metrics(self, db_session):
-        service = AnalyticsService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_cart_abandonment_metrics("not-a-date", "not-a-date")
-        assert exc_info.value.status_code == 500
-
-    async def test_time_to_purchase_metrics(self, db_session):
-        service = AnalyticsService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_time_to_purchase_metrics("not-a-date", "not-a-date")
-        assert exc_info.value.status_code == 500
-
     async def test_refund_rate_metrics(self, db_session):
         service = AnalyticsService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.get_refund_rate_metrics("not-a-date", "not-a-date")
-        assert exc_info.value.status_code == 500
-
-    async def test_repeat_customer_metrics(self, db_session):
-        service = AnalyticsService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_repeat_customer_metrics("not-a-date", "not-a-date")
         assert exc_info.value.status_code == 500
 
     async def test_comprehensive_dashboard_data_wraps_downstream_failure(self, db_session):
@@ -470,12 +341,6 @@ class TestServiceMethodsWrapDbErrors:
         service = AnalyticsService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.get_sales_trend_data("not-a-date", "not-a-date")
-        assert exc_info.value.status_code == 500
-
-    async def test_sales_overview_data(self, db_session):
-        service = AnalyticsService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_sales_overview_data("not-a-date", "not-a-date")
         assert exc_info.value.status_code == 500
 
     async def test_revenue_metrics(self, db_session):
@@ -503,23 +368,6 @@ class TestUpdateConversionFunnelErrors:
         await service._update_conversion_funnel("sess-x", test_user.id, EventType.PAGE_VIEW)  # must not raise
 
 
-class TestGetSalesOverviewDataGranularity:
-
-    async def test_weekly_granularity_uses_week_truncated_periods(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=7)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_sales_overview_data(start, end, granularity="weekly")
-        assert result["period"]["granularity"] == "weekly"
-
-    async def test_monthly_granularity_uses_month_truncated_periods(self, db_session, order):
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=30)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_sales_overview_data(start, end, granularity="monthly")
-        assert result["period"]["granularity"] == "monthly"
-
-
 class TestGetAdminStatsErrorPaths:
 
     async def test_malformed_date_from_falls_back_to_default_window(self, db_session, order):
@@ -545,3 +393,151 @@ class TestGetAdminStatsErrorPaths:
         with pytest.raises(HTTPException) as exc_info:
             await service.get_admin_stats()
         assert exc_info.value.status_code == 500
+
+
+def isolated_window():
+    """A unique future day, so rows other tests committed to the shared DB never fall inside it."""
+    day = datetime(2031, 1, 1, tzinfo=timezone.utc) + timedelta(days=uuid4().int % 3000, minutes=uuid4().int % 1000)
+    return day, day + timedelta(hours=1)
+
+
+async def add_session(db_session, source, started_at, events, user_id=None, revenue=None):
+    from models.accounts.analytics import TrafficSource
+    session_id = f"sess-{uuid4().hex}"
+    db_session.add(UserSession(id=uuid7(), session_id=session_id, traffic_source=TrafficSource(source), started_at=started_at, user_id=user_id))
+    await db_session.flush()
+    for event_type, product_id in events:
+        db_session.add(AnalyticsEvent(
+            id=uuid7(), session_id=session_id, event_type=event_type, product_id=product_id, created_at=started_at,
+            revenue=revenue if event_type == EventType.PURCHASE else None,
+        ))
+    await db_session.commit()
+
+
+class TestSessionAttribution:
+
+    async def test_first_event_records_traffic_source_and_utm(self, db_session):
+        session_id = f"sess-{uuid4().hex}"
+        await AnalyticsService(db_session).track_event(
+            session_id=session_id, event_type=EventType.PAGE_VIEW,
+            session_info={"traffic_source": "social", "referrer_url": "https://t.co/x", "utm_source": "twitter", "utm_campaign": "launch"},
+        )
+        session = (await db_session.execute(select(UserSession).where(UserSession.session_id == session_id))).scalar_one()
+        assert session.traffic_source.value == "social"
+        assert (session.utm_source, session.utm_campaign) == ("twitter", "launch")
+
+    async def test_unknown_source_falls_back_to_direct(self, db_session):
+        session_id = f"sess-{uuid4().hex}"
+        await AnalyticsService(db_session).track_event(session_id=session_id, event_type=EventType.PAGE_VIEW, session_info={"traffic_source": "bogus"})
+        session = (await db_session.execute(select(UserSession).where(UserSession.session_id == session_id))).scalar_one()
+        assert session.traffic_source.value == "direct"
+
+
+class TestConcurrentFirstEvents:
+
+    async def test_second_insert_of_the_same_session_is_harmless(self, db_session):
+        """Two events racing on a visitor's first page must both be recorded (no unique-key 500)."""
+        service = AnalyticsService(db_session)
+        session_id = f"sess-{uuid4().hex}"
+        await service.track_event(session_id=session_id, event_type=EventType.PAGE_VIEW)
+        await service.track_event(session_id=session_id, event_type=EventType.PAGE_VIEW, session_info={"traffic_source": "social"})
+        sessions = (await db_session.execute(select(UserSession).where(UserSession.session_id == session_id))).scalars().all()
+        events = (await db_session.execute(select(AnalyticsEvent).where(AnalyticsEvent.session_id == session_id))).scalars().all()
+        assert len(sessions) == 1 and sessions[0].traffic_source.value == "direct"  # first event's attribution wins
+        assert len(events) == 2
+
+
+class TestConversionFromTrackedSessions:
+    """Conversion and traffic sources come only from tracked sessions - nothing is extrapolated from orders."""
+
+    async def test_counts_real_sessions_and_purchases(self, db_session, test_user):
+        start, end = isolated_window()
+        at = start + timedelta(minutes=5)
+        await add_session(db_session, "organic_search", at, [(EventType.PAGE_VIEW, None), (EventType.PURCHASE, None)], revenue=Decimal("30.00"))
+        await add_session(db_session, "organic_search", at, [(EventType.PAGE_VIEW, None)])
+        await add_session(db_session, "paid_search", at, [(EventType.PAGE_VIEW, None)])
+
+        result = await AnalyticsService(db_session).get_conversion_metrics(start, end)
+        assert result["overall"]["total_sessions"] == 3
+        assert result["overall"]["converted_sessions"] == 1
+        assert result["overall"]["conversion_rate"] == pytest.approx(33.33)
+        by_source = {row["traffic_source"]: row for row in result["by_traffic_source"]}
+        assert by_source["organic_search"]["total_sessions"] == 2
+        assert by_source["organic_search"]["conversion_rate"] == 50.0
+        assert by_source["organic_search"]["revenue"] == 30.0
+        assert by_source["paid_search"]["converted_sessions"] == 0
+
+    async def test_no_traffic_means_no_sessions(self, db_session):
+        start, end = isolated_window()
+        result = await AnalyticsService(db_session).get_conversion_metrics(start, end)
+        assert result["overall"]["total_sessions"] == 0
+        assert result["by_traffic_source"] == []
+
+
+class TestFunnelFromTrackedEvents:
+
+    async def test_funnel_counts_distinct_sessions_per_step(self, db_session, variant):
+        start, end = isolated_window()
+        at = start + timedelta(minutes=5)
+        pid = variant.product_id
+        await add_session(db_session, "direct", at, [(EventType.PAGE_VIEW, None), (EventType.PAGE_VIEW, pid), (EventType.CART_ADD, pid),
+                                                    (EventType.CHECKOUT_START, None), (EventType.PURCHASE, None)])
+        await add_session(db_session, "direct", at, [(EventType.PAGE_VIEW, pid), (EventType.CART_ADD, pid), (EventType.CART_ADD, pid)])
+        await add_session(db_session, "direct", at, [(EventType.PAGE_VIEW, None)])
+
+        result = await AnalyticsService(db_session).get_cart_abandonment_metrics(start, end)
+        counts = [step["count"] for step in result["conversion_funnel"]]
+        assert counts == [3, 2, 2, 1, 1]
+        assert result["abandonment_rates"]["cart_abandonment_rate"] == 50.0
+        assert result["abandonment_rates"]["checkout_abandonment_rate"] == 0.0
+
+    async def test_empty_period_is_all_zero(self, db_session):
+        start, end = isolated_window()
+        result = await AnalyticsService(db_session).get_cart_abandonment_metrics(start, end)
+        assert [step["count"] for step in result["conversion_funnel"]] == [0, 0, 0, 0, 0]
+
+
+class TestTimeToFirstPurchase:
+
+    async def test_measures_signup_to_first_paid_order(self, db_session, test_user):
+        start, end = isolated_window()
+        test_user.created_at = start - timedelta(hours=48)
+        db_session.add_all([
+            make_order(test_user.id, created_at=start + timedelta(minutes=10)),
+            make_order(test_user.id, created_at=start + timedelta(minutes=40)),  # not the first order
+        ])
+        await db_session.commit()
+
+        result = await AnalyticsService(db_session).get_time_to_purchase_metrics(start, end)
+        assert result["metrics"]["total_first_purchases"] == 1
+        assert result["metrics"]["average_hours"] == pytest.approx(48.17, abs=0.01)
+        assert {b["range"]: b["count"] for b in result["distribution"]}["1-7 days"] == 1
+
+    async def test_empty_period_has_no_distribution(self, db_session):
+        start, end = isolated_window()
+        result = await AnalyticsService(db_session).get_time_to_purchase_metrics(start, end)
+        assert result["metrics"]["total_first_purchases"] == 0
+        assert result["distribution"] == []
+
+
+class TestRepeatCustomers:
+
+    async def test_segments_and_gaps_come_from_orders(self, db_session, test_user, admin_user):
+        start, end = isolated_window()
+        db_session.add_all([
+            make_order(test_user.id, total=Decimal("10.00"), created_at=start + timedelta(minutes=0)),
+            make_order(test_user.id, total=Decimal("20.00"), created_at=start + timedelta(minutes=30)),
+            make_order(admin_user.id, total=Decimal("5.00"), created_at=start + timedelta(minutes=5)),
+            make_order(admin_user.id, status=OrderStatus.PENDING, created_at=start + timedelta(minutes=6)),  # unpaid: ignored
+        ])
+        await db_session.commit()
+
+        result = await AnalyticsService(db_session).get_repeat_customer_metrics(start, end)
+        assert result["overall"]["total_customers"] == 2
+        assert result["overall"]["repeat_customers"] == 1
+        assert result["overall"]["repeat_rate"] == 50.0
+        segments = {seg["segment"]: seg for seg in result["by_segment"]}
+        assert segments["new"]["count"] == 1 and segments["new"]["average_ltv"] == 5.0
+        assert segments["returning"]["count"] == 1 and segments["returning"]["average_ltv"] == 30.0
+        assert segments["loyal"]["count"] == 0
+        assert {f["order_count"]: f["customer_count"] for f in result["frequency_distribution"]} == {1: 1, 2: 1, 3: 0, 4: 0}

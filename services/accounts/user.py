@@ -372,20 +372,6 @@ class UserService:
 
     # --- Admin user management methods ---
 
-    async def update_status(self, user_id: UUID, is_active: bool) -> Optional[User]:
-        """Update user active status (admin only)."""
-        query = select(User).where(User.id == user_id)
-        result = await self.db.execute(query)
-        user = result.scalar_one_or_none()
-
-        if not user:
-            return None
-
-        user.account_status = AccountStatus.ACTIVE if is_active else AccountStatus.INACTIVE
-        await self.db.commit()
-        await self.db.refresh(user)
-        return user
-
     async def verify_user_account(self, user_id: UUID) -> Optional[User]:
         """Verify user account (admin only)."""
         query = select(User).where(User.id == user_id)
@@ -399,20 +385,6 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
         return user
-
-    async def get_activity_log(self, user_id: UUID, page: int = 1, limit: int = 10) -> dict:
-        """Get user activity log (admin only)."""
-        # Not backed by an audit table yet - returns an empty page.
-        return {
-            "user_id": str(user_id),
-            "activities": [],
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total": 0,
-                "pages": 0
-            }
-        }
 
     async def reset_password(self, user_id: UUID) -> Dict[str, Any]:
         """Reset user password and send reset email (admin only)."""

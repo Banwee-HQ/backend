@@ -223,17 +223,15 @@ class TestSearch:
 
 class TestAdminStatusManagement:
 
-    async def test_update_status_activates_and_deactivates(self, db_session):
+    async def test_deactivate_then_activate(self, db_session):
         user = await make_user(db_session, account_status="active")
         service = UserService(db_session)
-        deactivated = await service.update_status(user.id, is_active=False)
-        assert deactivated.account_status == AccountStatus.INACTIVE
-        reactivated = await service.update_status(user.id, is_active=True)
-        assert reactivated.account_status == AccountStatus.ACTIVE
-
-    async def test_update_status_unknown_id_returns_none(self, db_session):
-        service = UserService(db_session)
-        assert await service.update_status(uuid4(), is_active=True) is None
+        await service.deactivate(user.id)
+        await db_session.refresh(user)
+        assert user.account_status == AccountStatus.INACTIVE
+        await service.activate(user.id)
+        await db_session.refresh(user)
+        assert user.account_status == AccountStatus.ACTIVE
 
     async def test_verify_user_account_sets_verified(self, db_session):
         user = await make_user(db_session, verification_status="pending")
@@ -247,12 +245,6 @@ class TestAdminStatusManagement:
         with pytest.raises(APIException) as exc_info:
             await service.verify_user_account(uuid4())
         assert exc_info.value.status_code == 404
-
-    async def test_get_activity_log_returns_empty_stub(self, db_session):
-        service = UserService(db_session)
-        result = await service.get_activity_log(uuid4())
-        assert result["activities"] == []
-        assert result["pagination"]["total"] == 0
 
     async def test_update_role_changes_role(self, db_session):
         user = await make_user(db_session, role=UserRole.CUSTOMER)

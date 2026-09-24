@@ -286,7 +286,7 @@ class TestInventoryCrud:
 
 class TestAdjustmentCrud:
 
-    async def test_get_and_delete_adjustment(self, db_session, variant):
+    async def test_get_adjustment(self, db_session, variant):
         service = InventoryService(db_session)
         await service.adjust_stock(
             StockAdjustmentCreate(variant_id=variant.id, quantity_change=-2, reason="test"),
@@ -297,17 +297,9 @@ class TestAdjustmentCrud:
         fetched = await service.get_adjustment(adjustment_id)
         assert fetched.id == adjustment_id
 
-        assert await service.delete_adjustment(adjustment_id) is True
-        assert await service.get_adjustment(adjustment_id) is None
-
     async def test_get_unknown_adjustment_returns_none(self, db_session):
         service = InventoryService(db_session)
         assert await service.get_adjustment(uuid4()) is None
-
-    async def test_delete_unknown_adjustment_returns_false(self, db_session):
-        service = InventoryService(db_session)
-        assert await service.delete_adjustment(uuid4()) is False
-
 
 class TestIsLowStock:
 

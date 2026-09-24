@@ -44,7 +44,8 @@ async def track(
             page_title=event_data.get("page_title"),
             order_id=UUID(event_data["order_id"]) if event_data.get("order_id") else None,
             product_id=UUID(event_data["product_id"]) if event_data.get("product_id") else None,
-            revenue=event_data.get("revenue")
+            revenue=event_data.get("revenue"),
+            session_info=event_data.get("session"),
         )
         
         return Response.success(
@@ -236,67 +237,6 @@ async def repeat_customers(
         )
 
 
-@router.get("/simple-dashboard/")
-async def simple_dashboard(
-    current_user: User = Depends(require_auth)
-):
-    """Get simple dashboard data (no admin required for testing)"""
-    return Response.success(data={
-        "message": "Dashboard data",
-        "user_role": current_user.role,
-        "timestamp": datetime.now().isoformat(),
-        "metrics": {
-            "total_orders": 0,
-            "total_revenue": 0.0,
-            "total_users": 0
-        }
-    })
-
-
-@router.get("/dashboard/")
-async def dashboard(
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
-    days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get comprehensive dashboard data."""
-    try:
-        analytics_service = AnalyticsService(db)
-        # Set default date range if not provided
-        if not end_date:
-            end_date = datetime.now(timezone.utc)
-        if not start_date:
-            start_date = end_date - timedelta(days=days)
-        
-        dashboard_data = await analytics_service.get_comprehensive_dashboard_data(
-            start_date=start_date,
-            end_date=end_date
-        )
-        
-        return Response.success(
-            data=dashboard_data,
-            message="Dashboard data retrieved successfully"
-        )
-        
-    except Exception as e:
-        # Return basic data on error
-        return Response.success(
-            data={
-                "message": "Dashboard data (fallback)",
-                "user_role": current_user.role,
-                "timestamp": datetime.now().isoformat(),
-                "error": str(e),
-                "metrics": {
-                    "total_orders": 0,
-                    "total_revenue": 0.0,
-                    "total_users": 1
-                }
-            },
-            message="Dashboard data retrieved successfully (fallback)"
-        )
-
 @router.get("/sales-trend/")
 async def sales_trend(
     days: int = Query(30),
@@ -345,54 +285,6 @@ async def users_growth_trend(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to retrieve users growth trend data: {str(e)}"
-        )
-
-
-@router.get("/sales-overview/")
-async def sales_overview(
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
-    days: Optional[int] = Query(30),
-    granularity: str = Query("daily"),
-    categories: Optional[str] = Query(None),
-    regions: Optional[str] = Query(None),
-    sales_channels: Optional[str] = Query("online,instore"),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get sales metrics, chart data, and performance indicators for the dashboard (admin only)."""
-    try:
-        analytics_service = AnalyticsService(db)
-        # Set default date range if not provided
-        if not end_date:
-            end_date = datetime.now(timezone.utc)
-        if not start_date:
-            start_date = end_date - timedelta(days=days)
-        
-        # Parse filter parameters
-        category_list = categories.split(',') if categories else []
-        region_list = regions.split(',') if regions else []
-        channel_list = sales_channels.split(',') if sales_channels else ['online', 'instore']
-        
-        # Get sales overview data
-        overview_data = await analytics_service.get_sales_overview_data(
-            start_date=start_date,
-            end_date=end_date,
-            granularity=granularity,
-            categories=category_list,
-            regions=region_list,
-            sales_channels=channel_list
-        )
-        
-        return Response.success(
-            data=overview_data,
-            message="Sales overview data retrieved successfully"
-        )
-        
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve sales overview data: {str(e)}"
         )
 
 
@@ -497,125 +389,6 @@ async def kpis(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to retrieve KPIs: {str(e)}"
-        )
-
-
-@router.get("/sales/")
-async def sales(
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None),
-    days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get sales analytics."""
-    try:
-        analytics_service = AnalyticsService(db)
-        if not end_date:
-            end_dt = datetime.now(timezone.utc)
-        else:
-            end_dt = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
-        if not start_date:
-            start_dt = end_dt - timedelta(days=days)
-        else:
-            start_dt = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
-
-        metrics = await analytics_service.get_revenue_metrics(start_date=start_dt, end_date=end_dt)
-        return Response.success(data=metrics)
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve sales analytics: {str(e)}"
-        )
-
-
-@router.get("/users/")
-async def users(
-    days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get user analytics (admin only)."""
-    try:
-        end_dt = datetime.now(timezone.utc)
-        start_dt = end_dt - timedelta(days=days)
-
-        total_result = await db.execute(select(func.count()).select_from(UserModel))
-        total_users = total_result.scalar() or 0
-
-        new_result = await db.execute(
-            select(func.count()).select_from(UserModel).where(UserModel.created_at >= start_dt)
-        )
-        new_users = new_result.scalar() or 0
-
-        return Response.success(data={
-            "total_users": total_users,
-            "new_users": new_users,
-            "period_days": days,
-        }, message="User analytics retrieved successfully")
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve user analytics: {str(e)}"
-        )
-
-
-@router.get("/products/")
-async def products(
-    days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get product analytics (admin only)."""
-    try:
-        total_result = await db.execute(select(func.count()).select_from(Product))
-        total_products = total_result.scalar() or 0
-
-        active_result = await db.execute(
-            select(func.count()).select_from(Product).where(Product.product_status == ProductStatus.ACTIVE)
-        )
-        active_products = active_result.scalar() or 0
-
-        return Response.success(data={
-            "total_products": total_products,
-            "active_products": active_products,
-            "period_days": days,
-        }, message="Product analytics retrieved successfully")
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve product analytics: {str(e)}"
-        )
-
-
-@router.get("/orders/")
-async def orders(
-    days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get order analytics (admin only)."""
-    try:
-        end_dt = datetime.now(timezone.utc)
-        start_dt = end_dt - timedelta(days=days)
-
-        total_result = await db.execute(select(func.count()).select_from(Order))
-        total_orders = total_result.scalar() or 0
-
-        recent_result = await db.execute(
-            select(func.count()).select_from(Order).where(Order.created_at >= start_dt)
-        )
-        recent_orders = recent_result.scalar() or 0
-
-        return Response.success(data={
-            "total_orders": total_orders,
-            "recent_orders": recent_orders,
-            "period_days": days,
-        }, message="Order analytics retrieved successfully")
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve order analytics: {str(e)}"
         )
 
 

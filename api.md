@@ -1,6 +1,6 @@
 # Banwee API Reference
 
-> **Source of truth:** generated from the running FastAPI application schema (`230 operations across 167 paths`).
+> **Source of truth:** generated from the running FastAPI application schema (`220 operations across 158 paths`).
 
 ## Environments
 
@@ -44,24 +44,17 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/analytics/cart-abandonment/` | Cart Abandonment | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/conversion-rates/` | Conversion Rates | Yes | `query:start_date`, `query:end_date`, `query:traffic_source`, `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/dashboard/` | Dashboard | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/dashboard/admin/` | Admin Dashboard | Yes | `query:date_from`, `query:date_to`, `query:status`, `query:category` | — | `200`, `422` |
 | `GET` | `/v1/analytics/export/orders/` | Export Orders | Yes | `query:format`, `query:status`, `query:q`, `query:date_from`, `query:date_to`, `query:min_price`, `query:max_price` | — | `200`, `422` |
 | `GET` | `/v1/analytics/kpis/` | Kpis | Yes | `query:start_date`, `query:end_date`, `query:days`, `query:compare_previous` | — | `200`, `422` |
-| `GET` | `/v1/analytics/orders/` | Orders | Yes | `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/products/` | Products | Yes | `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/refund-rates/` | Refund Rates | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/repeat-customers/` | Repeat Customers | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/revenue/` | Revenue | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/sales-overview/` | Sales Overview | Yes | `query:start_date`, `query:end_date`, `query:days`, `query:granularity`, `query:categories`, `query:regions`, `query:sales_channels` | — | `200`, `422` |
 | `GET` | `/v1/analytics/sales-trend/` | Sales Trend | Yes | `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/sales/` | Sales | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/simple-dashboard/` | Simple Dashboard | Yes | — | — | `200` |
 | `GET` | `/v1/analytics/stats/` | Admin Stats | Yes | `query:date_from`, `query:date_to`, `query:status`, `query:category` | — | `200`, `422` |
 | `GET` | `/v1/analytics/time-to-purchase/` | Time To Purchase | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `POST` | `/v1/analytics/track/` | Track | No | — | `Event Data` (application/json) | `200`, `422` |
 | `GET` | `/v1/analytics/users-growth-trend/` | Users Growth Trend | Yes | `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/users/` | Users | Yes | `query:days` | — | `200`, `422` |
 
 ## Authentication
 
@@ -131,7 +124,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `POST` | `/v1/inventory/` | Create | Yes | — | `schemas__catalog__inventory__Create` (application/json) | `200`, `422` |
 | `GET` | `/v1/inventory/adjustments/` | List Adj | Yes | `query:page`, `query:limit`, `query:inventory_id` | — | `200`, `422` |
 | `POST` | `/v1/inventory/adjustments/` | Create Adj | Yes | — | `AdjustmentCreate` (application/json) | `200`, `422` |
-| `DELETE` | `/v1/inventory/adjustments/{adjustment_id}/` | Delete Adj | Yes | `path:adjustment_id*` | — | `200`, `422` |
 | `GET` | `/v1/inventory/adjustments/{adjustment_id}/` | Get Adj | Yes | `path:adjustment_id*` | — | `200`, `422` |
 | `GET` | `/v1/inventory/locations/` | List Locations | Yes | `query:page`, `query:limit` | — | `200`, `422` |
 | `POST` | `/v1/inventory/locations/` | Create Location | Yes | — | `LocationCreate` (application/json) | `200`, `422` |
@@ -283,12 +275,11 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `POST` | `/v1/shipping-tracking/providers/` | Create Provider | Yes | — | `Provider Data` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/shipping-tracking/providers/{provider_id}/` | Delete Provider | Yes | `path:provider_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping-tracking/providers/{provider_id}/` | Patch Provider | Yes | `path:provider_id*` | `Provider Data` (application/json) | `200`, `422` |
-| `GET` | `/v1/shipping-tracking/shipments/` | List | Yes | `query:page`, `query:limit` | — | `200`, `422` |
+| `GET` | `/v1/shipping-tracking/shipments/` | List | Yes | `query:page`, `query:limit`, `query:order_id` | — | `200`, `422` |
 | `POST` | `/v1/shipping-tracking/shipments/` | Create Shipment | Yes | — | `schemas__commerce__shipping_tracking__Create` (application/json) | `200`, `422` |
 | `GET` | `/v1/shipping-tracking/shipments/{shipment_id}/` | Get Shipment | Yes | `path:shipment_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping-tracking/shipments/{shipment_id}/status/` | Update Shipment Status | Yes | `path:shipment_id*` | `schemas__commerce__shipping_tracking__Update` (application/json) | `200`, `422` |
 | `POST` | `/v1/shipping-tracking/track/` | Track | Yes | — | `Track` (application/json) | `200`, `422` |
-| `POST` | `/v1/shipping-tracking/webhooks/{carrier}/` | Handle Carrier Webhook | No | `path:carrier*` | `Webhook Data` (application/json) | `200`, `422` |
 
 ## subscriptions
 
@@ -355,10 +346,9 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `GET` | `/v1/users/{user_id}/` | Get | Yes | `path:user_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/users/{user_id}/` | Patch | Yes | `path:user_id*` | `schemas__accounts__user__Update` (application/json) | `200`, `422` |
 | `POST` | `/v1/users/{user_id}/activate/` | Activate | Yes | `path:user_id*` | — | `200`, `422` |
-| `GET` | `/v1/users/{user_id}/activity/` | Activity | Yes | `path:user_id*`, `query:page`, `query:limit` | — | `200`, `422` |
 | `POST` | `/v1/users/{user_id}/deactivate/` | Deactivate | Yes | `path:user_id*` | — | `200`, `422` |
 | `POST` | `/v1/users/{user_id}/reset-password/` | Reset Password | Yes | `path:user_id*` | — | `200`, `422` |
-| `PUT` | `/v1/users/{user_id}/status/` | Update Status | Yes | `path:user_id*` | `UserStatusUpdate` (application/json) | `200`, `422` |
+| `PUT` | `/v1/users/{user_id}/role/` | Update Role | Yes | `path:user_id*` | `UserRoleUpdate` (application/json) | `200`, `422` |
 | `PUT` | `/v1/users/{user_id}/verify/` | Verify | Yes | `path:user_id*` | — | `200`, `422` |
 
 ## webhooks
