@@ -219,3 +219,10 @@ class RateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BulkRateUpdate(BaseModel):
+    id: UUID
+    tax_rate: Optional[float] = Field(None, ge=0, le=1)
+    is_active: Optional[bool] = None
+    tax_name: Optional[str] = Field(None, max_length=50)

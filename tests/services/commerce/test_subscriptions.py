@@ -456,45 +456,11 @@ class TestQuantityManagement:
         updated = await service.set_quantity(subscription.id, variant.id, 3, test_user.id)
         assert updated.subscription_metadata["variant_quantities"][str(variant.id)] == 3
 
-    async def test_adjusts_quantity_up(self, db_session, test_user, subscription, variant):
-        service = SubscriptionService(db_session)
-        await service.set_quantity(subscription.id, variant.id, 2, test_user.id)
-        updated = await service.adjust_quantity(subscription.id, variant.id, 1, test_user.id)
-        assert updated.subscription_metadata["variant_quantities"][str(variant.id)] == 3
-
-    async def test_adjust_quantity_never_goes_below_one(self, db_session, test_user, subscription, variant):
-        service = SubscriptionService(db_session)
-        updated = await service.adjust_quantity(subscription.id, variant.id, -10, test_user.id)
-        assert updated.subscription_metadata["variant_quantities"][str(variant.id)] == 1
-
-    async def test_get_quantities(self, db_session, test_user, subscription, variant):
-        service = SubscriptionService(db_session)
-        await service.set_quantity(subscription.id, variant.id, 4, test_user.id)
-        quantities = await service.get_quantities(subscription.id, test_user.id)
-        assert quantities[str(variant.id)] == 4
-
-    async def test_get_quantities_not_found_raises_404(self, db_session, test_user):
-        service = SubscriptionService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_quantities(uuid4(), test_user.id)
-        assert exc_info.value.status_code == 404
-
-    async def test_get_quantities_returns_empty_dict_when_no_metadata(self, db_session, test_user, subscription):
-        subscription.subscription_metadata = None
-        await db_session.commit()
-        service = SubscriptionService(db_session)
-        assert await service.get_quantities(subscription.id, test_user.id) == {}
 
     async def test_set_quantity_not_found_raises_404(self, db_session, test_user, variant):
         service = SubscriptionService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.set_quantity(uuid4(), variant.id, 2, test_user.id)
-        assert exc_info.value.status_code == 404
-
-    async def test_adjust_quantity_not_found_raises_404(self, db_session, test_user, variant):
-        service = SubscriptionService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.adjust_quantity(uuid4(), variant.id, 1, test_user.id)
         assert exc_info.value.status_code == 404
 
 

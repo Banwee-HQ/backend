@@ -1,7 +1,7 @@
 """Tests for services/catalog/products.py - ProductService."""
 
 import pytest
-from uuid import uuid4
+from uuid import UUID, uuid4
 from decimal import Decimal
 from datetime import datetime
 
@@ -187,22 +187,6 @@ class TestFeaturedAndPopular:
         assert "Not Featured" not in names
 
 
-class TestByCategory:
-
-    async def test_returns_products_in_category(self, db_session):
-        cat = await make_category(db_session, slug="my-cat")
-        await make_product(db_session, category_id=cat.id, name="In Category")
-
-        service = ProductService(db_session)
-        result = await service.by_category("my-cat")
-        assert result is not None
-
-    async def test_unknown_slug_returns_empty_list(self, db_session):
-        service = ProductService(db_session)
-        result = await service.by_category("does-not-exist")
-        assert result.products == []
-
-
 class TestGet:
 
     async def test_get_by_id(self, db_session):
@@ -272,15 +256,58 @@ class TestVariantCrud:
     async def test_delete_variant(self, db_session):
         cat = await make_category(db_session)
         product = await make_product(db_session, category_id=cat.id)
+        await make_variant(db_session, product.id)
         variant = await make_variant(db_session, product.id)
 
         service = ProductService(db_session)
-        assert await service.delete_variant(variant.id) is True
+        assert await service.delete_variant(variant.id) == "deleted"
         assert await service.get_variant(variant.id) is None
 
-    async def test_delete_unknown_variant_returns_false(self, db_session):
+    async def test_last_variant_cannot_be_deleted(self, db_session):
+        cat = await make_category(db_session)
+        product = await make_product(db_session, category_id=cat.id)
+        variant = await make_variant(db_session, product.id)
+        with pytest.raises(APIException) as exc_info:
+            await ProductService(db_session).delete_variant(variant.id)
+        assert exc_info.value.status_code == 400
+
+    async def test_sold_variant_is_archived_not_deleted(self, db_session, test_user):
+        from models.commerce.orders import Order, OrderItem
+        cat = await make_category(db_session)
+        product = await make_product(db_session, category_id=cat.id)
+        await make_variant(db_session, product.id)
+        variant = await make_variant(db_session, product.id)
+        order = Order(id=uuid7(), order_number=f"ORD-{uuid4().hex[:8]}", user_id=test_user.id, subtotal=20, total_amount=20,
+                      billing_address={}, shipping_address={})
+        db_session.add(order)
+        await db_session.flush()
+        db_session.add(OrderItem(id=uuid7(), order_id=order.id, variant_id=variant.id, quantity=1, price_per_unit=20, total_price=20))
+        await db_session.commit()
+
         service = ProductService(db_session)
-        assert await service.delete_variant(uuid4()) is False
+        assert await service.delete_variant(variant.id) == "archived"
+        assert (await service.get_variant(variant.id)).is_active is False
+
+    async def test_sale_price_can_be_cleared(self, db_session):
+        cat = await make_category(db_session)
+        product = await make_product(db_session, category_id=cat.id)
+        variant = await make_variant(db_session, product.id, base_price=20.0, sale_price=15.0)
+        updated = await ProductService(db_session).update_variant(variant.id, VariantUpdate(sale_price=None))
+        assert updated.sale_price is None
+        assert updated.current_price == 20.0
+
+    async def test_delete_unknown_variant_returns_none(self, db_session):
+        assert await ProductService(db_session).delete_variant(uuid4()) is None
+
+    async def test_deleting_the_main_image_promotes_the_next(self, db_session):
+        cat = await make_category(db_session)
+        product = await make_product(db_session, category_id=cat.id)
+        variant = await make_variant(db_session, product.id)
+        service = ProductService(db_session)
+        first = await service.create_image(variant.id, "https://img/1.jpg", is_primary=True, sort_order=0)
+        second = await service.create_image(variant.id, "https://img/2.jpg", sort_order=1)
+        assert await service.delete_image(UUID(first["id"])) is True
+        assert (await service.get_image(UUID(second["id"])))["is_primary"] is True
 
 
 class TestProductCrud:
@@ -622,63 +649,6 @@ class TestUpdateVariantEdgeCases:
         updated = await service.update_variant(variant.id, VariantUpdate(stock=42))
         assert updated.stock == 42
 
-    async def test_replaces_images(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-
-        service = ProductService(db_session)
-        updated = await service.update_variant(variant.id, VariantUpdate(
-            images=[{"url": "https://example.com/new.jpg", "alt_text": "New"}]
-        ))
-        assert len(updated.images) == 1
-        assert updated.images[0].url == "https://example.com/new.jpg"
-
-
-class TestAllVariants:
-
-    async def test_lists_all_variants_with_pagination(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        for i in range(3):
-            await make_variant(db_session, product.id, sku=f"SKU-ALL-{i}-{uuid4().hex[:6]}", name=f"Variant {i}")
-
-        service = ProductService(db_session)
-        result = await service.all_variants(page=1, limit=2)
-        assert len(result["data"]) == 2
-        assert result["total"] >= 3
-        assert result["pages"] >= 2
-
-    async def test_filters_by_search(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        await make_variant(db_session, product.id, name="Unique Searchable Name")
-        await make_variant(db_session, product.id, name="Something Else")
-
-        service = ProductService(db_session)
-        result = await service.all_variants(search="Searchable")
-        names = [v.name for v in result["data"]]
-        assert "Unique Searchable Name" in names
-        assert "Something Else" not in names
-
-    async def test_filters_by_product_id(self, db_session):
-        cat = await make_category(db_session)
-        product_a = await make_product(db_session, category_id=cat.id)
-        product_b = await make_product(db_session, category_id=cat.id)
-        await make_variant(db_session, product_a.id, name="In A")
-        await make_variant(db_session, product_b.id, name="In B")
-
-        service = ProductService(db_session)
-        result = await service.all_variants(product_id=product_a.id)
-        names = [v.name for v in result["data"]]
-        assert names == ["In A"]
-
-    async def test_empty_result_has_zero_pages(self, db_session):
-        service = ProductService(db_session)
-        result = await service.all_variants(product_id=uuid4())
-        assert result["data"] == []
-        assert result["pages"] == 0
-
 
 class TestCreateWarehouseLocationAndImages:
 
@@ -746,207 +716,6 @@ class TestCreateWarehouseLocationAndImages:
 
         variant = result.variants[0]
         assert len(variant.images) == 2
-
-
-class TestUpdateVariantSyncEdgeCases:
-    """Covers the `variants` array on ProductUpdate - a full-replacement sync of a
-    product's variants (create/update/delete) plus nested image sync, exercised at
-    the API level in tests/api/catalog/test_products.py::TestVariantSyncViaProductUpdate
-    but drilled into here for the individual branches."""
-
-    async def test_creates_inventory_for_existing_variant_without_one(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)  # no inventory
-
-        # make_variant() calls db.refresh(), which - since inventory is a
-        # lazy="selectin" relationship - eagerly loads it as None right then, and nothing
-        # invalidates that cached None afterwards. Expire it so update()'s own query sees
-        # a clean slate, the same as it would in a real, freshly-opened request session.
-        db_session.expire(variant, ["inventory"])
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, stock=15)
-        ]), user_id=uuid4(), is_admin=True)
-
-        updated_variant = next(v for v in result.variants if v.id == variant.id)
-        assert updated_variant.stock == 15
-
-    async def test_unknown_variant_id_in_sync_is_ignored_but_kept(self, db_session):
-        """An id in the array that doesn't belong to this product is logged and
-        skipped for updates, but still counts as "kept" so it can't accidentally
-        trigger deletion of the product's real variants."""
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        real_variant = await make_variant(db_session, product.id)
-
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=real_variant.id), VariantUpdate(id=uuid4())
-        ]), user_id=uuid4(), is_admin=True)
-
-        assert [v.id for v in result.variants] == [real_variant.id]
-
-    async def test_update_existing_image_by_id(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-        image = ProductImage(id=uuid4(), variant_id=variant.id, url="https://example.com/old.jpg")
-        db_session.add(image)
-        await db_session.commit()
-
-        db_session.expire(variant, ["images"])  # see note in test_creates_inventory_for_existing_variant_without_one
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, images=[{"id": str(image.id), "url": "https://example.com/updated.jpg"}])
-        ]), user_id=uuid4(), is_admin=True)
-
-        updated_variant = next(v for v in result.variants if v.id == variant.id)
-        assert updated_variant.images[0].url == "https://example.com/updated.jpg"
-
-    async def test_image_with_invalid_uuid_string_id_is_skipped(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-        db_session.add(ProductImage(id=uuid4(), variant_id=variant.id, url="https://example.com/old.jpg"))
-        await db_session.commit()
-
-        service = ProductService(db_session)
-        # A malformed id must be skipped, not blow up the whole request.
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, images=[{"id": "not-a-uuid", "url": "https://example.com/x.jpg"}])
-        ]), user_id=uuid4(), is_admin=True)
-        assert result is not None
-
-    async def test_image_id_not_found_among_variant_images_is_skipped(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, images=[{"id": str(uuid4()), "url": "https://example.com/x.jpg"}])
-        ]), user_id=uuid4(), is_admin=True)
-
-        updated_variant = next(v for v in result.variants if v.id == variant.id)
-        assert updated_variant.images == []
-
-    async def test_deletes_images_not_present_in_sync(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-        keep = ProductImage(id=uuid4(), variant_id=variant.id, url="https://example.com/keep.jpg")
-        remove = ProductImage(id=uuid4(), variant_id=variant.id, url="https://example.com/remove.jpg")
-        db_session.add_all([keep, remove])
-        await db_session.commit()
-
-        db_session.expire(variant, ["images"])  # see note in test_creates_inventory_for_existing_variant_without_one
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, images=[{"id": str(keep.id), "url": keep.url}])
-        ]), user_id=uuid4(), is_admin=True)
-
-        updated_variant = next(v for v in result.variants if v.id == variant.id)
-        assert [img.url for img in updated_variant.images] == ["https://example.com/keep.jpg"]
-
-    async def test_creates_new_image_without_id(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, images=[{"url": "https://example.com/brand-new.jpg"}])
-        ]), user_id=uuid4(), is_admin=True)
-
-        updated_variant = next(v for v in result.variants if v.id == variant.id)
-        assert updated_variant.images[0].url == "https://example.com/brand-new.jpg"
-
-    async def test_empty_images_array_deletes_all_images(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        variant = await make_variant(db_session, product.id)
-        db_session.add(ProductImage(id=uuid4(), variant_id=variant.id, url="https://example.com/a.jpg"))
-        await db_session.commit()
-
-        db_session.expire(variant, ["images"])  # see note in test_creates_inventory_for_existing_variant_without_one
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=variant.id, images=[])
-        ]), user_id=uuid4(), is_admin=True)
-
-        updated_variant = next(v for v in result.variants if v.id == variant.id)
-        assert updated_variant.images == []
-
-    async def test_new_variant_with_stock_and_images_via_sync(self, db_session):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        existing = await make_variant(db_session, product.id)
-
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=existing.id),
-            VariantUpdate(name="Brand New", base_price=15.0, stock=9,
-                          images=[{"url": "https://example.com/new-variant.jpg"}]),
-        ]), user_id=uuid4(), is_admin=True)
-
-        new_variant = next(v for v in result.variants if v.name == "Brand New")
-        assert new_variant.stock == 9
-        assert new_variant.images[0].url == "https://example.com/new-variant.jpg"
-
-    async def test_deleting_variant_with_images_and_inventory_cleans_up_fully(self, db_session):
-        """Exercises the real deletion branch end-to-end (as opposed to the
-        order-history-blocked case already covered at the API level) - the removed
-        variant here has both an image and an inventory row to clean up."""
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        keeper = await make_variant(db_session, product.id)
-        doomed = await make_variant(db_session, product.id)
-        await make_inventory(db_session, doomed.id, quantity_available=3)
-        db_session.add(ProductImage(id=uuid4(), variant_id=doomed.id, url="https://example.com/doomed.jpg"))
-        await db_session.commit()
-
-        # see note in test_creates_inventory_for_existing_variant_without_one - both
-        # `images` and `inventory` were frozen (empty/None) by make_variant()'s own
-        # refresh(), predating make_inventory() and the image add above.
-        db_session.expire(doomed, ["images", "inventory"])
-        service = ProductService(db_session)
-        result = await service.update(product.id, ProductUpdate(variants=[
-            VariantUpdate(id=keeper.id)
-        ]), user_id=uuid4(), is_admin=True)
-
-        ids = [v.id for v in result.variants]
-        assert keeper.id in ids
-        assert doomed.id not in ids
-
-    async def test_variant_deletion_failure_is_logged_and_reraised(self, db_session, monkeypatch):
-        """The per-variant deletion block wraps its statements in a local
-        try/except that logs and re-raises - simulated here via a targeted
-        failure on the image-delete statement, since nothing in the schema lets
-        a real deletion of an otherwise-valid variant fail."""
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id)
-        keeper = await make_variant(db_session, product.id)
-        doomed = await make_variant(db_session, product.id)
-        db_session.add(ProductImage(id=uuid4(), variant_id=doomed.id, url="https://example.com/doomed.jpg"))
-        await db_session.commit()
-        db_session.expire(doomed, ["images"])  # see note in test_creates_inventory_for_existing_variant_without_one
-
-        real_execute = db_session.execute
-
-        async def flaky_execute(statement, *args, **kwargs):
-            compiled = str(statement)
-            if "product_images" in compiled.lower() and "DELETE" in compiled.upper():
-                raise RuntimeError("boom")
-            return await real_execute(statement, *args, **kwargs)
-
-        monkeypatch.setattr(db_session, "execute", flaky_execute)
-
-        service = ProductService(db_session)
-        with pytest.raises(RuntimeError):
-            await service.update(product.id, ProductUpdate(variants=[
-                VariantUpdate(id=keeper.id)
-            ]), user_id=uuid4(), is_admin=True)
 
 
 class TestDeleteProductAssociatedData:

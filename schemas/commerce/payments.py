@@ -43,11 +43,6 @@ class IntentBase(BaseModel):
     payment_method_id: Optional[str] = None
 
 
-class IntentCreate(BaseModel):
-    amount: float
-    order_id: Optional[UUID] = None
-
-
 class IntentUpdate(BaseModel):
     status: Optional[str] = None
     amount: Optional[float] = None
@@ -74,17 +69,6 @@ class TxnBase(BaseModel):
     currency: str = "USD"
     transaction_type: str  # matches model field name
     status: str = "pending"
-    description: Optional[str] = None
-
-
-class TxnCreate(TxnBase):
-    user_id: UUID
-    payment_intent_id: Optional[UUID] = None
-    order_id: Optional[UUID] = None
-
-
-class TxnUpdate(BaseModel):
-    status: Optional[str] = None
     description: Optional[str] = None
 
 

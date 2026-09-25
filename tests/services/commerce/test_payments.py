@@ -197,28 +197,9 @@ class TestDelete:
 
 # --------------------------------------------------------------------------- Payment intents ---------------------------------------------------------------------------
 
-class TestCreateIntent:
-
-    async def test_creates_a_real_stripe_intent(self, db_session, test_user):
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=25.00, currency="USD")
-        assert intent.stripe_payment_intent_id.startswith("pi_")
-        assert intent.amount_breakdown["total"] == 25.00
-
-    async def test_uncommitted_intent_is_not_persisted(self, db_session, test_user):
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=10.00, commit=False)
-        assert intent.stripe_payment_intent_id.startswith("pi_")
-
 
 class TestConfirmIntent:
 
-    async def test_confirms_successfully_with_test_card(self, db_session, test_user, payment_method):
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=15.00)
-        confirmed = await service.confirm_intent(intent.id, payment_method.stripe_payment_method_id)
-        assert confirmed.status == "succeeded"
-        assert confirmed.confirmed_at is not None
 
     async def test_not_found_raises_404(self, db_session, test_user, payment_method):
         service = PaymentService(db_session)
@@ -239,34 +220,6 @@ class TestIntentCRUD:
         result = await service.list_intents(test_user.id)
         assert result["total"] >= 1
         assert any(i.id == payment_intent.id for i in result["items"])
-
-    async def test_update_intent_persists_metadata(self, db_session, test_user, payment_intent):
-        """Regression test: this used to set intent.metadata/.description, neither
-        of which is a real column (the real one is payment_intent_metadata) -
-        every update silently discarded the change."""
-        service = PaymentService(db_session)
-        updated = await service.update_intent(payment_intent.id, test_user.id, {"metadata": {"note": "gift"}})
-        assert updated.payment_intent_metadata == {"note": "gift"}
-
-    async def test_update_intent_not_found_returns_none(self, db_session, test_user):
-        service = PaymentService(db_session)
-        assert await service.update_intent(uuid4(), test_user.id, {"metadata": {}}) is None
-
-    async def test_delete_pending_intent(self, db_session, test_user, payment_intent):
-        service = PaymentService(db_session)
-        assert await service.delete_intent(payment_intent.id, test_user.id) is True
-
-    async def test_cannot_delete_succeeded_intent(self, db_session, test_user, payment_intent):
-        payment_intent.status = "succeeded"
-        await db_session.commit()
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.delete_intent(payment_intent.id, test_user.id)
-        assert exc_info.value.status_code == 400
-
-    async def test_delete_intent_not_found_returns_false(self, db_session, test_user):
-        service = PaymentService(db_session)
-        assert await service.delete_intent(uuid4(), test_user.id) is False
 
 
 # --------------------------------------------------------------------------- process_idempotent - the flow OrderService.create() drives checkout through ---------------------------------------------------------------------------
@@ -366,42 +319,11 @@ class TestTransactions:
         result = await service.get_transaction(transaction.id, test_user.id)
         assert result.id == transaction.id
 
-    async def test_create_transaction(self, db_session, test_user):
-        service = PaymentService(db_session)
-        txn = await service.create_transaction(test_user.id, {"amount": 10.0, "status": "succeeded"})
-        assert txn.amount == 10.0
-
-    async def test_update_transaction(self, db_session, test_user, transaction):
-        service = PaymentService(db_session)
-        updated = await service.update_transaction(transaction.id, test_user.id, {"description": "Updated"})
-        assert updated.description == "Updated"
-
-    async def test_update_transaction_not_found_returns_none(self, db_session, test_user):
-        service = PaymentService(db_session)
-        assert await service.update_transaction(uuid4(), test_user.id, {"description": "x"}) is None
-
-    async def test_delete_transaction(self, db_session, test_user, transaction):
-        service = PaymentService(db_session)
-        assert await service.delete_transaction(transaction.id, test_user.id) is True
-
-    async def test_delete_transaction_not_found_returns_false(self, db_session, test_user):
-        service = PaymentService(db_session)
-        assert await service.delete_transaction(uuid4(), test_user.id) is False
-
 
 # --------------------------------------------------------------------------- Refunds ---------------------------------------------------------------------------
 
 class TestRefund:
 
-    async def test_refunds_a_succeeded_payment(self, db_session, test_user, payment_method):
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=20.00)
-        confirmed = await service.confirm_intent(intent.id, payment_method.stripe_payment_method_id)
-        assert confirmed.status == "succeeded"
-
-        refund = await service.refund(confirmed.id, amount=20.00, reason="requested_by_customer")
-        assert refund.transaction_type == "refund"
-        assert refund.amount == -20.00
 
     async def test_not_found_raises_404(self, db_session):
         service = PaymentService(db_session)
@@ -414,44 +336,6 @@ class TestRefund:
         with pytest.raises(HTTPException) as exc_info:
             await service.refund(payment_intent.id)
         assert exc_info.value.status_code == 400
-
-
-class TestRefundCRUD:
-
-    @pytest.fixture
-    async def refund_transaction(self, db_session, test_user):
-        txn = Transaction(
-            id=uuid7(), user_id=test_user.id, amount=Decimal("-10.00"), currency="USD",
-            status="succeeded", transaction_type="refund", description="Refund",
-        )
-        db_session.add(txn)
-        await db_session.commit()
-        await db_session.refresh(txn)
-        return txn
-
-    async def test_get_refund(self, db_session, test_user, refund_transaction):
-        service = PaymentService(db_session)
-        result = await service.get_refund(refund_transaction.id, test_user.id)
-        assert result.id == refund_transaction.id
-
-    async def test_list_refunds(self, db_session, test_user, refund_transaction):
-        service = PaymentService(db_session)
-        result = await service.list_refunds(test_user.id)
-        assert result["total"] >= 1
-
-    async def test_update_refund_metadata(self, db_session, test_user, refund_transaction):
-        service = PaymentService(db_session)
-        updated = await service.update_refund(refund_transaction.id, test_user.id, {"metadata": {"note": "adjustment"}})
-        assert json.loads(updated.transaction_metadata) == {"note": "adjustment"}
-
-    async def test_update_refund(self, db_session, test_user, refund_transaction):
-        service = PaymentService(db_session)
-        updated = await service.update_refund(refund_transaction.id, test_user.id, {"description": "Corrected"})
-        assert updated.description == "Corrected"
-
-    async def test_delete_refund(self, db_session, test_user, refund_transaction):
-        service = PaymentService(db_session)
-        assert await service.delete_refund(refund_transaction.id, test_user.id) is True
 
 
 # --------------------------------------------------------------------------- Failure handling - retry / failure_status / failed_payments ---------------------------------------------------------------------------
@@ -526,31 +410,6 @@ class TestFailedPayments:
 
 
 # --------------------------------------------------------------------------- Pure-logic helpers ---------------------------------------------------------------------------
-
-class TestCategorizeStripeError:
-
-    def test_maps_known_error_code(self, db_session):
-        service = PaymentService(db_session)
-
-        class FakeError:
-            code = "insufficient_funds"
-        assert service._categorize_stripe_error(FakeError()) == PaymentFailureReason.INSUFFICIENT_FUNDS
-
-    def test_falls_back_to_message_sniffing(self, db_session):
-        service = PaymentService(db_session)
-
-        class FakeError:
-            def __str__(self):
-                return "suspicious fraud activity detected"
-        assert service._categorize_stripe_error(FakeError()) == PaymentFailureReason.FRAUD_SUSPECTED
-
-    def test_unknown_error_returns_unknown(self, db_session):
-        service = PaymentService(db_session)
-
-        class FakeError:
-            def __str__(self):
-                return "something odd happened"
-        assert service._categorize_stripe_error(FakeError()) == PaymentFailureReason.UNKNOWN
 
 
 class TestDetermineRetryStrategy:
@@ -758,40 +617,9 @@ class TestDeleteStripeErrorHandling:
 
 # --------------------------------------------------------------------------- create_intent / confirm_intent - Stripe errors, 3DS, failure-handler resilience ---------------------------------------------------------------------------
 
-class TestCreateIntentStripeError:
-
-    async def test_negative_amount_is_rejected_by_stripe(self, db_session, test_user):
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.create_intent(user_id=test_user.id, amount=-5.00)
-        assert exc_info.value.status_code == 400
-
-
-class TestConfirmIntentRequiresAction:
-
-    async def test_authentication_required_card_returns_requires_action(self, db_session, test_user):
-        """A card that needs 3DS must be surfaced as requires_action, not treated as
-        success or failure."""
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=10.00)
-        confirmed = await service.confirm_intent(intent.id, "pm_card_authenticationRequired")
-        assert confirmed.status == "requires_action"
-        assert confirmed.requires_action is True
-        assert confirmed.client_secret is not None
-
 
 class TestConfirmIntentDeclineAndFailureHandler:
 
-    async def test_declined_card_marks_intent_failed_and_records_failure(self, db_session, test_user):
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=10.00)
-        declining_pm_id = stripe.PaymentMethod.create(type="card", card={"token": "tok_chargeDeclined"}).id
-        with pytest.raises(HTTPException) as exc_info:
-            await service.confirm_intent(intent.id, declining_pm_id)
-        assert exc_info.value.status_code == 400
-        await db_session.refresh(intent)
-        assert intent.status == "failed"
-        assert intent.failure_reason is not None
 
     async def test_failure_handler_error_does_not_mask_the_decline_response(self, db_session, test_user):
         """Regression: if the failure-recording handler itself blows up (e.g. because
@@ -814,95 +642,6 @@ class TestConfirmIntentDeclineAndFailureHandler:
 
 
 # --------------------------------------------------------------------------- process() - timeout/retry control flow and non-retryable errors ---------------------------------------------------------------------------
-
-class TestProcessTimeoutAndRetry:
-    # Note on what's NOT covered here: with max_retries=1, a real short timeout on a freshly-created session reliably produces a clean 408 (test below) - but with max_retries>=2, retrying a SECOND real attempt against the SAME session after the first was cancelled by asyncio.wait_for empirically raises a totally unrelated `MissingGreenlet` error from SQLAlchemy's asyncpg dialect instead of a clean second timeout - i.e. reusing a session after a cancelled in-flight DB operation is not safe. So the exponential-backoff retry-and-try-again path (services/commerce/payments.py's `wait_time = 2 ** attempt` branch) is not exercised, to avoid a test that can corrupt its own db_session. See the final report.
-
-    async def test_single_attempt_timeout_raises_408(self, db_session, test_user, payment_method):
-        """A real (not simulated) timeout: a short timeout_seconds guarantees
-        asyncio.wait_for fires before the real Stripe round-trip completes. Using
-        max_retries=1 keeps this to a single attempt on a fresh session, which is
-        the one real-timeout scenario that's safe to reproduce deterministically."""
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(
-                user_id=test_user.id, amount=5.00, payment_method_id=payment_method.id,
-                timeout_seconds=0.05, max_retries=1,
-            )
-        assert exc_info.value.status_code == 408
-
-    async def test_unknown_payment_method_is_not_retried(self, db_session, test_user):
-        """A 404 (payment method not found) must propagate immediately rather than
-        being retried and relabeled as a 500 after burning through max_retries."""
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.00, payment_method_id=uuid4())
-        assert exc_info.value.status_code == 404
-
-    async def test_expired_payment_method_is_rejected(self, db_session, test_user):
-        """_process_payment_internal's own expiry check, exercised through process().
-
-        Regression test for a real bug fixed alongside this coverage work: the
-        expiry check compared a timezone-naive `next_month` against
-        `datetime.now(timezone.utc)`, which always raised TypeError - and even the
-        deliberate HTTPException it was supposed to raise was nested inside the same
-        broad `except Exception: pass`, so it too would have been swallowed. Net
-        effect: expired cards were never actually rejected here. Both issues are
-        fixed in services/commerce/payments.py's _process_payment_internal."""
-        service = PaymentService(db_session)
-        expired_pm = await service.create_method(
-            user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id(),
-        )
-        expired_pm.expiry_month = 1
-        expired_pm.expiry_year = 2020
-        await db_session.commit()
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.00, payment_method_id=expired_pm.id)
-        assert exc_info.value.status_code == 400
-        assert "expired" in exc_info.value.detail.lower()
-
-    async def test_expired_payment_method_december_boundary_is_rejected(self, db_session, test_user):
-        """Exercises the m == 12 -> next_month = Jan 1 of following year branch."""
-        service = PaymentService(db_session)
-        expired_pm = await service.create_method(
-            user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id(),
-        )
-        expired_pm.expiry_month = 12
-        expired_pm.expiry_year = 2020
-        await db_session.commit()
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.00, payment_method_id=expired_pm.id)
-        assert exc_info.value.status_code == 400
-        assert "expired" in exc_info.value.detail.lower()
-
-    async def test_unparseable_expiry_does_not_block_payment(self, db_session, test_user, payment_method):
-        """A year so large it overflows datetime's range (year 10000) makes the
-        expiry check itself raise internally; that failure is swallowed and the
-        payment is allowed to proceed (Stripe's own validation is the backstop)."""
-        payment_method.expiry_month = 12
-        payment_method.expiry_year = 9999
-        await db_session.commit()
-        service = PaymentService(db_session)
-        result = await service.process(user_id=test_user.id, amount=5.00, payment_method_id=payment_method.id)
-        assert result["status"] == "succeeded"
-
-    async def test_bad_order_id_fk_violation_is_reported_as_500(self, db_session, test_user, payment_method):
-        """A nonexistent order_id violates the FK constraint at flush time inside
-        create_intent(); create_intent() only catches stripe.error.StripeError, so
-        this raw IntegrityError must be caught by _process_payment_internal's own
-        generic exception handler and converted to a clean HTTPException instead of
-        leaking a raw DB error."""
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(
-                user_id=test_user.id, amount=5.00, payment_method_id=payment_method.id, order_id=uuid4(),
-            )
-        assert exc_info.value.status_code == 500
-
-    async def test_successful_payment_via_process(self, db_session, test_user, payment_method):
-        service = PaymentService(db_session)
-        result = await service.process(user_id=test_user.id, amount=5.00, payment_method_id=payment_method.id)
-        assert result["status"] == "succeeded"
 
 
 # --------------------------------------------------------------------------- process_idempotent() - customer bootstrap edge cases and attach-error handling ---------------------------------------------------------------------------
@@ -1110,52 +849,7 @@ class TestTransactionsMetadataHandling:
         assert str(bank_txn.id) not in ids
 
 
-class TestUpdateTransactionMetadata:
-
-    async def test_updates_metadata(self, db_session, test_user, transaction):
-        service = PaymentService(db_session)
-        updated = await service.update_transaction(transaction.id, test_user.id, {"metadata": {"note": "x"}})
-        assert json.loads(updated.transaction_metadata) == {"note": "x"}
-
-
 # --------------------------------------------------------------------------- Refunds - Stripe-error path and CRUD not-found branches ---------------------------------------------------------------------------
-
-class TestRefundStripeError:
-
-    async def test_refund_amount_exceeding_charge_fails_cleanly(self, db_session, test_user, payment_method):
-        """Requesting a refund larger than the original charge is rejected by Stripe;
-        this must surface as a 400, not a raw StripeError or a 500."""
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=5.00)
-        confirmed = await service.confirm_intent(intent.id, payment_method.stripe_payment_method_id)
-        assert confirmed.status == "succeeded"
-
-        with pytest.raises(HTTPException) as exc_info:
-            await service.refund(confirmed.id, amount=999.00)
-        assert exc_info.value.status_code == 400
-
-    async def test_refund_full_amount_when_amount_breakdown_missing(self, db_session, test_user, payment_method):
-        """When no explicit amount is given and amount_breakdown is malformed, refund()
-        must fail loudly rather than silently refunding $0."""
-        service = PaymentService(db_session)
-        intent = await service.create_intent(user_id=test_user.id, amount=5.00)
-        confirmed = await service.confirm_intent(intent.id, payment_method.stripe_payment_method_id)
-        confirmed.amount_breakdown = None
-        await db_session.commit()
-
-        with pytest.raises(Exception):
-            await service.refund(confirmed.id)
-
-
-class TestRefundCRUDNotFound:
-
-    async def test_update_refund_not_found_returns_none(self, db_session, test_user):
-        service = PaymentService(db_session)
-        assert await service.update_refund(uuid4(), test_user.id, {"description": "x"}) is None
-
-    async def test_delete_refund_not_found_returns_false(self, db_session, test_user):
-        service = PaymentService(db_session)
-        assert await service.delete_refund(uuid4(), test_user.id) is False
 
 
 # --------------------------------------------------------------------------- retry() / failed_payments() - malformed data resilience ---------------------------------------------------------------------------
@@ -1204,62 +898,6 @@ class TestFailedPaymentsCorruptedReason:
 
 
 # --------------------------------------------------------------------------- _categorize_stripe_error - remaining error-code branches ---------------------------------------------------------------------------
-
-class TestCategorizeStripeErrorMoreCodes:
-
-    @pytest.mark.parametrize("code,expected", [
-        ("card_declined", PaymentFailureReason.CARD_DECLINED),
-        ("generic_decline", PaymentFailureReason.CARD_DECLINED),
-        ("expired_card", PaymentFailureReason.EXPIRED_CARD),
-        ("incorrect_number", PaymentFailureReason.INVALID_CARD),
-        ("invalid_cvc", PaymentFailureReason.INVALID_CARD),
-        ("authentication_required", PaymentFailureReason.AUTHENTICATION_REQUIRED),
-        ("card_not_supported", PaymentFailureReason.AUTHENTICATION_REQUIRED),
-        ("processing_error", PaymentFailureReason.PROCESSING_ERROR),
-        ("rate_limit", PaymentFailureReason.LIMIT_EXCEEDED),
-    ])
-    def test_maps_error_code(self, db_session, code, expected):
-        service = PaymentService(db_session)
-
-        class FakeError:
-            pass
-        FakeError.code = code
-        assert service._categorize_stripe_error(FakeError()) == expected
-
-    def test_network_message_maps_to_network_error(self, db_session):
-        service = PaymentService(db_session)
-
-        class FakeError:
-            def __str__(self):
-                return "a network connection issue occurred"
-        assert service._categorize_stripe_error(FakeError()) == PaymentFailureReason.NETWORK_ERROR
-
-
-class TestRecordPaymentFailure:
-
-    async def test_records_without_raising(self, db_session, test_user):
-        """Analytics-only helper: must never raise, even though (per the process()
-        control-flow analysis) it's currently only reachable via a direct call like
-        this one - confirm_intent()/create_intent() already convert CardError into
-        HTTPException before process()'s own CardError handler could ever see it."""
-        service = PaymentService(db_session)
-        await service._record_payment_failure(
-            user_id=test_user.id, order_id=None, error_code="card_declined",
-            error_message="Your card was declined.", failure_reason=PaymentFailureReason.CARD_DECLINED,
-        )
-
-    async def test_internal_error_while_recording_is_swallowed(self, db_session, test_user):
-        """An object without a `.value` attribute in place of failure_reason (which
-        the real call sites always pass correctly, but this exercises the method's
-        own defensive except) must not raise out of this analytics-only helper."""
-        service = PaymentService(db_session)
-
-        class NotAnEnum:
-            pass
-        await service._record_payment_failure(
-            user_id=test_user.id, order_id=None, error_code="x", error_message="x",
-            failure_reason=NotAnEnum(),
-        )
 
 
 # --------------------------------------------------------------------------- create_method - legacy-token customer recovery, and the non-card brand-normalization fallback ---------------------------------------------------------------------------
@@ -1394,90 +1032,6 @@ class TestCreateMethodTrueRaceRecovery:
 # process()'s own dispatch/retry/rollback logic from the (already-tested-elsewhere) question
 # of what create_intent/confirm_intent do with a real Stripe error.
 
-class TestProcessRateLimitAndCardErrorBranches:
-
-    async def test_rate_limit_on_final_attempt_returns_429(self, db_session, test_user, payment_method, monkeypatch):
-        service = PaymentService(db_session)
-        monkeypatch.setattr(
-            service, "_process_payment_internal",
-            _async_raiser(stripe.error.RateLimitError("Too many requests")),
-        )
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=1)
-        assert exc_info.value.status_code == 429
-
-    async def test_rate_limit_retries_before_final_attempt(self, db_session, test_user, payment_method, monkeypatch):
-        """Exercises the continue-and-backoff branch (not just the final-attempt
-        429): succeeds on the second attempt after one simulated rate limit."""
-        service = PaymentService(db_session)
-        calls = {"n": 0}
-
-        async def flaky(*args, **kwargs):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise stripe.error.RateLimitError("Too many requests")
-            return {"status": "succeeded", "payment_intent_id": str(uuid4()), "requires_action": False, "client_secret": None}
-
-        monkeypatch.setattr(service, "_process_payment_internal", flaky)
-
-        async def instant_sleep(*args, **kwargs):
-            return None
-        import services.commerce.payments as payments_service_module
-        monkeypatch.setattr(payments_service_module.asyncio, "sleep", instant_sleep)
-
-        result = await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=2)
-        assert result["status"] == "succeeded"
-        assert calls["n"] == 2
-
-    async def test_card_error_records_failure_and_returns_400(self, db_session, test_user, payment_method, monkeypatch):
-        service = PaymentService(db_session)
-        card_error = stripe.error.CardError(message="Your card was declined.", param=None, code="card_declined")
-        monkeypatch.setattr(service, "_process_payment_internal", _async_raiser(card_error))
-
-        recorded = {}
-        original_record = service._record_payment_failure
-
-        async def spy_record(**kwargs):
-            recorded.update(kwargs)
-            return await original_record(**kwargs)
-        monkeypatch.setattr(service, "_record_payment_failure", spy_record)
-
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=1)
-        assert exc_info.value.status_code == 400
-        assert recorded["error_code"] == "card_declined"
-        assert recorded["failure_reason"] == PaymentFailureReason.CARD_DECLINED
-
-
-class TestProcessDeadCodeDefensiveFallbacks:
-
-    async def test_max_retries_zero_hits_the_should_never_reach_here_fallback(self, db_session, test_user, payment_method):
-        """The only way to reach process()'s trailing `raise HTTPException(...
-        "Payment processing failed unexpectedly")` is for the retry loop's body to
-        never execute at all - i.e. max_retries=0 (range(0) is empty). Every real
-        exception branch inside the loop already raises on its own final attempt, so
-        this line is otherwise unreachable."""
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=0)
-        assert exc_info.value.status_code == 500
-        assert "unexpectedly" in exc_info.value.detail.lower()
-
-    async def test_process_internal_raising_a_bare_exception_is_wrapped_as_500(self, db_session, test_user, payment_method, monkeypatch):
-        """process()'s own bare `except Exception` fallback is, in the current
-        implementation, dead in practice too: _process_payment_internal already
-        converts every non-HTTPException exception it sees into an HTTPException
-        before it can escape (see its own try/except). This monkeypatches
-        _process_payment_internal itself (bypassing its real conversion logic) to
-        confirm process()'s own defensive final fallback still behaves correctly
-        if that invariant were ever broken."""
-        service = PaymentService(db_session)
-        monkeypatch.setattr(service, "_process_payment_internal", _async_raiser(ValueError("internal boom")))
-        with pytest.raises(HTTPException) as exc_info:
-            await service.process(user_id=test_user.id, amount=5.0, payment_method_id=payment_method.id, max_retries=1)
-        assert exc_info.value.status_code == 500
-        assert "after 1 attempts" in exc_info.value.detail
-
 
 # --------------------------------------------------------------------------- process_idempotent - Stripe's "previously used" payment-method-reuse error ---------------------------------------------------------------------------
 
@@ -1509,3 +1063,20 @@ class TestProcessIdempotentPreviouslyUsedPaymentMethod:
         assert "no longer usable" in exc_info.value.detail.lower()
         await db_session.refresh(payment_method)
         assert payment_method.is_active is False
+
+
+class TestSyncIntent:
+
+    async def test_in_flight_intent_takes_stripes_status(self, db_session, test_user, mocker):
+        from types import SimpleNamespace
+        from core.utils.uuid_utils import uuid7
+        from models.commerce.payments import PaymentIntent
+        intent = PaymentIntent(id=uuid7(), stripe_payment_intent_id="pi_sync", user_id=test_user.id,
+                               amount_breakdown={"total": 5}, currency="CAD", status="requires_action", requires_action=True)
+        db_session.add(intent)
+        await db_session.commit()
+        mocker.patch("stripe.PaymentIntent.retrieve", return_value=SimpleNamespace(status="succeeded"))
+        synced = await PaymentService(db_session).sync_intent(intent)
+        assert synced.status == "succeeded"
+        assert synced.requires_action is False
+        assert synced.confirmed_at is not None

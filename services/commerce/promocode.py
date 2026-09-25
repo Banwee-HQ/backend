@@ -93,22 +93,6 @@ class PromocodeService:
         await self.db.commit()
         return True
 
-    async def inc_usage(self, promocode_id: UUID) -> Optional[Promocode]:
-        """Increment the used_count for a promocode when it's applied"""
-        promocode = await self.get(promocode_id)
-        if not promocode:
-            raise APIException(status_code=404, message="Promocode not found")
-        
-        # Increment usage count
-        promocode.used_count = (promocode.used_count or 0) + 1
-        
-        # Check if usage limit reached and deactivate if needed
-        if promocode.usage_limit and promocode.used_count >= promocode.usage_limit:
-            promocode.is_active = False
-        
-        await self.db.commit()
-        await self.db.refresh(promocode)
-        return promocode
     
     async def validate(self, code: str, subtotal: Optional[Decimal] = None) -> tuple[bool, Optional[str], Optional[Promocode]]:
         """Validate a promocode (optionally against an order subtotal) and return (is_valid, error_message, promocode)."""

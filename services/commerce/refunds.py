@@ -15,9 +15,6 @@ from core.logging import get_structured_logger
 from services.catalog.inventory import InventoryService
 import random
 import string
-from models.commerce.payments import Transaction
-import stripe
-import asyncio
 
 logger = get_structured_logger(__name__)
 
@@ -114,51 +111,6 @@ class RefundService:
             raise HTTPException(status_code=500, detail="Failed to process refund request")
     
     
-    async def process_auto(self) -> Dict[str, Any]:
-        """Process pending auto-approved refunds; called by a background job."""
-        try:
-            # Get auto-approved refunds that need processing
-            pending_refunds = await self.db.execute(
-                select(Refund)
-                .where(
-                    and_(
-                        Refund.status == RefundStatus.APPROVED,
-                        Refund.auto_approved == True,
-                        Refund.processed_at.is_(None)
-                    )
-                )
-                .options(selectinload(Refund.order))
-                .limit(50)  # Process in batches
-            )
-            
-            refunds = pending_refunds.scalars().all()
-            processed_count = 0
-            failed_count = 0
-            
-            for refund in refunds:
-                try:
-                    await self._process_stripe_refund(refund)
-                    await self.db.commit()
-                    processed_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to process automatic refund {refund.id}: {e}")
-                    failed_count += 1
-                    # If _process_stripe_refund's own except already flagged this refund FAILED (a pure Python/Stripe-API error), persist that in its own commit. If instead a real SQL error corrupted the transaction, this commit itself fails - roll back so the next refund in the batch doesn't inherit a poisoned session.
-                    try:
-                        await self.db.commit()
-                    except Exception as commit_error:
-                        logger.error(f"Failed to persist failure state for refund {refund.id}: {commit_error}")
-                        await self.db.rollback()
-
-            return {
-                "processed": processed_count,
-                "failed": failed_count,
-                "total": len(refunds)
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to process automatic refunds: {e}")
-            return {"processed": 0, "failed": 0, "total": 0, "error": str(e)}
 
     async def list(
         self,
@@ -572,60 +524,6 @@ class RefundService:
             # Don't fail the refund if inventory restoration fails
     
     
-    async def _process_stripe_refund(self, refund: Refund):
-        """Process refund through Stripe"""
-        try:
-            # Get original payment transaction
-            transaction = await self.db.execute(
-                select(Transaction)
-                .where(
-                    and_(
-                        Transaction.order_id == refund.order_id,
-                        Transaction.status == "succeeded",
-                        Transaction.transaction_type == "payment"
-                    )
-                )
-            )
-            transaction = transaction.scalar_one_or_none()
-            
-            if not transaction or not transaction.stripe_payment_intent_id:
-                raise Exception("Original payment transaction not found")
-            
-            # Create Stripe refund
-            stripe_refund = await asyncio.to_thread(
-                stripe.Refund.create,
-                payment_intent=transaction.stripe_payment_intent_id,
-                amount=int(refund.approved_amount * 100),  # Convert to cents
-                reason="requested_by_customer",
-                metadata={
-                    "refund_id": str(refund.id),
-                    "order_id": str(refund.order_id),
-                    "refund_number": refund.refund_number
-                }
-            )
-            
-            # Update refund record
-            refund.status = RefundStatus.PROCESSING
-            refund.stripe_refund_id = stripe_refund.id
-            refund.stripe_status = stripe_refund.status
-            refund.processed_at = datetime.now(timezone.utc)
-            refund.processed_amount = refund.approved_amount
-            
-            # If Stripe refund is immediate, mark as completed
-            if stripe_refund.status == "succeeded":
-                refund.status = RefundStatus.COMPLETED
-                refund.completed_at = datetime.now(timezone.utc)
-            
-            # Send notification
-            await self._send_refund_notifications(refund, "processed")
-            
-            logger.info(f"Processed Stripe refund {stripe_refund.id} for refund {refund.refund_number}")
-            
-        except Exception as e:
-            refund.status = RefundStatus.FAILED
-            refund.admin_notes = f"Stripe processing failed: {str(e)}"
-            logger.error(f"Failed to process Stripe refund for {refund.refund_number}: {e}")
-            raise
 
     async def _send_refund_notifications(self, refund: Refund, event_type: str):
         """Send refund notifications to customer. Not yet implemented (ARQ notification integration was removed)."""

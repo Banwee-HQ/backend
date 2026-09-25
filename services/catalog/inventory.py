@@ -23,8 +23,8 @@ from schemas.catalog.inventory import (
 from core.exceptions import APIException
 from core.logging import get_structured_logger
 from core.utils.cache import invalidate_variant
-from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment, atomic_bulk_stock_update
-from core.utils.cache import invalidate_variant, invalidate_all
+from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
+from core.utils.cache import invalidate_variant
 
 logger = get_structured_logger(__name__)
 
@@ -622,18 +622,6 @@ class InventoryService:
         }
 
 
-    async def get_adjustment(self, adjustment_id: UUID) -> Optional[StockAdjustmentResponse]:
-        """Get a specific stock adjustment by ID"""
-        result = await self.db.execute(
-            select(StockAdjustment)
-            .filter(StockAdjustment.id == adjustment_id)
-            .options(joinedload(StockAdjustment.adjusted_by))
-        )
-        adjustment = result.scalar_one_or_none()
-        if adjustment:
-            return StockAdjustmentResponse.model_validate(adjustment)
-        return None
-
     async def is_low_stock(self, inventory_id: UUID) -> bool:
         inventory_item = await self.get(inventory_id)
         if not inventory_item:
@@ -682,29 +670,6 @@ class InventoryService:
         return stock_levels
 
 
-    async def predict_demand(
-        self,
-        variant_id: UUID,
-        forecast_days: int = 30
-    ) -> Dict[str, Any]:
-        """Predict demand based on real subscription patterns"""
-        # Get current stock
-        current_stock_query = select(Inventory.quantity_available).where(Inventory.variant_id == variant_id)
-        current_stock_result = await self.db.execute(current_stock_query)
-        current_stock = current_stock_result.scalar() or 0
-        
-        # Simple prediction based on current stock and consumption
-        predicted_demand = max(10, int(current_stock * 0.3))  # Predict 30% of current stock as demand
-        
-        return {
-            "variant_id": str(variant_id),
-            "forecast_days": forecast_days,
-            "predicted_demand": predicted_demand,
-            "confidence_level": 0.7,
-            "current_stock": current_stock,
-            "recommendation": "Reorder recommended" if predicted_demand > current_stock else "Stock adequate"
-        }
-
     async def reorder_suggestions(
         self,
         location_id: Optional[UUID] = None,
@@ -751,113 +716,6 @@ class InventoryService:
 
         
 
-    async def batch_update_inventory_from_warehouse_data(
-        self,
-        warehouse_data: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """Batch update inventory from real warehouse data using atomic operations"""
-        try:
-            # Prepare stock changes for atomic bulk update
-            stock_changes = []
-            
-            for item_data in warehouse_data:
-                try:
-                    variant_id = UUID(item_data["variant_id"])
-                    new_quantity = item_data["quantity"]
-                    
-                    # Get current inventory to calculate change
-                    inventory = await self.get(variant_id=variant_id)
-                    
-                    if not inventory:
-                        continue  # Skip items not found
-                    
-                    # Calculate quantity change
-                    quantity_change = new_quantity - inventory.quantity_available
-
-                    if quantity_change != 0:  # Only update if there's a change
-                        stock_changes.append({
-                            "variant_id": variant_id,
-                            "quantity_change": quantity_change,
-                            "notes": f"Warehouse sync: {inventory.quantity_available} -> {new_quantity}"
-                        })
-                        
-                except Exception as e:
-                    logger.error(f"Error preparing warehouse data", metadata={
-    "variant_id": str(item_data.get('variant_id'))
-}, exception=e)
-                    continue
-            
-            # Perform atomic bulk update
-            if stock_changes:
-                result = await self.bulk_stock_update(
-                    stock_changes=stock_changes,
-                    reason="warehouse_sync",
-                    user_id=None  # System update
-                )
-                
-                return {
-                    "success": True,
-                    "updated_count": result["updated_count"],
-                    "results": result["results"],
-                    "errors": []
-                }
-            else:
-                return {
-                    "success": True,
-                    "updated_count": 0,
-                    "results": [],
-                    "errors": []
-                }
-                
-        except Exception as e:
-            logger.error("Error in batch warehouse update", exception=e)
-            raise APIException(
-                status_code=500,
-                message=f"Failed to update inventory from warehouse data: {str(e)}"
-            )
-
-    async def check_stock_batch(
-        self,
-        requests: List[Dict[str, Any]]
-    ) -> Dict[UUID, Dict[str, Any]]:
-        """Check stock for multiple variant/quantity pairs in one query, keyed by variant_id."""
-        variant_ids = [r["variant_id"] for r in requests]
-        if not variant_ids:
-            return {}
-
-        result = await self.db.execute(
-            select(Inventory).where(Inventory.variant_id.in_(variant_ids))
-        )
-        inventory_by_variant = {inv.variant_id: inv for inv in result.scalars().all()}
-
-        results: Dict[UUID, Dict[str, Any]] = {}
-        for req in requests:
-            variant_id = req["variant_id"]
-            quantity = req["quantity"]
-            inventory = inventory_by_variant.get(variant_id)
-
-            if not inventory:
-                results[variant_id] = {
-                    "available": False,
-                    "current_stock": 0,
-                    "requested_quantity": quantity,
-                    "message": "Product not found in inventory",
-                    "stock_status": "out_of_stock"
-                }
-                continue
-
-            available = inventory.quantity_available >= quantity and inventory.quantity_available > 0
-            results[variant_id] = {
-                "available": available,
-                "current_stock": inventory.quantity_available,
-                "requested_quantity": quantity,
-                "inventory_id": str(inventory.id),
-                "location_id": str(inventory.location_id),
-                "stock_status": inventory.stock_status,
-                "message": "Stock available" if available else "Out of stock" if inventory.quantity_available <= 0 else f"Insufficient stock. Available: {inventory.quantity_available}, Requested: {quantity}"
-            }
-
-        return results
 
     async def check_stock(
         self,
@@ -1024,39 +882,6 @@ class InventoryService:
 
     
 
-
-    async def bulk_stock_update(
-        self,
-        stock_changes: List[Dict],
-        reason: str,
-        user_id: Optional[UUID] = None
-    ) -> Dict[str, Any]:
-        """Atomically update multiple stock levels using SELECT ... FOR UPDATE."""
-        try:
-            results = await atomic_bulk_stock_update(
-                db=self.db,
-                stock_changes=stock_changes,
-                reason=reason,
-                user_id=user_id
-            )
-            invalidate_all()
-
-            return {
-                "success": True,
-                "updated_count": len(results),
-                "results": results
-            }
-
-        except APIException:
-            # atomic_bulk_stock_update already raises a deliberate status code -
-            # propagate it as-is instead of relabeling every failure as a 500 below.
-            raise
-        except Exception as e:
-            logger.error(f"Failed bulk stock update: {e}")
-            raise APIException(
-                status_code=500,
-                message=f"Failed to update bulk stock: {str(e)}"
-            )
 
     async def sync(self, product_id: Optional[UUID] = None) -> Dict[str, Any]:
         """Sync availability_status from inventory levels, for one product or all."""

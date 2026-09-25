@@ -41,6 +41,25 @@ def _async_returner(value):
     return _return
 
 
+async def new_intent(db_session, user, amount: float) -> dict:
+    """A real Stripe PaymentIntent for `user` (on their Stripe customer, so their saved cards can pay it),
+    recorded the way checkout records one. Returned as the API would show it."""
+    from core.config import settings
+    from core.utils.uuid_utils import uuid7
+    from models.commerce.payments import PaymentIntent
+    await db_session.refresh(user)
+    stripe_intent = stripe.PaymentIntent.create(
+        amount=int(amount * 100), currency=settings.STORE_CURRENCY.lower(), customer=user.stripe_customer_id,
+        automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+    )
+    intent = PaymentIntent(id=uuid7(), stripe_payment_intent_id=stripe_intent.id, user_id=user.id,
+                           amount_breakdown={"total": amount}, currency=settings.STORE_CURRENCY,
+                           status=stripe_intent.status, client_secret=stripe_intent.client_secret)
+    db_session.add(intent)
+    await db_session.commit()
+    return {"id": str(intent.id), "amount": amount, "status": intent.status}
+
+
 @pytest.fixture
 async def created_method(async_client: AsyncClient, auth_headers):
     stripe_id = fresh_stripe_payment_method_id()
@@ -55,12 +74,11 @@ async def created_method(async_client: AsyncClient, auth_headers):
 
 
 @pytest.fixture
-async def succeeded_intent(async_client: AsyncClient, auth_headers, created_method):
+async def succeeded_intent(async_client: AsyncClient, auth_headers, created_method, db_session, test_user):
     """A real, captured Stripe PaymentIntent - refund/confirm need one that actually succeeded."""
-    intent = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 25.0})
-    assert intent.status_code == 201, intent.text
+    intent = await new_intent(db_session, test_user, 25.0)
     response = await async_client.post(
-        f"/v1/payments/intents/{intent.json()['data']['id']}/confirm/", headers=auth_headers,
+        f"/v1/payments/intents/{intent['id']}/confirm/", headers=auth_headers,
         params={"payment_method_id": created_method["id"]},
     )
     assert response.status_code == 200, response.text
@@ -202,9 +220,9 @@ class TestNonOwnerAccessIsDenied:
         response = await async_client.post(f"/v1/payments/methods/{created_method['id']}/default/", headers=other_auth_headers)
         assert response.status_code == 404
 
-    async def test_cannot_get_another_users_intent(self, async_client: AsyncClient, auth_headers, other_auth_headers):
-        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
-        intent_id = create.json()["data"]["id"]
+    async def test_cannot_get_another_users_intent(self, async_client: AsyncClient, auth_headers, other_auth_headers, db_session, test_user):
+        create = await new_intent(db_session, test_user, 10.0)
+        intent_id = create["id"]
         response = await async_client.get(f"/v1/payments/intents/{intent_id}/", headers=other_auth_headers)
         assert response.status_code == 404
 
@@ -398,16 +416,11 @@ async def own_failed_intent(db_session, test_user):
 @pytest.mark.api
 class TestPaymentIntentEndpoints:
 
-    async def test_create(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/payments/intents - Create a payment intent."""
-        response = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 49.99})
-        assert response.status_code == 201
-        assert response.json()["data"]["amount"] == 49.99
 
-    async def test_get_by_id(self, async_client: AsyncClient, auth_headers):
+    async def test_get_by_id(self, async_client: AsyncClient, auth_headers, db_session, test_user):
         """GET /v1/payments/intents/{id} - Get an intent."""
-        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 20.0})
-        intent_id = create.json()["data"]["id"]
+        create = await new_intent(db_session, test_user, 20.0)
+        intent_id = create["id"]
 
         response = await async_client.get(f"/v1/payments/intents/{intent_id}/", headers=auth_headers)
         assert response.status_code == 200
@@ -417,9 +430,9 @@ class TestPaymentIntentEndpoints:
         response = await async_client.get(f"/v1/payments/intents/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
 
-    async def test_list(self, async_client: AsyncClient, auth_headers):
+    async def test_list(self, async_client: AsyncClient, auth_headers, db_session, test_user):
         """GET /v1/payments/intents - List intents."""
-        await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 15.0})
+        await new_intent(db_session, test_user, 15.0)
         response = await async_client.get("/v1/payments/intents/", headers=auth_headers)
         assert response.status_code == 200
 
@@ -459,23 +472,6 @@ class TestFailureHandlingEndpoints:
         """GET /v1/payments/failures - List failed payments."""
         response = await async_client.get("/v1/payments/failures/", headers=auth_headers)
         assert response.status_code == 200
-
-
-@pytest.mark.api
-class TestCreateIntentErrors:
-
-    async def test_negative_amount_is_rejected_by_stripe(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": -5.0})
-        assert response.status_code == 400
-
-    async def test_nonexistent_order_id_is_reported_as_500(self, async_client: AsyncClient, auth_headers):
-        """order_id has a real FK constraint to commerce.orders; create_intent()
-        doesn't pre-validate it, so a bogus id must still surface as a clean error
-        rather than corrupting the request."""
-        response = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={
-            "amount": 10.0, "order_id": str(uuid4()),
-        })
-        assert response.status_code == 500
 
 
 @pytest.mark.api
@@ -534,18 +530,18 @@ class TestFailureHandlingErrors:
 @pytest.mark.api
 class TestGetIntentErrorPassthrough:
 
-    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch):
+    async def test_httpexception_from_service_passes_through(self, async_client, auth_headers, monkeypatch, db_session, test_user):
         from services.commerce.payments import PaymentService
-        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
-        intent_id = create.json()["data"]["id"]
+        create = await new_intent(db_session, test_user, 10.0)
+        intent_id = create["id"]
         monkeypatch.setattr(PaymentService, "get_intent", _async_raiser(HTTPException(status_code=403, detail="nope")))
         response = await async_client.get(f"/v1/payments/intents/{intent_id}/", headers=auth_headers)
         assert response.status_code == 403
 
-    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch):
+    async def test_generic_exception_from_service_becomes_500(self, async_client, auth_headers, monkeypatch, db_session, test_user):
         from services.commerce.payments import PaymentService
-        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
-        intent_id = create.json()["data"]["id"]
+        create = await new_intent(db_session, test_user, 10.0)
+        intent_id = create["id"]
         monkeypatch.setattr(PaymentService, "get_intent", _async_raiser(RuntimeError("boom")))
         response = await async_client.get(f"/v1/payments/intents/{intent_id}/", headers=auth_headers)
         assert response.status_code == 500
@@ -612,7 +608,7 @@ class TestListTransactionsErrorPassthrough:
 @pytest.mark.api
 class TestConfirmIntentSuccessAndGenericException:
 
-    async def test_confirming_a_fresh_intent_succeeds(self, async_client, auth_headers):
+    async def test_confirming_a_fresh_intent_succeeds(self, async_client, auth_headers, db_session, test_user):
         """Regression test for a real, previously-live bug: IntentResponse.payment_method_id
         (schemas/commerce/payments.py) was typed Optional[UUID], but confirm_intent()
         (services/commerce/payments.py) always stores the raw Stripe payment_method id
@@ -622,8 +618,8 @@ class TestConfirmIntentSuccessAndGenericException:
         a pydantic ValidationError and returned 500 - the endpoint's success response (200)
         was unreachable in production. Fixed by typing the schema field Optional[str] to
         match what's actually stored. This test confirms the success path now actually works."""
-        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 12.0})
-        intent_id = create.json()["data"]["id"]
+        create = await new_intent(db_session, test_user, 12.0)
+        intent_id = create["id"]
         pm_id = fresh_stripe_payment_method_id()
         response = await async_client.post(
             f"/v1/payments/intents/{intent_id}/confirm/", headers=auth_headers,
@@ -632,10 +628,10 @@ class TestConfirmIntentSuccessAndGenericException:
         assert response.status_code == 200, response.text
         assert response.json()["data"]["payment_method_id"] == pm_id
 
-    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, monkeypatch):
+    async def test_response_construction_failure_becomes_500(self, async_client, auth_headers, monkeypatch, db_session, test_user):
         import api.commerce.payments as payments_api
-        create = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 12.0})
-        intent_id = create.json()["data"]["id"]
+        create = await new_intent(db_session, test_user, 12.0)
+        intent_id = create["id"]
         monkeypatch.setattr(payments_api.Response, "success", staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom"))))
         response = await async_client.post(
             f"/v1/payments/intents/{intent_id}/confirm/", headers=auth_headers,
@@ -708,15 +704,15 @@ class TestListFailuresErrorPassthrough:
 @pytest.mark.api
 class TestIntentOwnership:
 
-    async def test_cannot_confirm_another_users_intent(self, async_client: AsyncClient, auth_headers, other_auth_headers, created_method):
-        intent = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
+    async def test_cannot_confirm_another_users_intent(self, async_client: AsyncClient, auth_headers, other_auth_headers, created_method, db_session, test_user):
+        intent = await new_intent(db_session, test_user, 10.0)
         response = await async_client.post(
-            f"/v1/payments/intents/{intent.json()['data']['id']}/confirm/", headers=other_auth_headers,
+            f"/v1/payments/intents/{intent['id']}/confirm/", headers=other_auth_headers,
             params={"payment_method_id": created_method["id"]},
         )
         assert response.status_code == 404
 
-    async def test_cannot_retry_another_users_payment(self, async_client: AsyncClient, auth_headers, other_auth_headers):
-        intent = await async_client.post("/v1/payments/intents/", headers=auth_headers, json={"amount": 10.0})
-        response = await async_client.post(f"/v1/payments/failures/{intent.json()['data']['id']}/retry/", headers=other_auth_headers)
+    async def test_cannot_retry_another_users_payment(self, async_client: AsyncClient, auth_headers, other_auth_headers, db_session, test_user):
+        intent = await new_intent(db_session, test_user, 10.0)
+        response = await async_client.post(f"/v1/payments/failures/{intent['id']}/retry/", headers=other_auth_headers)
         assert response.status_code == 404

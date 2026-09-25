@@ -689,122 +689,63 @@ class TestAdminProductList:
         assert (await async_client.get("/v1/products/admin/", headers=auth_headers)).status_code == 403
 
 
+
 @pytest.mark.api
-class TestVariantSyncViaProductUpdate:
-    """PATCH /v1/products/{id} with a `variants` array - bulk update/create/delete of
-    variants (plus nested image sync and stock/inventory) in one request."""
+class TestVariantAndImageEndpoints:
+    """The admin editor saves each variant and image through its own endpoint."""
 
-    async def test_update_existing_variant_fields_and_stock(self, async_client: AsyncClient, admin_headers, created_product):
-        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        variant = variants_resp.json()["data"][0]
+    async def test_variant_lifecycle(self, async_client: AsyncClient, admin_headers, created_product):
+        pid = created_product["id"]
+        created = await async_client.post(f"/v1/products/{pid}/variants/", headers=admin_headers,
+                                          json={"name": "2 kg bag", "base_price": 9.5, "sale_price": 8.0, "stock": 12})
+        assert created.status_code in (200, 201), created.text
+        vid = created.json()["data"]["id"]
 
-        response = await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={
-                "variants": [{"id": variant["id"], "name": "Renamed Variant", "stock": 77}]
-            }
-        )
-        assert response.status_code == 200
+        updated = await async_client.patch(f"/v1/products/variants/{vid}/", headers=admin_headers, json={"sale_price": None, "stock": 30})
+        assert updated.status_code == 200
+        assert updated.json()["data"]["sale_price"] is None
+        assert updated.json()["data"]["stock"] == 30
 
-        updated = await async_client.get(f"/v1/products/variants/{variant['id']}/")
-        assert updated.json()["data"]["name"] == "Renamed Variant"
-        assert updated.json()["data"]["stock"] == 77
+        listed = await async_client.get(f"/v1/products/{pid}/variants/")
+        assert vid in [v["id"] for v in listed.json()["data"]]
 
-    async def test_create_new_variant_via_array(self, async_client: AsyncClient, admin_headers, created_product):
-        response = await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={
-                "variants": [{"name": "Brand New Variant", "base_price": 12.5, "stock": 8}]
-            }
-        )
-        assert response.status_code == 200
+        deleted = await async_client.delete(f"/v1/products/variants/{vid}/", headers=admin_headers)
+        assert deleted.json()["data"]["outcome"] == "deleted"
 
-        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        names = [v["name"] for v in variants_resp.json()["data"]]
-        assert "Brand New Variant" in names
+    async def test_last_variant_is_protected(self, async_client: AsyncClient, admin_headers, created_product):
+        only = (await async_client.get(f"/v1/products/{created_product['id']}/variants/")).json()["data"]
+        if len(only) == 1:
+            response = await async_client.delete(f"/v1/products/variants/{only[0]['id']}/", headers=admin_headers)
+            assert response.status_code == 400
 
-    async def test_add_and_remove_image_via_variant_sync(self, async_client: AsyncClient, admin_headers, created_product):
-        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        variant_id = variants_resp.json()["data"][0]["id"]
+    async def test_image_lifecycle(self, async_client: AsyncClient, admin_headers, created_product):
+        vid = (await async_client.get(f"/v1/products/{created_product['id']}/variants/")).json()["data"][0]["id"]
+        first = await async_client.post(f"/v1/products/variants/{vid}/images/", headers=admin_headers,
+                                        json={"url": "https://img.example/1.jpg", "is_primary": True})
+        second = await async_client.post(f"/v1/products/variants/{vid}/images/", headers=admin_headers,
+                                         json={"url": "https://img.example/2.jpg", "alt_text": "Side"})
+        second_id = second.json()["data"]["id"]
+        made_primary = await async_client.patch(f"/v1/products/images/{second_id}/", headers=admin_headers, json={"is_primary": True})
+        assert made_primary.json()["data"]["is_primary"] is True
+        images = (await async_client.get(f"/v1/products/variants/{vid}/images/")).json()["data"]
+        assert [i["id"] for i in images if i["is_primary"]] == [second_id]
+        await async_client.delete(f"/v1/products/images/{second_id}/", headers=admin_headers)
+        remaining = await async_client.get(f"/v1/products/images/{first.json()['data']['id']}/")
+        assert remaining.json()["data"]["is_primary"] is True
 
-        added = await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={
-                "variants": [{"id": variant_id, "images": [{"url": "https://example.com/a.jpg"}]}]
-            }
-        )
-        assert added.status_code == 200
-        images_resp = await async_client.get(f"/v1/products/variants/{variant_id}/images/")
-        assert len(images_resp.json()["data"]) == 1
+    async def test_moderation_and_featuring(self, async_client: AsyncClient, admin_headers, created_product):
+        pid = created_product["id"]
+        rejected = await async_client.patch(f"/v1/products/{pid}/moderate/", headers=admin_headers, json={"status": "rejected", "notes": "Blurry photos"})
+        assert rejected.status_code == 200
+        assert rejected.json()["data"]["product_status"] == "inactive"
+        invalid = await async_client.patch(f"/v1/products/{pid}/moderate/", headers=admin_headers, json={"status": "maybe"})
+        assert invalid.status_code == 422
+        featured = await async_client.patch(f"/v1/products/{pid}/feature/?featured=true", headers=admin_headers)
+        assert featured.json()["data"]["is_featured"] is True
 
-        removed = await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={
-                "variants": [{"id": variant_id, "images": []}]
-            }
-        )
-        assert removed.status_code == 200
-        images_after = await async_client.get(f"/v1/products/variants/{variant_id}/images/")
-        assert images_after.json()["data"] == []
-
-    async def test_delete_variant_removed_from_array(self, async_client: AsyncClient, admin_headers, created_product):
-        """The variants array is a full replacement set: any existing variant id not
-        included gets deleted. Keep the original by id, add a second to delete later."""
-        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        keeper = variants_resp.json()["data"][0]
-
-        await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={
-                "variants": [{"id": keeper["id"]}, {"name": "Extra", "base_price": 5.0}]
-            }
-        )
-        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        all_variants = variants_resp.json()["data"]
-        assert len(all_variants) == 2
-        to_delete = next(v for v in all_variants if v["id"] != keeper["id"])
-
-        response = await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={"variants": [{"id": keeper["id"]}]}
-        )
-        assert response.status_code == 200
-
-        after = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        ids = [v["id"] for v in after.json()["data"]]
-        assert keeper["id"] in ids
-        assert to_delete["id"] not in ids
-
-    async def test_delete_variant_referenced_by_order_is_blocked(self, async_client: AsyncClient, admin_headers,
-                                                                    created_product, db_session, test_user):
-        """A variant with order history can't be dropped via the sync - it would orphan the order item."""
-        from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus
-        from core.utils.uuid_utils import uuid7
-        from decimal import Decimal
-
-        variants_resp = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        variant_id = variants_resp.json()["data"][0]["id"]
-
-        order = Order(
-            id=uuid7(), order_number=f"ORD-{uuid4().hex[:10].upper()}", user_id=test_user.id,
-            order_status=OrderStatus.DELIVERED, payment_status=PaymentStatus.PAID,
-            fulfillment_status=FulfillmentStatus.FULFILLED,
-            subtotal=Decimal("10.0"), shipping_cost=Decimal("0.0"), tax_amount=Decimal("0.0"), total_amount=Decimal("10.0"),
-            billing_address={"street": "1 Test St"}, shipping_address={"street": "1 Test St"},
-        )
-        db_session.add(order)
-        await db_session.flush()
-        db_session.add(OrderItem(
-            id=uuid7(), order_id=order.id, variant_id=variant_id, quantity=1,
-            price_per_unit=Decimal("10.0"), total_price=Decimal("10.0"),
-        ))
-        await db_session.commit()
-
-        # Keep the referenced variant by id while adding a second one.
-        await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={
-                "variants": [{"id": variant_id}, {"name": "Other", "base_price": 5.0}]
-            }
-        )
-        after_add = await async_client.get(f"/v1/products/{created_product['id']}/variants/")
-        other = next(v for v in after_add.json()["data"] if v["id"] != variant_id)
-
-        # Now omit the referenced variant - the sync would try to delete it.
-        response = await async_client.patch(f"/v1/products/{created_product['id']}/",
-            headers=admin_headers, json={"variants": [{"id": other["id"]}]}
-        )
-        assert response.status_code == 400
+    async def test_product_update_ignores_nested_variants(self, async_client: AsyncClient, admin_headers, created_product):
+        before = (await async_client.get(f"/v1/products/{created_product['id']}/variants/")).json()["data"]
+        await async_client.patch(f"/v1/products/{created_product['id']}/", headers=admin_headers,
+                                 json={"name": "Renamed", "variants": [{"name": "Sneaky", "base_price": 1}]})
+        after = (await async_client.get(f"/v1/products/{created_product['id']}/variants/")).json()["data"]
+        assert [v["id"] for v in after] == [v["id"] for v in before]

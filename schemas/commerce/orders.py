@@ -110,25 +110,3 @@ class Note(BaseModel):
 
 
 # Admin order management schemas
-
-class ShipOrder(BaseModel):
-    tracking_number: str
-    carrier_name: str
-
-
-class UpdateOrderStatus(BaseModel):
-    status: str
-    tracking_number: Optional[str] = None
-    carrier_name: Optional[str] = None
-    location: Optional[str] = None
-    description: Optional[str] = None
-
-
-class OrderPatch(BaseModel):
-    """Request model for partial order updates via PATCH."""
-    status: Optional[str] = None
-    tracking_number: Optional[str] = None
-    carrier_name: Optional[str] = None
-    notes: Optional[str] = None
-    admin_notes: Optional[str] = None
-

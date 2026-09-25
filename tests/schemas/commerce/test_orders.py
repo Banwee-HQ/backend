@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from schemas.commerce.orders import Checkout
-from schemas.commerce.orders import ShipOrder
 
 
 class TestCheckout:
@@ -20,9 +19,3 @@ class TestCheckout:
         assert not hasattr(checkout, "currency")
         assert checkout.discount_code is None
 
-
-class TestShipOrder:
-
-    def test_requires_tracking_number_and_carrier(self):
-        with pytest.raises(ValidationError):
-            ShipOrder(tracking_number="123")

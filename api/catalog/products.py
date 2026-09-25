@@ -8,12 +8,10 @@ from core.dependencies import require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.catalog.product import Create, Update
 from services.catalog.products import ProductService
 from models.accounts.user import User
 from models.catalog.product import ProductStatus
-from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
-from services.catalog.category import CategoryService
+from schemas.catalog.product import ProductModeration, Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
 
 logger = get_logger(__name__)
 
@@ -382,10 +380,11 @@ async def delete_variant(
     """Delete a variant (admin only)."""
     try:
         product_service = ProductService(db)
-        deleted = await product_service.delete_variant(variant_id)
-        if not deleted:
+        outcome = await product_service.delete_variant(variant_id)
+        if not outcome:
             raise APIException(status_code=404, message="Variant not found")
-        return Response.success(message="Variant deleted successfully")
+        message = "Variant deleted" if outcome == "deleted" else "Variant archived: it has orders or subscriptions, so it was made inactive"
+        return Response.success(data={"outcome": outcome}, message=message)
     except APIException:
         raise
     except HTTPException:
@@ -508,14 +507,14 @@ async def delete_image(
 @router.patch("/{product_id}/moderate/")
 async def moderate(
     product_id: UUID,
-    request: dict,
+    request: ProductModeration,
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Moderate product (admin only)."""
     try:
         product_service = ProductService(db)
-        result = await product_service.moderate(product_id, request.get("status"), request.get("notes"))
+        result = await product_service.moderate(product_id, request.status, request.notes)
         return Response.success(data=result, message="Product moderated successfully")
     except APIException:
         raise

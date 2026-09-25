@@ -17,11 +17,7 @@ from services.analytics.analytics import AnalyticsService
 from services.analytics.export import ExportService
 from services.commerce.orders import OrderService
 from core.exceptions import APIException
-from sqlalchemy import select, func
-from core.dependencies import get_current_auth_user, require_admin, require_auth
-from models.accounts.user import User as UserModel
-from models.catalog.product import Product, ProductStatus
-from models.commerce.orders import Order
+from core.dependencies import get_current_auth_user, require_admin
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -390,40 +386,6 @@ async def kpis(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to retrieve KPIs: {str(e)}"
-        )
-
-
-@router.get("/revenue/")
-async def revenue(
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
-    days: Optional[int] = Query(30),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get revenue analytics."""
-    try:
-        analytics_service = AnalyticsService(db)
-        # Set default date range if not provided
-        if not end_date:
-            end_date = datetime.now(timezone.utc)
-        if not start_date:
-            start_date = end_date - timedelta(days=days)
-        
-        metrics = await analytics_service.get_revenue_metrics(
-            start_date=start_date,
-            end_date=end_date
-        )
-        
-        return Response.success(
-            data=metrics,
-            message="Revenue metrics retrieved successfully"
-        )
-        
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to retrieve revenue metrics: {str(e)}"
         )
 
 

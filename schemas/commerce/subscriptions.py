@@ -7,26 +7,6 @@ from uuid import UUID
 from models.commerce.subscriptions import SubscriptionStatus, BillingCycle
 
 
-class VariantItem(BaseModel):
-    """Variant with quantity"""
-    id: str
-    qty: int = 1
-
-
-class VariantPrice(BaseModel):
-    """Variant with price and quantity"""
-    id: str
-    price: float
-    qty: int = 1
-
-
-class DiscountInfo(BaseModel):
-    """Discount information"""
-    discount_type: str  # "percentage" or "fixed"
-    value: float
-    code: Optional[str] = None
-
-
 class Create(BaseModel):
     """Create subscription"""
     name: Optional[str] = "My Subscription"

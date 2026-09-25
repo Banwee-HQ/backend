@@ -8,9 +8,6 @@ class BaseCarrierIntegration:
     async def track_shipment(self, tracking_number: str, config: Dict[str, Any]) -> Dict[str, Any]:
         """Track shipment - to be implemented by each carrier"""
         raise NotImplementedError
-    def _make_api_request(self, url: str, headers: Dict[str, str] = None, 
-                         params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Make API request with error handling"""
 
 
         # Implementation for making HTTP requests

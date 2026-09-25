@@ -809,31 +809,11 @@ class SubscriptionService:
         return await self.get(subscription.id)
 
 
-    async def adjust_quantity(self, subscription_id: UUID, variant_id: UUID, change: int, user_id: UUID) -> Subscription:
-        subscription = await self.get(subscription_id, user_id)
-        if not subscription:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        self._require_variant(subscription, variant_id)
-        meta = dict(subscription.subscription_metadata or {})
-        quantities = dict(meta.get("variant_quantities", {}))
-        quantities[str(variant_id)] = max(1, quantities.get(str(variant_id), 1) + change)
-        subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
-        await self.recalc_pricing(subscription)
-        return await self.get(subscription.id)
-
     @staticmethod
     def _require_variant(subscription: Subscription, variant_id) -> None:
         if str(variant_id) not in [str(v) for v in (subscription.variant_ids or [])]:
             raise HTTPException(status_code=400, detail="That product is not part of this subscription")
 
-
-    async def get_quantities(self, subscription_id: UUID, user_id: UUID) -> Dict[str, int]:
-        subscription = await self.get(subscription_id, user_id)
-        if not subscription:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-        if subscription.subscription_metadata:
-            return subscription.subscription_metadata.get("variant_quantities", {})
-        return {}
 
     async def get_orders(self, subscription_id: UUID, user_id: UUID, page: int = 1, limit: int = 10) -> Dict[str, Any]:
         subscription = await self.get(subscription_id, user_id)

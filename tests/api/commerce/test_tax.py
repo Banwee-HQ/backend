@@ -160,9 +160,13 @@ class TestTaxRateEndpoints:
         response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[
             {"id": str(uuid4()), "tax_rate": 0.1}
         ])
-        assert response.status_code == 200
-        assert response.json()["data"]["updated_count"] == 0
-        assert len(response.json()["data"]["errors"]) == 1
+        assert response.status_code == 404  # all-or-nothing: nothing is changed
+
+    async def test_bulk_update_rejects_out_of_range_rates(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[
+            {"id": created_rate["id"], "tax_rate": 5}
+        ])
+        assert response.status_code == 422
 
     async def test_bulk_update_requires_admin(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post("/v1/tax/rates/bulk-update/", headers=auth_headers, json=[])
@@ -481,42 +485,9 @@ class TestBulkUpdateFields:
 
 @pytest.mark.api
 @pytest.mark.tax
-class TestBulkUpdateErrors:
+class TestBulkUpdateValidation:
 
-    async def test_bulk_update_item_with_malformed_id_is_captured_as_error(
-        self, async_client: AsyncClient, admin_headers
-    ):
-        """UUID("not-a-valid-uuid") raises ValueError inside the per-item try block -
-        must be caught and reported per-item, not blow up the whole request."""
-        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[
-            {"id": "not-a-valid-uuid", "tax_rate": 0.1}
-        ])
-        assert response.status_code == 200
-        data = response.json()["data"]
-        assert data["updated_count"] == 0
-        assert len(data["errors"]) == 1
-
-    async def test_bulk_update_item_missing_id_is_captured_as_error(
-        self, async_client: AsyncClient, admin_headers
-    ):
-        """update_data.get("id") is None when "id" is absent - UUID(None) raises
-        TypeError, exercising the same per-item except branch via a different cause."""
-        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[
-            {"tax_rate": 0.1}
-        ])
-        assert response.status_code == 200
-        data = response.json()["data"]
-        assert data["updated_count"] == 0
-        assert len(data["errors"]) == 1
-
-    async def test_bulk_update_outer_exception_returns_500(
-        self, async_client: AsyncClient, admin_headers, monkeypatch
-    ):
-        import api.commerce.tax as tax_api
-        monkeypatch.setattr(
-            tax_api.Response, "success",
-            staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
-        )
-        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[])
-        assert response.status_code == 500
-        assert "Failed to bulk update tax rates" in response.json()["message"]
+    @pytest.mark.parametrize("item", [{"id": "not-a-uuid", "is_active": False}, {"is_active": False}])
+    async def test_bad_items_are_rejected_before_anything_changes(self, async_client: AsyncClient, admin_headers, item):
+        response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[item])
+        assert response.status_code == 422

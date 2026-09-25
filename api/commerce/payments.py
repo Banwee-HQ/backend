@@ -13,15 +13,7 @@ from core.exceptions import APIException
 from models.accounts.user import User
 from services.commerce.payments import PaymentService
 from schemas.commerce.payments import MethodResponse, MethodCreate
-from schemas.commerce.payments import (
-    MethodResponse,
-    MethodCreate,
-    MethodUpdate,
-    IntentResponse,
-    IntentCreate,
-    TxnResponse,
-    Refund
-)
+from schemas.commerce.payments import MethodResponse, MethodCreate, IntentResponse, TxnResponse
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -101,43 +93,20 @@ async def delete_method(
 # --- TRANSACTIONS - Read Only (system creates automatically) ---
 
 
-@router.post("/intents/")
-async def create_intent(
-    payment_intent_data: IntentCreate,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a payment intent"""
-    try:
-        service = PaymentService(db)
-        payment_intent = await service.create_intent(
-            user_id=current_user.id,
-            amount=payment_intent_data.amount,
-            order_id=payment_intent_data.order_id,
-            subscription_id=None,
-            metadata={}
-        )
-        return Response.success(data=IntentResponse.model_validate(payment_intent), status_code=status.HTTP_201_CREATED, message="Payment intent created successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to create payment intent: {str(e)}")
-
-
 @router.get("/intents/{payment_intent_id}/")
 async def get_intent(
     payment_intent_id: UUID,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a specific payment intent"""
+    """One of your payment intents; one still in progress is re-checked with Stripe first."""
     try:
         service = PaymentService(db)
         intent = await service.get_intent(payment_intent_id, current_user.id)
         if not intent:
             raise APIException(status_code=404, message="Payment intent not found")
+        if intent.status in ("requires_action", "processing", "requires_confirmation"):
+            intent = await service.sync_intent(intent)
         return Response.success(data=IntentResponse.model_validate(intent), message="Payment intent retrieved successfully")
     except APIException:
         raise

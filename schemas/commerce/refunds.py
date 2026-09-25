@@ -86,32 +86,8 @@ class ListResponse(BaseModel):
 
 
 # Admin refund management schemas
-class EligibilityResponse(BaseModel):
-    """Response schema for refund eligibility check"""
-    eligible: bool
-    reason: Optional[str]
-    max_refund_amount: Optional[float]
-    refund_window_days: int
-    order_age_days: int
-
-
-class StatsResponse(BaseModel):
-    """Response schema for refund statistics"""
-    total_refunds: int
-    total_amount: float
-    auto_approved_count: int
-    pending_count: int
-    completed_count: int
-    average_processing_time_hours: Optional[float]
 
 
 class UpdateRefundStatus(BaseModel):
     status: str
     admin_notes: Optional[str] = None
-
-class RefundPatch(BaseModel):
-    """Request model for partial refund updates via PATCH."""
-    status: Optional[str] = None
-    admin_notes: Optional[str] = None
-    approved_amount: Optional[float] = None
-

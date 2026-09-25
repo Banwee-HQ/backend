@@ -6,4 +6,3 @@ from .shipping import *
 from .tax import *
 from .promos import *
 from .subscriptions import *
-from .transaction import *

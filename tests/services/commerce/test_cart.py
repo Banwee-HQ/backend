@@ -142,20 +142,6 @@ class TestGetCart:
         result = await service.get_cart(user.id)
         assert result["items"][0]["unit_price"] == pytest.approx(15.0)
 
-    async def test_auto_clears_deactivated_promocode(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        promo = await make_promocode(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-        await service.apply_promo(user.id, promo.code)
-
-        promo.is_active = False
-        await db_session.commit()
-
-        result = await service.get_cart(user.id)
-        assert result["promocode"] is None
-
 
 class TestAddToCart:
 
@@ -291,23 +277,6 @@ class TestRemoveItem:
         assert exc_info.value.status_code == 404
 
 
-class TestClearCart:
-
-    async def test_removes_all_items_and_promocode(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        promo = await make_promocode(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-        await service.apply_promo(user.id, promo.code)
-
-        result = await service.clear_cart(user.id)
-        assert result["items"] == []
-        # An emptied cart takes the _create_empty_cart_response() shape, which
-        # has no "promocode" key at all (rather than an explicit None).
-        assert result.get("promocode") is None
-
-
 class TestItemCount:
 
     async def test_sums_quantities(self, db_session):
@@ -323,71 +292,6 @@ class TestItemCount:
     async def test_no_user_id_returns_zero(self, db_session):
         service = CartService(db_session)
         assert await service.item_count(None) == 0
-
-
-class TestApplyPromo:
-
-    async def test_applies_a_valid_code(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session, price=100.0)
-        promo = await make_promocode(db_session, value=10)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-
-        result = await service.apply_promo(user.id, promo.code)
-        assert result["promocode_applied"] is True
-        assert result["discount_amount"] == pytest.approx(10.0)
-
-    async def test_missing_code_raises_400(self, db_session):
-        user = await make_user(db_session)
-        service = CartService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.apply_promo(user.id, None)
-        assert exc_info.value.status_code == 400
-
-    async def test_empty_cart_raises_400(self, db_session):
-        user = await make_user(db_session)
-        promo = await make_promocode(db_session)
-        service = CartService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.apply_promo(user.id, promo.code)
-        assert exc_info.value.status_code == 400
-
-    async def test_invalid_code_raises_400(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-
-        with pytest.raises(HTTPException) as exc_info:
-            await service.apply_promo(user.id, f"NOPE{uuid4().hex[:8]}")
-        assert exc_info.value.status_code == 400
-
-    async def test_below_minimum_order_amount_raises_400(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session, price=10.0)
-        promo = await make_promocode(db_session, minimum_order_amount=100)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-
-        with pytest.raises(HTTPException) as exc_info:
-            await service.apply_promo(user.id, promo.code)
-        assert exc_info.value.status_code == 400
-
-
-class TestRemovePromo:
-
-    async def test_clears_the_promocode(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        promo = await make_promocode(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-        await service.apply_promo(user.id, promo.code)
-
-        result = await service.remove_promo(user.id)
-        assert result["promocode_removed"] is True
-        assert result["promocode"] is None
 
 
 class TestValidateCart:
@@ -468,24 +372,6 @@ class TestShippingOptions:
         assert any(o["name"] == "Rocket" for o in result["shipping_options"])
 
 
-class TestCalcTotals:
-
-    async def test_adds_shipping_cost_from_selected_method(self, db_session):
-        from models.commerce.shipping import ShippingMethod
-        method = ShippingMethod(id=uuid4(), name="Standard", price=7.5, estimated_days=3, is_active=True)
-        db_session.add(method)
-        await db_session.commit()
-
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session, price=20.0)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-
-        result = await service.calc_totals(user.id, data={"shipping_method_id": str(method.id)})
-        assert result["shipping_amount"] == pytest.approx(7.5)
-        assert result["total_amount"] == pytest.approx(27.5)
-
-
 class TestCheckoutSummary:
 
     async def test_can_checkout_true_when_cart_has_value(self, db_session):
@@ -507,62 +393,6 @@ class TestCheckoutSummary:
 
 class TestSavedItems:
 
-    async def test_save_later_and_move_back(self, db_session):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-        cart = await service.get_or_create(user.id)
-        item_id = cart.items[0].id
-
-        await service.save_later(user.id, item_id)
-        saved = await service.saved_items(user.id)
-        assert saved["count"] == 1
-
-        await service.move_to_cart(user.id, item_id)
-        saved_after = await service.saved_items(user.id)
-        assert saved_after["count"] == 0
-
-    async def test_save_later_unknown_item_raises_404(self, db_session):
-        user = await make_user(db_session)
-        service = CartService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.save_later(user.id, uuid4())
-        assert exc_info.value.status_code == 404
-
-    async def test_save_later_db_failure_raises_500(self, db_session, mocker):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-        cart = await service.get_or_create(user.id)
-        item_id = cart.items[0].id
-
-        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
-        with pytest.raises(HTTPException) as exc_info:
-            await service.save_later(user.id, item_id)
-        assert exc_info.value.status_code == 500
-
-    async def test_move_to_cart_unknown_item_raises_404(self, db_session):
-        user = await make_user(db_session)
-        service = CartService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.move_to_cart(user.id, uuid4())
-        assert exc_info.value.status_code == 404
-
-    async def test_move_to_cart_db_failure_raises_500(self, db_session, mocker):
-        user = await make_user(db_session)
-        product, variant = await make_stocked_variant(db_session)
-        service = CartService(db_session)
-        await service.add_to_cart(user.id, variant.id, quantity=1)
-        cart = await service.get_or_create(user.id)
-        item_id = cart.items[0].id
-        await service.save_later(user.id, item_id)
-
-        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
-        with pytest.raises(HTTPException) as exc_info:
-            await service.move_to_cart(user.id, item_id)
-        assert exc_info.value.status_code == 500
 
     async def test_saved_items_failure_raises_500(self, db_session, mocker):
         mocker.patch.object(CartService, "get_or_create", side_effect=RuntimeError("db down"))

@@ -32,10 +32,6 @@ class TestBaseCarrierIntegration:
         with pytest.raises(NotImplementedError):
             await base.track_shipment("TRACK123", {})
 
-    def test_make_api_request_is_a_stub(self):
-        base = BaseCarrierIntegration()
-        assert base._make_api_request("https://example.com") is None
-
 
 @pytest.mark.parametrize("integration_cls,expected_country", ALL_INTEGRATIONS)
 class TestCarrierIntegrations:

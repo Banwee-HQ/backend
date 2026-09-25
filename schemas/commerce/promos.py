@@ -56,13 +56,3 @@ class InDB(Base):
 class ValidateRequest(BaseModel):
     code: str
     subtotal: Optional[float] = Field(None, ge=0)
-
-class ValidateResponse(BaseModel):
-    valid: bool
-    code: str
-    discount_type: Optional[str] = None
-    value: Optional[float] = None
-    minimum_order_amount: Optional[float] = None
-    maximum_discount_amount: Optional[float] = None
-    message: Optional[str] = None
-

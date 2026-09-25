@@ -33,15 +33,6 @@ class AddressUpdate(BaseModel):
     post_code: Optional[str] = None
 
 
-class AddressResponse(AddressBase):
-    id: UUID
-    user_id: UUID
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class Base(BaseModel):
     email: EmailStr
     firstname: Optional[str] = None

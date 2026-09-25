@@ -1,7 +1,6 @@
 """Common service result types and TypedDicts for API responses."""
 from typing import TypedDict, Dict, Any, List, Optional
 from decimal import Decimal
-from datetime import date, datetime
 
 
 # --- Cart Service Types ---
@@ -36,38 +35,6 @@ class PricingCalculationResult(TypedDict, total=False):
 
 
 # --- Template Service Types ---
-
-class DiscountValidationResult(TypedDict, total=False):
-    """Result of discount validation"""
-    is_valid: bool
-    error_message: Optional[str]
-    discount: Optional[Any]  # Discount model
-
-
-class DiscountCalculationResult(TypedDict, total=False):
-    """Result of discount calculation"""
-    discount_amount: Decimal
-    final_total: Decimal
-    discount_type: str
-
-
-class ExportFilters(TypedDict, total=False):
-    """Filters for export data"""
-    start_date: Optional[date]
-    end_date: Optional[date]
-    customer_id: Optional[str]
-    subscription_status: Optional[str]
-    payment_status: Optional[str]
-    variant_ids: Optional[List[str]]
-
-
-class ExportResult(TypedDict, total=False):
-    """Result of export operation"""
-    content: bytes
-    content_type: str
-    filename: str
-    format_type: str
-    generated_at: datetime
 
 
 class RenderedTemplate(TypedDict, total=False):

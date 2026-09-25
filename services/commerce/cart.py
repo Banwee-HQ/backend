@@ -17,7 +17,6 @@ from services.commerce.tax import TaxService
 from services.catalog.inventory import InventoryService
 from schemas.common.service_types import CartValidationResult
 from core.config import settings
-from services.commerce.promocode import PromocodeService
 
 logger = get_structured_logger(__name__)
 
@@ -674,53 +673,6 @@ class CartService:
         return checkout_summary
 
 
-    async def apply_promo(self, user_id: UUID, code: Optional[str] = None) -> Dict[str, Any]:
-        """Validate a promocode and apply it to the user's cart."""
-        if not code:
-            raise HTTPException(status_code=400, detail="Promocode is required")
-
-        cart = await self.get_or_create(user_id)
-        if not cart.items:
-            raise HTTPException(status_code=400, detail="Cannot apply a promocode to an empty cart")
-
-        is_valid, error_message, promocode = await PromocodeService(self.db).validate(code)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error_message)
-
-        subtotal = cart.subtotal
-        if promocode.minimum_order_amount and subtotal < promocode.minimum_order_amount:
-            raise HTTPException(
-                status_code=400,
-                detail=f"This promocode requires a minimum order amount of {promocode.minimum_order_amount}"
-            )
-
-        cart.promocode_id = promocode.id
-        await self.db.commit()
-        # Setting the FK directly doesn't refresh the loaded `promocode` relationship,
-        # which cart.discount_amount reads.
-        await self.db.refresh(cart, ["promocode"])
-
-        cart_data = await self.get_cart(user_id=user_id)
-        return {
-            **cart_data,
-            "promocode_applied": True,
-            "message": "Promocode applied successfully"
-        }
-
-    async def remove_promo(self, user_id: UUID) -> Dict[str, Any]:
-        """Remove any promocode applied to the user's cart."""
-        cart = await self.get_or_create(user_id)
-        cart.promocode_id = None
-        await self.db.commit()
-        await self.db.refresh(cart, ["promocode"])
-
-        cart_data = await self.get_cart(user_id=user_id)
-        return {
-            **cart_data,
-            "promocode_removed": True,
-            "message": "Promocode removed"
-        }
-
     async def shipping_options(
         self,
         user_id: UUID,
@@ -789,97 +741,6 @@ class CartService:
                 ]
             }
 
-
-    async def calc_totals(
-        self,
-        user_id: UUID,
-        data: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
-        """Calculate cart totals with shipping and tax"""
-        cart_data = await self.get_cart(user_id=user_id)
-        
-        # Extract shipping method from data
-        shipping_cost = 0.0
-        if data and "shipping_method_id" in data:
-            shipping_options = await self.shipping_options(user_id)
-            for option in shipping_options.get("shipping_options", []):
-                if option["id"] == data["shipping_method_id"]:
-                    shipping_cost = option["price"]
-                    break
-        
-        # Recalculate totals
-        subtotal = cart_data["subtotal"]
-        tax_amount = cart_data["tax_amount"]
-        total_amount = subtotal + tax_amount + shipping_cost
-        
-        return {
-            **cart_data,
-            "shipping_amount": shipping_cost,
-            "total_amount": total_amount,
-            "calculation_timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-    async def save_later(
-        self,
-        user_id: UUID,
-        item_id: UUID
-    ) -> Dict[str, Any]:
-        """Save cart item for later (move to saved items list)"""
-        try:
-            # Get the cart item
-            item_query = select(CartItem).where(
-                and_(
-                    CartItem.id == item_id,
-                    CartItem.cart.has(Cart.user_id == user_id)
-                )
-            )
-            result = await self.db.execute(item_query)
-            item = result.scalar_one_or_none()
-            
-            if not item:
-                raise HTTPException(status_code=404, detail="Cart item not found")
-            
-            # Mark as saved for later
-            item.is_saved_for_later = True
-            await self.db.commit()
-            
-            return await self.get_cart(user_id=user_id)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to save item for later: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to save item for later: {str(e)}")
-
-    async def move_to_cart(
-        self,
-        user_id: UUID,
-        item_id: UUID
-    ) -> Dict[str, Any]:
-        """Move saved item back to active cart"""
-        try:
-            # Get the cart item
-            item_query = select(CartItem).where(
-                and_(
-                    CartItem.id == item_id,
-                    CartItem.cart.has(Cart.user_id == user_id)
-                )
-            )
-            result = await self.db.execute(item_query)
-            item = result.scalar_one_or_none()
-            
-            if not item:
-                raise HTTPException(status_code=404, detail="Cart item not found")
-            
-            # Mark as active (not saved for later)
-            item.is_saved_for_later = False
-            await self.db.commit()
-            
-            return await self.get_cart(user_id=user_id)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to move item to cart: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to move item to cart: {str(e)}")
 
     async def saved_items(
         self,

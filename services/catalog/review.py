@@ -197,26 +197,4 @@ class ReviewService:
         except Exception as e:
             logger.error(f"Could not update product rating for {product_id}: {type(e).__name__}: {str(e)}")
             raise
-    async def recalc_ratings(self):
-        """Recalculate ratings for all products that have reviews"""
-        # Get all products that have reviews
-        products_with_reviews = await self.db.execute(
-            select(Product.id, func.avg(Review.rating).label('avg_rating'), func.count(Review.id).label('review_count'))
-            .join(Review, Product.id == Review.product_id)
-            .where(Review.is_approved == True)
-            .group_by(Product.id)
-        )
-        
-        updated_count = 0
-        for product_id, avg_rating, review_count in products_with_reviews:
-            product = await self.db.get(Product, product_id)
-            if product:
-                product.rating_average = float(avg_rating) if avg_rating is not None else 0.0
-                product.rating_count = int(review_count) if review_count is not None else 0
-                product.review_count = int(review_count) if review_count is not None else 0
-                product.updated_at = datetime.now(timezone.utc)
-                await self.db.commit()
-                updated_count += 1
-        
-        return updated_count
 

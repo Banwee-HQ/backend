@@ -9,8 +9,9 @@ from uuid import UUID
 from core.db import get_db
 from core.dependencies import require_admin
 from core.utils.response import Response
+from core.exceptions import APIException
 from core.logging import get_structured_logger
-from schemas.commerce.tax import RateCreate, RateUpdate, RateResponse
+from schemas.commerce.tax import BulkRateUpdate, RateCreate, RateUpdate, RateResponse
 from models.commerce.tax_rates import TaxRate
 
 logger = get_structured_logger(__name__)
@@ -411,51 +412,17 @@ async def delete_rate(
 
 @router.post("/rates/bulk-update/")
 async def bulk_update(
-    updates: List[dict],
+    updates: List[BulkRateUpdate],
     current_user = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Bulk update multiple tax rates (Admin only)."""
-    try:
-        updated_count = 0
-        errors = []
-        
-        for update_data in updates:
-            try:
-                tax_rate_id = UUID(update_data.get("id"))
-                result = await db.execute(
-                    select(TaxRate).where(TaxRate.id == tax_rate_id)
-                )
-                tax_rate = result.scalar_one_or_none()
-                
-                if tax_rate:
-                    if "tax_rate" in update_data:
-                        tax_rate.tax_rate = float(update_data["tax_rate"])
-                    if "is_active" in update_data:
-                        tax_rate.is_active = bool(update_data["is_active"])
-                    if "tax_name" in update_data:
-                        tax_rate.tax_name = update_data["tax_name"]
-                    
-                    updated_count += 1
-                else:
-                    errors.append(f"Tax rate {tax_rate_id} not found")
-                    
-            except Exception as e:
-                errors.append(f"Error updating {update_data.get('id')}: {str(e)}")
-        
-        await db.commit()
-        
-        return Response.success(
-            data={
-                "updated_count": updated_count,
-                "errors": errors
-            },
-            message=f"Successfully updated {updated_count} tax rates"
-        )
-        
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to bulk update tax rates: {str(e)}"
-        )
+    """Update several tax rates at once, e.g. switch them on or off (Admin only)."""
+    rates = {r.id: r for r in (await db.execute(select(TaxRate).where(TaxRate.id.in_([u.id for u in updates])))).scalars()}
+    missing = [str(u.id) for u in updates if u.id not in rates]
+    if missing:
+        raise APIException(status_code=status.HTTP_404_NOT_FOUND, message=f"Tax rates not found: {', '.join(missing)}")
+    for update in updates:
+        for field, value in update.model_dump(exclude={"id"}, exclude_unset=True).items():
+            setattr(rates[update.id], field, value)
+    await db.commit()
+    return Response.success(data={"updated_count": len(updates)}, message=f"Updated {len(updates)} tax rates")

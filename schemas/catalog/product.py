@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
 
@@ -75,7 +75,6 @@ class Create(BaseModel):
 
 
 class VariantUpdate(BaseModel):
-    id: Optional[UUID] = None  # Include ID for existing variants
     sku: Optional[str] = None
     name: Optional[str] = None
     base_price: Optional[float] = None
@@ -87,7 +86,6 @@ class VariantUpdate(BaseModel):
     tags: Optional[str] = None
     is_active: Optional[bool] = None
     availability_status: Optional[AvailabilityStatus] = None
-    images: Optional[List[Dict[str, Any]]] = None  # List of image objects with id, url, alt_text, is_primary, sort_order
 
     @field_validator('dietary_tags', mode='before')
     @classmethod
@@ -105,7 +103,6 @@ class Update(BaseModel):
     product_status: Optional[ProductStatus] = None
     is_featured: Optional[bool] = None
     is_bestseller: Optional[bool] = None
-    variants: Optional[List[VariantUpdate]] = None
 
 
 class InventoryResponse(BaseModel):
@@ -206,10 +203,6 @@ class ListResponse(BaseModel):
 
 # Admin product management schemas
 
-class DetailResponse(Response):
-    # Includes all product fields plus additional details
-    pass
-
 
 class ImageCreate(BaseModel):
     url: str
@@ -225,33 +218,7 @@ class ImageUpdate(BaseModel):
     sort_order: Optional[int] = None
 
 
-class ProductPatch(BaseModel):
-    """Request model for partial product updates via PATCH."""
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    compare_at_price: Optional[float] = None
-    category_id: Optional[UUID] = None
-    status: Optional[str] = None
-    is_active: Optional[bool] = None
-    is_featured: Optional[bool] = None
-    tags: Optional[list] = None
-    seo_title: Optional[str] = None
-
-
-class VariantStockUpdate(BaseModel):
-    """Request model for updating variant stock."""
-    quantity: int
-    reason: Optional[str] = None
-
-
 class ProductModeration(BaseModel):
-    """Request model for product moderation."""
-    action: str  # "approve" or "reject"
-    reason: Optional[str] = None
-
-
-class ProductFeatureToggle(BaseModel):
-    """Request model for toggling product featured status."""
-    featured: bool
-
+    """Approve (publish) or reject (take down) a product, with an optional note kept on the product."""
+    status: Literal["approved", "rejected"]
+    notes: Optional[str] = Field(None, max_length=1000)

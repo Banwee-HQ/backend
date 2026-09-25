@@ -11,7 +11,7 @@ logger = get_structured_logger(__name__)
 
 
 from schemas.common.service_types import RenderedTemplate
-from schemas.common.service_types import RenderedTemplate, RenderedExport, TemplateValidationResult
+from schemas.common.service_types import RenderedTemplate
 
 
 class JinjaTemplateService:
@@ -85,98 +85,6 @@ class JinjaTemplateService:
         except Exception as e:
             logger.error(f"Unexpected error rendering template {template_name}: {e}")
             raise TemplateError(f"Failed to render template {template_name}: {e}")
-    async def render_export(self, template_name: str, context: Dict[str, Any]) -> RenderedExport:
-        """Render an export template with the provided context"""
-        try:
-            template = self.env.get_template(template_name)
-            
-            format_type = context.get('format_type', 'html')
-            # Add common export context variables
-            export_context = {
-                **context,
-                'format_type': format_type,
-                'generated_at': context.get('generated_at'),
-                'company_name': context.get('company_name', 'Banwee')
-            }
-            rendered_content = template.render(**export_context)
-            
-            return RenderedExport(
-                content=rendered_content,
-                format_type=format_type,
-                template_name=template_name,
-                data_used=export_context,
-                rendered_at=datetime.now().isoformat()
-            )
-            
-        except TemplateError as e:
-            logger.error(f"Template rendering failed for {template_name}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error rendering template {template_name}: {e}")
-            raise TemplateError(f"Failed to render template {template_name}: {e}")
-    async def validate_template(
-        self,
-        template_content: str
-    ) -> TemplateValidationResult:
-        """Validate a template string for syntax errors."""
-        errors = []
-        warnings = []
-        
-        try:
-            # Parse the template to check for syntax errors
-            template = self.env.from_string(template_content)
-            
-            # Try to render with empty context to catch basic issues
-            try:
-                template.render()
-            except Exception as e:
-                # This might be expected if template requires specific variables
-                # Only warn about undefined variables, not error
-                if "undefined" in str(e).lower():
-                    warnings.append(f"Template contains undefined variables: {e}")
-                else:
-                    errors.append(f"Template rendering error: {e}")
-            
-        except TemplateError as e:
-            errors.append(f"Template syntax error: {e}")
-        except Exception as e:
-            errors.append(f"Unexpected validation error: {e}")
-        
-        return TemplateValidationResult(
-            is_valid=len(errors) == 0,
-            errors=errors,
-            warnings=warnings
-        )
-    def create_template_file(self, template_name: str, content: str) -> bool:
-        """Create a new template file; returns True on success."""
-        try:
-            template_path = self.template_dir / template_name
-            template_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(template_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            logger.info(f"Template file created: {template_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to create template file {template_name}: {e}")
-            return False
-    def list_templates(self) -> list[str]:
-        """List all available template file names."""
-        try:
-            templates = []
-            for file_path in self.template_dir.rglob("*.html"):
-                relative_path = file_path.relative_to(self.template_dir)
-                templates.append(str(relative_path))
-            return templates
-        except Exception as e:
-            logger.error(f"Failed to list templates: {e}")
-            return []
-    def template_exists(self, template_name: str) -> bool:
-        """Check if a template file exists."""
-        template_path = self.template_dir / template_name
-        return template_path.exists()
 
 
     

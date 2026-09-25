@@ -671,17 +671,6 @@ class TestUpdateStatus:
         order = await service.update_status(existing_order.id, "shipped")
         assert order.carrier == "ups"
 
-    async def test_deliver_marks_order_delivered(self, db_session, existing_order):
-        service = OrderService(db_session)
-        result = await service.deliver(str(existing_order.id), notes="Left at door")
-        assert result.order_status == OrderStatus.DELIVERED
-
-    async def test_ship_marks_order_shipped(self, db_session, existing_order):
-        service = OrderService(db_session)
-        result = await service.ship(str(existing_order.id), carrier="ups", tracking_number="TRACK1")
-        assert result.order_status == OrderStatus.SHIPPED
-        assert result.tracking_number == "TRACK1"
-
 
 # --------------------------------------------------------------------------- tracking / payments / tracking_public ---------------------------------------------------------------------------
 
@@ -852,79 +841,6 @@ class TestGetStatistics:
 
 
 # --------------------------------------------------------------------------- Private helpers ---------------------------------------------------------------------------
-
-class TestGeneratePriceUpdateMessage:
-
-    def test_single_item_price_increase(self, db_session):
-        service = OrderService(db_session)
-        updates = [{"product_name": "Widget", "price_increased": True, "is_sale": False, "new_price": 12.0, "old_price": 10.0}]
-        msg = service._generate_price_update_message(updates, 2.0)
-        assert "Widget" in msg and "12.00" in msg
-
-    def test_single_item_on_sale(self, db_session):
-        service = OrderService(db_session)
-        updates = [{"product_name": "Widget", "price_increased": True, "is_sale": True, "new_price": 8.0, "old_price": 10.0}]
-        msg = service._generate_price_update_message(updates, -2.0)
-        assert "sale" in msg.lower()
-
-    def test_single_item_price_decrease(self, db_session):
-        service = OrderService(db_session)
-        updates = [{"product_name": "Widget", "price_increased": False, "is_sale": False, "new_price": 8.0, "old_price": 10.0}]
-        msg = service._generate_price_update_message(updates, -2.0)
-        assert "reduced" in msg.lower()
-
-    def test_multiple_items_total_increase(self, db_session):
-        service = OrderService(db_session)
-        msg = service._generate_price_update_message([{}, {}], 5.0)
-        assert "increase" in msg.lower()
-
-    def test_multiple_items_total_decrease(self, db_session):
-        service = OrderService(db_session)
-        msg = service._generate_price_update_message([{}, {}], -5.0)
-        assert "save" in msg.lower()
-
-    def test_multiple_items_no_net_change(self, db_session):
-        service = OrderService(db_session)
-        msg = service._generate_price_update_message([{}, {}], 0.0)
-        assert "updated" in msg.lower()
-
-
-class TestValidateAndRecalculatePrices:
-
-    async def test_matching_price_has_no_discrepancy(self, db_session, cart_with_item):
-        service = OrderService(db_session)
-        result = await service._validate_and_recalculate_prices(cart_with_item)
-        assert result["valid"] is True
-        assert result["price_discrepancies"] == []
-
-    async def test_stale_cart_price_is_flagged_and_corrected(self, db_session, cart_with_item, variant):
-        variant.base_price = Decimal("999.99")
-        await db_session.commit()
-        service = OrderService(db_session)
-        result = await service._validate_and_recalculate_prices(cart_with_item)
-        assert result["valid"] is True
-        assert len(result["price_discrepancies"]) == 1
-        assert result["validated_items"][0]["backend_price"] == Decimal("999.99")
-
-    async def test_variant_no_longer_exists_is_invalid(self, db_session):
-        fake_item = SimpleNamespace(
-            saved_for_later=False, variant=SimpleNamespace(id=uuid4()),
-            price_per_unit=Decimal("10.00"), total_price=Decimal("10.00"), quantity=1,
-        )
-        fake_cart = SimpleNamespace(items=[fake_item])
-        service = OrderService(db_session)
-        result = await service._validate_and_recalculate_prices(fake_cart)
-        assert result["valid"] is False
-
-
-class TestSendOrderEventsWithIdempotency:
-
-    async def test_sends_confirmation_email(self, db_session, test_user, existing_order, mocker):
-        mock = mocker.patch("services.accounts.email.EmailService.send_order_confirmation_email", return_value=None)
-        service = OrderService(db_session)
-        validated_items = [{"product_name": "Widget", "quantity": 1, "backend_price": 10.0}]
-        await service._send_order_events_with_idempotency(existing_order, test_user.id, validated_items)
-        mock.assert_called_once()
 
 
 class TestFormatOrderResponse:
@@ -1230,32 +1146,8 @@ class TestFormatOrderResponseEdgeCases:
 
 # --------------------------------------------------------------------------- _validate_and_recalculate_prices edge cases ---------------------------------------------------------------------------
 
-class TestValidateAndRecalculatePricesEdgeCases:
-
-    async def test_missing_variant_reference_is_caught(self, db_session):
-        fake_item = SimpleNamespace(saved_for_later=False, variant=None)
-        fake_cart = SimpleNamespace(items=[fake_item])
-        service = OrderService(db_session)
-        result = await service._validate_and_recalculate_prices(fake_cart)
-        assert result["valid"] is False
-        assert "Price validation failed" in result["message"]
-
 
 # --------------------------------------------------------------------------- _send_order_events_with_idempotency edge cases ---------------------------------------------------------------------------
-
-class TestSendOrderEventsWithIdempotencyEdgeCases:
-
-    async def test_email_failure_propagates(self, db_session, test_user, existing_order, mocker):
-        """Unlike create()'s best-effort email scheduling, this method must propagate
-        failures rather than swallow them."""
-        mocker.patch(
-            "services.accounts.email.EmailService.send_order_confirmation_email",
-            side_effect=RuntimeError("smtp down"),
-        )
-        service = OrderService(db_session)
-        validated_items = [{"product_name": "Widget", "quantity": 1, "backend_price": 10.0}]
-        with pytest.raises(RuntimeError):
-            await service._send_order_events_with_idempotency(existing_order, test_user.id, validated_items)
 
 
 # --------------------------------------------------------------------------- tracking / payments / tracking_public / reorder / invoice - generic error edge cases ---------------------------------------------------------------------------

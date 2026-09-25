@@ -224,36 +224,6 @@ class TestGetSalesTrendData:
         assert result["summary"]["growth_rate"] != 0.0
 
 
-class TestGetRevenueMetrics:
-
-    async def test_computes_revenue_from_completed_orders(self, db_session, test_user):
-        order = make_order(test_user.id, status=OrderStatus.SHIPPED)
-        db_session.add(order)
-        await db_session.commit()
-
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        result = await service.get_revenue_metrics(start, end)
-        assert result["summary"]["completed_orders"] >= 1
-        assert result["summary"]["total_revenue"] >= 49.98
-
-    async def test_pending_orders_are_excluded(self, db_session, test_user):
-        # A wide, shared window plus a before/after delta instead of an absolute
-        # count, since the shared test DB has other committed orders too.
-        service = AnalyticsService(db_session)
-        start = datetime.now(timezone.utc) - timedelta(days=1)
-        end = datetime.now(timezone.utc) + timedelta(days=1)
-        before = (await service.get_revenue_metrics(start, end))["summary"]["completed_orders"]
-
-        order = make_order(test_user.id, status=OrderStatus.PENDING)
-        db_session.add(order)
-        await db_session.commit()
-
-        after = (await service.get_revenue_metrics(start, end))["summary"]["completed_orders"]
-        assert after == before
-
-
 class TestGetAdminStats:
 
     async def test_returns_full_shape(self, db_session, order):
@@ -341,12 +311,6 @@ class TestServiceMethodsWrapDbErrors:
         service = AnalyticsService(db_session)
         with pytest.raises(HTTPException) as exc_info:
             await service.get_sales_trend_data("not-a-date", "not-a-date")
-        assert exc_info.value.status_code == 500
-
-    async def test_revenue_metrics(self, db_session):
-        service = AnalyticsService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_revenue_metrics("not-a-date", "not-a-date")
         assert exc_info.value.status_code == 500
 
 

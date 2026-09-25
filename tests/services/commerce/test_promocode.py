@@ -56,17 +56,6 @@ class TestValidate:
         assert is_valid is False
         assert "expired" in error
 
-    async def test_usage_limit_reached_is_rejected(self, db_session):
-        """inc_usage() auto-deactivates on limit reached, so the active_only lookup in
-        validate() excludes it before ever reaching its own usage_limit check - the
-        promocode is still correctly rejected, just via the not-found path."""
-        service = PromocodeService(db_session)
-        created = await service.create(make_create(usage_limit=1))
-        await service.inc_usage(created.id)
-        is_valid, error, promo = await service.validate(created.code)
-        assert is_valid is False
-        assert promo is None
-
 
     async def test_usage_limit_check_inside_validate_when_still_flagged_active(self, db_session):
         """Exercises validate()'s own usage_limit branch directly (used_count at the
@@ -80,35 +69,6 @@ class TestValidate:
         is_valid, error, promo = await service.validate(created.code)
         assert is_valid is False
         assert "usage limit" in error
-
-
-class TestIncUsage:
-
-    async def test_increments_used_count(self, db_session):
-        service = PromocodeService(db_session)
-        created = await service.create(make_create())
-        updated = await service.inc_usage(created.id)
-        assert updated.used_count == 1
-
-    async def test_deactivates_when_usage_limit_reached(self, db_session):
-        service = PromocodeService(db_session)
-        created = await service.create(make_create(usage_limit=2))
-        await service.inc_usage(created.id)
-        second = await service.inc_usage(created.id)
-        assert second.used_count == 2
-        assert second.is_active is False
-
-    async def test_stays_active_below_usage_limit(self, db_session):
-        service = PromocodeService(db_session)
-        created = await service.create(make_create(usage_limit=5))
-        updated = await service.inc_usage(created.id)
-        assert updated.is_active is True
-
-    async def test_unknown_id_raises_404(self, db_session):
-        service = PromocodeService(db_session)
-        with pytest.raises(APIException) as exc_info:
-            await service.inc_usage(uuid4())
-        assert exc_info.value.status_code == 404
 
 
 class TestGet:

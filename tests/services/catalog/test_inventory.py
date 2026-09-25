@@ -76,24 +76,6 @@ class TestCheckStock:
         assert result["stock_status"] == "out_of_stock"
 
 
-class TestCheckStockBatch:
-
-    async def test_reports_availability_per_variant(self, db_session, variant):
-        service = InventoryService(db_session)
-        results = await service.check_stock_batch([
-            {"variant_id": variant.id, "quantity": 3},
-            {"variant_id": uuid4(), "quantity": 1},
-        ])
-        assert results[variant.id]["available"] is True
-        for key, value in results.items():
-            if key != variant.id:
-                assert value["available"] is False
-
-    async def test_empty_requests_returns_empty_dict(self, db_session):
-        service = InventoryService(db_session)
-        assert await service.check_stock_batch([]) == {}
-
-
 class TestAdjustStock:
 
     async def test_decrements_stock_and_records_adjustment(self, db_session, variant):
@@ -283,23 +265,6 @@ class TestInventoryCrud:
             await service.delete(uuid4())
         assert exc_info.value.status_code == 404
 
-
-class TestAdjustmentCrud:
-
-    async def test_get_adjustment(self, db_session, variant):
-        service = InventoryService(db_session)
-        await service.adjust_stock(
-            StockAdjustmentCreate(variant_id=variant.id, quantity_change=-2, reason="test"),
-        )
-        listed = await service.adjustments()
-        adjustment_id = listed["data"][0].id
-
-        fetched = await service.get_adjustment(adjustment_id)
-        assert fetched.id == adjustment_id
-
-    async def test_get_unknown_adjustment_returns_none(self, db_session):
-        service = InventoryService(db_session)
-        assert await service.get_adjustment(uuid4()) is None
 
 class TestIsLowStock:
 
@@ -665,39 +630,6 @@ class TestListIncludesVariantImages:
         assert item["variant"]["primary_image"]["id"] == str(image.id)
 
 
-class TestPredictDemand:
-
-    async def test_predicts_thirty_percent_of_current_stock(self, db_session, variant):
-        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
-        inventory = inv_result.scalar_one()
-        inventory.quantity_available = 100
-        await db_session.commit()
-
-        service = InventoryService(db_session)
-        result = await service.predict_demand(variant.id, forecast_days=14)
-        assert result["current_stock"] == 100
-        assert result["predicted_demand"] == 30
-        assert result["forecast_days"] == 14
-        assert result["recommendation"] == "Stock adequate"
-
-    async def test_floors_prediction_at_ten_for_low_stock(self, db_session, variant):
-        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
-        inv_result.scalar_one().quantity_available = 5
-        await db_session.commit()
-
-        service = InventoryService(db_session)
-        result = await service.predict_demand(variant.id)  # stock=5, 30% = 1, floored to 10
-        assert result["predicted_demand"] == 10
-        assert result["current_stock"] == 5
-        assert result["recommendation"] == "Reorder recommended"  # 10 > 5
-
-    async def test_unknown_variant_defaults_to_zero_stock(self, db_session):
-        service = InventoryService(db_session)
-        result = await service.predict_demand(uuid4())
-        assert result["current_stock"] == 0
-        assert result["predicted_demand"] == 10
-
-
 class TestReorderSuggestions:
 
     async def test_suggests_reorder_only_for_low_stock_items_with_urgency_ordering(self, db_session):
@@ -752,52 +684,6 @@ class TestReorderSuggestions:
 
         elsewhere = await service.reorder_suggestions(location_id=uuid4())
         assert all(s["variant_id"] != str(variant.id) for s in elsewhere)
-
-
-class TestBatchUpdateInventoryFromWarehouseData:
-
-    async def test_applies_quantity_changes_for_known_variants(self, db_session, variant):
-        service = InventoryService(db_session)
-        result = await service.batch_update_inventory_from_warehouse_data([
-            {"variant_id": str(variant.id), "quantity": 25},
-        ])
-        assert result["success"] is True
-        assert result["updated_count"] == 1
-
-        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
-        assert inv_result.scalar_one().quantity_available == 25
-
-    async def test_skips_items_with_no_quantity_change(self, db_session, variant):
-        service = InventoryService(db_session)
-        result = await service.batch_update_inventory_from_warehouse_data([
-            {"variant_id": str(variant.id), "quantity": 10},  # already 10, no change
-        ])
-        assert result["success"] is True
-        assert result["updated_count"] == 0
-
-    async def test_skips_unknown_variants(self, db_session):
-        service = InventoryService(db_session)
-        result = await service.batch_update_inventory_from_warehouse_data([
-            {"variant_id": str(uuid4()), "quantity": 5},
-        ])
-        assert result["success"] is True
-        assert result["updated_count"] == 0
-
-    async def test_malformed_item_is_skipped_without_failing_the_batch(self, db_session, variant):
-        """One bad row in a warehouse feed (missing the quantity key) shouldn't take down
-        processing for the other, well-formed rows."""
-        service = InventoryService(db_session)
-        result = await service.batch_update_inventory_from_warehouse_data([
-            {"variant_id": str(variant.id)},  # missing "quantity" -> KeyError, caught, skipped
-        ])
-        assert result["success"] is True
-        assert result["updated_count"] == 0
-
-    async def test_non_iterable_input_raises_500(self, db_session):
-        service = InventoryService(db_session)
-        with pytest.raises(APIException) as exc_info:
-            await service.batch_update_inventory_from_warehouse_data(None)
-        assert exc_info.value.status_code == 500
 
 
 class TestCheckStockLocationFilter:
@@ -856,52 +742,3 @@ class TestIncrementGenericFailure:
         await db_session.rollback()
 
 
-class TestBulkStockUpdate:
-
-    async def test_updates_stock_for_known_variants(self, db_session, variant):
-        service = InventoryService(db_session)
-        result = await service.bulk_stock_update(
-            stock_changes=[{"variant_id": variant.id, "quantity_change": -4, "notes": "test"}],
-            reason="bulk_test",
-        )
-        assert result["success"] is True
-        assert result["updated_count"] == 1
-
-        inv_result = await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))
-        assert inv_result.scalar_one().quantity_available == 6
-
-    async def test_unknown_variant_propagates_404_not_masked_as_500(self, db_session):
-        """Regression test for a bug fixed alongside this test: bulk_stock_update() used to
-        catch every exception - including the deliberate APIException(404) that
-        atomic_bulk_stock_update raises for an unknown variant - and relabel it as a 500,
-        hiding the real cause from callers (e.g. an admin warehouse-sync tool). Fixed to
-        re-raise APIException as-is, matching adjust_stock/increment's existing pattern."""
-        service = InventoryService(db_session)
-        with pytest.raises(APIException) as exc_info:
-            await service.bulk_stock_update(
-                stock_changes=[{"variant_id": uuid4(), "quantity_change": -1, "notes": "x"}],
-                reason="bulk_test",
-            )
-        assert exc_info.value.status_code == 404
-
-    async def test_insufficient_stock_propagates_400_not_masked_as_500(self, db_session, variant):
-        service = InventoryService(db_session)
-        with pytest.raises(APIException) as exc_info:
-            await service.bulk_stock_update(
-                stock_changes=[{"variant_id": variant.id, "quantity_change": -1000, "notes": "x"}],
-                reason="bulk_test",
-            )
-        assert exc_info.value.status_code == 400
-
-    async def test_non_api_exception_is_still_wrapped_as_500(self, db_session):
-        """A malformed variant_id can't raise APIException (it never gets far enough to look up
-        the row) - it's a raw DB error, which should still fall through to the generic 500
-        handler, distinct from the APIException passthrough exercised above."""
-        service = InventoryService(db_session)
-        with pytest.raises(APIException) as exc_info:
-            await service.bulk_stock_update(
-                stock_changes=[{"variant_id": "not-a-uuid", "quantity_change": -1, "notes": "x"}],
-                reason="bulk_test",
-            )
-        assert exc_info.value.status_code == 500
-        await db_session.rollback()
