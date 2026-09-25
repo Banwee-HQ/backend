@@ -18,6 +18,5 @@ from .commerce import (
     TaxValidationRule, ShippingValidationRule,
 )
 from .system import (
-    ContactMessage, MessageStatus, MessagePriority,
     AnalyticsEvent, ConversionFunnel, EventType,
 )

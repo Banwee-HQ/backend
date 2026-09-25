@@ -36,7 +36,7 @@ from api import (
     cart_router, orders_router, payments_router, refunds_router, shipping_router,
     shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router,
     analytics_router,
-    health_router, contact_messages_router,
+    health_router,
 )
 import models
 from core.worker import start_scheduler
@@ -128,7 +128,6 @@ v1_router.include_router(webhooks_router)
 # (e.g. accounts/user.py, catalog/products.py, commerce/orders.py) rather than grouped here.
 v1_router.include_router(analytics_router)
 v1_router.include_router(health_router)
-v1_router.include_router(contact_messages_router)
 
 app.include_router(v1_router)
 

@@ -1,6 +1,6 @@
 # Banwee API Reference
 
-> **Source of truth:** generated from the running FastAPI application schema (`220 operations across 158 paths`).
+> **Source of truth:** generated from the running FastAPI application schema (`189 operations across 139 paths`).
 
 ## Environments
 
@@ -49,7 +49,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `GET` | `/v1/analytics/kpis/` | Kpis | Yes | `query:start_date`, `query:end_date`, `query:days`, `query:compare_previous` | — | `200`, `422` |
 | `GET` | `/v1/analytics/refund-rates/` | Refund Rates | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/repeat-customers/` | Repeat Customers | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
-| `GET` | `/v1/analytics/revenue/` | Revenue | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/sales-trend/` | Sales Trend | Yes | `query:days` | — | `200`, `422` |
 | `GET` | `/v1/analytics/stats/` | Admin Stats | Yes | `query:date_from`, `query:date_to`, `query:status`, `query:category` | — | `200`, `422` |
 | `GET` | `/v1/analytics/time-to-purchase/` | Time To Purchase | Yes | `query:start_date`, `query:end_date`, `query:days` | — | `200`, `422` |
@@ -80,10 +79,7 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/cart/` | Get | Yes | `query:country`, `query:province` | — | `200`, `422` |
 | `POST` | `/v1/cart/` | Create | Yes | — | `Add` (application/json) | `200`, `422` |
-| `POST` | `/v1/cart/calculate/` | Calculate | Yes | — | `Data` (application/json) | `200`, `422` |
-| `GET` | `/v1/cart/checkout-summary/` | Summary | Yes | — | — | `200` |
 | `POST` | `/v1/cart/clear/` | Clear | Yes | — | — | `200` |
-| `GET` | `/v1/cart/count/` | Count | Yes | — | — | `200` |
 | `POST` | `/v1/cart/validate/` | Validate | Yes | `query:country`, `query:province` | — | `200`, `422` |
 | `DELETE` | `/v1/cart/{item_id}/` | Delete | Yes | `path:item_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/cart/{item_id}/` | Patch | Yes | `path:item_id*` | `UpdateItem` (application/json) | `200`, `422` |
@@ -99,16 +95,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `GET` | `/v1/categories/{category_id}/` | Get | No | `path:category_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/categories/{category_id}/` | Update | Yes | `path:category_id*` | `schemas__catalog__category__Update` (application/json) | `200`, `422` |
 
-## Contact Messages
-
-| Method | Path | Summary | Auth | Parameters | Request body | Responses |
-| --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/contact-messages/` | List | Yes | `query:page`, `query:page_size`, `query:status`, `query:priority`, `query:search` | — | `200`, `422` |
-| `POST` | `/v1/contact-messages/` | Create | No | — | `schemas__system__contact_message__Create` (application/json) | `200`, `422` |
-| `DELETE` | `/v1/contact-messages/{message_id}/` | Delete | Yes | `path:message_id*` | — | `200`, `422` |
-| `GET` | `/v1/contact-messages/{message_id}/` | Get | Yes | `path:message_id*` | — | `200`, `422` |
-| `PATCH` | `/v1/contact-messages/{message_id}/` | Patch | Yes | `path:message_id*` | `schemas__system__contact_message__Update` (application/json) | `200`, `422` |
-
 ## health
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
@@ -121,10 +107,8 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/inventory/` | List | Yes | `query:page`, `query:limit`, `query:product_id`, `query:location_id`, `query:location_name`, `query:search`, `query:low_stock`, `query:in_stock`, `query:out_of_stock`, `query:sort_by`, `query:sort_order` | — | `200`, `422` |
-| `POST` | `/v1/inventory/` | Create | Yes | — | `schemas__catalog__inventory__Create` (application/json) | `200`, `422` |
 | `GET` | `/v1/inventory/adjustments/` | List Adj | Yes | `query:page`, `query:limit`, `query:inventory_id` | — | `200`, `422` |
 | `POST` | `/v1/inventory/adjustments/` | Create Adj | Yes | — | `AdjustmentCreate` (application/json) | `200`, `422` |
-| `GET` | `/v1/inventory/adjustments/{adjustment_id}/` | Get Adj | Yes | `path:adjustment_id*` | — | `200`, `422` |
 | `GET` | `/v1/inventory/locations/` | List Locations | Yes | `query:page`, `query:limit` | — | `200`, `422` |
 | `POST` | `/v1/inventory/locations/` | Create Location | Yes | — | `LocationCreate` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/inventory/locations/{location_id}/` | Delete Location | Yes | `path:location_id*` | — | `200`, `422` |
@@ -132,7 +116,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `PATCH` | `/v1/inventory/locations/{location_id}/` | Update Location | Yes | `path:location_id*` | `LocationUpdate` (application/json) | `200`, `422` |
 | `POST` | `/v1/inventory/sync-all/` | Sync All | Yes | — | — | `200` |
 | `POST` | `/v1/inventory/sync/product/{product_id}/` | Sync Product | Yes | `path:product_id*` | — | `200`, `422` |
-| `DELETE` | `/v1/inventory/{inventory_id}/` | Delete | Yes | `path:inventory_id*` | — | `200`, `422` |
 | `GET` | `/v1/inventory/{inventory_id}/` | Get | Yes | `path:inventory_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/inventory/{inventory_id}/` | Patch | Yes | `path:inventory_id*` | `schemas__catalog__inventory__Update` (application/json) | `200`, `422` |
 
@@ -148,23 +131,19 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/orders/` | List | Yes | `query:page`, `query:limit`, `query:status_filter`, `query:search`, `query:date_from`, `query:date_to`, `query:sort_by`, `query:sort_order` | — | `200`, `422` |
-| `POST` | `/v1/orders/` | Create | Yes | — | `Checkout` (application/json) | `200`, `422` |
 | `POST` | `/v1/orders/checkout/` | Checkout | Yes | — | `Checkout` (application/json) | `200`, `422` |
 | `POST` | `/v1/orders/checkout/validate/` | Validate | Yes | — | `Checkout` (application/json) | `200`, `422` |
 | `GET` | `/v1/orders/statistics/` | Statistics | Yes | `query:date_from`, `query:date_to` | — | `200`, `422` |
 | `GET` | `/v1/orders/track/{order_id}/` | Get Public Tracking | No | `path:order_id*` | — | `200`, `422` |
 | `GET` | `/v1/orders/{order_id}/` | Get | Yes | `path:order_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/orders/{order_id}/cancel/` | Cancel | Yes | `path:order_id*` | — | `200`, `422` |
-| `PUT` | `/v1/orders/{order_id}/deliver/` | Deliver | Yes | `path:order_id*` | `Request` (application/json) | `200`, `422` |
+| `POST` | `/v1/orders/{order_id}/complete-payment/` | Complete Payment | Yes | `path:order_id*` | — | `200`, `422` |
 | `GET` | `/v1/orders/{order_id}/invoice/` | Get Invoice | Yes | `path:order_id*` | — | `200`, `422` |
 | `GET` | `/v1/orders/{order_id}/notes/` | List Notes | Yes | `path:order_id*` | — | `200`, `422` |
 | `POST` | `/v1/orders/{order_id}/notes/` | Create Note | Yes | `path:order_id*` | `Note` (application/json) | `200`, `422` |
-| `GET` | `/v1/orders/{order_id}/notes/{note_index}/` | Get Note | Yes | `path:order_id*`, `path:note_index*` | — | `200`, `422` |
 | `GET` | `/v1/orders/{order_id}/payments/` | Get Order Payments | Yes | `path:order_id*` | — | `200`, `422` |
-| `POST` | `/v1/orders/{order_id}/ship/` | Ship | Yes | `path:order_id*` | `Request` (application/json) | `200`, `422` |
 | `GET` | `/v1/orders/{order_id}/shipments/` | Get Order Shipments | Yes | `path:order_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/orders/{order_id}/status/` | Update Status | Yes | `path:order_id*` | `Request` (application/json) | `200`, `422` |
-| `GET` | `/v1/orders/{order_id}/tracking/` | Get Tracking | Yes | `path:order_id*` | — | `200`, `422` |
 
 ## payments
 
@@ -175,19 +154,12 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `POST` | `/v1/payments/failures/{payment_intent_id}/retry/` | Retry Payment | Yes | `path:payment_intent_id*`, `query:new_payment_method_id` | — | `200`, `422` |
 | `GET` | `/v1/payments/failures/{payment_intent_id}/status/` | Failure Status | Yes | `path:payment_intent_id*` | — | `200`, `422` |
 | `GET` | `/v1/payments/intents/` | List Intents | Yes | `query:page`, `query:limit` | — | `200`, `422` |
-| `POST` | `/v1/payments/intents/` | Create Intent | Yes | — | `IntentCreate` (application/json) | `200`, `422` |
 | `GET` | `/v1/payments/intents/{payment_intent_id}/` | Get Intent | Yes | `path:payment_intent_id*` | — | `200`, `422` |
 | `POST` | `/v1/payments/intents/{payment_intent_id}/confirm/` | Confirm Intent | Yes | `path:payment_intent_id*`, `query:payment_method_id*` | — | `200`, `422` |
 | `GET` | `/v1/payments/methods/` | List Methods | Yes | `query:page`, `query:limit`, `query:search` | — | `200`, `422` |
 | `POST` | `/v1/payments/methods/` | Create Method | Yes | — | `schemas__commerce__payments__MethodCreate` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/payments/methods/{payment_method_id}/` | Delete Method | Yes | `path:payment_method_id*` | — | `200`, `422` |
-| `GET` | `/v1/payments/methods/{payment_method_id}/` | Get Method | Yes | `path:payment_method_id*` | — | `200`, `422` |
-| `PATCH` | `/v1/payments/methods/{payment_method_id}/` | Patch Method | Yes | `path:payment_method_id*` | `schemas__commerce__payments__MethodUpdate` (application/json) | `200`, `422` |
 | `POST` | `/v1/payments/methods/{payment_method_id}/default/` | Set Default Method | Yes | `path:payment_method_id*` | — | `200`, `422` |
-| `POST` | `/v1/payments/process/` | Process Payment | Yes | `query:amount*`, `query:payment_method_id*`, `query:order_id`, `query:subscription_id` | — | `200`, `422` |
-| `GET` | `/v1/payments/refunds/` | List Refunds | Yes | `query:page`, `query:limit` | — | `200`, `422` |
-| `POST` | `/v1/payments/refunds/` | Create Refund | Yes | — | `Refund` (application/json) | `200`, `422` |
-| `GET` | `/v1/payments/refunds/{refund_id}/` | Get Refund | Yes | `path:refund_id*` | — | `200`, `422` |
 | `GET` | `/v1/payments/transactions/` | List Transactions | Yes | `query:page`, `query:limit` | — | `200`, `422` |
 | `GET` | `/v1/payments/transactions/{transaction_id}/` | Get Transaction | Yes | `path:transaction_id*` | — | `200`, `422` |
 
@@ -195,7 +167,7 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GET` | `/v1/products/` | List | No | `query:page`, `query:limit`, `query:category`, `query:q`, `query:min_price`, `query:max_price`, `query:min_rating`, `query:max_rating`, `query:sort_by`, `query:sort_order`, `query:availability`, `query:featured`, `query:is_featured`, `query:is_bestseller`, `query:popular`, `query:sale`, `query:search_mode` | — | `200`, `422` |
+| `GET` | `/v1/products/` | List | No | `query:page`, `query:limit`, `query:category`, `query:q`, `query:min_price`, `query:max_price`, `query:min_rating`, `query:max_rating`, `query:sort_by`, `query:sort_order`, `query:availability`, `query:is_featured`, `query:is_bestseller`, `query:sale` | — | `200`, `422` |
 | `POST` | `/v1/products/` | Create | Yes | — | `schemas__catalog__product__Create` (application/json) | `200`, `422` |
 | `GET` | `/v1/products/admin/` | Admin List | Yes | `query:page`, `query:limit`, `query:q`, `query:category`, `query:status`, `query:sort_by`, `query:sort_order` | — | `200`, `422` |
 | `GET` | `/v1/products/deals/` | Get Deals | No | `query:page`, `query:limit` | — | `200`, `422` |
@@ -213,7 +185,7 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `GET` | `/v1/products/{product_id}/` | Get Product | No | `path:product_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/products/{product_id}/` | Update | Yes | `path:product_id*` | `schemas__catalog__product__Update` (application/json) | `200`, `422` |
 | `PATCH` | `/v1/products/{product_id}/feature/` | Feature | Yes | `path:product_id*`, `query:featured` | — | `200`, `422` |
-| `PATCH` | `/v1/products/{product_id}/moderate/` | Moderate | Yes | `path:product_id*` | `Request` (application/json) | `200`, `422` |
+| `PATCH` | `/v1/products/{product_id}/moderate/` | Moderate | Yes | `path:product_id*` | `ProductModeration` (application/json) | `200`, `422` |
 | `GET` | `/v1/products/{product_id}/recommendations/` | Recommended | No | `path:product_id*`, `query:limit` | — | `200`, `422` |
 | `GET` | `/v1/products/{product_id}/variants/` | List Variants | No | `path:product_id*` | — | `200`, `422` |
 | `POST` | `/v1/products/{product_id}/variants/` | Create Variant | Yes | `path:product_id*` | `VariantCreate` (application/json) | `200`, `422` |
@@ -235,10 +207,8 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/refunds/` | List | Yes | `query:refund_status`, `query:page`, `query:limit`, `query:sort_by`, `query:sort_order` | — | `200`, `422` |
-| `POST` | `/v1/refunds/` | Create | Yes | — | `Refund Data` (application/json) | `200`, `422` |
 | `POST` | `/v1/refunds/orders/{order_id}/request/` | Request | Yes | `path:order_id*` | `Request` (application/json) | `200`, `422` |
 | `GET` | `/v1/refunds/{refund_id}/` | Get | Yes | `path:refund_id*` | — | `200`, `422` |
-| `PATCH` | `/v1/refunds/{refund_id}/` | Patch | Yes | `path:refund_id*` | `Payload` (application/json) | `200`, `422` |
 | `PUT` | `/v1/refunds/{refund_id}/status/` | Update Status | Yes | `path:refund_id*` | `UpdateRefundStatus` (application/json) | `200`, `422` |
 
 ## Reviews
@@ -261,7 +231,7 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `POST` | `/v1/shipping/methods/` | Create | Yes | — | `schemas__commerce__shipping__MethodCreate` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/shipping/methods/{method_id}/` | Delete | Yes | `path:method_id*` | — | `200`, `422` |
 | `GET` | `/v1/shipping/methods/{method_id}/` | Get | No | `path:method_id*` | — | `200`, `422` |
-| `PATCH` | `/v1/shipping/methods/{method_id}/` | Patch | Yes | `path:method_id*` | `schemas__commerce__shipping__MethodUpdate` (application/json) | `200`, `422` |
+| `PATCH` | `/v1/shipping/methods/{method_id}/` | Patch | Yes | `path:method_id*` | `MethodUpdate` (application/json) | `200`, `422` |
 
 ## shipping-tracking
 
@@ -275,7 +245,7 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `POST` | `/v1/shipping-tracking/providers/` | Create Provider | Yes | — | `Provider Data` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/shipping-tracking/providers/{provider_id}/` | Delete Provider | Yes | `path:provider_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping-tracking/providers/{provider_id}/` | Patch Provider | Yes | `path:provider_id*` | `Provider Data` (application/json) | `200`, `422` |
-| `GET` | `/v1/shipping-tracking/shipments/` | List | Yes | `query:page`, `query:limit`, `query:order_id` | — | `200`, `422` |
+| `GET` | `/v1/shipping-tracking/shipments/` | List | Yes | `query:page`, `query:limit` | — | `200`, `422` |
 | `POST` | `/v1/shipping-tracking/shipments/` | Create Shipment | Yes | — | `schemas__commerce__shipping_tracking__Create` (application/json) | `200`, `422` |
 | `GET` | `/v1/shipping-tracking/shipments/{shipment_id}/` | Get Shipment | Yes | `path:shipment_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/shipping-tracking/shipments/{shipment_id}/status/` | Update Shipment Status | Yes | `path:shipment_id*` | `schemas__commerce__shipping_tracking__Update` (application/json) | `200`, `422` |
@@ -295,7 +265,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `DELETE` | `/v1/subscriptions/{subscription_id}/` | Delete | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `GET` | `/v1/subscriptions/{subscription_id}/` | Get | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/subscriptions/{subscription_id}/` | Update | Yes | `path:subscription_id*` | `schemas__commerce__subscriptions__Update` (application/json) | `200`, `422` |
-| `PATCH` | `/v1/subscriptions/{subscription_id}/auto-renew/` | Toggle Auto Renew | Yes | `path:subscription_id*`, `query:auto_renew*` | — | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/cancel/` | Cancel | Yes | `path:subscription_id*`, `query:reason` | — | `200`, `422` |
 | `GET` | `/v1/subscriptions/{subscription_id}/details/` | Details | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/discounts/` | Apply Discount | Yes | `path:subscription_id*` | `DiscountApplication` (application/json) | `200`, `422` |
@@ -306,8 +275,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `POST` | `/v1/subscriptions/{subscription_id}/process-shipment/` | Process Shipment | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `DELETE` | `/v1/subscriptions/{subscription_id}/products/` | Remove Products | Yes | `path:subscription_id*` | `RemoveProducts` (application/json) | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/products/` | Add Products | Yes | `path:subscription_id*` | `AddProducts` (application/json) | `200`, `422` |
-| `PATCH` | `/v1/subscriptions/{subscription_id}/products/adjust-quantity/` | Adjust Quantity | Yes | `path:subscription_id*` | `QuantityChange` (application/json) | `200`, `422` |
-| `GET` | `/v1/subscriptions/{subscription_id}/products/quantities/` | Get Quantities | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/subscriptions/{subscription_id}/products/quantity/` | Update Quantity | Yes | `path:subscription_id*` | `UpdateQuantity` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/subscriptions/{subscription_id}/products/{product_id}/` | Remove Product | Yes | `path:subscription_id*`, `path:product_id*` | — | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/resume/` | Resume | Yes | `path:subscription_id*` | — | `200`, `422` |
@@ -318,7 +285,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
-| `POST` | `/v1/tax/calculate/` | Calculate Tax | No | — | `Calculation` (application/json) | `200`, `422` |
 | `GET` | `/v1/tax/countries/` | Countries | No | — | — | `200` |
 | `GET` | `/v1/tax/rates/` | List Rates | Yes | `query:country_code`, `query:country_name`, `query:province_code`, `query:province_name`, `query:is_active`, `query:search`, `query:sort_by`, `query:sort_order`, `query:page`, `query:per_page` | — | `200`, `422` |
 | `POST` | `/v1/tax/rates/` | Create Rate | Yes | — | `RateCreate` (application/json) | `201`, `422` |
@@ -340,8 +306,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/users/` | List | Yes | `query:page`, `query:limit`, `query:role`, `query:q`, `query:search`, `query:status` | — | `200`, `422` |
 | `POST` | `/v1/users/` | Create | Yes | — | `schemas__accounts__user__Create` (application/json) | `200`, `422` |
-| `GET` | `/v1/users/me/` | Me | Yes | — | — | `200` |
-| `GET` | `/v1/users/profile/` | Profile | Yes | — | — | `200` |
 | `DELETE` | `/v1/users/{user_id}/` | Delete | Yes | `path:user_id*` | — | `200`, `422` |
 | `GET` | `/v1/users/{user_id}/` | Get | Yes | `path:user_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/users/{user_id}/` | Patch | Yes | `path:user_id*` | `schemas__accounts__user__Update` (application/json) | `200`, `422` |

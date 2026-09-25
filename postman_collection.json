@@ -497,45 +497,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/analytics/revenue/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/analytics/revenue/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "analytics",
-                "revenue"
-              ],
-              "query": [
-                {
-                  "key": "start_date",
-                  "value": "{{start_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "end_date",
-                  "value": "{{end_date}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "days",
-                  "value": "{{days}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/analytics/sales-trend/",
           "request": {
             "method": "GET",
@@ -1222,59 +1183,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/cart/calculate/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/cart/calculate/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "cart",
-                "calculate"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/cart/checkout-summary/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/cart/checkout-summary/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "cart",
-                "checkout-summary"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "POST /v1/cart/clear/",
           "request": {
             "method": "POST",
@@ -1288,25 +1196,6 @@
                 "v1",
                 "cart",
                 "clear"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/cart/count/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/cart/count/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "cart",
-                "count"
               ]
             }
           },
@@ -1585,169 +1474,6 @@
       ]
     },
     {
-      "name": "Contact Messages",
-      "item": [
-        {
-          "name": "GET /v1/contact-messages/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/contact-messages/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "contact-messages"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "{{page}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "page_size",
-                  "value": "{{page_size}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "status",
-                  "value": "{{status}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "priority",
-                  "value": "{{priority}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "search",
-                  "value": "{{search}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST /v1/contact-messages/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/contact-messages/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "contact-messages"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"email\": \"user@example.com\",\n  \"subject\": \"string\",\n  \"message\": \"string\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "DELETE /v1/contact-messages/{message_id}/",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/contact-messages/{{message_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "contact-messages",
-                "{{message_id}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/contact-messages/{message_id}/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/contact-messages/{{message_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "contact-messages",
-                "{{message_id}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "PATCH /v1/contact-messages/{message_id}/",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/contact-messages/{{message_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "contact-messages",
-                "{{message_id}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"new\",\n  \"priority\": \"low\",\n  \"admin_notes\": \"string\",\n  \"assigned_to\": \"00000000-0000-0000-0000-000000000000\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
       "name": "health",
       "item": [
         {
@@ -1885,39 +1611,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/inventory/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/inventory/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "inventory"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"location_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"quantity\": 0,\n  \"low_stock_threshold\": 10\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/inventory/adjustments/",
           "request": {
             "method": "GET",
@@ -1986,26 +1679,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/inventory/adjustments/{adjustment_id}/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/inventory/adjustments/{{adjustment_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "inventory",
-                "adjustments",
-                "{{adjustment_id}}"
-              ]
             }
           },
           "response": []
@@ -2187,25 +1860,6 @@
                 "sync",
                 "product",
                 "{{product_id}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "DELETE /v1/inventory/{inventory_id}/",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/inventory/{{inventory_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "inventory",
-                "{{inventory_id}}"
               ]
             }
           },
@@ -2423,39 +2077,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/orders/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/orders/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "orders"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
           "name": "POST /v1/orders/checkout/",
           "request": {
             "method": "POST",
@@ -2479,7 +2100,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
+              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"discount_code\": \"string\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2514,7 +2135,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"currency\": \"USD\",\n  \"country_code\": \"US\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
+              "raw": "{\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"payment_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"notes\": \"string\",\n  \"discount_code\": \"string\",\n  \"frontend_calculated_total\": 1.0,\n  \"idempotency_key\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2620,18 +2241,12 @@
           "response": []
         },
         {
-          "name": "PUT /v1/orders/{order_id}/deliver/",
+          "name": "POST /v1/orders/{order_id}/complete-payment/",
           "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
+            "method": "POST",
+            "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/orders/{{order_id}}/deliver/",
+              "raw": "{{baseUrl}}/v1/orders/{{order_id}}/complete-payment/",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -2639,17 +2254,8 @@
                 "v1",
                 "orders",
                 "{{order_id}}",
-                "deliver"
+                "complete-payment"
               ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "response": []
@@ -2730,27 +2336,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/orders/{order_id}/notes/{note_index}/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/orders/{{order_id}}/notes/{{note_index}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "orders",
-                "{{order_id}}",
-                "notes",
-                "{{note_index}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/orders/{order_id}/payments/",
           "request": {
             "method": "GET",
@@ -2766,41 +2351,6 @@
                 "{{order_id}}",
                 "payments"
               ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST /v1/orders/{order_id}/ship/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/orders/{{order_id}}/ship/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "orders",
-                "{{order_id}}",
-                "ship"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "response": []
@@ -2856,26 +2406,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/orders/{order_id}/tracking/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/orders/{{order_id}}/tracking/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "orders",
-                "{{order_id}}",
-                "tracking"
-              ]
             }
           },
           "response": []
@@ -3066,40 +2596,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/payments/intents/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/intents/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "intents"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"amount\": 1.0,\n  \"currency\": \"USD\",\n  \"order_id\": \"00000000-0000-0000-0000-000000000000\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
           "name": "GET /v1/payments/intents/{payment_intent_id}/",
           "request": {
             "method": "GET",
@@ -3242,61 +2738,6 @@
           "response": []
         },
         {
-          "name": "GET /v1/payments/methods/{payment_method_id}/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/methods/{{payment_method_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "methods",
-                "{{payment_method_id}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "PATCH /v1/payments/methods/{payment_method_id}/",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/methods/{{payment_method_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "methods",
-                "{{payment_method_id}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"is_default\": true,\n  \"meta_data\": {}\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
           "name": "POST /v1/payments/methods/{payment_method_id}/default/",
           "request": {
             "method": "POST",
@@ -3312,138 +2753,6 @@
                 "methods",
                 "{{payment_method_id}}",
                 "default"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST /v1/payments/process/",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/process/?amount={{amount}}&payment_method_id={{payment_method_id}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "process"
-              ],
-              "query": [
-                {
-                  "key": "amount",
-                  "value": "{{amount}}",
-                  "description": "",
-                  "disabled": false
-                },
-                {
-                  "key": "payment_method_id",
-                  "value": "{{payment_method_id}}",
-                  "description": "",
-                  "disabled": false
-                },
-                {
-                  "key": "order_id",
-                  "value": "{{order_id}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "subscription_id",
-                  "value": "{{subscription_id}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/payments/refunds/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/refunds/?",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "refunds"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "{{page}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "limit",
-                  "value": "{{limit}}",
-                  "description": "",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST /v1/payments/refunds/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/refunds/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "refunds"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"payment_intent_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"amount\": 1.0,\n  \"reason\": \"requested_by_customer\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/payments/refunds/{refund_id}/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/payments/refunds/{{refund_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "payments",
-                "refunds",
-                "{{refund_id}}"
               ]
             }
           },
@@ -3573,7 +2882,7 @@
                 {
                   "key": "sort_by",
                   "value": "{{sort_by}}",
-                  "description": "",
+                  "description": "created_at, name, price, rating_average or popular",
                   "disabled": true
                 },
                 {
@@ -3585,12 +2894,6 @@
                 {
                   "key": "availability",
                   "value": "{{availability}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "featured",
-                  "value": "{{featured}}",
                   "description": "",
                   "disabled": true
                 },
@@ -3607,21 +2910,9 @@
                   "disabled": true
                 },
                 {
-                  "key": "popular",
-                  "value": "{{popular}}",
-                  "description": "",
-                  "disabled": true
-                },
-                {
                   "key": "sale",
                   "value": "{{sale}}",
                   "description": "",
-                  "disabled": true
-                },
-                {
-                  "key": "search_mode",
-                  "value": "{{search_mode}}",
-                  "description": "Search mode: basic or advanced",
                   "disabled": true
                 }
               ]
@@ -3962,7 +3253,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"00000000-0000-0000-0000-000000000000\",\n  \"sku\": \"string\",\n  \"name\": \"string\",\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"stock\": 1,\n  \"attributes\": {},\n  \"specifications\": {},\n  \"dietary_tags\": {},\n  \"tags\": \"string\",\n  \"is_active\": true,\n  \"availability_status\": \"available\",\n  \"images\": [\n    {}\n  ]\n}",
+              "raw": "{\n  \"sku\": \"string\",\n  \"name\": \"string\",\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"stock\": 1,\n  \"attributes\": {},\n  \"specifications\": {},\n  \"dietary_tags\": {},\n  \"tags\": \"string\",\n  \"is_active\": true,\n  \"availability_status\": \"available\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4097,7 +3388,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"origin\": \"string\",\n  \"product_status\": \"active\",\n  \"is_featured\": true,\n  \"is_bestseller\": true,\n  \"variants\": [\n    {\n      \"id\": null,\n      \"sku\": null,\n      \"name\": null,\n      \"base_price\": null,\n      \"sale_price\": null,\n      \"stock\": null,\n      \"attributes\": null,\n      \"specifications\": null,\n      \"dietary_tags\": null,\n      \"tags\": null,\n      \"is_active\": null,\n      \"availability_status\": null,\n      \"images\": null\n    }\n  ]\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"origin\": \"string\",\n  \"product_status\": \"active\",\n  \"is_featured\": true,\n  \"is_bestseller\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4160,7 +3451,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{}",
+              "raw": "{\n  \"status\": \"approved\",\n  \"notes\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4325,7 +3616,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"string\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": 1.0,\n  \"maximum_discount_amount\": 1.0,\n  \"usage_limit\": 1,\n  \"is_active\": true,\n  \"valid_from\": \"2024-01-01T00:00:00Z\",\n  \"valid_until\": \"2024-01-01T00:00:00Z\"\n}",
+              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"percentage\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": 1.0,\n  \"maximum_discount_amount\": 1.0,\n  \"usage_limit\": 1,\n  \"is_active\": true,\n  \"valid_from\": \"2024-01-01T00:00:00Z\",\n  \"valid_until\": \"2024-01-01T00:00:00Z\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4378,7 +3669,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"string\"\n}",
+              "raw": "{\n  \"code\": \"string\",\n  \"subtotal\": 1.0\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4450,7 +3741,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"string\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": 1.0,\n  \"maximum_discount_amount\": 1.0,\n  \"usage_limit\": 1,\n  \"is_active\": true,\n  \"valid_from\": \"2024-01-01T00:00:00Z\",\n  \"valid_until\": \"2024-01-01T00:00:00Z\"\n}",
+              "raw": "{\n  \"code\": \"string\",\n  \"description\": \"string\",\n  \"discount_type\": \"percentage\",\n  \"value\": 1.0,\n  \"minimum_order_amount\": 1.0,\n  \"maximum_discount_amount\": 1.0,\n  \"usage_limit\": 1,\n  \"is_active\": true,\n  \"valid_from\": \"2024-01-01T00:00:00Z\",\n  \"valid_until\": \"2024-01-01T00:00:00Z\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4516,39 +3807,6 @@
           "response": []
         },
         {
-          "name": "POST /v1/refunds/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/refunds/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "refunds"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
           "name": "POST /v1/refunds/orders/{order_id}/request/",
           "request": {
             "method": "POST",
@@ -4599,40 +3857,6 @@
                 "refunds",
                 "{{refund_id}}"
               ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "PATCH /v1/refunds/{refund_id}/",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/refunds/{{refund_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "refunds",
-                "{{refund_id}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "response": []
@@ -4759,7 +3983,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"user_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"rating\": 1,\n  \"comment\": \"string\"\n}",
+              "raw": "{\n  \"product_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"rating\": 1,\n  \"comment\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4928,7 +4152,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"order_amount\": 1.0,\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"destination_country\": \"US\",\n  \"address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"items\": [\n    {}\n  ]\n}",
+              "raw": "{\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5360,12 +4584,6 @@
                   "value": "{{limit}}",
                   "description": "",
                   "disabled": true
-                },
-                {
-                  "key": "order_id",
-                  "value": "{{order_id}}",
-                  "description": "",
-                  "disabled": true
                 }
               ]
             }
@@ -5592,7 +4810,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"CAD\",\n  \"discount_code\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"discount_code\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5626,7 +4844,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"currency\": \"CAD\"\n}",
+              "raw": "{\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5783,34 +5001,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "PATCH /v1/subscriptions/{subscription_id}/auto-renew/",
-          "request": {
-            "method": "PATCH",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/subscriptions/{{subscription_id}}/auto-renew/?auto_renew={{auto_renew}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "subscriptions",
-                "{{subscription_id}}",
-                "auto-renew"
-              ],
-              "query": [
-                {
-                  "key": "auto_renew",
-                  "value": "{{auto_renew}}",
-                  "description": "",
-                  "disabled": false
-                }
-              ]
             }
           },
           "response": []
@@ -6107,63 +5297,6 @@
           "response": []
         },
         {
-          "name": "PATCH /v1/subscriptions/{subscription_id}/products/adjust-quantity/",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/subscriptions/{{subscription_id}}/products/adjust-quantity/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "subscriptions",
-                "{{subscription_id}}",
-                "products",
-                "adjust-quantity"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"variant_id\": \"string\",\n  \"change\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/subscriptions/{subscription_id}/products/quantities/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/subscriptions/{{subscription_id}}/products/quantities/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "subscriptions",
-                "{{subscription_id}}",
-                "products",
-                "quantities"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "PATCH /v1/subscriptions/{subscription_id}/products/quantity/",
           "request": {
             "method": "PATCH",
@@ -6300,43 +5433,6 @@
     {
       "name": "tax",
       "item": [
-        {
-          "name": "POST /v1/tax/calculate/",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/v1/tax/calculate/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "tax",
-                "calculate"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"subtotal\": 1.0,\n  \"shipping\": 0.0,\n  \"shipping_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"country_code\": \"string\",\n  \"state_code\": \"string\",\n  \"product_type\": \"string\",\n  \"currency\": \"USD\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "response": []
-        },
         {
           "name": "GET /v1/tax/countries/",
           "request": {
@@ -6499,7 +5595,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "[\n  {}\n]",
+              "raw": "[\n  {\n    \"id\": \"00000000-0000-0000-0000-000000000000\",\n    \"tax_rate\": 1.0,\n    \"is_active\": true,\n    \"tax_name\": \"string\"\n  }\n]",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6719,44 +5815,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/users/me/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/users/me/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "users",
-                "me"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/users/profile/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/users/profile/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "users",
-                "profile"
-              ]
             }
           },
           "response": []

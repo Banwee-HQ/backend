@@ -262,14 +262,3 @@ def sample_address_data():
         "post_code": "100001",
         "country": "NG",
     }
-
-
-@pytest.fixture
-def sample_contact_message():
-    """Sample contact message data."""
-    return {
-        "name": "Test Contact",
-        "email": "contact@test.com",
-        "subject": "Test Subject",
-        "message": "This is a test message for the contact form."
-    }
