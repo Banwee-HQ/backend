@@ -16,8 +16,8 @@ async def created_variant(async_client: AsyncClient, admin_headers, sample_produ
     )
     sample_product_data["category_id"] = cat.json()["data"]["id"]
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
-    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
-    return variants.json()["data"][0]
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/")
+    return variants.json()["data"]["variants"][0]
 
 
 @pytest.fixture
@@ -107,10 +107,6 @@ class TestCartEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["items"] == []
 
-    async def test_count(self, async_client: AsyncClient, auth_headers, cart_with_item):
-        """GET /v1/cart/count - Item count."""
-        response = await async_client.get("/v1/cart/count/", headers=auth_headers)
-        assert response.status_code == 200
 
     async def test_validate(self, async_client: AsyncClient, auth_headers, cart_with_item):
         """POST /v1/cart/validate - Validate cart before checkout."""
@@ -118,10 +114,6 @@ class TestCartEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["valid"] is True
 
-    async def test_calculate(self, async_client: AsyncClient, auth_headers, cart_with_item):
-        """POST /v1/cart/calculate - Calculate cart totals."""
-        response = await async_client.post("/v1/cart/calculate/", headers=auth_headers, json={})
-        assert response.status_code == 200
 
     async def test_clear(self, async_client: AsyncClient, auth_headers, cart_with_item):
         """POST /v1/cart/clear - Clear cart."""
@@ -131,14 +123,6 @@ class TestCartEndpoints:
         cart = await async_client.get("/v1/cart/", headers=auth_headers)
         assert cart.json()["data"]["items"] == []
 
-    async def test_checkout_summary(self, async_client: AsyncClient, auth_headers, cart_with_item):
-        """GET /v1/cart/checkout-summary - Get checkout summary."""
-        response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
-        assert response.status_code == 200
-
-    async def test_count_unauthenticated(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/cart/count/")
-        assert response.status_code == 401
 
     async def test_validate_unauthenticated(self, async_client: AsyncClient):
         response = await async_client.post("/v1/cart/validate/")
@@ -146,10 +130,6 @@ class TestCartEndpoints:
 
     async def test_clear_unauthenticated(self, async_client: AsyncClient):
         response = await async_client.post("/v1/cart/clear/")
-        assert response.status_code == 401
-
-    async def test_checkout_summary_unauthenticated(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/cart/checkout-summary/")
         assert response.status_code == 401
 
 
@@ -202,20 +182,6 @@ class TestDeleteItemEdgeCases:
 
 
 @pytest.mark.api
-class TestCountEdgeCases:
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.cart.CartService.item_count", side_effect=HTTPException(status_code=403, detail="nope"))
-        response = await async_client.get("/v1/cart/count/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.cart.CartService.item_count", side_effect=RuntimeError("db down"))
-        response = await async_client.get("/v1/cart/count/", headers=auth_headers)
-        assert response.status_code == 500
-
-
-@pytest.mark.api
 class TestValidateEdgeCases:
 
     async def test_missing_current_user_raises_401_defensively(self, db_session):
@@ -265,20 +231,6 @@ class TestValidateEdgeCases:
 
 
 @pytest.mark.api
-class TestCalculateEdgeCases:
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.cart.CartService.calc_totals", side_effect=HTTPException(status_code=403, detail="nope"))
-        response = await async_client.post("/v1/cart/calculate/", headers=auth_headers, json={})
-        assert response.status_code == 403
-
-    async def test_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.cart.CartService.calc_totals", side_effect=RuntimeError("db down"))
-        response = await async_client.post("/v1/cart/calculate/", headers=auth_headers, json={})
-        assert response.status_code == 400
-
-
-@pytest.mark.api
 class TestClearEdgeCases:
 
     async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
@@ -292,15 +244,3 @@ class TestClearEdgeCases:
         assert response.status_code == 400
 
 
-@pytest.mark.api
-class TestCheckoutSummaryEdgeCases:
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.cart.CartService.checkout_summary", side_effect=HTTPException(status_code=403, detail="nope"))
-        response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_unexpected_service_error_returns_500(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.cart.CartService.checkout_summary", side_effect=RuntimeError("db down"))
-        response = await async_client.get("/v1/cart/checkout-summary/", headers=auth_headers)
-        assert response.status_code == 500

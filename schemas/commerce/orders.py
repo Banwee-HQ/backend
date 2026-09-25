@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
@@ -11,8 +11,7 @@ class Checkout(BaseModel):
     shipping_method_id: UUID  # Reverted back to UUID since we're using database shipping methods
     payment_method_id: UUID
     notes: Optional[str] = None
-    currency: Optional[str] = "USD"  # User's detected currency
-    country_code: Optional[str] = "US"  # User's detected country
+    discount_code: Optional[str] = None
     frontend_calculated_total: Optional[float] = None  # For validation
     idempotency_key: Optional[str] = None  # For duplicate prevention
 
@@ -67,6 +66,10 @@ class Response(BaseModel):
     cancelled_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    # Set when the bank asks the customer to verify (3-D Secure): the browser completes it with Stripe.js
+    # and then calls POST /orders/{id}/complete-payment/.
+    requires_action: bool = False
+    client_secret: Optional[str] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -103,10 +106,11 @@ class IntentResponse(IntentBase):
 
 # Order note schemas
 class Note(BaseModel):
-    note: str
+    note: str = Field(..., min_length=1, max_length=2000)
 
 
 # Admin order management schemas
+
 class ShipOrder(BaseModel):
     tracking_number: str
     carrier_name: str
@@ -127,3 +131,4 @@ class OrderPatch(BaseModel):
     carrier_name: Optional[str] = None
     notes: Optional[str] = None
     admin_notes: Optional[str] = None
+

@@ -24,16 +24,15 @@
 <body>
     <div class="header">
         <div>
-            {% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="Banwee">{% else %}<strong>Banwee</strong>{% endif %}
-            <div>{{ company_address_line1 }}</div>
-            <div>{{ company_address_line2 }}</div>
+            {% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="{{ company_name }}">{% else %}<strong>{{ company_name }}</strong>{% endif %}
+            {% for line in company_address_lines %}<div>{{ line }}</div>{% endfor %}
         </div>
         <div>
             <div class="invoice-title">INVOICE</div>
             <div class="invoice-meta">
                 <div>Invoice #: {{ bnw_invoice_ref }}</div>
                 <div>Issued: {{ bnw_invoice_issue_date }}</div>
-                <div>Due: {{ bnw_payment_due_date }}</div>
+                {% if payment_status %}<div>Payment: {{ payment_status }}</div>{% endif %}
             </div>
         </div>
     </div>
@@ -43,11 +42,17 @@
             <h3>Bill To</h3>
             <div>{{ bnw_customer_full_name }}</div>
             <div>{{ bnw_customer_email_address }}</div>
-            <div>{{ bnw_customer_phone_number }}</div>
+            {% if bnw_customer_phone_number %}<div>{{ bnw_customer_phone_number }}</div>{% endif %}
         </div>
+        {% if shipping_address_lines %}
+        <div>
+            <h3>Ship To</h3>
+            {% for line in shipping_address_lines %}<div>{{ line }}</div>{% endfor %}
+        </div>
+        {% endif %}
         <div>
             <h3>Order</h3>
-            <div>Order Ref: {{ bnw_order_reference_id }}</div>
+            <div>Order: {{ bnw_order_reference_id }}</div>
             <div>Placed: {{ bnw_order_placement_date }}</div>
         </div>
     </div>
@@ -75,7 +80,7 @@
 
     <table class="totals">
         <tr><td>Subtotal</td><td class="text-right">{{ bnw_order_subtotal_amount }}</td></tr>
-        {% if bnw_discount_amount %}<tr><td>Discount ({{ discount_percentage }}%)</td><td class="text-right">-{{ bnw_discount_amount }}</td></tr>{% endif %}
+        {% if bnw_discount_amount %}<tr><td>Discount</td><td class="text-right">-{{ bnw_discount_amount }}</td></tr>{% endif %}
         <tr><td>Tax ({{ bnw_tax_rate }}%)</td><td class="text-right">{{ bnw_tax_amount }}</td></tr>
         <tr><td>Shipping</td><td class="text-right">{{ bnw_shipping_amount }}</td></tr>
         <tr class="grand-total"><td>Total</td><td class="text-right">{{ bnw_grand_total_amount }}</td></tr>

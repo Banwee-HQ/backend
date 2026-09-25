@@ -1,14 +1,4 @@
-"""Tests for SubscriptionService.apply_discount/remove_discount (services/commerce/subscriptions.py).
-
-POST/DELETE /v1/subscriptions/{id}/discounts/ used to unconditionally return
-501 "not yet implemented". Subscription already carries its own
-discount_id/discount_type/discount_value/discount_code columns (discount_id
-FKs to commerce.promocodes, not the separate, largely-dead Discount/
-DiscountEngine system in services/commerce/discounts.py), and
-_calculate_pricing already knows how to resolve a Promocode by code - these
-tests exercise the new service methods that wire that existing logic up to
-an already-created subscription instead of only at creation time.
-"""
+"""Tests for SubscriptionService.apply_discount/remove_discount - subscriptions use the same admin promocodes as orders."""
 
 import pytest
 from uuid import uuid4

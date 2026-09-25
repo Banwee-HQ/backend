@@ -91,7 +91,7 @@ class TestCalcCost:
     async def test_uses_the_specified_active_method(self, db_session):
         service = ShippingService(db_session)
         method = await service.create(make_create(price=15.0))
-        cost = await service.calc_cost(cart_subtotal=50.0, address={}, shipping_method_id=method.id)
+        cost = await service.calc_cost(shipping_method_id=method.id)
         assert float(cost) == pytest.approx(15.0)
 
     async def test_falls_back_to_cheapest_when_no_method_specified(self, db_session):
@@ -99,7 +99,7 @@ class TestCalcCost:
         await service.create(make_create(price=20.0))
         cheap = await service.create(make_create(price=3.0))
 
-        cost = await service.calc_cost(cart_subtotal=50.0, address={})
+        cost = await service.calc_cost()
         assert float(cost) == pytest.approx(3.0)
 
     async def test_falls_back_to_cheapest_when_specified_method_is_inactive(self, db_session):
@@ -107,12 +107,12 @@ class TestCalcCost:
         inactive = await service.create(make_create(price=1.0, is_active=False))
         cheapest_active = await service.create(make_create(price=8.0))
 
-        cost = await service.calc_cost(cart_subtotal=50.0, address={}, shipping_method_id=inactive.id)
+        cost = await service.calc_cost(shipping_method_id=inactive.id)
         assert float(cost) == pytest.approx(8.0)
 
     async def test_returns_zero_when_no_methods_exist(self, db_session):
         service = ShippingService(db_session)
-        cost = await service.calc_cost(cart_subtotal=50.0, address={}, shipping_method_id=uuid4())
+        cost = await service.calc_cost(shipping_method_id=uuid4())
         assert cost == 0.0
 
 

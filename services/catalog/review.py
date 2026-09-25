@@ -130,8 +130,13 @@ class ReviewService:
         }
 
     async def get(self, review_id: UUID) -> Optional[Review]:
-        """Get a review by ID"""
-        result = await self.db.execute(select(Review).where(Review.id == review_id))
+        """Get a review by ID, with its author and product."""
+        result = await self.db.execute(
+            select(Review).where(Review.id == review_id).options(
+                selectinload(Review.user).load_only(User.id, User.firstname, User.lastname),
+                selectinload(Review.product).load_only(Product.id, Product.name),
+            )
+        )
         return result.scalars().first()
 
     async def update(self, review_id: UUID, review_data: ReviewUpdate, user_id: UUID) -> Review:
@@ -155,13 +160,13 @@ class ReviewService:
 
         return ReviewResponse.model_validate(review)
 
-    async def delete(self, review_id: UUID, user_id: UUID):
-        """Delete a review"""
+    async def delete(self, review_id: UUID, user_id: UUID, is_admin: bool = False):
+        """Delete a review; only its author or staff may."""
         review = await self.get(review_id)
         if not review:
             raise APIException(status_code=404, message="Review not found")
 
-        if review.user_id != user_id:
+        if review.user_id != user_id and not is_admin:
             raise APIException(
                 status_code=403, message="Not authorized to delete this review")
 
@@ -192,7 +197,6 @@ class ReviewService:
         except Exception as e:
             logger.error(f"Could not update product rating for {product_id}: {type(e).__name__}: {str(e)}")
             raise
-
     async def recalc_ratings(self):
         """Recalculate ratings for all products that have reviews"""
         # Get all products that have reviews
@@ -215,3 +219,4 @@ class ReviewService:
                 updated_count += 1
         
         return updated_count
+

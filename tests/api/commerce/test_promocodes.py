@@ -101,30 +101,31 @@ class TestPromocodeEndpoints:
         assert response.status_code == 403
 
     async def test_validate_valid_code(self, async_client: AsyncClient, auth_headers, created_promo):
-        """POST /v1/promocodes/validate - A real, active code validates successfully."""
+        """POST /v1/promocodes/validate - A real, active code is returned with its discount on the given subtotal."""
         response = await async_client.post("/v1/promocodes/validate/",
-            headers=auth_headers, json={"code": created_promo["code"]}
+            headers=auth_headers, json={"code": created_promo["code"].lower(), "subtotal": 200}
         )
         assert response.status_code == 200
-        assert response.json()["data"]["valid"] is True
+        data = response.json()["data"]
+        assert data["code"] == created_promo["code"]
+        assert data["discount_amount"] is not None
 
     async def test_validate_unknown_code(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/promocodes/validate - Unknown code returns valid=False, not an error."""
+        """POST /v1/promocodes/validate - An unusable code is a 400 carrying the reason."""
         response = await async_client.post("/v1/promocodes/validate/",
             headers=auth_headers, json={"code": "NOPE-NOT-REAL"}
         )
-        assert response.status_code == 200
-        assert response.json()["data"]["valid"] is False
+        assert response.status_code == 400
+        assert response.json()["message"] == "Promocode not found"
 
-    async def test_trigger_cleanup_requires_admin(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/promocodes/trigger-cleanup - Non-admin is forbidden."""
-        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=auth_headers)
-        assert response.status_code == 403
+    async def test_validate_below_minimum_order(self, async_client: AsyncClient, auth_headers, admin_headers):
+        code = f"MIN{uuid4().hex[:6].upper()}"
+        await async_client.post("/v1/promocodes/", headers=admin_headers, json={
+            "code": code, "discount_type": "fixed", "value": 5, "minimum_order_amount": 50})
+        response = await async_client.post("/v1/promocodes/validate/", headers=auth_headers, json={"code": code, "subtotal": 20})
+        assert response.status_code == 400
+        assert "at least 50.00" in response.json()["message"]
 
-    async def test_trigger_cleanup_as_admin(self, async_client: AsyncClient, admin_headers):
-        """POST /v1/promocodes/trigger-cleanup - Admin can trigger cleanup."""
-        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
-        assert response.status_code == 200
 
     async def test_delete_unknown_id_returns_404(self, async_client: AsyncClient, admin_headers):
         """DELETE /v1/promocodes/{id} - Unknown ID returns 404, not a silent success."""
@@ -136,6 +137,16 @@ class TestPromocodeEndpoints:
         this endpoint's `except APIException: raise` must pass straight through."""
         response = await async_client.patch(f"/v1/promocodes/{uuid4()}/", headers=admin_headers, json={"value": 1})
         assert response.status_code == 404
+
+    async def test_trigger_cleanup_requires_admin(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/promocodes/trigger-cleanup - Non-admin is forbidden."""
+        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_trigger_cleanup_as_admin(self, async_client: AsyncClient, admin_headers):
+        """POST /v1/promocodes/trigger-cleanup - Admin can trigger cleanup."""
+        response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
+        assert response.status_code == 200
 
 
 @pytest.mark.api
@@ -152,10 +163,6 @@ class TestUnexpectedErrorsBecomeSafe500s:
         response = await async_client.get("/v1/promocodes/", headers=admin_headers)
         assert response.status_code == 500
 
-    async def test_validate(self, async_client: AsyncClient, auth_headers, mocker):
-        mocker.patch("services.commerce.promocode.PromocodeService.validate", side_effect=Exception("boom"))
-        response = await async_client.post("/v1/promocodes/validate/", headers=auth_headers, json={"code": "X"})
-        assert response.status_code == 500
 
     async def test_get(self, async_client: AsyncClient, admin_headers, created_promo, mocker):
         mocker.patch("services.commerce.promocode.PromocodeService.get", side_effect=Exception("boom"))
@@ -179,6 +186,7 @@ class TestUnexpectedErrorsBecomeSafe500s:
         response = await async_client.delete(f"/v1/promocodes/{created_promo['id']}/", headers=admin_headers)
         assert response.status_code == 500
 
+
     async def test_trigger_cleanup_reports_scheduler_failure_as_500(self, async_client: AsyncClient, admin_headers, mocker):
         """update_promocode_statuses() itself never raises (it catches its own
         errors and returns success=False) - this exercises the endpoint's own
@@ -198,3 +206,5 @@ class TestUnexpectedErrorsBecomeSafe500s:
         )
         response = await async_client.post("/v1/promocodes/trigger-cleanup/", headers=admin_headers)
         assert response.status_code == 500
+
+

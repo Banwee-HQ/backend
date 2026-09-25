@@ -7,8 +7,9 @@ from core.dependencies import require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from models.accounts.user import User
-from schemas.catalog.category import Create, Update, Response as CategoryResponse, TreeResponse
+from schemas.catalog.category import Create, Update, Response as CategoryResponse
 from services.catalog.category import CategoryService
+from schemas.catalog.category import Create, Update, Response as CategoryResponse, TreeResponse
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 

@@ -85,7 +85,6 @@ class UserRoleUpdate(BaseModel):
     role: UserRole
 
 
-
 class Response(BaseModel):
     id: UUID
     email: EmailStr

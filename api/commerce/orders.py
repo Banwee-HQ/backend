@@ -10,34 +10,15 @@ from core.exceptions import APIException
 from core.logging import get_structured_logger
 from core.utils.response import Response
 from services.commerce.orders import OrderService
-from services.commerce.shipping_tracking import ShippingTrackingService
 from models.accounts.user import User, UserRole
 from models.commerce.orders import Order as OrderModel
 from schemas.commerce.orders import Checkout, Note
+from services.commerce.shipping_tracking import ShippingTrackingService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 logger = get_structured_logger(__name__)
 
 # --- ORDERS - 5 Standard APIs ---
-@router.post("/")
-async def create(
-    request: Checkout,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a new order. Alias of POST /orders/checkout/ - both place an
-    order from the user's cart using OrderService.create()."""
-    try:
-        order_service = OrderService(db)
-        order = await order_service.create(current_user.id, request, background_tasks)
-        return Response.success(data=order, message="Order created successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=400, message=f"Failed to create order: {str(e)}")
 
 
 @router.get("/statistics/")
@@ -80,8 +61,9 @@ async def get(
         if not order:
             raise APIException(status_code=404, message="Order not found")
 
-        # Convert to dict and add customer information for admin
         order_dict = order.model_dump()
+        if not is_admin:
+            order_dict["internal_notes"] = None
 
         # Add customer information if user is loaded
         order_query = select(OrderModel).where(OrderModel.id == order_id).options(
@@ -200,6 +182,20 @@ async def checkout(
         raise APIException(status_code=500, message=f"Order placement failed: {str(e)}")
 
 
+@router.post("/{order_id}/complete-payment/")
+async def complete_payment(
+    order_id: UUID,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Finish checkout after the customer's bank verification (3-D Secure) in the browser."""
+    try:
+        order = await OrderService(db).complete_payment(order_id, current_user.id)
+        return Response.success(data=order, message="Payment completed")
+    except HTTPException as e:
+        raise APIException(status_code=e.status_code, message=e.detail)
+
+
 @router.patch("/{order_id}/cancel/")
 async def cancel(
     order_id: UUID,
@@ -219,7 +215,6 @@ async def cancel(
         raise APIException(status_code=400, message="Failed to cancel order")
 
 
-
 @router.get("/{order_id}/invoice/")
 async def get_invoice(
     order_id: UUID,
@@ -229,7 +224,7 @@ async def get_invoice(
     """Get order invoice (PDF)."""
     try:
         order_service = OrderService(db)
-        invoice_result = await order_service.invoice(order_id, current_user.id)
+        invoice_result = await order_service.invoice(order_id, current_user.id, is_admin=current_user.role in [UserRole.ADMIN, UserRole.MANAGER])
         if invoice_result.get('success') and invoice_result.get('pdf_bytes'):
             # Local: shadows this file's core.utils.response.Response on purpose,
             # for a raw binary PDF response instead of the app's JSON envelope.
@@ -256,10 +251,10 @@ async def create_note(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Add note to order."""
+    """Add a note: customers to their own order, staff as an internal note on any order."""
     try:
         order_service = OrderService(db)
-        result = await order_service.add_note(order_id, current_user.id, request.note)
+        result = await order_service.add_note(order_id, current_user.id, request.note, is_admin=current_user.role in [UserRole.ADMIN, UserRole.MANAGER])
         return Response.success(data=result, message="Note added successfully")
     except APIException:
         raise
@@ -267,28 +262,6 @@ async def create_note(
         raise
     except Exception as e:
         raise APIException(status_code=400, message=f"Failed to add note: {str(e)}")
-
-
-@router.get("/{order_id}/notes/{note_index}/")
-async def get_note(
-    order_id: UUID,
-    note_index: int,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific note by index."""
-    try:
-        order_service = OrderService(db)
-        note = await order_service.get_note(order_id, current_user.id, note_index)
-        if not note:
-            raise APIException(status_code=404, message="Note not found")
-        return Response.success(data=note, message="Note retrieved successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to get note: {str(e)}")
 
 
 @router.get("/{order_id}/notes/")
@@ -300,7 +273,7 @@ async def list_notes(
     """List all notes for an order."""
     try:
         order_service = OrderService(db)
-        notes = await order_service.notes(order_id, current_user.id)
+        notes = await order_service.notes(order_id, current_user.id, is_admin=current_user.role in [UserRole.ADMIN, UserRole.MANAGER])
         return Response.success(data=notes, message="Notes retrieved successfully")
     except APIException:
         raise
@@ -311,37 +284,19 @@ async def list_notes(
 
 
 # --- ORDER TRACKING - Moved from shipping_tracking.py ---
-@router.get("/{order_id}/tracking/")
-async def get_tracking(
-    order_id: UUID,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get order tracking information (authenticated)."""
-    try:
-        order_service = OrderService(db)
-        tracking = await order_service.tracking(order_id, current_user.id)
-        if tracking is None:
-            raise APIException(status_code=404, message="Order not found or tracking unavailable")
-        return Response.success(data=tracking, message="Tracking information retrieved")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to fetch tracking: {str(e)}")
 
 
+# --- PUBLIC TRACKING - No authentication required ---
 @router.get("/{order_id}/payments/")
 async def get_order_payments(
     order_id: UUID,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get payment intents and transactions for an order (authenticated, owner only)."""
+    """An order's payment attempts and transactions: the owner's order, or any order for staff."""
     try:
         order_service = OrderService(db)
-        payments = await order_service.payments(order_id, current_user.id)
+        payments = await order_service.payments(order_id, current_user.id, is_admin=current_user.role in [UserRole.ADMIN, UserRole.MANAGER])
         return Response.success(data=payments, message="Payment information retrieved")
     except APIException:
         raise
@@ -357,12 +312,11 @@ async def get_order_shipments(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all shipments for an order (owner only)."""
+    """An order's shipments with their tracking events: the owner's order, or any order for staff."""
     try:
         order_service = OrderService(db)
-        # list_by_order() has no ownership filter of its own - confirm this order
-        # belongs to the caller before returning its shipments.
-        order = await order_service.get(order_id, current_user.id)
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.MANAGER]
+        order = await order_service.get(order_id, None if is_admin else current_user.id)
         if not order:
             raise APIException(status_code=404, message="Order not found")
 
@@ -380,7 +334,6 @@ async def get_order_shipments(
         )
 
 
-# --- PUBLIC TRACKING - No authentication required ---
 @router.get("/track/{order_id}/")
 async def get_public_tracking(
     order_id: str,
@@ -425,41 +378,3 @@ async def update_status(
         raise APIException(status_code=500, message=f"Failed to update order status: {str(e)}")
 
 
-@router.put("/{order_id}/deliver/")
-async def deliver(
-    order_id: str,
-    request: dict = {},
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Mark order as delivered (admin only)."""
-    try:
-        order_service = OrderService(db)
-        result = await order_service.deliver(order_id, request.get("notes"))
-        return Response.success(data=result, message="Order marked as delivered")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to mark order as delivered: {str(e)}")
-
-
-@router.post("/{order_id}/ship/")
-async def ship(
-    order_id: str,
-    request: dict,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Ship order (admin only)."""
-    try:
-        order_service = OrderService(db)
-        result = await order_service.ship(order_id, request.get("carrier"), request.get("tracking_number"))
-        return Response.success(data=result, message="Order shipped")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=500, message=f"Failed to ship order: {str(e)}")

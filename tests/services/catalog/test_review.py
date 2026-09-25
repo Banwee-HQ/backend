@@ -234,6 +234,23 @@ class TestDelete:
         await service.delete(created["id"], user.id)
         assert await service.get(created["id"]) is None
 
+    async def test_other_customer_cannot_delete(self, db_session):
+        product = await make_product(db_session)
+        author, other = await make_user(db_session), await make_user(db_session)
+        service = ReviewService(db_session)
+        created = await service.create(ReviewCreate(product_id=product.id, rating=3), author.id)
+        with pytest.raises(APIException) as exc_info:
+            await service.delete(created["id"], other.id)
+        assert exc_info.value.status_code == 403
+
+    async def test_staff_can_delete_any_review(self, db_session):
+        product = await make_product(db_session)
+        author, staff = await make_user(db_session), await make_user(db_session)
+        service = ReviewService(db_session)
+        created = await service.create(ReviewCreate(product_id=product.id, rating=3), author.id)
+        await service.delete(created["id"], staff.id, is_admin=True)
+        assert await service.get(created["id"]) is None
+
     async def test_delete_updates_product_rating_count(self, db_session):
         product = await make_product(db_session)
         user = await make_user(db_session)

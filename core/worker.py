@@ -151,6 +151,14 @@ async def update_promocode_statuses_task() -> str:
 
 SUBSCRIPTION_RUN_HOURS = {2, 8, 14, 20}  # every 6 hours
 
+async def expire_unverified_orders_task() -> str:
+    """Release checkouts whose 3-D Secure verification was never finished."""
+    async def run(db):
+        from services.commerce.orders import OrderService
+        return f"Released {await OrderService(db).expire_unverified_orders()} unverified orders"
+    return await _run_scheduled_job("expire_unverified_orders", run)
+
+
 async def _run_scheduler():
     """Check once a minute whether it's time to run the subscription or promocode job."""
     logger.info("Background scheduler started")
@@ -175,6 +183,12 @@ async def _run_scheduler():
                     logger.info(await update_promocode_statuses_task())
                 except Exception as e:
                     logger.error(f"Promocode scheduler error: {e}")
+
+        if now.minute % 10 == 0:
+            try:
+                logger.info(await expire_unverified_orders_task())
+            except Exception as e:
+                logger.error(f"Unverified order expiry error: {e}")
 
         await asyncio.sleep(60)
 

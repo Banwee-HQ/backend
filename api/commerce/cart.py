@@ -106,25 +106,6 @@ async def delete(
         raise APIException(status_code=400, message=f"Failed to remove item: {e}")
 
 
-@router.get("/count/")
-async def count(
-    request: Request,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        cart_service = CartService(db)
-        count = await cart_service.item_count(
-            user_id=current_user.id
-        )
-        return Response.success(data=count)
-    except HTTPException as e:
-        raise
-    except Exception:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Failed to get cart count")
-
-
 @router.post("/validate/")
 async def validate(
     request: Request,
@@ -185,28 +166,6 @@ async def validate(
         )
 
 
-@router.post("/calculate/")
-async def calculate(
-    data: dict,
-    request: Request,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        cart_service = CartService(db)
-        result = await cart_service.calc_totals(
-            user_id=current_user.id,
-            data=data
-        )
-        return Response.success(data=result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to calculate totals: {str(e)}", exc_info=True)
-        raise APIException(status_code=status.HTTP_400_BAD_REQUEST,
-                           message=f"Failed to calculate totals: {str(e)}")
-
-
 @router.post("/clear/")
 async def clear(
     request: Request,
@@ -229,20 +188,3 @@ async def clear(
         )
 
 
-@router.get("/checkout-summary/")
-async def summary(
-    request: Request,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        cart_service = CartService(db)
-        result = await cart_service.checkout_summary(
-            user_id=current_user.id
-        )
-        return Response.success(data=result)
-    except HTTPException:
-        raise
-    except Exception:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                           message="Failed to get checkout summary")

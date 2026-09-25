@@ -3,7 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from schemas.commerce.cart import Add, EnhancedProductVariantResponse
+from schemas.commerce.cart import Add
+from schemas.commerce.cart import EnhancedProductVariantResponse
 
 
 class TestAdd:

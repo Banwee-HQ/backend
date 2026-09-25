@@ -698,7 +698,6 @@ class TestCalculateCartPricingEdgeCases:
         assert result["tax_amount"] == pytest.approx(10.0)
 
 
-
 class TestGetCartEdgeCases:
 
     async def test_item_with_images_includes_image_list(self, db_session):

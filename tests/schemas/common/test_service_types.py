@@ -6,9 +6,8 @@ match how callers actually construct them (services/commerce/export.py etc.).
 
 from decimal import Decimal
 
-from schemas.common.service_types import (
-    CartValidationResult, PricingCalculationResult, DiscountCalculationResult, ExportResult,
-)
+from schemas.common.service_types import CartValidationResult, PricingCalculationResult
+from schemas.common.service_types import DiscountCalculationResult, ExportResult
 
 
 class TestCartValidationResult:

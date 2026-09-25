@@ -1,14 +1,22 @@
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import Optional
 from core.db import get_db, logger
-from core.dependencies import require_admin, require_auth
+from core.dependencies import require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
+from schemas.commerce.subscriptions import Create, Update, AddProducts, RemoveProducts, UpdateQuantity, DiscountApplication, ChangeFrequency, SkipShipment
+from services.commerce.subscriptions import SubscriptionService
+from models.accounts.user import User, UserRole, Address
+from models.commerce.shipping import ShippingMethod
+from models.catalog.product import ProductVariant
+from models.commerce.subscriptions import Subscription
+from datetime import datetime, timezone
+from sqlalchemy import select, and_
+from core.dependencies import require_admin, require_auth
 from schemas.commerce.subscriptions import (
     Create,
     Update,
@@ -21,12 +29,8 @@ from schemas.commerce.subscriptions import (
     ChangeFrequency,
     SkipShipment
 )
-from services.commerce.subscriptions import SubscriptionService
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
-from models.accounts.user import User, UserRole, Address
-from models.commerce.shipping import ShippingMethod
-from models.catalog.product import ProductVariant
-from models.commerce.subscriptions import Subscription
+from core.config import settings
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
@@ -189,24 +193,15 @@ async def calculate(
                     "post_code": address.post_code
                 }
 
-        # Calculate cost
-        cost_breakdown = await subscription_service._calc_cost(
+        pricing = await subscription_service._calculate_pricing(
             variants=variants,
-            shipping_method_id=cost_request.shipping_method_id,
+            variant_quantities=cost_request.variant_quantities or {},
             customer_address=customer_address,
-            currency=cost_request.currency,
-            user_id=current_user.id
+            currency=settings.STORE_CURRENCY,
+            user_id=current_user.id,
+            shipping_method_id=cost_request.shipping_method_id,
         )
-        
-        return Response.success(
-            data={
-                "cost_breakdown": cost_breakdown,
-                "estimated_total": cost_breakdown.get("total", cost_breakdown.get("total_amount", 0)),
-                "currency": cost_request.currency,
-                "calculation_timestamp": datetime.now(timezone.utc)
-            },
-            message="Subscription cost calculated successfully"
-        )
+        return Response.success(data={**pricing, "currency": settings.STORE_CURRENCY})
 
     except APIException:
         raise
@@ -249,7 +244,6 @@ async def create(
             variant_quantities=variant_quantities,
             delivery_address_id=subscription_data.delivery_address_id,
             billing_cycle=subscription_data.billing_cycle,
-            currency=subscription_data.currency,
             current_period_start=subscription_data.current_period_start,
             shipping_method_id=subscription_data.shipping_method_id
         )
@@ -406,100 +400,6 @@ async def update_quantity(
         )
 
 
-@router.patch("/{subscription_id}/products/adjust-quantity/")
-async def adjust_quantity(
-    subscription_id: UUID,
-    request: QuantityChange,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Increment or decrement the quantity of a specific variant in a subscription."""
-    try:
-        subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.adjust_quantity(
-            subscription_id, request.variant_id, request.change, current_user.id
-        )
-        action = "increased" if request.change > 0 else "decreased"
-        return Response.success(
-            data=subscription.to_dict(include_products=True), 
-            message=f"Variant quantity {action} by {abs(request.change)} successfully"
-        )
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error adjusting variant quantity: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to adjust variant quantity: {str(e)}"
-        )
-@router.get("/{subscription_id}/products/quantities/")
-async def get_quantities(
-    subscription_id: UUID,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-    ):
-    """Get the quantities of all variants in a subscription."""
-    try:
-        subscription_service = SubscriptionService(db)
-        quantities = await subscription_service.get_quantities(
-            subscription_id, current_user.id
-            )
-        return Response.success(
-            data={"variant_quantities": quantities}, 
-            message="Variant quantities retrieved successfully"
-        )
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting variant quantities: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to get variant quantities: {str(e)}"
-        )
-@router.patch("/{subscription_id}/auto-renew/")
-async def toggle_auto_renew(
-    subscription_id: UUID,
-    auto_renew: bool,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-    ):
-    """Simple toggle for auto-renew setting."""
-    try:
-        subscription_service = SubscriptionService(db)
-        # Get the subscription
-        subscription = await subscription_service.get(subscription_id, current_user.id)
-        if not subscription:
-            raise APIException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            message="Subscription not found"
-            )
-        # Update auto_renew
-        subscription.auto_renew = auto_renew
-        await db.commit()
-        await db.refresh(subscription)
-        return Response.success(
-            data={
-                "id": str(subscription.id),
-                "auto_renew": subscription.auto_renew,
-                "status": subscription.status,
-                "next_billing_date": subscription.next_billing_date.isoformat() if subscription.next_billing_date else None
-                },
-                message=f"Auto-renew {'enabled' if auto_renew else 'disabled'}"
-            )
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating auto-renew: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to update auto-renew: {str(e)}"
-        )
 @router.get("/{subscription_id}/")
 async def get(
     subscription_id: UUID,
@@ -684,6 +584,8 @@ async def process_shipment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to process subscription shipment: {str(e)}"
         )
+
+
 @router.post("/{subscription_id}/pause/")
 async def pause(
     subscription_id: UUID,

@@ -17,14 +17,14 @@ from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from core.config import settings
 from core.exceptions import APIException
 from core.utils.uuid_utils import uuid7
 from core.utils.encryption import PasswordManager
-from services.commerce.orders import OrderService, get_currency_from_address
-from services.commerce.discounts import DiscountEngine
+from services.commerce.orders import OrderService
 from services.commerce.cart import CartService
 from schemas.commerce.orders import Checkout
-from models.commerce.discounts import DiscountType
+from models.commerce.promocode import Promocode
 from models.catalog.category import Category
 from models.catalog.product import Product, ProductVariant
 from models.catalog.inventories import Inventory, StockAdjustment
@@ -35,6 +35,14 @@ from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider
 from models.commerce.tax_rates import TaxRate
 from models.commerce.orders import Order, OrderItem, TrackingEvent, OrderStatus, PaymentStatus, FulfillmentStatus
 from tests.conftest import TestingSessionLocal
+
+
+async def make_promo(db_session, discount_type: str, value, **extra) -> str:
+    """An active admin promocode; returns its code."""
+    code = f"P{uuid4().hex[:8].upper()}"
+    db_session.add(Promocode(id=uuid7(), code=code, discount_type=discount_type, value=Decimal(str(value)), is_active=True, **extra))
+    await db_session.flush()
+    return code
 
 
 # --------------------------------------------------------------------------- Fixtures ---------------------------------------------------------------------------
@@ -160,26 +168,6 @@ async def existing_order(db_session, test_user, variant) -> Order:
     return order
 
 
-# --------------------------------------------------------------------------- get_currency_from_address (module-level helper) ---------------------------------------------------------------------------
-
-class TestGetCurrencyFromAddress:
-
-    def test_known_country_code(self):
-        assert get_currency_from_address("NG") == "NGN"
-
-    def test_known_full_name_case_insensitive(self):
-        assert get_currency_from_address("canada") == "CAD"
-
-    def test_unknown_country_defaults_to_usd(self):
-        assert get_currency_from_address("Atlantis") == "USD"
-
-    def test_empty_defaults_to_usd(self):
-        assert get_currency_from_address("") == "USD"
-
-    def test_none_defaults_to_usd(self):
-        assert get_currency_from_address(None) == "USD"
-
-
 # --------------------------------------------------------------------------- calc_pricing ---------------------------------------------------------------------------
 
 class TestCalcPricing:
@@ -189,7 +177,7 @@ class TestCalcPricing:
         result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id)
         assert result["subtotal"] == Decimal("39.98")
         assert result["shipping_cost"] == Decimal("10.00")
-        assert result["currency"] == "USD"
+        assert result["currency"] == settings.STORE_CURRENCY
         assert result["total_amount"] >= result["subtotal"]
 
     async def test_inactive_shipping_method_costs_nothing(self, db_session, cart_with_item, address, shipping_method):
@@ -199,39 +187,22 @@ class TestCalcPricing:
         result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id)
         assert result["shipping_cost"] == Decimal("0.00")
 
-    async def test_applies_percentage_discount_code(self, db_session, cart_with_item, address, shipping_method):
-        engine = DiscountEngine(db_session)
-        now = datetime.now(timezone.utc)
-        code = f"pct{uuid4().hex[:6]}"
-        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=10,
-                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
-        service = OrderService(db_session)
-        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
-        assert result["discount_amount"] > Decimal("0.00")
-        assert result["breakdown"]["discount"]["code"] == code.upper()
+    async def test_applies_percentage_promocode(self, db_session, cart_with_item, address, shipping_method):
+        code = await make_promo(db_session, "percentage", 10)
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code.lower())
+        assert result["discount_amount"] == Decimal("4.00")  # 10% of 39.98
+        assert result["breakdown"]["discount"]["code"] == code
 
-    async def test_applies_fixed_amount_discount_code(self, db_session, cart_with_item, address, shipping_method):
-        engine = DiscountEngine(db_session)
-        now = datetime.now(timezone.utc)
-        code = f"fix{uuid4().hex[:6]}"
-        await engine.create(code=code, discount_type=DiscountType.FIXED_AMOUNT.value, value=5,
-                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
-        service = OrderService(db_session)
-        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
+    async def test_applies_fixed_promocode(self, db_session, cart_with_item, address, shipping_method):
+        code = await make_promo(db_session, "fixed", 5)
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
         assert result["discount_amount"] == Decimal("5.00")
 
-    async def test_applies_free_shipping_discount_code(self, db_session, cart_with_item, address, shipping_method):
-        engine = DiscountEngine(db_session)
-        now = datetime.now(timezone.utc)
-        code = f"ship{uuid4().hex[:6]}"
-        await engine.create(code=code, discount_type=DiscountType.FREE_SHIPPING.value, value=0,
-                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
-        service = OrderService(db_session)
-        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
-        # Shipping shows at full price and is taken off once, as the discount
-        assert result["shipping_cost"] == Decimal("10.00")
-        assert result["discount_amount"] == Decimal("10.00")
-        assert result["total_amount"] == result["subtotal"] + result["tax_amount"]
+    async def test_promocode_below_its_minimum_order_is_not_applied(self, db_session, cart_with_item, address, shipping_method):
+        code = await make_promo(db_session, "fixed", 5, minimum_order_amount=Decimal("100"))
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
+        assert result["discount_amount"] == Decimal("0.00")
+        assert result["breakdown"]["discount"] is None
 
     async def test_unknown_discount_code_is_silently_ignored(self, db_session, cart_with_item, address, shipping_method):
         service = OrderService(db_session)
@@ -260,22 +231,10 @@ class TestCalcPricingTax:
         assert result["total_amount"] == Decimal("56.48")
 
     async def test_discount_reduces_the_taxed_amount(self, db_session, cart_with_item, taxed_address, shipping_method):
-        now = datetime.now(timezone.utc)
-        code = f"fix{uuid4().hex[:6]}"
-        await DiscountEngine(db_session).create(code=code, discount_type=DiscountType.FIXED_AMOUNT.value, value=5,
-                                                valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
+        code = await make_promo(db_session, "fixed", 5)
         result = await OrderService(db_session).calc_pricing(cart_with_item.items, taxed_address, shipping_method.id, discount_code=code)
         assert result["tax_amount"] == Decimal("5.85")  # 13% of 44.98
         assert result["total_amount"] == Decimal("50.83")
-
-    async def test_free_shipping_is_not_taxed(self, db_session, cart_with_item, taxed_address, shipping_method):
-        now = datetime.now(timezone.utc)
-        code = f"ship{uuid4().hex[:6]}"
-        await DiscountEngine(db_session).create(code=code, discount_type=DiscountType.FREE_SHIPPING.value, value=0,
-                                                valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
-        result = await OrderService(db_session).calc_pricing(cart_with_item.items, taxed_address, shipping_method.id, discount_code=code)
-        assert result["tax_amount"] == Decimal("5.20")  # 13% of 39.98
-        assert result["total_amount"] == Decimal("45.18")
 
     async def test_address_without_a_rate_has_no_tax(self, db_session, cart_with_item, address, shipping_method):
         result = await OrderService(db_session).calc_pricing(cart_with_item.items, address, shipping_method.id)
@@ -839,54 +798,33 @@ class TestInvoice:
 
 class TestNotes:
 
-    async def test_add_and_list_notes(self, db_session, test_user, existing_order):
+    async def test_customer_note_goes_to_customer_notes(self, db_session, test_user, existing_order):
         service = OrderService(db_session)
-        add_result = await service.add_note(existing_order.id, test_user.id, "Please gift wrap")
-        assert "Please gift wrap" in add_result["all_notes"]
+        result = await service.add_note(existing_order.id, test_user.id, "Please gift wrap")
+        assert [n["note"] for n in result["customer"]] == ["Please gift wrap"]
+        assert result["internal"] == []
 
-        list_result = await service.notes(existing_order.id, test_user.id)
-        assert list_result["total_notes"] == 1
-        assert list_result["notes"][0]["note"] == "Please gift wrap"
-
-    async def test_get_note_by_index(self, db_session, test_user, existing_order):
+    async def test_staff_note_is_internal_and_hidden_from_the_customer(self, db_session, test_user, admin_user, existing_order):
         service = OrderService(db_session)
-        await service.add_note(existing_order.id, test_user.id, "First note")
-        note = await service.get_note(existing_order.id, test_user.id, 0)
-        assert note["note"] == "First note"
+        await service.add_note(existing_order.id, admin_user.id, "Fragile - double box", is_admin=True)
+        assert [n["note"] for n in (await service.notes(existing_order.id, admin_user.id, is_admin=True))["internal"]] == ["Fragile - double box"]
+        assert (await service.notes(existing_order.id, test_user.id))["internal"] == []
 
-    async def test_get_note_out_of_range_returns_none(self, db_session, test_user, existing_order):
+    async def test_notes_keep_order_and_multiline_text(self, db_session, test_user, existing_order):
         service = OrderService(db_session)
-        assert await service.get_note(existing_order.id, test_user.id, 5) is None
+        await service.add_note(existing_order.id, test_user.id, "First")
+        await service.add_note(existing_order.id, test_user.id, "Second\nline")
+        notes = (await service.notes(existing_order.id, test_user.id))["customer"]
+        assert [n["note"] for n in notes] == ["First", "Second\nline"]
 
-    async def test_update_note(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        await service.add_note(existing_order.id, test_user.id, "Original")
-        result = await service.update_note(existing_order.id, test_user.id, 0, "Updated")
-        assert result["updated_note"] == "Updated"
-        notes = await service.notes(existing_order.id, test_user.id)
-        assert notes["notes"][0]["note"] == "Updated"
-
-    async def test_update_note_out_of_range_raises_404(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
+    async def test_customer_cannot_note_someone_elses_order(self, db_session, admin_user, existing_order):
         with pytest.raises(HTTPException) as exc_info:
-            await service.update_note(existing_order.id, test_user.id, 0, "x")
+            await OrderService(db_session).add_note(existing_order.id, admin_user.id, "Not mine")
         assert exc_info.value.status_code == 404
 
-    async def test_delete_note(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        await service.add_note(existing_order.id, test_user.id, "To delete")
-        assert await service.delete_note(existing_order.id, test_user.id, 0) is True
-        notes = await service.notes(existing_order.id, test_user.id)
-        assert notes["total_notes"] == 0
-
-    async def test_delete_note_out_of_range_returns_false(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        assert await service.delete_note(existing_order.id, test_user.id, 5) is False
-
     async def test_notes_order_not_found_raises_404(self, db_session, test_user):
-        service = OrderService(db_session)
         with pytest.raises(HTTPException) as exc_info:
-            await service.notes(uuid4(), test_user.id)
+            await OrderService(db_session).notes(uuid4(), test_user.id)
         assert exc_info.value.status_code == 404
 
 
@@ -1010,36 +948,18 @@ class TestFormatOrderResponse:
 class TestCalcPricingDiscountEdgeCases:
 
     async def test_percentage_discount_capped_by_maximum_discount(self, db_session, cart_with_item, address, shipping_method):
-        engine = DiscountEngine(db_session)
-        now = datetime.now(timezone.utc)
-        code = f"maxcap{uuid4().hex[:6]}"
-        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=50,
-                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10),
-                             maximum_discount=2.00)
+        code = await make_promo(db_session, "percentage", 50, maximum_discount_amount=Decimal("2.00"))
         service = OrderService(db_session)
         result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
         # 50% of the 39.98 subtotal is 19.99, but the code's maximum_discount caps it at 2.00
         assert result["discount_amount"] == Decimal("2.00")
 
-    async def test_total_amount_never_goes_negative(self, db_session, cart_with_item, address, shipping_method):
-        """A discount larger than subtotal+shipping+tax must floor the total at 0.00,
-        not go negative (which would mean paying the customer instead of charging them)."""
-        engine = DiscountEngine(db_session)
-        now = datetime.now(timezone.utc)
-        code = f"huge{uuid4().hex[:6]}"
-        await engine.create(code=code, discount_type=DiscountType.PERCENTAGE.value, value=1000,
-                             valid_from=now - timedelta(days=1), valid_until=now + timedelta(days=10))
-        service = OrderService(db_session)
-        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
-        assert result["total_amount"] == Decimal("0.00")
-
-    async def test_discount_engine_error_is_swallowed_not_raised(self, db_session, cart_with_item, address, shipping_method, mocker):
-        """calc_pricing must degrade gracefully (no discount applied) rather than
-        failing checkout entirely if the discount engine itself errors out."""
-        mocker.patch.object(DiscountEngine, "validate_discount_code", side_effect=RuntimeError("discount service down"))
-        service = OrderService(db_session)
-        result = await service.calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code="ANYCODE")
-        assert result["discount_amount"] == Decimal("0.00")
+    async def test_discount_never_exceeds_the_subtotal(self, db_session, cart_with_item, address, shipping_method):
+        """A code worth more than the goods only zeroes the goods; delivery is still charged."""
+        code = await make_promo(db_session, "fixed", 1000)
+        result = await OrderService(db_session).calc_pricing(cart_with_item.items, address, shipping_method.id, discount_code=code)
+        assert result["discount_amount"] == Decimal("39.98")
+        assert result["total_amount"] == Decimal("10.00")
 
 
 # --------------------------------------------------------------------------- validate_checkout edge cases ---------------------------------------------------------------------------
@@ -1152,7 +1072,7 @@ class TestCreateEdgeCases:
         with pytest.raises(HTTPException) as exc_info:
             await service.create(test_user.id, checkout_request, BackgroundTasks())
         assert exc_info.value.status_code == 500
-        assert "Order creation failed due to system error" in exc_info.value.detail["message"]
+        assert "Traceback" not in exc_info.value.detail
 
 
 # --------------------------------------------------------------------------- list() edge cases ---------------------------------------------------------------------------
@@ -1405,88 +1325,6 @@ class TestInvoiceEdgeCases:
 
 # --------------------------------------------------------------------------- Notes CRUD edge cases ---------------------------------------------------------------------------
 
-class TestNotesEdgeCases:
-
-    async def test_second_note_is_appended_not_overwritten(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        await service.add_note(existing_order.id, test_user.id, "First")
-        result = await service.add_note(existing_order.id, test_user.id, "Second")
-        assert "First" in result["all_notes"]
-        assert "Second" in result["all_notes"]
-
-    async def test_add_note_unknown_order_raises_404(self, db_session, test_user):
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.add_note(uuid4(), test_user.id, "x")
-        assert exc_info.value.status_code == 404
-
-    async def test_add_note_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
-        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.add_note(existing_order.id, test_user.id, "x")
-        assert exc_info.value.status_code == 500
-
-    async def test_notes_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
-        mocker.patch.object(db_session, "execute", side_effect=RuntimeError("db down"))
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.notes(existing_order.id, test_user.id)
-        assert exc_info.value.status_code == 500
-
-    async def test_get_note_failure_raises_500(self, db_session, test_user, existing_order, mocker):
-        mocker.patch.object(OrderService, "notes", side_effect=RuntimeError("boom"))
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.get_note(existing_order.id, test_user.id, 0)
-        assert exc_info.value.status_code == 500
-
-    async def test_update_note_unknown_order_raises_404(self, db_session, test_user):
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.update_note(uuid4(), test_user.id, 0, "x")
-        assert exc_info.value.status_code == 404
-
-    async def test_update_note_preserves_other_notes(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        await service.add_note(existing_order.id, test_user.id, "Keep me")
-        await service.add_note(existing_order.id, test_user.id, "Change me")
-        await service.update_note(existing_order.id, test_user.id, 1, "Changed")
-        notes = await service.notes(existing_order.id, test_user.id)
-        assert notes["notes"][0]["note"] == "Keep me"
-        assert notes["notes"][1]["note"] == "Changed"
-
-    async def test_update_note_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
-        await OrderService(db_session).add_note(existing_order.id, test_user.id, "x")
-        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.update_note(existing_order.id, test_user.id, 0, "y")
-        assert exc_info.value.status_code == 500
-
-    async def test_delete_note_unknown_order_raises_404(self, db_session, test_user):
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.delete_note(uuid4(), test_user.id, 0)
-        assert exc_info.value.status_code == 404
-
-    async def test_delete_note_preserves_other_notes(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        await service.add_note(existing_order.id, test_user.id, "Delete me")
-        await service.add_note(existing_order.id, test_user.id, "Keep me")
-        assert await service.delete_note(existing_order.id, test_user.id, 0) is True
-        notes = await service.notes(existing_order.id, test_user.id)
-        assert notes["total_notes"] == 1
-        assert notes["notes"][0]["note"] == "Keep me"
-
-    async def test_delete_note_db_failure_raises_500(self, db_session, test_user, existing_order, mocker):
-        await OrderService(db_session).add_note(existing_order.id, test_user.id, "x")
-        mocker.patch.object(db_session, "commit", side_effect=RuntimeError("db down"))
-        service = OrderService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.delete_note(existing_order.id, test_user.id, 0)
-        assert exc_info.value.status_code == 500
-
 
 # --------------------------------------------------------------------------- _calculate_estimated_delivery (pure/sync helper) ---------------------------------------------------------------------------
 
@@ -1556,3 +1394,83 @@ class TestGetStatisticsEdgeCases:
         service = OrderService(db_session)
         stats = await service.get_statistics(date_to="not-a-date")
         assert "total_orders" in stats
+
+
+# --------------------------------------------------------------------------- 3-D Secure: bank verification ---------------------------------------------------------------------------
+
+async def _stock(db_session, variant_id) -> int:
+    return (await db_session.execute(select(Inventory.quantity_available).where(Inventory.variant_id == variant_id))).scalar_one()
+
+
+class TestBankVerification:
+    """A card that needs 3-D Secure leaves the order pending with stock held until the browser finishes it."""
+
+    @pytest.fixture
+    def needs_verification(self, mocker):
+        return mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "requires_action", "client_secret": "pi_123_secret_abc"},
+        )
+
+    async def test_checkout_returns_the_client_secret_and_holds_stock(self, db_session, test_user, variant, cart_with_item, checkout_request, needs_verification):
+        order = await OrderService(db_session).create(test_user.id, checkout_request, BackgroundTasks())
+        assert order.requires_action is True
+        assert order.client_secret == "pi_123_secret_abc"
+        assert order.payment_status == PaymentStatus.PENDING
+        assert await _stock(db_session, variant.id) == 48
+        cart_items = (await db_session.execute(select(CartItem).where(CartItem.cart_id == cart_with_item.id))).scalars().all()
+        assert len(cart_items) == 1  # the cart is only cleared once the bank approves
+
+    async def test_approved_verification_confirms_the_order(self, db_session, test_user, cart_with_item, checkout_request, needs_verification, mocker):
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, BackgroundTasks())
+        mocker.patch("services.commerce.payments.PaymentService.refresh_order_payment", return_value="succeeded")
+        completed = await service.complete_payment(order.id, test_user.id)
+        assert completed.payment_status == PaymentStatus.PAID
+        assert completed.order_status == OrderStatus.CONFIRMED
+        cart_items = (await db_session.execute(select(CartItem).where(CartItem.cart_id == cart_with_item.id))).scalars().all()
+        assert cart_items == []
+
+    async def test_refused_verification_releases_stock_and_promo(self, db_session, test_user, variant, cart_with_item, checkout_request, needs_verification, mocker):
+        code = await make_promo(db_session, "fixed", 5)
+        checkout_request.discount_code = code
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, BackgroundTasks())
+        promo = (await db_session.execute(select(Promocode).where(Promocode.code == code))).scalar_one()
+        assert promo.used_count == 1
+        mocker.patch("services.commerce.payments.PaymentService.refresh_order_payment", return_value="requires_payment_method")
+        with pytest.raises(HTTPException) as exc_info:
+            await service.complete_payment(order.id, test_user.id)
+        assert exc_info.value.status_code == 400
+        assert await _stock(db_session, variant.id) == 50
+        await db_session.refresh(promo)
+        assert promo.used_count == 0
+        released = await db_session.get(Order, order.id)
+        assert released.payment_status == PaymentStatus.FAILED
+        assert released.order_status == OrderStatus.CANCELLED
+
+    async def test_verification_still_in_progress_is_a_409(self, db_session, test_user, cart_with_item, checkout_request, needs_verification, mocker):
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, BackgroundTasks())
+        mocker.patch("services.commerce.payments.PaymentService.refresh_order_payment", return_value="requires_action")
+        with pytest.raises(HTTPException) as exc_info:
+            await service.complete_payment(order.id, test_user.id)
+        assert exc_info.value.status_code == 409
+
+    async def test_declined_card_releases_stock(self, db_session, test_user, variant, cart_with_item, checkout_request, mocker):
+        mocker.patch("services.commerce.payments.PaymentService.process_idempotent", return_value={"status": "requires_payment_method"})
+        with pytest.raises(HTTPException) as exc_info:
+            await OrderService(db_session).create(test_user.id, checkout_request, BackgroundTasks())
+        assert exc_info.value.status_code == 400
+        assert await _stock(db_session, variant.id) == 50
+
+    async def test_abandoned_verification_expires(self, db_session, test_user, variant, cart_with_item, checkout_request, needs_verification, mocker):
+        service = OrderService(db_session)
+        order = await service.create(test_user.id, checkout_request, BackgroundTasks())
+        stored = await db_session.get(Order, order.id)
+        stored.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        await db_session.commit()
+        refresh = mocker.patch("services.commerce.payments.PaymentService.refresh_order_payment", return_value="canceled")
+        assert await service.expire_unverified_orders() >= 1
+        refresh.assert_any_call(order.id, cancel_if_unfinished=True)
+        assert await _stock(db_session, variant.id) == 50

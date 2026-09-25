@@ -10,14 +10,14 @@ from fastapi import HTTPException
 
 from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason
 from models.commerce.orders import Order
-from models.commerce.payments import Transaction
 from schemas.commerce.refunds import Request as RefundRequest, Response as RefundResponse, ItemRequest as RefundItemRequest
 from core.logging import get_structured_logger
 from services.catalog.inventory import InventoryService
-import stripe
-import asyncio
 import random
 import string
+from models.commerce.payments import Transaction
+import stripe
+import asyncio
 
 logger = get_structured_logger(__name__)
 
@@ -113,6 +113,7 @@ class RefundService:
             logger.error(f"Failed to request refund: {e}")
             raise HTTPException(status_code=500, detail="Failed to process refund request")
     
+    
     async def process_auto(self) -> Dict[str, Any]:
         """Process pending auto-approved refunds; called by a background job."""
         try:
@@ -158,7 +159,7 @@ class RefundService:
         except Exception as e:
             logger.error(f"Failed to process automatic refunds: {e}")
             return {"processed": 0, "failed": 0, "total": 0, "error": str(e)}
-    
+
     async def list(
         self,
         user_id: Optional[UUID] = None,
@@ -570,6 +571,7 @@ class RefundService:
             logger.error(f"Failed to restore inventory for refund {refund.id}: {e}")
             # Don't fail the refund if inventory restoration fails
     
+    
     async def _process_stripe_refund(self, refund: Refund):
         """Process refund through Stripe"""
         try:
@@ -624,7 +626,7 @@ class RefundService:
             refund.admin_notes = f"Stripe processing failed: {str(e)}"
             logger.error(f"Failed to process Stripe refund for {refund.refund_number}: {e}")
             raise
-    
+
     async def _send_refund_notifications(self, refund: Refund, event_type: str):
         """Send refund notifications to customer. Not yet implemented (ARQ notification integration was removed)."""
     

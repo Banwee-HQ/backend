@@ -38,35 +38,6 @@ def _user_payload(user) -> dict:
     }
 
 
-@router.get("/me/")
-async def me(current_user: AuthUser = Depends(require_auth)):
-    """Get the current authenticated user."""
-    try:
-        user_data = {
-            "id": str(current_user.id),
-            "email": current_user.email,
-            "firstname": current_user.firstname,
-            "lastname": current_user.lastname,
-            "full_name": f"{current_user.firstname} {current_user.lastname}",
-            "phone": current_user.phone,
-            "role": current_user.role.value if hasattr(current_user.role, "value") else current_user.role,
-            "date_of_birth": current_user.date_of_birth.isoformat() if current_user.date_of_birth else None,
-            "gender": current_user.gender,
-            "country": current_user.country,
-            "timezone": current_user.timezone,
-            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
-        }
-        return Response.success(data=user_data)
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=str(e))
-
-
-@router.get("/profile/")
-async def profile(current_user: AuthUser = Depends(require_auth)):
-    """Get the current authenticated user - this is the route the frontend actually calls."""
-    return await me(current_user)
-
-
 @router.post("/")
 async def create(
     payload: UserCreate,

@@ -16,8 +16,8 @@ async def created_variant(async_client: AsyncClient, admin_headers, sample_produ
     )
     sample_product_data["category_id"] = cat.json()["data"]["id"]
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
-    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
-    return variants.json()["data"][0]
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/")
+    return variants.json()["data"]["variants"][0]
 
 
 @pytest.mark.api

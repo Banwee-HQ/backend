@@ -67,19 +67,6 @@ async def sortable_rates(async_client: AsyncClient, admin_headers):
 
 @pytest.mark.api
 @pytest.mark.tax
-class TestTaxPublicLists:
-
-    async def test_countries_list(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/tax/countries/")
-        assert response.status_code == 200
-
-    async def test_tax_types_list(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/tax/tax-types/")
-        assert response.status_code == 200
-
-
-@pytest.mark.api
-@pytest.mark.tax
 class TestTaxRateEndpoints:
 
     async def test_list_as_admin(self, async_client: AsyncClient, admin_headers, created_rate):
@@ -146,6 +133,22 @@ class TestTaxRateEndpoints:
         response = await async_client.delete(f"/v1/tax/rates/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
 
+
+    async def test_list_filters_by_country_code(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get(f"/v1/tax/rates/?country_code={created_rate['country_code']}", headers=admin_headers)
+        assert response.status_code == 200
+        assert all(r["country_code"] == created_rate["country_code"] for r in response.json()["data"])
+
+    async def test_list_filters_by_search(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get("/v1/tax/rates/?search=Testland", headers=admin_headers)
+        assert response.status_code == 200
+        ids = [r["id"] for r in response.json()["data"]]
+        assert created_rate["id"] in ids
+
+    async def test_list_sort_by_tax_rate(self, async_client: AsyncClient, admin_headers, created_rate):
+        response = await async_client.get("/v1/tax/rates/?sort_by=tax_rate&sort_order=asc", headers=admin_headers)
+        assert response.status_code == 200
+
     async def test_bulk_update(self, async_client: AsyncClient, admin_headers, created_rate):
         response = await async_client.post("/v1/tax/rates/bulk-update/", headers=admin_headers, json=[
             {"id": created_rate["id"], "tax_rate": 0.1}
@@ -164,21 +167,6 @@ class TestTaxRateEndpoints:
     async def test_bulk_update_requires_admin(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post("/v1/tax/rates/bulk-update/", headers=auth_headers, json=[])
         assert response.status_code == 403
-
-    async def test_list_filters_by_country_code(self, async_client: AsyncClient, admin_headers, created_rate):
-        response = await async_client.get(f"/v1/tax/rates/?country_code={created_rate['country_code']}", headers=admin_headers)
-        assert response.status_code == 200
-        assert all(r["country_code"] == created_rate["country_code"] for r in response.json()["data"])
-
-    async def test_list_filters_by_search(self, async_client: AsyncClient, admin_headers, created_rate):
-        response = await async_client.get("/v1/tax/rates/?search=Testland", headers=admin_headers)
-        assert response.status_code == 200
-        ids = [r["id"] for r in response.json()["data"]]
-        assert created_rate["id"] in ids
-
-    async def test_list_sort_by_tax_rate(self, async_client: AsyncClient, admin_headers, created_rate):
-        response = await async_client.get("/v1/tax/rates/?sort_by=tax_rate&sort_order=asc", headers=admin_headers)
-        assert response.status_code == 200
 
 
 @pytest.mark.api
@@ -301,48 +289,6 @@ class TestListRatesErrors:
 
 @pytest.mark.api
 @pytest.mark.tax
-class TestCountriesEndpoint:
-
-    async def test_countries_includes_created_rate(self, async_client: AsyncClient, created_rate):
-        response = await async_client.get("/v1/tax/countries/")
-        assert response.status_code == 200
-        codes = [c["country_code"] for c in response.json()["data"]]
-        assert created_rate["country_code"] in codes
-
-    async def test_countries_error_returns_500(self, async_client: AsyncClient, monkeypatch):
-        import api.commerce.tax as tax_api
-        monkeypatch.setattr(
-            tax_api.Response, "success",
-            staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
-        )
-        response = await async_client.get("/v1/tax/countries/")
-        assert response.status_code == 500
-        assert "Failed to fetch countries" in response.json()["message"]
-
-
-@pytest.mark.api
-@pytest.mark.tax
-class TestTaxTypesEndpoint:
-
-    async def test_tax_types_includes_created_rate(self, async_client: AsyncClient, created_rate):
-        response = await async_client.get("/v1/tax/tax-types/")
-        assert response.status_code == 200
-        names = [t["value"] for t in response.json()["data"]]
-        assert created_rate["tax_name"] in names
-
-    async def test_tax_types_error_returns_500(self, async_client: AsyncClient, monkeypatch):
-        import api.commerce.tax as tax_api
-        monkeypatch.setattr(
-            tax_api.Response, "success",
-            staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
-        )
-        response = await async_client.get("/v1/tax/tax-types/")
-        assert response.status_code == 500
-        assert "Failed to fetch tax types" in response.json()["message"]
-
-
-@pytest.mark.api
-@pytest.mark.tax
 class TestGetRateErrors:
 
     async def test_get_rate_generic_exception_returns_500(
@@ -451,6 +397,61 @@ class TestDeleteRateErrors:
         response = await async_client.delete(f"/v1/tax/rates/{created_rate['id']}/", headers=admin_headers)
         assert response.status_code == 500
         assert "Failed to delete tax rate" in response.json()["message"]
+
+
+@pytest.mark.api
+@pytest.mark.tax
+class TestTaxPublicLists:
+
+    async def test_countries_list(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/tax/countries/")
+        assert response.status_code == 200
+
+    async def test_tax_types_list(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/tax/tax-types/")
+        assert response.status_code == 200
+
+
+@pytest.mark.api
+@pytest.mark.tax
+class TestCountriesEndpoint:
+
+    async def test_countries_includes_created_rate(self, async_client: AsyncClient, created_rate):
+        response = await async_client.get("/v1/tax/countries/")
+        assert response.status_code == 200
+        codes = [c["country_code"] for c in response.json()["data"]]
+        assert created_rate["country_code"] in codes
+
+    async def test_countries_error_returns_500(self, async_client: AsyncClient, monkeypatch):
+        import api.commerce.tax as tax_api
+        monkeypatch.setattr(
+            tax_api.Response, "success",
+            staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        )
+        response = await async_client.get("/v1/tax/countries/")
+        assert response.status_code == 500
+        assert "Failed to fetch countries" in response.json()["message"]
+
+
+@pytest.mark.api
+@pytest.mark.tax
+class TestTaxTypesEndpoint:
+
+    async def test_tax_types_includes_created_rate(self, async_client: AsyncClient, created_rate):
+        response = await async_client.get("/v1/tax/tax-types/")
+        assert response.status_code == 200
+        names = [t["value"] for t in response.json()["data"]]
+        assert created_rate["tax_name"] in names
+
+    async def test_tax_types_error_returns_500(self, async_client: AsyncClient, monkeypatch):
+        import api.commerce.tax as tax_api
+        monkeypatch.setattr(
+            tax_api.Response, "success",
+            staticmethod(lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        )
+        response = await async_client.get("/v1/tax/tax-types/")
+        assert response.status_code == 500
+        assert "Failed to fetch tax types" in response.json()["message"]
 
 
 @pytest.mark.api

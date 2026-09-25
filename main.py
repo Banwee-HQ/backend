@@ -31,7 +31,7 @@ from core.exceptions import (
 )
 
 from api import (
-    auth_router, oauth_router, oauth_social_router, user_router, addresses_router,
+    auth_router, oauth_router, user_router, addresses_router,
     products_router, review_router, inventory_router, category_router,
     cart_router, orders_router, payments_router, refunds_router, shipping_router,
     shipping_tracking_router, tax_router, promocodes_router, subscriptions_router, webhooks_router,
@@ -108,7 +108,6 @@ if hasattr(settings, 'ALLOWED_HOSTS'):
 v1_router = APIRouter(prefix="/v1", redirect_slashes=False)
 v1_router.include_router(auth_router)
 v1_router.include_router(oauth_router)
-v1_router.include_router(oauth_social_router)
 v1_router.include_router(user_router)
 v1_router.include_router(addresses_router)
 v1_router.include_router(products_router)

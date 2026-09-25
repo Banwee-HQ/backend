@@ -201,12 +201,16 @@ class ListResponse(BaseModel):
     pages: int
 
 
+# Product image schemas
+
+
+# Admin product management schemas
+
 class DetailResponse(Response):
     # Includes all product fields plus additional details
     pass
 
 
-# Product image schemas
 class ImageCreate(BaseModel):
     url: str
     alt_text: Optional[str] = None
@@ -221,7 +225,6 @@ class ImageUpdate(BaseModel):
     sort_order: Optional[int] = None
 
 
-# Admin product management schemas
 class ProductPatch(BaseModel):
     """Request model for partial product updates via PATCH."""
     name: Optional[str] = None
@@ -251,3 +254,4 @@ class ProductModeration(BaseModel):
 class ProductFeatureToggle(BaseModel):
     """Request model for toggling product featured status."""
     featured: bool
+

@@ -7,9 +7,9 @@ from core.dependencies import require_auth
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger
-from schemas.catalog.review import Create, Update
+from schemas.catalog.review import Create, Update, Response as ReviewResponse
 from services.catalog.review import ReviewService
-from models.accounts.user import User
+from models.accounts.user import User, UserRole
 
 logger = get_structured_logger(__name__)
 
@@ -89,7 +89,7 @@ async def get(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Review not found"
             )
-        return Response.success(data=review, message="Review retrieved successfully")
+        return Response.success(data=ReviewResponse.model_validate(review), message="Review retrieved successfully")
     except APIException:
         raise
     except HTTPException:
@@ -130,10 +130,10 @@ async def delete(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a review (owner only)."""
+    """Delete a review: its author, or staff removing it from the shop."""
     try:
         review_service = ReviewService(db)
-        await review_service.delete(review_id, current_user.id)
+        await review_service.delete(review_id, current_user.id, is_admin=current_user.role in [UserRole.ADMIN, UserRole.MANAGER])
         return Response.success(message="Review deleted successfully")
     except APIException:
         raise

@@ -16,39 +16,6 @@ from core.exceptions import APIException
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 
 
-@router.post("/")
-async def create(
-    refund_data: dict,
-    current_user = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a refund request. Must build a real Request model (not pass the dict through) -
-    RefundService.request() reads .items as an attribute, which resolves to dict.items otherwise."""
-    try:
-        raw_order_id = refund_data.get("order_id")
-        if not raw_order_id:
-            raise APIException(status_code=400, message="order_id is required")
-        order_id = UUID(raw_order_id)
-        refund_request = Request(**{k: v for k, v in refund_data.items() if k != "order_id"})
-
-        refund_service = RefundService(db)
-        refund = await refund_service.request(
-            user_id=current_user.id,
-            order_id=order_id,
-            refund_request=refund_request
-        )
-        return Response.success(data=refund, message="Refund created successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=f"Failed to create refund: {str(e)}"
-        )
-
-
 @router.get("/")
 async def list(
     refund_status: Optional[RefundStatus] = Query(None),
@@ -190,26 +157,4 @@ async def update_status(
             message=f"Failed to update refund status: {str(e)}"
         )
 
-
-@router.patch("/{refund_id}/")
-async def patch(
-    refund_id: UUID,
-    payload: dict,
-    current_user = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Partial update refund (admin only)."""
-    try:
-        refund_service = RefundService(db)
-        refund = await refund_service.patch(refund_id, payload)
-        return Response.success(data=refund, message="Refund updated successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to update refund: {str(e)}"
-        )
 

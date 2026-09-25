@@ -45,7 +45,6 @@ class IntentBase(BaseModel):
 
 class IntentCreate(BaseModel):
     amount: float
-    currency: str = "USD"
     order_id: Optional[UUID] = None
 
 
@@ -67,6 +66,9 @@ class IntentResponse(IntentBase):
 
 
 # Transaction schemas
+
+
+# Refund schemas
 class TxnBase(BaseModel):
     amount: float
     currency: str = "USD"
@@ -100,7 +102,6 @@ class TxnResponse(TxnBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Refund schemas
 class Refund(BaseModel):
     payment_intent_id: UUID
     amount: Optional[float] = None

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from core.config import settings
 from core.logging import get_structured_logger
+from services.commerce.orders import OrderService
 
 logger = get_structured_logger(__name__)
 
@@ -178,11 +179,8 @@ class WebhookService:
                 order = order_result.scalar_one_or_none()
                 
                 if order:
-                    # Update order status to confirmed atomically
-                    order.order_status = OrderStatus.CONFIRMED
-                    order.confirmed_at = datetime.now(timezone.utc)
+                    await OrderService(self.db)._mark_order_paid(order)
 
-            
             await self.db.commit()
             
             return {
@@ -227,9 +225,8 @@ class WebhookService:
                 )
                 order = order_result.scalar_one_or_none()
                 if order:
-                    order.order_status = OrderStatus.CANCELLED
-                    order.payment_status = PaymentStatus.FAILED
-            
+                    await OrderService(self.db)._release_unpaid_order(order, "payment failed")
+
             await self.db.commit()
             
             # Use comprehensive failure handler if payment intent exists
@@ -303,9 +300,8 @@ class WebhookService:
                 )
                 order = order_result.scalar_one_or_none()
                 if order:
-                    order.order_status = OrderStatus.CANCELLED
-                    order.cancelled_at = datetime.now(timezone.utc)
-            
+                    await OrderService(self.db)._release_unpaid_order(order, "payment cancelled")
+
             await self.db.commit()
             
             return {

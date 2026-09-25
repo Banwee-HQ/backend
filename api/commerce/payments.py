@@ -12,6 +12,7 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from models.accounts.user import User
 from services.commerce.payments import PaymentService
+from schemas.commerce.payments import MethodResponse, MethodCreate
 from schemas.commerce.payments import (
     MethodResponse,
     MethodCreate,
@@ -50,27 +51,6 @@ async def create_method(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to create payment method: {str(e)}")
 
 
-@router.get("/methods/{payment_method_id}/")
-async def get_method(
-    payment_method_id: UUID,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific payment method"""
-    try:
-        service = PaymentService(db)
-        method = await service.get(payment_method_id, current_user.id)
-        if not method:
-            raise APIException(status_code=404, message="Payment method not found")
-        return Response.success(data=MethodResponse.model_validate(method), message="Payment method retrieved successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get payment method: {str(e)}")
-
-
 @router.get("/methods/")
 async def list_methods(
     page: int = Query(1, ge=1),
@@ -92,32 +72,6 @@ async def list_methods(
         raise
     except Exception as e:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list payment methods: {str(e)}")
-
-
-@router.patch("/methods/{payment_method_id}/")
-async def patch_method(
-    payment_method_id: UUID,
-    payment_method_data: MethodUpdate,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update a payment method (partial)"""
-    try:
-        service = PaymentService(db)
-        updated_method = await service.update(
-            payment_method_id,
-            current_user.id,
-            payment_method_data.model_dump(exclude_unset=True)
-        )
-        if not updated_method:
-            raise APIException(status_code=404, message="Payment method not found")
-        return Response.success(data=MethodResponse.model_validate(updated_method), message="Payment method updated successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to update payment method: {str(e)}")
 
 
 @router.delete("/methods/{payment_method_id}/")
@@ -142,6 +96,11 @@ async def delete_method(
 
 
 # --- PAYMENT INTENTS - 5 Standard APIs ---
+
+
+# --- TRANSACTIONS - Read Only (system creates automatically) ---
+
+
 @router.post("/intents/")
 async def create_intent(
     payment_intent_data: IntentCreate,
@@ -154,7 +113,6 @@ async def create_intent(
         payment_intent = await service.create_intent(
             user_id=current_user.id,
             amount=payment_intent_data.amount,
-            currency=payment_intent_data.currency,
             order_id=payment_intent_data.order_id,
             subscription_id=None,
             metadata={}
@@ -217,7 +175,6 @@ async def list_intents(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list payment intents: {str(e)}")
 
 
-# --- TRANSACTIONS - Read Only (system creates automatically) ---
 @router.get("/transactions/{transaction_id}/")
 async def get_transaction(
     transaction_id: UUID,
@@ -293,79 +250,11 @@ async def list_all_transactions(
 
 
 # --- REFUNDS - Create & List Only (immutable after processing) ---
-@router.post("/refunds/")
-async def create_refund(
-    request: Refund,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a refund"""    
-    try:
-        service = PaymentService(db)
-        transaction = await service.refund(
-            payment_intent_id=request.payment_intent_id,
-            amount=request.amount,
-            reason=request.reason
-        )
-        return Response.success(data=TxnResponse.model_validate(transaction), message="Refund created successfully", status_code=status.HTTP_201_CREATED)
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to create refund: {str(e)}")
-
-
-@router.get("/refunds/{refund_id}/")
-async def get_refund(
-    refund_id: UUID,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific refund"""
-    try:
-        service = PaymentService(db)
-        refund = await service.get_refund(refund_id, current_user.id)
-        if not refund:
-            raise APIException(status_code=404, message="Refund not found")
-        return Response.success(data=TxnResponse.model_validate(refund), message="Refund retrieved successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to get refund: {str(e)}")
-
-
-@router.get("/refunds/")
-async def list_refunds(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """List refunds for user"""
-    try:
-        service = PaymentService(db)
-        result = await service.list_refunds(current_user.id, page=page, limit=limit)
-        if isinstance(result, dict) and "items" in result:
-            pagination = {
-                "page": result.get("page", page),
-                "limit": result.get("limit", limit),
-                "total": result.get("total", 0),
-                "pages": (result.get("total", 0) + limit - 1) // limit
-            }
-            return Response.success(data=result.get("items", []), pagination=pagination)
-        return Response.success(data=result)
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to list refunds: {str(e)}")
 
 
 # --- KEPT ROUTES - Additional functionality ---
+
+
 @router.post("/intents/{payment_intent_id}/confirm/")
 async def confirm_intent(
     payment_intent_id: UUID,
@@ -373,9 +262,11 @@ async def confirm_intent(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Confirm a payment intent"""
+    """Charge one of your payment intents with a saved card (or Stripe PaymentMethod id)."""
     try:
         service = PaymentService(db)
+        if not await service.get_intent(payment_intent_id, current_user.id):
+            raise APIException(status_code=404, message="Payment intent not found")
         payment_intent = await service.confirm_intent(
             payment_intent_id=payment_intent_id,
             payment_method_id=payment_method_id
@@ -410,35 +301,9 @@ async def set_default_method(
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to set default payment method: {str(e)}")
 
 
-@router.post("/process/")
-async def process_payment(
-    amount: float,
-    payment_method_id: UUID,
-    order_id: Optional[UUID] = None,
-    subscription_id: Optional[UUID] = None,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Process a payment"""
-    try:
-        service = PaymentService(db)
-        result = await service.process(
-            user_id=current_user.id,
-            amount=amount,
-            payment_method_id=payment_method_id,
-            order_id=order_id,
-            subscription_id=subscription_id
-        )
-        return Response.success(data=result, message="Payment processed successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to process payment: {str(e)}")
-
-
 # --- FAILURE HANDLING - Kept routes ---
+
+
 @router.get("/failures/{payment_intent_id}/status/")
 async def failure_status(
     payment_intent_id: UUID,
@@ -463,9 +328,11 @@ async def retry_payment(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retry a failed payment"""
+    """Reset one of your failed subscription payments so it can be charged again (then confirm it)."""
     try:
         service = PaymentService(db)
+        if not await service.get_intent(payment_intent_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Payment intent not found")
         retry_result = await service.retry(payment_intent_id, new_payment_method_id)
         return Response.success(data=retry_result, message="Payment retry initiated")
     except HTTPException as e:

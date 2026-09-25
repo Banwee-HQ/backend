@@ -2,25 +2,26 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
 from core.logging import get_structured_logger as get_logger
 
 from core.db import get_db
-from core.dependencies import get_current_auth_user, require_admin, require_auth
+from core.dependencies import get_current_auth_user, require_admin
 from core.utils.response import Response
 from models.accounts.user import User
-from models.accounts.user import User as UserModel
 from models.system import EventType
 from models.accounts import TrafficSource
-from models.catalog.product import Product, ProductStatus
-from models.commerce.orders import Order
 from services.analytics.analytics import AnalyticsService
 from services.analytics.export import ExportService
 from services.commerce.orders import OrderService
 from core.exceptions import APIException
+from sqlalchemy import select, func
+from core.dependencies import get_current_auth_user, require_admin, require_auth
+from models.accounts.user import User as UserModel
+from models.catalog.product import Product, ProductStatus
+from models.commerce.orders import Order
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])

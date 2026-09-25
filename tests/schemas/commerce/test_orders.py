@@ -3,7 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from schemas.commerce.orders import Checkout, ShipOrder
+from schemas.commerce.orders import Checkout
+from schemas.commerce.orders import ShipOrder
 
 
 class TestCheckout:
@@ -12,11 +13,12 @@ class TestCheckout:
         with pytest.raises(ValidationError):
             Checkout()
 
-    def test_defaults_currency_and_country(self):
+    def test_currency_is_not_client_controlled(self):
+        """Prices are charged in the store currency, so checkout takes no currency/country input."""
         from uuid import uuid4
-        checkout = Checkout(shipping_address_id=uuid4(), shipping_method_id=uuid4(), payment_method_id=uuid4())
-        assert checkout.currency == "USD"
-        assert checkout.country_code == "US"
+        checkout = Checkout(shipping_address_id=uuid4(), shipping_method_id=uuid4(), payment_method_id=uuid4(), currency="EUR")
+        assert not hasattr(checkout, "currency")
+        assert checkout.discount_code is None
 
 
 class TestShipOrder:

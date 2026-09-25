@@ -240,11 +240,10 @@ async def delete_carrier(
 async def list(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    order_id: Optional[UUID] = Query(None),
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """List shipments (optionally for one order): admins see every shipment, customers only their own orders'."""
+    """List shipments: admins see every shipment, customers only their own orders' (one order: GET /orders/{id}/shipments/)."""
     try:
         base_query = (
             select(ShipmentTracking)
@@ -259,9 +258,6 @@ async def list(
         if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
             base_query = base_query.where(Order.user_id == current_user.id)
             count_query = count_query.where(Order.user_id == current_user.id)
-        if order_id:
-            base_query = base_query.where(ShipmentTracking.order_id == order_id)
-            count_query = count_query.where(ShipmentTracking.order_id == order_id)
 
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0

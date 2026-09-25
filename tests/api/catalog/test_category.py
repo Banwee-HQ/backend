@@ -34,21 +34,6 @@ class TestCategoryEndpoints:
         assert response.status_code == 200
         assert response.json()["success"] is True
 
-    async def test_tree(self, async_client: AsyncClient, created_category):
-        """GET /v1/categories/tree/ - Nested category tree."""
-        response = await async_client.get("/v1/categories/tree/")
-        assert response.status_code == 200
-
-    async def test_get_by_id(self, async_client: AsyncClient, created_category):
-        """GET /v1/categories/{id} - Get a category."""
-        response = await async_client.get(f"/v1/categories/{created_category['id']}/")
-        assert response.status_code == 200
-        assert response.json()["data"]["id"] == created_category["id"]
-
-    async def test_get_by_id_not_found(self, async_client: AsyncClient):
-        """GET /v1/categories/{id} - Unknown ID returns 404."""
-        response = await async_client.get(f"/v1/categories/{uuid4()}/")
-        assert response.status_code == 404
 
     async def test_create_as_admin(self, async_client: AsyncClient, admin_headers):
         """POST /v1/categories/ - Create category (admin)."""
@@ -79,13 +64,6 @@ class TestCategoryEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["name"] == "Updated Name"
 
-    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, created_category):
-        """DELETE /v1/categories/{id} - Delete category (admin), no products/children attached."""
-        response = await async_client.delete(f"/v1/categories/{created_category['id']}/", headers=admin_headers)
-        assert response.status_code == 200
-
-        get_resp = await async_client.get(f"/v1/categories/{created_category['id']}/")
-        assert get_resp.status_code == 404
 
     async def test_delete_with_products_blocked(self, async_client: AsyncClient, admin_headers,
                                                   created_category, sample_product_data):
@@ -136,6 +114,30 @@ class TestCategoryEndpoints:
         response = await async_client.get("/v1/categories/")
         assert response.status_code == 500
 
+    async def test_tree(self, async_client: AsyncClient, created_category):
+        """GET /v1/categories/tree/ - Nested category tree."""
+        response = await async_client.get("/v1/categories/tree/")
+        assert response.status_code == 200
+
+    async def test_get_by_id(self, async_client: AsyncClient, created_category):
+        """GET /v1/categories/{id} - Get a category."""
+        response = await async_client.get(f"/v1/categories/{created_category['id']}/")
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == created_category["id"]
+
+    async def test_get_by_id_not_found(self, async_client: AsyncClient):
+        """GET /v1/categories/{id} - Unknown ID returns 404."""
+        response = await async_client.get(f"/v1/categories/{uuid4()}/")
+        assert response.status_code == 404
+
+    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, created_category):
+        """DELETE /v1/categories/{id} - Delete category (admin), no products/children attached."""
+        response = await async_client.delete(f"/v1/categories/{created_category['id']}/", headers=admin_headers)
+        assert response.status_code == 200
+
+        get_resp = await async_client.get(f"/v1/categories/{created_category['id']}/")
+        assert get_resp.status_code == 404
+
     async def test_tree_wraps_api_exception(self, async_client: AsyncClient, monkeypatch):
         monkeypatch.setattr(CategoryService, "tree", _async_raiser(APIException(status_code=418, message="teapot")))
         response = await async_client.get("/v1/categories/tree/")
@@ -145,3 +147,5 @@ class TestCategoryEndpoints:
         monkeypatch.setattr(CategoryService, "tree", _async_raiser(RuntimeError("boom")))
         response = await async_client.get("/v1/categories/tree/")
         assert response.status_code == 500
+
+

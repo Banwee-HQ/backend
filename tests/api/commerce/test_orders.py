@@ -45,8 +45,8 @@ async def checkout_ready_cart(async_client: AsyncClient, auth_headers, admin_hea
     )
     sample_product_data["category_id"] = cat.json()["data"]["id"]
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
-    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
-    variant_id = variants.json()["data"][0]["id"]
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/")
+    variant_id = variants.json()["data"]["variants"][0]["id"]
     await async_client.post("/v1/cart/", headers=auth_headers, json={"variant_id": variant_id, "quantity": 2})
 
     address = await async_client.post("/v1/addresses/", headers=auth_headers, json={
@@ -100,17 +100,6 @@ class TestCheckout:
         cart = await async_client.get("/v1/cart/", headers=auth_headers)
         assert cart.json()["data"]["items"] == []
 
-    async def test_create_endpoint_is_checkout_alias(self, async_client: AsyncClient, auth_headers, checkout_ready_cart, mocker):
-        """POST /v1/orders - Same underlying OrderService.create() as /orders/checkout/."""
-        mocker.patch(
-            "services.commerce.payments.PaymentService.process_idempotent",
-            return_value={"status": "succeeded", "payment_intent_id": str(uuid4())},
-        )
-        mocker.patch("services.accounts.email.EmailService.send_order_confirmation_email", return_value=None)
-
-        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
-        assert response.status_code == 200
-        assert response.json()["data"]["order_status"] == "confirmed"
 
     async def test_checkout_unknown_payment_method(self, async_client: AsyncClient, auth_headers, checkout_ready_cart):
         """POST /v1/orders/checkout - A payment method that doesn't exist is rejected
@@ -180,7 +169,7 @@ class TestOrderEndpoints:
             headers=auth_headers, json={"note": "Please deliver after 5pm"}
         )
         assert response.status_code == 200
-        assert "Please deliver after 5pm" in response.json()["data"]["all_notes"]
+        assert response.json()["data"]["customer"][0]["note"] == "Please deliver after 5pm"
 
     async def test_list_notes(self, async_client: AsyncClient, auth_headers, created_order):
         """GET /v1/orders/{id}/notes - List notes after adding one."""
@@ -189,33 +178,25 @@ class TestOrderEndpoints:
         )
         response = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json()["data"]["total_notes"] == 1
+        assert len(response.json()["data"]["customer"]) == 1
 
-    async def test_list_notes_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
-        """Regression test: this used to relabel the service's 404 as a 500."""
-        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=admin_headers)
-        assert response.status_code == 404
-
-    async def test_add_note_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
-        """Regression test: this used to relabel the service's 404 as a flat 400."""
-        response = await async_client.post(f"/v1/orders/{created_order.id}/notes/",
-            headers=admin_headers, json={"note": "Not mine"}
-        )
-        assert response.status_code == 404
-
-    async def test_get_note_by_index(self, async_client: AsyncClient, auth_headers, created_order):
-        """GET /v1/orders/{id}/notes/{index} - Get a specific note."""
-        await async_client.post(f"/v1/orders/{created_order.id}/notes/",
-            headers=auth_headers, json={"note": "Call before delivery"}
-        )
-        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/0/", headers=auth_headers)
+    async def test_admin_note_is_internal_and_hidden_from_customer(self, async_client: AsyncClient, auth_headers, admin_headers, created_order):
+        response = await async_client.post(f"/v1/orders/{created_order.id}/notes/", headers=admin_headers, json={"note": "Check address"})
         assert response.status_code == 200
-        assert response.json()["data"]["note"] == "Call before delivery"
+        assert response.json()["data"]["internal"][0]["note"] == "Check address"
+        customer_view = await async_client.get(f"/v1/orders/{created_order.id}/", headers=auth_headers)
+        assert customer_view.json()["data"]["internal_notes"] is None
+        customer_notes = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers)
+        assert customer_notes.json()["data"]["internal"] == []
 
-    async def test_get_note_index_out_of_range(self, async_client: AsyncClient, auth_headers, created_order):
-        """GET /v1/orders/{id}/notes/{index} - Out-of-range index returns 404."""
-        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/99/", headers=auth_headers)
+    async def test_note_on_unknown_order_returns_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post(f"/v1/orders/{uuid4()}/notes/", headers=auth_headers, json={"note": "x"})
         assert response.status_code == 404
+
+    async def test_empty_note_is_rejected(self, async_client: AsyncClient, auth_headers, created_order):
+        response = await async_client.post(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers, json={"note": ""})
+        assert response.status_code == 422
+
 
     async def test_invoice(self, async_client: AsyncClient, auth_headers, created_order):
         """GET /v1/orders/{id}/invoice - Download a PDF invoice for own order."""
@@ -223,33 +204,16 @@ class TestOrderEndpoints:
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
 
-    async def test_invoice_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
-        """Regression test: this used to relabel the service's 404 as a 500."""
+    async def test_admin_can_download_any_customers_invoice(self, async_client: AsyncClient, admin_headers, created_order):
         response = await async_client.get(f"/v1/orders/{created_order.id}/invoice/", headers=admin_headers)
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+
+    async def test_unknown_order_invoice_returns_404(self, async_client: AsyncClient, auth_headers):
+        """Regression test: this used to relabel the service's 404 as a 500."""
+        response = await async_client.get(f"/v1/orders/{uuid4()}/invoice/", headers=auth_headers)
         assert response.status_code == 404
 
-    async def test_tracking(self, async_client: AsyncClient, auth_headers, created_order):
-        """GET /v1/orders/{id}/tracking - Get tracking info for own order."""
-        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"]["order_id"] == str(created_order.id)
-
-    async def test_payments(self, async_client: AsyncClient, auth_headers, created_order):
-        """GET /v1/orders/{id}/payments - No payments yet, still 200 with empty lists."""
-        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"]["payment_intents"] == []
-
-    async def test_shipments(self, async_client: AsyncClient, auth_headers, created_order):
-        """GET /v1/orders/{id}/shipments - No shipments yet, still 200."""
-        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
-        assert response.status_code == 200
-
-    async def test_shipments_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
-        """Regression test: this endpoint had no ownership check at all - any
-        authenticated user could view any order's shipments by guessing its ID."""
-        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=admin_headers)
-        assert response.status_code == 404
 
     async def test_public_tracking_by_order_number(self, async_client: AsyncClient, created_order):
         """GET /v1/orders/track/{id} - Public tracking, no auth required."""
@@ -275,33 +239,6 @@ class TestOrderEndpoints:
         )
         assert response.status_code == 200
 
-    async def test_ship_requires_admin(self, async_client: AsyncClient, auth_headers, created_order):
-        """POST /v1/orders/{id}/ship - Non-admin is forbidden."""
-        response = await async_client.post(f"/v1/orders/{created_order.id}/ship/",
-            headers=auth_headers, json={"carrier": "ups", "tracking_number": "1Z999"}
-        )
-        assert response.status_code == 403
-
-    async def test_ship_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
-        """POST /v1/orders/{id}/ship - Admin marks the order shipped."""
-        response = await async_client.post(f"/v1/orders/{created_order.id}/ship/",
-            headers=admin_headers, json={"carrier": "ups", "tracking_number": "1Z999"}
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["order_status"] == "shipped"
-
-    async def test_deliver_requires_admin(self, async_client: AsyncClient, auth_headers, created_order):
-        """PUT /v1/orders/{id}/deliver - Non-admin is forbidden."""
-        response = await async_client.put(f"/v1/orders/{created_order.id}/deliver/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_deliver_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
-        """PUT /v1/orders/{id}/deliver - Admin marks the order delivered."""
-        response = await async_client.put(f"/v1/orders/{created_order.id}/deliver/",
-            headers=admin_headers, json={"notes": "Left at door"}
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["order_status"] == "delivered"
 
     async def test_update_status_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):
         response = await async_client.patch(f"/v1/orders/{uuid4()}/status/",
@@ -315,23 +252,6 @@ class TestOrderEndpoints:
         )
         assert response.status_code == 400
 
-    async def test_tracking_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
-        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=admin_headers)
-        assert response.status_code == 404
-
-    async def test_payments_not_own_order_returns_404(self, async_client: AsyncClient, admin_headers, created_order):
-        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=admin_headers)
-        assert response.status_code == 404
-
-    async def test_statistics_requires_admin(self, async_client: AsyncClient, auth_headers):
-        """GET /v1/orders/statistics - Non-admin is forbidden."""
-        response = await async_client.get("/v1/orders/statistics/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_statistics_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
-        """GET /v1/orders/statistics - Admin can view order statistics."""
-        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
-        assert response.status_code == 200
 
     async def test_checkout_insufficient_stock_returns_400(
         self, async_client: AsyncClient, auth_headers, test_user, checkout_ready_cart, db_session, mocker
@@ -364,43 +284,6 @@ class TestOrderEndpoints:
         response = await async_client.post("/v1/orders/checkout/", headers=auth_headers, json=checkout_ready_cart)
         assert response.status_code == 500
 
-    async def test_create_alias_insufficient_stock_returns_400(
-        self, async_client: AsyncClient, auth_headers, test_user, checkout_ready_cart, db_session, mocker
-    ):
-        """POST /v1/orders (the create() alias) - real APIException-preserving
-        behavior, verified independently of /orders/checkout/."""
-        from sqlalchemy import select
-        from models.commerce.cart import Cart, CartItem
-        from models.catalog.inventories import Inventory
-
-        cart_item = (await db_session.execute(
-            select(CartItem).join(Cart).where(Cart.user_id == test_user.id)
-        )).scalars().first()
-        inventory = (await db_session.execute(
-            select(Inventory).where(Inventory.variant_id == cart_item.variant_id)
-        )).scalar_one()
-        inventory.quantity_available = 1  # the cart wants 2
-        await db_session.commit()
-
-        mocker.patch(
-            "services.commerce.payments.PaymentService.process_idempotent",
-            return_value={"status": "succeeded"},
-        )
-        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
-        assert response.status_code == 400
-
-    async def test_create_alias_unknown_payment_method_returns_400(self, async_client: AsyncClient, auth_headers, checkout_ready_cart):
-        """POST /v1/orders (the create() alias) - same APIException-preserving
-        behavior as /orders/checkout/, verified independently since it's a
-        separate route function in the API layer."""
-        checkout_ready_cart["payment_method_id"] = str(uuid4())
-        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
-        assert response.status_code == 400
-
-    async def test_create_alias_unexpected_service_error_returns_400(self, async_client: AsyncClient, auth_headers, checkout_ready_cart, mocker):
-        mocker.patch("services.commerce.orders.OrderService.create", side_effect=RuntimeError("boom"))
-        response = await async_client.post("/v1/orders/", headers=auth_headers, json=checkout_ready_cart)
-        assert response.status_code == 400
 
     async def test_checkout_validate_empty_cart(self, async_client: AsyncClient, auth_headers):
         """POST /v1/orders/checkout/validate - Empty cart fails validation, but the
@@ -417,25 +300,52 @@ class TestOrderEndpoints:
         assert response.json()["data"]["can_proceed"] is False
 
 
-# --------------------------------------------------------------------------- Thin-wrapper exception-handling branches: every endpoint's try/except preserves APIException/HTTPException status codes as-is and maps any other unexpected exception to a documented status code. Verified via mocker since OrderService itself never raises bare exceptions for most of these calls. ---------------------------------------------------------------------------
+    async def test_payments(self, async_client: AsyncClient, auth_headers, created_order):
+        """GET /v1/orders/{id}/payments - No payments yet, still 200 with empty lists."""
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["payment_intents"] == []
 
-@pytest.mark.api
-class TestStatisticsEdgeCases:
+    async def test_shipments(self, async_client: AsyncClient, auth_headers, created_order):
+        """GET /v1/orders/{id}/shipments - No shipments yet, still 200."""
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
+        assert response.status_code == 200
 
-    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=APIException(status_code=418, message="teapot"))
-        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
-        assert response.status_code == 418
+    async def test_shipments_not_own_order_returns_404(self, async_client: AsyncClient, db_session, created_order):
+        """Regression test: this endpoint had no ownership check at all - any
+        customer could view any order's shipments by guessing its ID."""
+        from core.utils.encryption import PasswordManager
+        from models.accounts.user import User, UserRole
+        other = User(id=uuid7(), email=f"other_{uuid4().hex[:8]}@example.com", firstname="Other", lastname="Customer",
+                     hashed_password=PasswordManager().hash_password("OtherPassword123!"), role=UserRole.CUSTOMER,
+                     account_status="active", verification_status="verified")
+        db_session.add(other)
+        await db_session.commit()
+        login = await async_client.post("/v1/auth/login/", json={"email": other.email, "password": "OtherPassword123!"})
+        headers = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=headers)
+        assert response.status_code == 404
 
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=HTTPException(status_code=403, detail="x"))
-        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+    async def test_staff_can_view_any_orders_payments(self, async_client: AsyncClient, admin_headers, created_order):
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=admin_headers)
+        assert response.status_code == 200
+
+    async def test_payments_unknown_order_returns_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get(f"/v1/orders/{uuid4()}/payments/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_statistics_requires_admin(self, async_client: AsyncClient, auth_headers):
+        """GET /v1/orders/statistics - Non-admin is forbidden."""
+        response = await async_client.get("/v1/orders/statistics/", headers=auth_headers)
         assert response.status_code == 403
 
-    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=RuntimeError("boom"))
+    async def test_statistics_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
+        """GET /v1/orders/statistics - Admin can view order statistics."""
         response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
-        assert response.status_code == 500
+        assert response.status_code == 200
+
+
+# --------------------------------------------------------------------------- Thin-wrapper exception-handling branches: every endpoint's try/except preserves APIException/HTTPException status codes as-is and maps any other unexpected exception to a documented status code. Verified via mocker since OrderService itself never raises bare exceptions for most of these calls. ---------------------------------------------------------------------------
 
 
 @pytest.mark.api
@@ -556,20 +466,6 @@ class TestCreateNoteEdgeCases:
 
 
 @pytest.mark.api
-class TestGetNoteEdgeCases:
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.get_note", side_effect=HTTPException(status_code=403, detail="x"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/0/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.get_note", side_effect=RuntimeError("boom"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/notes/0/", headers=auth_headers)
-        assert response.status_code == 500
-
-
-@pytest.mark.api
 class TestListNotesEdgeCases:
 
     async def test_service_apiexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
@@ -580,58 +476,6 @@ class TestListNotesEdgeCases:
     async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
         mocker.patch("services.commerce.orders.OrderService.notes", side_effect=RuntimeError("boom"))
         response = await async_client.get(f"/v1/orders/{created_order.id}/notes/", headers=auth_headers)
-        assert response.status_code == 500
-
-
-@pytest.mark.api
-class TestGetTrackingEdgeCases:
-
-    async def test_none_result_is_treated_as_not_found(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        """Defensive check: OrderService.tracking() always raises rather than
-        returning None today, but the endpoint guards against it regardless."""
-        mocker.patch("services.commerce.orders.OrderService.tracking", return_value=None)
-        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
-        assert response.status_code == 404
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.tracking", side_effect=HTTPException(status_code=403, detail="x"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.tracking", side_effect=RuntimeError("boom"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/tracking/", headers=auth_headers)
-        assert response.status_code == 500
-
-
-@pytest.mark.api
-class TestGetOrderPaymentsEdgeCases:
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.payments", side_effect=HTTPException(status_code=403, detail="x"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.payments", side_effect=RuntimeError("boom"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
-        assert response.status_code == 500
-
-
-@pytest.mark.api
-class TestGetOrderShipmentsEdgeCases:
-
-    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.get", side_effect=HTTPException(status_code=403, detail="x"))
-        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
-        mocker.patch(
-            "services.commerce.shipping_tracking.ShippingTrackingService.list_by_order",
-            side_effect=RuntimeError("boom"),
-        )
-        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
         assert response.status_code == 500
 
 
@@ -661,49 +505,6 @@ class TestUpdateStatusEdgeCases:
         mocker.patch("services.commerce.orders.OrderService.update_status", side_effect=RuntimeError("boom"))
         response = await async_client.patch(f"/v1/orders/{created_order.id}/status/", headers=admin_headers, json={"status": "confirmed"})
         assert response.status_code == 500
-
-
-@pytest.mark.api
-class TestDeliverEdgeCases:
-
-    async def test_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.put(f"/v1/orders/{uuid4()}/deliver/", headers=admin_headers, json={})
-        assert response.status_code == 404
-
-    async def test_malformed_order_id_returns_500(self, async_client: AsyncClient, admin_headers):
-        """deliver() does UUID(order_id) internally - a non-UUID path segment
-        raises a bare ValueError, which the endpoint must map to a clean 500
-        instead of letting it bubble up unhandled."""
-        response = await async_client.put("/v1/orders/not-a-real-uuid/deliver/", headers=admin_headers, json={})
-        assert response.status_code == 500
-
-    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.deliver", side_effect=APIException(status_code=418, message="teapot"))
-        response = await async_client.put(f"/v1/orders/{created_order.id}/deliver/", headers=admin_headers, json={})
-        assert response.status_code == 418
-
-
-@pytest.mark.api
-class TestShipEdgeCases:
-
-    async def test_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.post(f"/v1/orders/{uuid4()}/ship/", headers=admin_headers, json={
-            "carrier": "ups", "tracking_number": "1Z999"
-        })
-        assert response.status_code == 404
-
-    async def test_malformed_order_id_returns_500(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.post("/v1/orders/not-a-real-uuid/ship/", headers=admin_headers, json={
-            "carrier": "ups", "tracking_number": "1Z999"
-        })
-        assert response.status_code == 500
-
-    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, created_order, mocker):
-        mocker.patch("services.commerce.orders.OrderService.ship", side_effect=APIException(status_code=418, message="teapot"))
-        response = await async_client.post(f"/v1/orders/{created_order.id}/ship/", headers=admin_headers, json={
-            "carrier": "ups", "tracking_number": "1Z999"
-        })
-        assert response.status_code == 418
 
 
 @pytest.mark.api
@@ -791,3 +592,53 @@ class TestCancelPaidOrderRefunds:
         assert response.status_code == 400
         await db_session.refresh(created_order)
         assert created_order.order_status == OrderStatus.CONFIRMED
+
+
+@pytest.mark.api
+class TestStatisticsEdgeCases:
+
+    async def test_service_apiexception_passes_through(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=APIException(status_code=418, message="teapot"))
+        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+        assert response.status_code == 418
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get_statistics", side_effect=RuntimeError("boom"))
+        response = await async_client.get("/v1/orders/statistics/", headers=admin_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetOrderPaymentsEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.payments", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.payments", side_effect=RuntimeError("boom"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/payments/", headers=auth_headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.api
+class TestGetOrderShipmentsEdgeCases:
+
+    async def test_service_httpexception_passes_through(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch("services.commerce.orders.OrderService.get", side_effect=HTTPException(status_code=403, detail="x"))
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_unexpected_error_returns_500(self, async_client: AsyncClient, auth_headers, created_order, mocker):
+        mocker.patch(
+            "services.commerce.shipping_tracking.ShippingTrackingService.list_by_order",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.get(f"/v1/orders/{created_order.id}/shipments/", headers=auth_headers)
+        assert response.status_code == 500

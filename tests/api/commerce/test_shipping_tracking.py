@@ -383,11 +383,14 @@ class TestShipmentEndpoints:
             "order_id": str(own_order.id), "carrier": created_provider["carrier"], "tracking_number": "TRACKX"})
         assert response.status_code == 403
 
-    async def test_filter_by_order(self, async_client: AsyncClient, auth_headers, created_shipment):
-        own = await async_client.get(f"/v1/shipping-tracking/shipments/?order_id={created_shipment['order_id']}", headers=auth_headers)
+    async def test_order_shipments_for_owner_and_staff(self, async_client: AsyncClient, auth_headers, admin_headers, created_shipment):
+        url = f"/v1/orders/{created_shipment['order_id']}/shipments/"
+        own = await async_client.get(url, headers=auth_headers)
         assert [s["id"] for s in own.json()["data"]] == [created_shipment["id"]]
-        other = await async_client.get(f"/v1/shipping-tracking/shipments/?order_id={uuid4()}", headers=auth_headers)
-        assert other.json()["data"] == []
+        staff = await async_client.get(url, headers=admin_headers)
+        assert [s["id"] for s in staff.json()["data"]] == [created_shipment["id"]]
+        unknown = await async_client.get(f"/v1/orders/{uuid4()}/shipments/", headers=auth_headers)
+        assert unknown.status_code == 404
 
     async def test_admin_lists_all_shipments(self, async_client: AsyncClient, admin_headers, created_shipment):
         response = await async_client.get("/v1/shipping-tracking/shipments/?limit=100", headers=admin_headers)

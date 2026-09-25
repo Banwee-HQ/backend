@@ -1,13 +1,12 @@
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+from typing import Literal, Optional
 from datetime import datetime
 
 
 class Base(BaseModel):
     code: str = Field(..., min_length=1)
     description: Optional[str] = None
-    discount_type: str = Field(...,
-                               description="e.g., 'fixed', 'percentage', 'shipping'")
+    discount_type: Literal["percentage", "fixed"]
     value: float = Field(..., gt=0)
     minimum_order_amount: Optional[float] = None
     maximum_discount_amount: Optional[float] = None
@@ -15,6 +14,11 @@ class Base(BaseModel):
     is_active: bool = True
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
+
+    @field_validator("code")
+    @classmethod
+    def _upper(cls, v: str) -> str:
+        return v.strip().upper()
 
 
 class Create(Base):
@@ -24,7 +28,7 @@ class Create(Base):
 class Update(BaseModel):
     code: Optional[str] = None
     description: Optional[str] = None
-    discount_type: Optional[str] = None
+    discount_type: Optional[Literal["percentage", "fixed"]] = None
     value: Optional[float] = None
     minimum_order_amount: Optional[float] = None
     maximum_discount_amount: Optional[float] = None
@@ -32,6 +36,11 @@ class Update(BaseModel):
     is_active: Optional[bool] = None
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
+
+    @field_validator("code")
+    @classmethod
+    def _upper(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip().upper() if v else v
 
 
 class InDB(Base):
@@ -46,7 +55,7 @@ class InDB(Base):
 # Validate promocode schemas
 class ValidateRequest(BaseModel):
     code: str
-
+    subtotal: Optional[float] = Field(None, ge=0)
 
 class ValidateResponse(BaseModel):
     valid: bool
@@ -56,3 +65,4 @@ class ValidateResponse(BaseModel):
     minimum_order_amount: Optional[float] = None
     maximum_discount_amount: Optional[float] = None
     message: Optional[str] = None
+

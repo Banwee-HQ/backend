@@ -23,6 +23,6 @@ class TestMethodBaseConstraints:
 
 class TestCalculate:
 
-    def test_defaults_destination_country_to_us(self):
-        calc = Calculate()
-        assert calc.destination_country == "US"
+    def test_method_is_optional(self):
+        """No method means "cheapest active method" for the delivery estimate."""
+        assert Calculate().shipping_method_id is None

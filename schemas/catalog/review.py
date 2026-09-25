@@ -12,20 +12,26 @@ class User(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProductRef(BaseModel):
+    id: UUID
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class Response(BaseModel):
     id: UUID
     rating: int
     comment: Optional[str]
     created_at: datetime
     user: Optional[User] = None
+    product: Optional[ProductRef] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class Base(BaseModel):
     product_id: UUID
-    user_id: Optional[UUID] = None  # Will be set by the backend
-    # based on current user
     rating: int = Field(..., ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=1000)
 

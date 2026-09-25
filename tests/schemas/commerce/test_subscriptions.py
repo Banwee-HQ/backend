@@ -3,15 +3,14 @@
 import pytest
 from pydantic import ValidationError
 
-from schemas.commerce.subscriptions import Create, UpdateQuantity, CostCalculation
+from schemas.commerce.subscriptions import Create, UpdateQuantity
+from schemas.commerce.subscriptions import CostCalculation
 
 
 class TestCreate:
 
-    def test_defaults_name_and_currency(self):
-        sub = Create()
-        assert sub.name == "My Subscription"
-        assert sub.currency == "CAD"
+    def test_defaults_name(self):
+        assert Create().name == "My Subscription"
 
 
 class TestUpdateQuantity:

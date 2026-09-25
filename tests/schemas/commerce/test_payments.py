@@ -23,6 +23,6 @@ class TestMethodBaseConstraints:
 
 class TestIntentCreate:
 
-    def test_defaults_currency_to_usd(self):
-        intent = IntentCreate(amount=10.0)
-        assert intent.currency == "USD"
+    def test_currency_is_not_client_controlled(self):
+        """Intents are always in the store currency, so the request carries none."""
+        assert not hasattr(IntentCreate(amount=10.0, currency="EUR"), "currency")

@@ -186,14 +186,6 @@ class TestFeaturedAndPopular:
         assert "Featured" in names
         assert "Not Featured" not in names
 
-    async def test_popular_returns_products(self, db_session):
-        cat = await make_category(db_session)
-        await make_product(db_session, category_id=cat.id, name="Popular")
-
-        service = ProductService(db_session)
-        result = await service.popular(limit=10)
-        assert isinstance(result, list)
-
 
 class TestByCategory:
 
@@ -551,17 +543,6 @@ class TestListMoreFilters:
         assert "Low Rated" in names
         assert "High Rated" not in names
 
-    async def test_legacy_featured_flag_filters_to_featured_only(self, db_session):
-        """The `featured` filter key is a legacy alias for `is_featured=True`."""
-        cat = await make_category(db_session)
-        await make_product(db_session, category_id=cat.id, name="Featured", is_featured=True)
-        await make_product(db_session, category_id=cat.id, name="Not Featured", is_featured=False)
-
-        service = ProductService(db_session)
-        result = await service.list(filters={"featured": True})
-        names = [p.name for p in result["data"]]
-        assert "Featured" in names
-        assert "Not Featured" not in names
 
     async def test_filters_by_is_bestseller(self, db_session):
         cat = await make_category(db_session)
@@ -588,28 +569,6 @@ class TestListMoreFilters:
         names = [p.name for p in result["data"]]
         assert "Out Of Stock" in names
         assert "In Stock" not in names
-
-
-class TestPopularCartBased:
-
-    async def test_orders_by_cart_additions_when_present(self, db_session, test_user):
-        cat = await make_category(db_session)
-        product = await make_product(db_session, category_id=cat.id, name="Cart Favorite")
-        variant = await make_variant(db_session, product.id)
-
-        cart = Cart(id=uuid4(), user_id=test_user.id)
-        db_session.add(cart)
-        await db_session.flush()
-        db_session.add(CartItem(
-            id=uuid4(), cart_id=cart.id, product_id=product.id, variant_id=variant.id,
-            quantity=2, price_per_unit=Decimal("20.0"),
-        ))
-        await db_session.commit()
-
-        service = ProductService(db_session)
-        result = await service.popular(limit=10)
-        names = [p.name for p in result]
-        assert "Cart Favorite" in names
 
 
 class TestReadCaching:

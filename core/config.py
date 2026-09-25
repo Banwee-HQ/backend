@@ -62,6 +62,12 @@ class Settings:
     ALGORITHM: str = "HS256"
 
     # Payments (Stripe)
+    # The one currency prices are set, shown, recorded and charged in (ISO 4217).
+    STORE_CURRENCY: str = os.getenv("STORE_CURRENCY", "CAD").upper()
+    # Seller details printed on invoices; lines separated by "|".
+    STORE_NAME: str = os.getenv("STORE_NAME", "Banwee")
+    STORE_ADDRESS: str = os.getenv("STORE_ADDRESS", "")
+
     STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
     STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 

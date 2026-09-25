@@ -11,17 +11,19 @@ from models.catalog.inventories import Inventory, StockAdjustment, WarehouseLoca
 from models.catalog.review import Review
 from models.commerce.cart import CartItem
 from models.commerce.orders import OrderItem
+from schemas.catalog.product import Create as ProductCreate, Update as ProductUpdate, Response as ProductResponse, VariantCreate as ProductVariantCreate, VariantResponse as ProductVariantResponse, PriceRange
+from schemas.catalog.category import CategoryBrief
+from core.logging import get_structured_logger
+from core.utils.cache import product_read_cache, invalidate_variant, invalidate_product
+from fastapi import HTTPException
+from datetime import datetime, date
 from schemas.catalog.product import (
     Create as ProductCreate, Update as ProductUpdate, Response as ProductResponse,
     VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate,
     VariantResponse as ProductVariantResponse,
     PriceRange, ListResponse as ProductListResponse
 )
-from schemas.catalog.category import CategoryBrief
 from core.exceptions import APIException
-from core.logging import get_structured_logger
-from core.utils.cache import product_read_cache, invalidate_variant, invalidate_product
-from fastapi import HTTPException
 from datetime import datetime, timezone, date
 
 logger = get_structured_logger(__name__)
@@ -30,6 +32,7 @@ logger = get_structured_logger(__name__)
 class ProductService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
 
     def _convert_variant_to_response(self, variant: ProductVariant) -> ProductVariantResponse:
         """Convert ProductVariant model to response format."""
@@ -226,9 +229,6 @@ class ProductService:
             if filters.get("max_rating") is not None:
                 base_conditions.append(Product.rating_average <= filters["max_rating"])
 
-            if filters.get("featured"):
-                base_conditions.append(Product.is_featured.is_(True))
-
             if filters.get("is_featured") is not None:
                 base_conditions.append(Product.is_featured.is_(filters["is_featured"]))
 
@@ -302,8 +302,16 @@ class ProductService:
             )
         )
 
-        # Apply sorting; "price" orders by each product's cheapest current variant price
-        if sort_by == "price":
+        # Apply sorting; "price" orders by each product's cheapest current variant price, "popular" by units sold
+        if sort_by == "popular":
+            units_sold = (
+                select(func.coalesce(func.sum(ProductVariant.purchase_count), 0))
+                .where(ProductVariant.product_id == Product.id)
+                .correlate(Product)
+                .scalar_subquery()
+            )
+            query = query.order_by(units_sold.desc(), Product.rating_average.desc(), Product.created_at.desc())
+        elif sort_by == "price":
             min_price = (
                 select(func.min(func.coalesce(ProductVariant.sale_price, ProductVariant.base_price)))
                 .where(ProductVariant.product_id == Product.id)
@@ -349,73 +357,10 @@ class ProductService:
             "total_pages": (total + limit - 1) // limit
         }
 
+
     async def featured(self, limit: int = 4) -> List[ProductResponse]:
-        """Fetch featured products with related data."""
-        print(f"Fetching {limit} featured products...")
-
-        # ✅ Use outerjoin if variants might be missing
-        query = (
-            select(Product)
-            .options(
-                selectinload(Product.variants).selectinload(
-                    ProductVariant.images),
-                selectinload(Product.variants).selectinload(ProductVariant.inventory)
-            )
-            .where(Product.is_featured.is_(True))
-            .order_by(Product.created_at.desc())
-            .limit(limit)
-        )
-
-        result = await self.db.execute(query)
-        products = result.scalars().unique().all()  # ✅ ensure uniqueness with .unique()
-
-        print(f"Found {len(products)} featured products in DB.")
-        for p in products:
-            print(
-                f"  - {p.name} (Featured: {p.is_featured}, Variants: {len(p.variants)})")
-
-        if not products:
-            print(
-                "⚠️ No featured products found. Check your DB data or 'featured' column values.")
-
-        return [self._convert_product_to_response(product) for product in products]
-
-    async def popular(self, limit: int = 4) -> List[ProductResponse]:
-        """Get popular products based on cart additions or fallback to highest rated products."""
-        # First, try to get products based on cart additions
-        query = (
-            select(Product, func.count(CartItem.id).label("added_to_cart"))
-            .join(Product.variants)
-            .join(CartItem, CartItem.variant_id == ProductVariant.id)
-            .group_by(Product.id)
-            .order_by(func.count(CartItem.id).desc())
-            .limit(limit)
-            .options(
-                selectinload(Product.variants).selectinload(
-                    ProductVariant.images),
-                selectinload(Product.variants).selectinload(ProductVariant.inventory)
-            )
-        )
-
-        result = await self.db.execute(query)
-        rows = result.all()
-
-        # If no products found (no cart items), fallback to highest rated products
-        if not rows:
-            fallback_query = select(Product).options(
-                selectinload(Product.variants).selectinload(
-                    ProductVariant.images),
-                selectinload(Product.variants).selectinload(ProductVariant.inventory)
-            ).order_by(Product.rating_average.desc(), Product.review_count.desc()).limit(limit)
-
-            fallback_result = await self.db.execute(fallback_query)
-            fallback_products = fallback_result.scalars().all()
-
-            return [self._convert_product_to_response(product) for product in fallback_products]
-
-        # Process cart-based popular products
-        products = [row[0] for row in rows]  # Extract Product objects
-        return [self._convert_product_to_response(product) for product in products]
+        """Active featured products, newest first."""
+        return (await self.list(limit=limit, filters={"is_featured": True}))["data"]
 
     async def recommended(self, product_id: UUID, limit: int = 4) -> List[ProductResponse]:
         """Get smart recommendations (complementary, similar, behavioral); see RecommendationService."""
@@ -424,6 +369,7 @@ class ProductService:
         
         recommendation_service = RecommendationService(self.db)
         return await recommendation_service.get_smart_recommendations(product_id, limit)
+
 
     async def by_category(self, slug: str) -> Optional[ProductResponse]:
         """Get category by slug and return products in that category."""
@@ -486,6 +432,7 @@ class ProductService:
         if response is not None:
             product_read_cache[cache_key] = response
         return response
+
 
     async def get_variant(self, variant_id: UUID) -> Optional[ProductVariantResponse]:
         """Get a variant by ID. Cached for 5s (display only - cart/checkout never read this)."""
@@ -1055,6 +1002,7 @@ class ProductService:
         self.db.expire_all()
         return await self.get(product_id)
 
+
     async def moderate(self, product_id: UUID, action: str, notes: Optional[str] = None) -> ProductResponse:
         """Approve or reject a product, publishing/unpublishing it accordingly."""
         result = await self.db.execute(select(Product).where(Product.id == product_id))
@@ -1140,8 +1088,6 @@ class ProductService:
         invalidate_product(product_id, product.slug)
         for variant_id in variant_ids:
             invalidate_variant(variant_id)
-
-    # --- Variant image CRUD ---
     async def create_image(self, variant_id: UUID, url: str, alt_text: Optional[str] = None,
                           is_primary: bool = False, sort_order: int = 0) -> dict:
         """Create a new image for a variant"""
@@ -1173,7 +1119,6 @@ class ProductService:
         await self.db.commit()
         await self.db.refresh(image)
         return image.to_dict()
-
     async def get_image(self, image_id: UUID) -> Optional[dict]:
         """Get an image by ID"""
         result = await self.db.execute(
@@ -1181,7 +1126,6 @@ class ProductService:
         )
         image = result.scalar_one_or_none()
         return image.to_dict() if image else None
-
     async def list_images(self, variant_id: UUID) -> List[dict]:
         """List all images for a variant"""
         result = await self.db.execute(
@@ -1191,7 +1135,6 @@ class ProductService:
         )
         images = result.scalars().all()
         return [img.to_dict() for img in images]
-
     async def update_image(self, image_id: UUID, url: Optional[str] = None,
                           alt_text: Optional[str] = None, is_primary: Optional[bool] = None,
                           sort_order: Optional[int] = None) -> Optional[dict]:
@@ -1223,7 +1166,6 @@ class ProductService:
         await self.db.commit()
         await self.db.refresh(image)
         return image.to_dict()
-
     async def delete_image(self, image_id: UUID) -> bool:
         """Delete an image"""
         result = await self.db.execute(
@@ -1236,3 +1178,8 @@ class ProductService:
         await self.db.delete(image)
         await self.db.commit()
         return True
+
+
+    # --- Variant image CRUD ---
+
+

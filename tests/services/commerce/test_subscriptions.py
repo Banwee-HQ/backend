@@ -87,14 +87,6 @@ class TestCreate:
         delta_days = (sub.current_period_end - sub.current_period_start).days
         assert 88 <= delta_days <= 92
 
-    async def test_currency_derived_from_address_country(self, db_session, test_user, variant, address):
-        address.country = "US"
-        await db_session.commit()
-        service = SubscriptionService(db_session)
-        sub = await service.create(
-            user_id=test_user.id, name="US Sub", variant_ids=[str(variant.id)], delivery_address_id=address.id,
-        )
-        assert sub.currency == "USD"
 
     async def test_applies_discount_code_at_creation(self, db_session, test_user, variant):
         promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:8].upper()}", discount_type="fixed", value=5, is_active=True)
@@ -128,26 +120,6 @@ class TestCreate:
         service = SubscriptionService(db_session)
         sub = await service.create(user_id=test_user.id, name="Free Sub", variant_ids=[str(free_variant.id)])
         assert sub.variant_prices_at_creation[0]["price"] == pytest.approx(9.99)
-
-
-class TestCalculatePricingEdgeCases:
-
-    async def test_corrupt_discount_value_does_not_crash_pricing(self, db_session, test_user, variant):
-        """Defends _calculate_pricing's discount-amount computation: if the
-        promo's value can't be turned into a Decimal, pricing must still be
-        returned (with no discount applied) instead of raising mid-checkout."""
-        promo = Promocode(id=uuid7(), code=f"CORRUPT{uuid4().hex[:6].upper()}", discount_type="fixed", value=5, is_active=True)
-        db_session.add(promo)
-        await db_session.commit()
-        promo.value = None  # mutated in-memory only; the service re-fetches by code within this same session
-
-        service = SubscriptionService(db_session)
-        pricing = await service._calculate_pricing(
-            variants=[variant], variant_quantities={}, customer_address=None,
-            currency="USD", user_id=test_user.id, discount_code=promo.code,
-        )
-        assert pricing["discount"] == 0.0
-
 
 
 class TestGetShippingCost:

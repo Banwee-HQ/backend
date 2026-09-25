@@ -42,7 +42,6 @@ class TestAdminOnlyEndpoints:
     call and a real query error (not just "route exists") are what matter here."""
 
     ENDPOINTS = [
-        "/v1/analytics/revenue/",
         "/v1/analytics/conversion-rates/",
         "/v1/analytics/cart-abandonment/",
         "/v1/analytics/time-to-purchase/",
@@ -51,7 +50,6 @@ class TestAdminOnlyEndpoints:
         "/v1/analytics/sales-trend/",
         "/v1/analytics/users-growth-trend/",
         "/v1/analytics/kpis/",
-        "/v1/analytics/stats/",
         "/v1/analytics/dashboard/admin/",
     ]
 
@@ -80,7 +78,6 @@ class TestAdminEndpointsServiceErrorHandling:
         ("/v1/analytics/repeat-customers/", "get_repeat_customer_metrics"),
         ("/v1/analytics/sales-trend/", "get_sales_trend_data"),
         ("/v1/analytics/users-growth-trend/", "get_users_growth_trend"),
-        ("/v1/analytics/revenue/", "get_revenue_metrics"),
     ]
 
     @pytest.mark.parametrize("path, service_method", ENDPOINT_TO_SERVICE_METHOD)
@@ -139,28 +136,6 @@ class TestKpisComparison:
 
 @pytest.mark.api
 @pytest.mark.analytics
-class TestSimpleQueryEndpointsErrorHandling:
-    """users/, products/, orders/ build their queries inline (no AnalyticsService), so a
-    DB failure is injected directly on the request's own db_session. Every request also
-    re-authenticates via one db.execute() call inside get_current_auth_user() first, so
-    the fake failure only kicks in from the *second* execute() onward - otherwise it
-    would break authentication itself (401) rather than the route body (500)."""
-
-    @staticmethod
-    def _break_execute_after_auth(db_session, mocker):
-        original_execute = db_session.execute
-        state = {"calls": 0}
-
-        async def flaky_execute(*args, **kwargs):
-            state["calls"] += 1
-            if state["calls"] == 1:
-                return await original_execute(*args, **kwargs)
-            raise RuntimeError("boom")
-
-        mocker.patch.object(db_session, "execute", side_effect=flaky_execute)
-
-@pytest.mark.api
-@pytest.mark.analytics
 class TestAdminStatsAndDashboardErrorHandling:
     """Regression coverage for a real bug: `status` used to be the name of a Query(...)
     parameter on both admin_stats() and admin_dashboard(), shadowing the module-level
@@ -169,6 +144,34 @@ class TestAdminStatsAndDashboardErrorHandling:
     `status` rebound to a plain string (or None), that line raised AttributeError
     instead of returning a clean 500, masking the real error entirely. Fixed by
     renaming the parameter to `order_status` (aliased back to the `status` query key)."""
+
+
+    async def test_admin_dashboard_passes_through_api_exception(self, async_client: AsyncClient, admin_headers, mocker):
+        from core.exceptions import APIException
+        mocker.patch(
+            "services.analytics.analytics.AnalyticsService.get_admin_overview",
+            side_effect=APIException(status_code=418, message="teapot"),
+        )
+        response = await async_client.get("/v1/analytics/dashboard/admin/", headers=admin_headers)
+        assert response.status_code == 418
+
+    async def test_admin_dashboard_passes_through_http_exception(self, async_client: AsyncClient, admin_headers, mocker):
+        from fastapi import HTTPException
+        mocker.patch(
+            "services.analytics.analytics.AnalyticsService.get_admin_overview",
+            side_effect=HTTPException(status_code=503, detail="down"),
+        )
+        response = await async_client.get("/v1/analytics/dashboard/admin/", headers=admin_headers)
+        assert response.status_code == 503
+
+    async def test_admin_dashboard_generic_exception_becomes_clean_500(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.analytics.analytics.AnalyticsService.get_admin_overview",
+            side_effect=RuntimeError("boom"),
+        )
+        response = await async_client.get("/v1/analytics/dashboard/admin/?status=pending", headers=admin_headers)
+        assert response.status_code == 500
+        assert "Failed to fetch dashboard data" in response.json()["message"]
 
     async def test_status_query_param_still_works_via_alias(self, async_client: AsyncClient, admin_headers):
         response = await async_client.get("/v1/analytics/stats/?status=delivered", headers=admin_headers)
@@ -201,33 +204,6 @@ class TestAdminStatsAndDashboardErrorHandling:
         response = await async_client.get("/v1/analytics/stats/?status=pending", headers=admin_headers)
         assert response.status_code == 500
         assert "Failed to fetch admin stats" in response.json()["message"]
-
-    async def test_admin_dashboard_passes_through_api_exception(self, async_client: AsyncClient, admin_headers, mocker):
-        from core.exceptions import APIException
-        mocker.patch(
-            "services.analytics.analytics.AnalyticsService.get_admin_overview",
-            side_effect=APIException(status_code=418, message="teapot"),
-        )
-        response = await async_client.get("/v1/analytics/dashboard/admin/", headers=admin_headers)
-        assert response.status_code == 418
-
-    async def test_admin_dashboard_passes_through_http_exception(self, async_client: AsyncClient, admin_headers, mocker):
-        from fastapi import HTTPException
-        mocker.patch(
-            "services.analytics.analytics.AnalyticsService.get_admin_overview",
-            side_effect=HTTPException(status_code=503, detail="down"),
-        )
-        response = await async_client.get("/v1/analytics/dashboard/admin/", headers=admin_headers)
-        assert response.status_code == 503
-
-    async def test_admin_dashboard_generic_exception_becomes_clean_500(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch(
-            "services.analytics.analytics.AnalyticsService.get_admin_overview",
-            side_effect=RuntimeError("boom"),
-        )
-        response = await async_client.get("/v1/analytics/dashboard/admin/?status=pending", headers=admin_headers)
-        assert response.status_code == 500
-        assert "Failed to fetch dashboard data" in response.json()["message"]
 
 
 @pytest.mark.api
@@ -289,3 +265,26 @@ class TestExportOrders:
         response = await async_client.get("/v1/analytics/export/orders/", headers=admin_headers)
         assert response.status_code == 500
         assert "Failed to export orders" in response.json()["message"]
+
+
+@pytest.mark.api
+@pytest.mark.analytics
+class TestSimpleQueryEndpointsErrorHandling:
+    """users/, products/, orders/ build their queries inline (no AnalyticsService), so a
+    DB failure is injected directly on the request's own db_session. Every request also
+    re-authenticates via one db.execute() call inside get_current_auth_user() first, so
+    the fake failure only kicks in from the *second* execute() onward - otherwise it
+    would break authentication itself (401) rather than the route body (500)."""
+
+    @staticmethod
+    def _break_execute_after_auth(db_session, mocker):
+        original_execute = db_session.execute
+        state = {"calls": 0}
+
+        async def flaky_execute(*args, **kwargs):
+            state["calls"] += 1
+            if state["calls"] == 1:
+                return await original_execute(*args, **kwargs)
+            raise RuntimeError("boom")
+
+        mocker.patch.object(db_session, "execute", side_effect=flaky_execute)

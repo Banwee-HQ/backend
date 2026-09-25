@@ -35,7 +35,6 @@ class Create(BaseModel):
     delivery_address_id: Optional[UUID] = None
     shipping_method_id: Optional[UUID] = None
     billing_cycle: BillingCycle = BillingCycle.MONTHLY
-    currency: str = "CAD"
     discount_code: Optional[str] = None
     payment_method_id: Optional[str] = None
     current_period_start: Optional[str] = None
@@ -58,7 +57,6 @@ class CostCalculation(BaseModel):
     variant_quantities: Optional[Dict[str, int]] = {}
     delivery_address_id: Optional[UUID] = None
     shipping_method_id: Optional[UUID] = None
-    currency: str = "CAD"
 
 
 class AddProducts(BaseModel):
@@ -138,4 +136,3 @@ class Response(BaseModel):
             datetime: lambda v: v.isoformat() if v else None
         }
     )
-

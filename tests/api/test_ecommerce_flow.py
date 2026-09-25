@@ -51,8 +51,8 @@ class TestSearchCartCheckoutFlow:
         search_results = search.json()["data"]
         assert any(p["id"] == product_id for p in search_results), search_results
 
-        variants = await async_client.get(f"/v1/products/{product_id}/variants/")
-        variant = variants.json()["data"][0]
+        detail = await async_client.get(f"/v1/products/{product_id}/")
+        variant = detail.json()["data"]["variants"][0]
         variant_id = variant["id"]
         assert variant["stock"] == 3
 
@@ -105,5 +105,5 @@ class TestSearchCartCheckoutFlow:
         cart_after = await async_client.get("/v1/cart/", headers=auth_headers)
         assert cart_after.json()["data"]["items"] == []
 
-        variants_after = await async_client.get(f"/v1/products/{product_id}/variants/")
-        assert variants_after.json()["data"][0]["stock"] == 1
+        detail_after = await async_client.get(f"/v1/products/{product_id}/")
+        assert detail_after.json()["data"]["variants"][0]["stock"] == 1

@@ -212,6 +212,7 @@ class ShippingTrackingService:
         except Exception as e:
             raise APIException(status_code=500, message=f"Failed to get shipment: {str(e)}")
 
+
     async def list_by_order(self, order_id: str) -> List[Dict[str, Any]]:
         """Get all shipments for an order"""
         try:
@@ -222,7 +223,7 @@ class ShippingTrackingService:
                     selectinload(ShipmentTracking.tracking_events),
                     selectinload(ShipmentTracking.carrier),
                     selectinload(ShipmentTracking.provider),
-                )
+                ).order_by(ShipmentTracking.created_at.desc())
             )
             shipments = shipments_result.scalars().all()
             return [shipment.to_dict() for shipment in shipments]

@@ -12,6 +12,7 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from models.accounts.user import User
 from services.commerce.shipping import ShippingService
+from schemas.commerce.shipping import MethodCreate, MethodUpdate, MethodInDB
 from schemas.commerce.shipping import (
     MethodCreate,
     MethodUpdate,
@@ -186,29 +187,17 @@ async def delete(
 
 
 # --- CALCULATE - Kept Route ---
+
+
 @router.post("/calculate/")
 async def calc_cost(
     body: Calculate,
     db: AsyncSession = Depends(get_db)
 ) -> Response:
-    """Calculate shipping cost."""
+    """Delivery estimate: the chosen method's price, or the cheapest active method."""
     try:
-        shipping_service = ShippingService(db)
-        address = {'country': body.destination_country or 'US'}
-        order_amount = body.order_amount or 0.0
-        cost = await shipping_service.calc_cost(
-            cart_subtotal=order_amount,
-            address=address,
-            shipping_method_id=body.shipping_method_id
-        )
-        return Response.success(
-            data={
-                "shipping_cost": cost,
-                "order_amount": order_amount,
-                "shipping_method_id": body.shipping_method_id
-            },
-            message="Shipping cost calculated successfully"
-        )
+        cost = await ShippingService(db).calc_cost(shipping_method_id=body.shipping_method_id)
+        return Response.success(data={"shipping_cost": cost})
     except APIException:
         raise
     except HTTPException:
@@ -219,4 +208,3 @@ async def calc_cost(
             status_code=status.HTTP_400_BAD_REQUEST,
             message=f"Failed to calculate shipping cost: {str(e)}"
         )
-

@@ -1,7 +1,8 @@
+from pydantic import BaseModel, Field
+from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from uuid import UUID
 from schemas.catalog.product import VariantResponse as ProductVariantResponse, normalize_dietary_tags
 
 
@@ -81,7 +82,6 @@ class CartResponse(BaseModel):
 class UpdateItem(BaseModel):
     quantity: int
 
-
 class ValidationIssue(BaseModel):
     """Individual cart validation issue"""
     variant_id: Optional[str] = None
@@ -150,3 +150,4 @@ class CheckoutValidationResponse(BaseModel):
     can_proceed: bool
     validation_errors: List[str] = Field(default=[])
     estimated_totals: Optional[EstimatedTotals] = None
+

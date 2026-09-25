@@ -122,26 +122,6 @@ class TestShippingMethodEndpoints:
 
 @pytest.mark.api
 @pytest.mark.shipping
-class TestCalculateShippingCost:
-
-    async def test_calculate_with_method(self, async_client: AsyncClient, created_method):
-        """POST /v1/shipping/calculate - Calculate cost using a specific method."""
-        response = await async_client.post("/v1/shipping/calculate/", json={
-            "order_amount": 50.0, "shipping_method_id": created_method["id"], "destination_country": "US"
-        })
-        assert response.status_code == 200
-        assert response.json()["data"]["shipping_cost"] == created_method["price"]
-
-    async def test_calculate_without_method(self, async_client: AsyncClient):
-        """POST /v1/shipping/calculate - Calculate cost with no method specified falls back gracefully."""
-        response = await async_client.post("/v1/shipping/calculate/", json={
-            "order_amount": 50.0, "destination_country": "US"
-        })
-        assert response.status_code == 200
-
-
-@pytest.mark.api
-@pytest.mark.shipping
 class TestShippingMethodErrorHandling:
     """Exercises the try/except blocks in api/commerce/shipping.py directly.
 
@@ -260,7 +240,7 @@ class TestShippingMethodErrorHandling:
             "services.commerce.shipping.ShippingService.calc_cost",
             side_effect=APIException(status_code=400, message="bad address"),
         )
-        response = await async_client.post("/v1/shipping/calculate/", json={"order_amount": 10.0})
+        response = await async_client.post("/v1/shipping/calculate/", json={})
         assert response.status_code == 400
 
     async def test_calculate_propagates_http_exception(self, async_client: AsyncClient, mocker):
@@ -268,7 +248,7 @@ class TestShippingMethodErrorHandling:
             "services.commerce.shipping.ShippingService.calc_cost",
             side_effect=HTTPException(status_code=403, detail="nope"),
         )
-        response = await async_client.post("/v1/shipping/calculate/", json={"order_amount": 10.0})
+        response = await async_client.post("/v1/shipping/calculate/", json={})
         assert response.status_code == 403
 
     async def test_calculate_wraps_unexpected_error_as_400(self, async_client: AsyncClient, mocker):
@@ -276,5 +256,25 @@ class TestShippingMethodErrorHandling:
             "services.commerce.shipping.ShippingService.calc_cost",
             side_effect=RuntimeError("db down"),
         )
-        response = await async_client.post("/v1/shipping/calculate/", json={"order_amount": 10.0})
+        response = await async_client.post("/v1/shipping/calculate/", json={})
         assert response.status_code == 400
+
+
+@pytest.mark.api
+@pytest.mark.shipping
+class TestCalculateShippingCost:
+
+    async def test_calculate_with_method(self, async_client: AsyncClient, created_method):
+        """POST /v1/shipping/calculate - Calculate cost using a specific method."""
+        response = await async_client.post("/v1/shipping/calculate/", json={
+            "shipping_method_id": created_method["id"]
+        })
+        assert response.status_code == 200
+        assert response.json()["data"]["shipping_cost"] == created_method["price"]
+
+    async def test_calculate_without_method(self, async_client: AsyncClient):
+        """POST /v1/shipping/calculate - Calculate cost with no method specified falls back gracefully."""
+        response = await async_client.post("/v1/shipping/calculate/", json={
+        
+        })
+        assert response.status_code == 200

@@ -39,10 +39,6 @@ class MethodInDB(MethodBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Shipping calculation schema
+# Shipping estimate: the chosen method's price, or the cheapest active method when none is chosen
 class Calculate(BaseModel):
-    order_amount: Optional[float] = None
     shipping_method_id: Optional[UUID] = None
-    destination_country: Optional[str] = "US"
-    address_id: Optional[UUID] = None
-    items: Optional[list] = None

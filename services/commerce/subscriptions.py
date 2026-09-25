@@ -4,7 +4,6 @@ from sqlalchemy import select, and_, delete, or_, func, update
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 from models.commerce.subscriptions import Subscription, SubscriptionStatus, BillingCycle, SubscriptionProductAssociation, SubscriptionProduct
-from models.commerce.discounts import SubscriptionDiscount, ProductRemovalAudit
 from models.commerce.orders import Order
 from models.commerce.shipping import ShippingMethod
 from models.catalog.product import ProductVariant
@@ -12,12 +11,14 @@ from models.catalog.variant_tracking import VariantTrackingEntry
 from models.accounts.user import Address, User
 from models.commerce.promocode import Promocode
 from services.commerce.tax import TaxService
+from services.commerce.promocode import PromocodeService
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 from core.logging import get_structured_logger
+from core.config import settings
 
 logger = get_structured_logger(__name__)
 
@@ -49,35 +50,13 @@ class SubscriptionService:
         delivery_address_id: Optional[UUID] = None,
         shipping_method_id: Optional[UUID] = None,
         billing_cycle: str = "monthly",
-        currency: str = "CAD",
         discount_code: Optional[str] = None,
         current_period_start: Optional[str] = None
     ) -> Subscription:
         """Create a new subscription"""
         logger.info(f"Creating subscription with user_id={user_id}, name={name}, variant_ids={variant_ids}")
 
-        # Determine currency from delivery address if not provided
-        if not currency or currency == "CAD":
-            try:
-                if delivery_address_id:
-                    address_result = await self.db.execute(
-                        select(Address).where(Address.id == delivery_address_id)
-                    )
-                    address = address_result.scalar_one_or_none()
-                    if address:
-                        # Simple country to currency mapping
-                        country_currency_map = {
-                            "US": "USD",
-                            "CA": "CAD",
-                            "GB": "GBP",
-                            "EUR": "EUR",
-                            "AU": "AUD",
-                            "JP": "JPY",
-                        }
-                        currency = country_currency_map.get(address.country.upper(), "CAD")
-            except Exception as e:
-                logger.warning(f"Could not determine currency from address: {e}")
-                currency = "CAD"
+        currency = settings.STORE_CURRENCY
 
         # Validate variants
         variant_uuids = [UUID(vid) for vid in variant_ids]
@@ -225,41 +204,16 @@ class SubscriptionService:
         # Get shipping cost from database
         shipping_cost = await self._get_shipping_cost(shipping_method_id)
 
-        # Apply discount
+        # Apply the promocode with the same rules as one-off orders
         discount_amount = Decimal('0.00')
-        discount_id = None
-        discount_type = None
-        discount_value = None
-        discount_code_used = None
-        
+        discount_id = discount_type = discount_value = discount_code_used = None
         if discount_code:
-            try:
-                promo_result = await self.db.execute(
-                    select(Promocode).where(
-                        and_(
-                            Promocode.code == discount_code,
-                            Promocode.is_active == True
-                        )
-                    )
-                )
-                promo = promo_result.scalar_one_or_none()
-                
-                if promo:
-                    discount_id = promo.id
-                    discount_type = promo.discount_type
-                    discount_value = promo.value
-                    discount_code_used = promo.code
-                    
-                    if promo.discount_type == "percentage":
-                        discount_amount = subtotal * (Decimal(str(promo.value)) / 100)
-                    else:  # fixed
-                        discount_amount = Decimal(str(promo.value))
-                        
-            except Exception as e:
-                logger.warning(f"Discount application failed: {e}")
-        
+            is_valid, _, promo = await PromocodeService(self.db).validate(discount_code, subtotal)
+            if is_valid:
+                discount_amount = PromocodeService.amount(promo, subtotal)
+                discount_id, discount_type, discount_value, discount_code_used = promo.id, promo.discount_type, promo.value, promo.code
+
         # Tax after discount, same rule as one-off orders (services.commerce.tax)
-        discount_amount = min(discount_amount, subtotal)
         tax_rate = 0.0
         if customer_address:
             tax_rate = await TaxService(self.db).rate(customer_address.get('country'), customer_address.get('state'))
@@ -579,6 +533,7 @@ class SubscriptionService:
         await self.db.commit()
         return await self.get(subscription.id)
 
+
     async def list_due(self, limit: int = 50) -> List[Subscription]:
         """List active subscriptions currently due for billing (admin)."""
         result = await self.db.execute(
@@ -779,16 +734,6 @@ class SubscriptionService:
             )
         )
         await self.db.execute(
-            delete(SubscriptionDiscount).where(
-                SubscriptionDiscount.subscription_id == subscription_id
-            )
-        )
-        await self.db.execute(
-            delete(ProductRemovalAudit).where(
-                ProductRemovalAudit.subscription_id == subscription_id
-            )
-        )
-        await self.db.execute(
             delete(VariantTrackingEntry).where(
                 VariantTrackingEntry.subscription_id == subscription_id
             )
@@ -863,6 +808,7 @@ class SubscriptionService:
         await self.recalc_pricing(subscription)
         return await self.get(subscription.id)
 
+
     async def adjust_quantity(self, subscription_id: UUID, variant_id: UUID, change: int, user_id: UUID) -> Subscription:
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
@@ -879,6 +825,7 @@ class SubscriptionService:
     def _require_variant(subscription: Subscription, variant_id) -> None:
         if str(variant_id) not in [str(v) for v in (subscription.variant_ids or [])]:
             raise HTTPException(status_code=400, detail="That product is not part of this subscription")
+
 
     async def get_quantities(self, subscription_id: UUID, user_id: UUID) -> Dict[str, int]:
         subscription = await self.get(subscription_id, user_id)
@@ -909,20 +856,4 @@ class SubscriptionService:
             "pages": max(1, (total + limit - 1) // limit)
         }
 
-    async def _calc_cost(
-        self,
-        variants: List[ProductVariant],
-        shipping_method_id: Optional[UUID],
-        customer_address: Optional[Dict],
-        currency: str,
-        user_id: UUID,
-        variant_quantities: Optional[Dict[str, int]] = None,
-    ) -> Dict[str, Any]:
-        return await self._calculate_pricing(
-            variants=variants,
-            variant_quantities=variant_quantities or {},
-            customer_address=customer_address,
-            currency=currency,
-            user_id=user_id,
-            shipping_method_id=shipping_method_id,
-        )
+

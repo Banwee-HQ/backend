@@ -23,9 +23,9 @@ from services.commerce.cart import CartService
 from services.commerce.payments import PaymentService
 from services.catalog.inventory import InventoryService 
 from services.commerce.tax import TaxService
+from services.commerce.promocode import PromocodeService
+from models.commerce.promocode import Promocode
 from services.commerce.shipping import ShippingService
-from services.commerce.discounts import DiscountEngine
-from models.commerce.discounts import DiscountType
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timedelta, timezone
@@ -34,225 +34,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from core.logging import get_structured_logger
 
 from schemas.common.service_types import PricingCalculationResult
+from core.config import settings
 
 logger = get_structured_logger(__name__)
-
-
-def get_currency_from_address(country: str) -> str:
-    """Determine currency based on country in address."""
-    if not country:
-        return "USD"
-    
-    country = country.upper()
-    
-    # Map countries to their currencies (both codes and full names)
-    country_to_currency = {
-        # North America
-        "CA": "CAD", "CANADA": "CAD",
-        "US": "USD", "UNITED STATES": "USD", "USA": "USD",
-        "MX": "MXN", "MEXICO": "MXN",
-        "GT": "GTQ", "GUATEMALA": "GTQ",
-        "CR": "CRC", "COSTA RICA": "CRC",
-        "PA": "PAB", "PANAMA": "PAB",
-        "JM": "JMD", "JAMAICA": "JMD",
-        "DO": "DOP", "DOMINICAN REPUBLIC": "DOP",
-        "CU": "CUP", "CUBA": "CUP",
-        "HT": "HTG", "HAITI": "HTG",
-        "HN": "HNL", "HONDURAS": "HNL",
-        "NI": "NIO", "NICARAGUA": "NIO",
-        "SV": "SVC", "EL SALVADOR": "SVC",
-        "BB": "BBD", "BARBADOS": "BBD",
-        "BS": "BSD", "BAHAMAS": "BSD",
-        "TT": "TTD", "TRINIDAD AND TOBAGO": "TTD",
-        
-        # Central America
-        "BZ": "BZD", "BELIZE": "BZD",
-        
-        # Europe (Eurozone)
-        "DE": "EUR", "GERMANY": "EUR",
-        "FR": "EUR", "FRANCE": "EUR",
-        "IT": "EUR", "ITALY": "EUR",
-        "ES": "EUR", "SPAIN": "EUR",
-        "NL": "EUR", "NETHERLANDS": "EUR",
-        "BE": "EUR", "BELGIUM": "EUR",
-        "AT": "EUR", "AUSTRIA": "EUR",
-        "IE": "EUR", "IRELAND": "EUR",
-        "PT": "EUR", "PORTUGAL": "EUR",
-        "FI": "EUR", "FINLAND": "EUR",
-        "GR": "EUR", "GREECE": "EUR",
-        "LU": "EUR", "LUXEMBOURG": "EUR",
-        "MT": "EUR", "MALTA": "EUR",
-        "CY": "EUR", "CYPRUS": "EUR",
-        "EE": "EUR", "ESTONIA": "EUR",
-        "LV": "EUR", "LATVIA": "EUR",
-        "LT": "EUR", "LITHUANIA": "EUR",
-        "SK": "EUR", "SLOVAKIA": "EUR",
-        "SI": "EUR", "SLOVENIA": "EUR",
-        "HR": "EUR", "CROATIA": "EUR",
-        "AD": "EUR", "ANDORRA": "EUR",
-        "MC": "EUR", "MONACO": "EUR",
-        "SM": "EUR", "SAN MARINO": "EUR",
-        "VA": "EUR", "VATICAN CITY": "EUR",
-        
-        # Europe (Non-Eurozone)
-        "GB": "GBP", "UNITED KINGDOM": "GBP", "UK": "GBP",
-        "CH": "CHF", "SWITZERLAND": "CHF",
-        "SE": "SEK", "SWEDEN": "SEK",
-        "NO": "NOK", "NORWAY": "NOK",
-        "DK": "DKK", "DENMARK": "DKK",
-        "PL": "PLN", "POLAND": "PLN",
-        "CZ": "CZK", "CZECH REPUBLIC": "CZK",
-        "HU": "HUF", "HUNGARY": "HUF",
-        "RO": "RON", "ROMANIA": "RON",
-        "BG": "BGN", "BULGARIA": "BGN",
-        "IS": "ISK", "ICELAND": "ISK",
-        "UA": "UAH", "UKRAINE": "UAH",
-        "RU": "RUB", "RUSSIA": "RUB",
-        "BY": "BYN", "BELARUS": "BYN",
-        "MD": "MDL", "MOLDOVA": "MDL",
-        "GE": "GEL", "GEORGIA": "GEL",
-        "AM": "AMD", "ARMENIA": "AMD",
-        "AZ": "AZN", "AZERBAIJAN": "AZN",
-        "KZ": "KZT", "KAZAKHSTAN": "KZT",
-        "RS": "RSD", "SERBIA": "RSD",
-        "BA": "BAM", "BOSNIA AND HERZEGOVINA": "BAM",
-        "ME": "EUR", "MONTENEGRO": "EUR",
-        "MK": "MKD", "NORTH MACEDONIA": "MKD",
-        "AL": "ALL", "ALBANIA": "ALL",
-        "XK": "EUR", "KOSOVO": "EUR",
-        "LI": "CHF", "LIECHTENSTEIN": "CHF",
-        
-        # Asia
-        "JP": "JPY", "JAPAN": "JPY",
-        "CN": "CNY", "CHINA": "CNY",
-        "IN": "INR", "INDIA": "INR",
-        "KR": "KRW", "SOUTH KOREA": "KRW", "KOREA": "KRW",
-        "KP": "KPW", "NORTH KOREA": "KPW",
-        "SG": "SGD", "SINGAPORE": "SGD",
-        "HK": "HKD", "HONG KONG": "HKD",
-        "MY": "MYR", "MALAYSIA": "MYR",
-        "TH": "THB", "THAILAND": "THB",
-        "ID": "IDR", "INDONESIA": "IDR",
-        "PH": "PHP", "PHILIPPINES": "PHP",
-        "VN": "VND", "VIETNAM": "VND",
-        "TW": "TWD", "TAIWAN": "TWD",
-        "BN": "BND", "BRUNEI": "BND",
-        "KH": "KHR", "CAMBODIA": "KHR",
-        "LA": "LAK", "LAOS": "LAK",
-        "MM": "MMK", "MYANMAR": "MMK",
-        "BD": "BDT", "BANGLADESH": "BDT",
-        "LK": "LKR", "SRI LANKA": "LKR",
-        "NP": "NPR", "NEPAL": "NPR",
-        "PK": "PKR", "PAKISTAN": "PKR",
-        "AF": "AFN", "AFGHANISTAN": "AFN",
-        "MV": "MVR", "MALDIVES": "MVR",
-        "BT": "BTN", "BHUTAN": "BTN",
-        "MO": "MOP", "MACAU": "MOP",
-        
-        # Central Asia
-        "UZ": "UZS", "UZBEKISTAN": "UZS",
-        "KG": "KGS", "KYRGYZSTAN": "KGS",
-        "TJ": "TJS", "TAJIKISTAN": "TJS",
-        "TM": "TMT", "TURKMENISTAN": "TMT",
-        
-        # Middle East
-        "IL": "ILS", "ISRAEL": "ILS",
-        "SA": "SAR", "SAUDI ARABIA": "SAR",
-        "AE": "AED", "UNITED ARAB EMIRATES": "AED",
-        "QA": "QAR", "QATAR": "QAR",
-        "TR": "TRY", "TURKEY": "TRY",
-        "IR": "IRR", "IRAN": "IRR",
-        "IQ": "IQD", "IRAQ": "IQD",
-        "KW": "KWD", "KUWAIT": "KWD",
-        "BH": "BHD", "BAHRAIN": "BHD",
-        "OM": "OMR", "OMAN": "OMR",
-        "JO": "JOD", "JORDAN": "JOD",
-        "LB": "LBP", "LEBANON": "LBP",
-        "SY": "SYP", "SYRIA": "SYP",
-        "YE": "YER", "YEMEN": "YER",
-        "PS": "ILS", "PALESTINE": "ILS",
-        
-        # Oceania
-        "AU": "AUD", "AUSTRALIA": "AUD",
-        "NZ": "NZD", "NEW ZEALAND": "NZD",
-        "PG": "PGK", "PAPUA NEW GUINEA": "PGK",
-        "FJ": "FJD", "FIJI": "FJD",
-        "SB": "SBD", "SOLOMON ISLANDS": "SBD",
-        "VU": "VUV", "VANUATU": "VUV",
-        "WS": "WST", "SAMOA": "WST",
-        "TO": "TOP", "TONGA": "TOP",
-        "NU": "NZD", "NIUE": "NZD",
-        "CK": "NZD", "COOK ISLANDS": "NZD",
-        
-        # South America
-        "BR": "BRL", "BRAZIL": "BRL",
-        "AR": "ARS", "ARGENTINA": "ARS",
-        "CL": "CLP", "CHILE": "CLP",
-        "CO": "COP", "COLOMBIA": "COP",
-        "PE": "PEN", "PERU": "PEN",
-        "VE": "VES", "VENEZUELA": "VES",
-        "EC": "USD", "ECUADOR": "USD",
-        "BO": "BOB", "BOLIVIA": "BOB",
-        "PY": "PYG", "PARAGUAY": "PYG",
-        "UY": "UYU", "URUGUAY": "UYU",
-        "GY": "GYD", "GUYANA": "GYD",
-        "SR": "SRD", "SURINAME": "SRD",
-        "GF": "EUR", "FRENCH GUIANA": "EUR",
-        
-        # Africa
-        "ZA": "ZAR", "SOUTH AFRICA": "ZAR",
-        "EG": "EGP", "EGYPT": "EGP",
-        "NG": "NGN", "NIGERIA": "NGN",
-        "KE": "KES", "KENYA": "KES",
-        "MA": "MAD", "MOROCCO": "MAD",
-        "DZ": "DZD", "ALGERIA": "DZD",
-        "TN": "TND", "TUNISIA": "TND",
-        "LY": "LYD", "LIBYA": "LYD",
-        "GH": "GHS", "GHANA": "GHS",
-        "ET": "ETB", "ETHIOPIA": "ETB",
-        "TZ": "TZS", "TANZANIA": "TZS",
-        "UG": "UGX", "UGANDA": "UGX",
-        "RW": "RWF", "RWANDA": "RWF",
-        "BW": "BWP", "BOTSWANA": "BWP",
-        "ZM": "ZMW", "ZAMBIA": "ZMW",
-        "ZW": "ZWL", "ZIMBABWE": "ZWL",
-        "MW": "MWK", "MALAWI": "MWK",
-        "MZ": "MZN", "MOZAMBIQUE": "MZN",
-        "AO": "AOA", "ANGOLA": "AOA",
-        "CD": "CDF", "DEMOCRATIC REPUBLIC OF THE CONGO": "CDF",
-        "CG": "XAF", "CONGO": "XAF",
-        "CI": "XOF", "IVORY COAST": "XOF",
-        "SN": "XOF", "SENEGAL": "XOF",
-        "ML": "XOF", "MALI": "XOF",
-        "BF": "XOF", "BURKINA FASO": "XOF",
-        "NE": "XOF", "NIGER": "XOF",
-        "TD": "XAF", "CHAD": "XAF",
-        "CM": "XAF", "CAMEROON": "XAF",
-        "GA": "XAF", "GABON": "XAF",
-        "CF": "XAF", "CENTRAL AFRICAN REPUBLIC": "XAF",
-        "DJ": "DJF", "DJIBOUTI": "DJF",
-        "ER": "ERN", "ERITREA": "ERN",
-        "SO": "SOS", "SOMALIA": "SOS",
-        "SS": "SSP", "SOUTH SUDAN": "SSP",
-        "GM": "GMD", "GAMBIA": "GMD",
-        "GN": "GNF", "GUINEA": "GNF",
-        "SL": "SLL", "SIERRA LEONE": "SLL",
-        "LR": "LRD", "LIBERIA": "LRD",
-        "BI": "BIF", "BURUNDI": "BIF",
-        "MG": "MGA", "MADAGASCAR": "MGA",
-        "MU": "MUR", "MAURITIUS": "MUR",
-        "SC": "SCR", "SEYCHELLES": "SCR",
-        "KM": "KMF", "COMOROS": "KMF",
-        "ST": "STN", "SAO TOME AND PRINCIPE": "STN",
-        "CV": "CVE", "CAPE VERDE": "CVE",
-        "EH": "MAD", "WESTERN SAHARA": "MAD",
-        "NA": "NAD", "NAMIBIA": "NAD",
-        "SZ": "SZL", "ESWATINI": "SZL",
-        "LS": "LSL", "LESOTHO": "LSL",
-        "MR": "MRU", "MAURITANIA": "MRU",
-    }
-    
-    return country_to_currency.get(country, "USD")
 
 
 class OrderService:
@@ -264,7 +48,6 @@ class OrderService:
         self.inventory_service = InventoryService(db, lock_service)
         self.tax_service = TaxService(db)
         self.shipping_service = ShippingService(db)
-        self.discount_engine = DiscountEngine(db)
 
     @staticmethod
     def _orderable_items(cart_items: List[CartItem]) -> List[CartItem]:
@@ -277,8 +60,7 @@ class OrderService:
         cart_items: List[CartItem],
         shipping_address: Address,
         shipping_method_id: UUID,
-        discount_code: Optional[str] = None,
-        currency: str = "USD"
+        discount_code: Optional[str] = None
     ) -> PricingCalculationResult:
         """The authoritative pricing calculation (subtotal/shipping/tax/discount); never trust frontend prices."""
         logger.info(f"Calculating comprehensive pricing for {len(cart_items)} items")
@@ -312,38 +94,21 @@ class OrderService:
             shipping_cost = Decimal(str(shipping_method.price))
             logger.info(f"Shipping cost: ${shipping_cost} ({shipping_method.name})")
         
-        # Step 3: Apply discount if provided
+        # Step 3: Apply the promocode, if it's valid for this subtotal
         discount_amount = Decimal('0.00')
         discount_info = None
         if discount_code:
-            try:
-                validation_result = await self.discount_engine.validate_discount_code(
-                    discount_code,
-                    subtotal=float(subtotal)
-                )
-                if validation_result["is_valid"]:
-                    discount = validation_result["discount"]
-                    if discount.type == DiscountType.PERCENTAGE.value:
-                        discount_amount = (subtotal * Decimal(str(discount.value / 100))).quantize(
-                            Decimal('0.01'), rounding=ROUND_HALF_UP
-                        )
-                        if discount.maximum_discount:
-                            discount_amount = min(discount_amount, Decimal(str(discount.maximum_discount)))
-                    elif discount.type == DiscountType.FIXED_AMOUNT.value:
-                        discount_amount = min(Decimal(str(discount.value)), subtotal)
-                    elif discount.type == DiscountType.FREE_SHIPPING.value:
-                        discount_amount = shipping_cost
-                    
-                    discount_info = {
-                        'code': discount.code,
-                        'type': discount.type,
-                        'value': discount.value,
-                        'amount': float(discount_amount)
-                    }
-                    logger.info(f"Applied discount {discount_code}: -${discount_amount}")
-            except Exception as e:
-                logger.warning(f"Failed to apply discount {discount_code}: {e}")
-        
+            is_valid, _, promocode = await PromocodeService(self.db).validate(discount_code, subtotal)
+            if is_valid:
+                discount_amount = PromocodeService.amount(promocode, subtotal)
+                discount_info = {
+                    'id': str(promocode.id),
+                    'code': promocode.code,
+                    'type': promocode.discount_type,
+                    'value': float(promocode.value),
+                    'amount': float(discount_amount)
+                }
+
         # Step 4: Tax on what the customer actually pays for goods and delivery, at the shipping address's rate
         tax_rate = await self.tax_service.rate(shipping_address.country, shipping_address.state)
         tax_amount = TaxService.amount(subtotal + shipping_cost - discount_amount, tax_rate)
@@ -375,7 +140,7 @@ class OrderService:
             },
             'discount': discount_info,
             'total': float(total_amount),
-            'currency': currency,
+            'currency': settings.STORE_CURRENCY,
             'calculated_at': datetime.now(timezone.utc).isoformat()
         }
         
@@ -386,7 +151,7 @@ class OrderService:
             tax_rate=float(tax_rate),
             discount_amount=discount_amount,
             total_amount=total_amount,
-            currency=currency,
+            currency=settings.STORE_CURRENCY,
             breakdown=breakdown
         )
 
@@ -498,8 +263,7 @@ class OrderService:
                 orderable_items,
                 shipping_address,
                 request.shipping_method_id,
-                getattr(request, 'discount_code', None),
-                getattr(request, 'currency', 'USD')
+                request.discount_code
             )
             validation_result['pricing'] = pricing['breakdown']
             
@@ -593,210 +357,241 @@ class OrderService:
         shipping_method = shipping_method_result.scalar_one()
         
         
-        try:
-            # Generate a temp order id and deterministic order number using it
-            temp_order_id = uuid7()  # Temporary ID for payment processing
-            # UUID7's leading hex chars are a shared timestamp, not random - slice from the
-            # tail so concurrent checkouts don't collide.
-            order_number = f"ORD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{temp_order_id.hex[-12:].upper()}"
+        order_id = uuid7()
+        # UUID7's leading hex chars are a shared timestamp, not random - slice from the tail so concurrent checkouts don't collide.
+        order_number = f"ORD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{order_id.hex[-12:].upper()}"
+        address = {
+            'street': shipping_address.street,
+            'city': shipping_address.city,
+            'state': shipping_address.state,
+            'country': shipping_address.country,
+            'post_code': shipping_address.post_code
+        }
+        order = Order(
+            id=order_id,
+            order_number=order_number,
+            user_id=user_id,
+            order_status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            fulfillment_status=FulfillmentStatus.UNFULFILLED,
+            subtotal=pricing['subtotal'],
+            shipping_cost=pricing['shipping']['cost'],
+            tax_amount=pricing['tax']['amount'],
+            tax_rate=pricing['tax']['rate'],
+            discount_amount=pricing['discount']['amount'] if pricing['discount'] else 0,
+            promocode_id=UUID(pricing['discount']['id']) if pricing['discount'] else None,
+            total_amount=pricing['total'],
+            currency=pricing['currency'],
+            shipping_method=shipping_method.name,
+            billing_address=address,
+            shipping_address=dict(address),
+            customer_notes=request.notes,
+        )
+        self.db.add(order)
+        await self.db.flush()
 
-            temp_currency = get_currency_from_address(shipping_address.country) if shipping_address.country else "USD"
-
-            placeholder_order = Order(
-                id=temp_order_id,
-                order_number=order_number,
-                user_id=user_id,
-                order_status="pending",
-                payment_status="pending",
-                fulfillment_status="unfulfilled",
-                subtotal=Decimal('0.00'),
-                shipping_cost=Decimal('0.00'),
-                tax_amount=Decimal('0.00'),
-                total_amount=Decimal('0.00'),
-                currency=temp_currency
+        # Reserve stock (and the promo redemption) BEFORE charging, so a losing race for the last unit fails
+        # cleanly instead of charging the card; _release_unpaid_order gives both back if payment doesn't complete.
+        order_items = []
+        for cart_item in orderable_items:
+            price = cart_item.variant.sale_price or cart_item.variant.base_price
+            order_item = OrderItem(
+                id=uuid7(), order_id=order_id, variant_id=cart_item.variant_id, quantity=cart_item.quantity,
+                price_per_unit=price, total_price=price * cart_item.quantity
             )
-            # Provide minimal address dicts to satisfy NOT NULL constraints
-            placeholder_order.billing_address = {}
-            placeholder_order.shipping_address = {}
-            self.db.add(placeholder_order)
-            await self.db.flush()
-
-            # Step 3: Reserve inventory BEFORE charging payment, so a losing race for the
-            # last unit fails cleanly instead of charging the card and rolling back after.
-            order_items_list = []
-            for cart_item in orderable_items:
-                variant_price = cart_item.variant.sale_price or cart_item.variant.base_price
-
-                order_item = OrderItem(
-                    id=uuid7(),
-                    order_id=temp_order_id,
-                    variant_id=cart_item.variant_id,
-                    quantity=cart_item.quantity,
-                    price_per_unit=variant_price,
-                    total_price=variant_price * cart_item.quantity
-                )
-                self.db.add(order_item)
-                order_items_list.append(order_item)
-                cart_item.variant.purchase_count = (cart_item.variant.purchase_count or 0) + cart_item.quantity
-
-                adjustment = StockAdjustmentCreate(
+            self.db.add(order_item)
+            order_items.append(order_item)
+            cart_item.variant.purchase_count = (cart_item.variant.purchase_count or 0) + cart_item.quantity
+            await self.inventory_service.adjust_stock(
+                StockAdjustmentCreate(
                     variant_id=cart_item.variant_id,
                     quantity_change=-cart_item.quantity,
                     reason=f"Order placed: {order_number}",
-                    notes=f"Auto-adjusted inventory for order {order_number}"
-                )
-                await self.inventory_service.adjust_stock(
-                    adjustment,
-                    adjusted_by_user_id=user_id,
-                    commit=False
-                )
-
-            # Process payment with Stripe using backend-calculated total
-            payment_service = PaymentService(self.db)
-            payment_idempotency_key = (
-                f"payment_{temp_order_id}_{idempotency_key}" if idempotency_key else f"payment_{temp_order_id}"
+                    notes=f"Reserved for order {order_number}"
+                ),
+                adjusted_by_user_id=user_id,
+                commit=False
             )
+        if order.promocode_id:
+            promocode = await self.db.get(Promocode, order.promocode_id)
+            promocode.used_count = (promocode.used_count or 0) + 1
 
-            logger.info(f"Processing payment for order {order_number}, amount: {pricing['total']}")
-            
-            payment_result = await payment_service.process_idempotent(
+        try:
+            payment = await PaymentService(self.db).process_idempotent(
                 user_id=user_id,
-                order_id=temp_order_id,  # Use temp ID since order doesn't exist yet
+                order_id=order_id,
                 amount=pricing['total'],
                 payment_method_id=request.payment_method_id,
-                idempotency_key=payment_idempotency_key,
+                idempotency_key=f"payment_{order_id}_{idempotency_key}" if idempotency_key else f"payment_{order_id}",
                 request_id=str(uuid7()),
-                frontend_calculated_amount=getattr(request, "frontend_calculated_total", None)
+                frontend_calculated_amount=request.frontend_calculated_total
             )
-
-            # Check payment status - MUST be successful before creating order
-            if payment_result.get("status") != "succeeded":
-                error_message = payment_result.get("error", "Payment processing failed")
-                logger.error(f"Payment failed for order {order_number}: {error_message}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Payment failed: {error_message}"
-                )
-            
-            logger.info(f"Payment successful for order {order_number}, updating placeholder order...")
-            # Update placeholder order with final details
-            order = await self.db.get(Order, temp_order_id)
-            order.order_status = "confirmed"
-            order.payment_status = "paid"
-            order.fulfillment_status = "unfulfilled"
-            order.subtotal = pricing['subtotal']
-            order.shipping_cost = pricing['shipping']['cost']
-            order.tax_amount = pricing['tax']['amount']
-            order.tax_rate = pricing['tax']['rate']
-            order.total_amount = pricing['total']
-            order.currency = pricing['currency']
-            order.shipping_method = shipping_method.name
-            order.billing_address = {
-                'street': shipping_address.street,
-                'city': shipping_address.city,
-                'state': shipping_address.state,
-                'country': shipping_address.country,
-                'post_code': shipping_address.post_code
-            }
-            order.shipping_address = order.billing_address.copy()
-            order.customer_notes = request.notes
-
-            # Payment has already succeeded with Stripe at this point - commit the order's confirmed/paid state now, before any further work. Everything below (email scheduling, cart-clearing) is best-effort cleanup; if it fails, it must never be able to roll back a charge that already went through and take the order's paid status down with it.
-            await self.db.commit()
-            await self.db.refresh(order)
-
-            # Send invoice/confirmation email in background
-            try:
-                user_result = await self.db.execute(select(User).where(User.id == user_id))
-                user = user_result.scalar_one_or_none()
-                if user and getattr(user, "email", None):
-                    email_items = [
-                        {
-                            "name": cart_item.variant.name if cart_item.variant else "Item",
-                            "quantity": cart_item.quantity,
-                            "price": float(cart_item.variant.sale_price or cart_item.variant.base_price or 0)
-                        }
-                        for cart_item in orderable_items
-                    ]
-                    email_service = EmailService(self.db)
-                    background_tasks.add_task(
-                        email_service.send_order_confirmation_email,
-                        recipient_email=user.email,
-                        customer_name=getattr(user, "full_name", "Customer"),
-                        order_number=order.order_number,
-                        order_date=order.created_at or datetime.now(timezone.utc),
-                        total_amount=order.total_amount,
-                        items=email_items,
-                        shipping_address=order.shipping_address
-                    )
-            except Exception as email_error:
-                logger.error(f"Failed to schedule invoice email: {email_error}")
-                # A failed SELECT here can leave the transaction aborted. Don't roll back explicitly: expire_on_commit=False keeps `order` and the already-loaded order items usable purely in-memory for the response below regardless, and rollback() would expire them and force a lazy (sync-context) reload that crashes with MissingGreenlet. The session is cleaned up on close() at the end of the request either way.
-
-            # Clear only the items that were actually ordered - anything skipped for being out of stock or deactivated stays in the cart for the customer to revisit. Best-effort: the order itself is already committed and paid regardless of whether this cleanup succeeds.
-            try:
-                ordered_item_ids = [item.id for item in orderable_items]
-                await self.db.execute(delete(CartItem).where(CartItem.id.in_(ordered_item_ids)))
-                await self.db.commit()
-            except Exception as cart_clear_error:
-                logger.error(f"Failed to clear ordered items from cart: {cart_clear_error}")
-            
-            logger.info("Order completed", metadata={
-                "order_id": str(order.id),
-                "order_number": order_number,
-                "user_id": str(user_id),
-                "total_amount": float(order.total_amount),
-                "items_count": len(order_items_list),
-                "payment_status": "completed",
-                "milestone": "revenue"
-            })
-            
-            # Return order response using the items we collected
-            return OrderResponse(
-                id=order.id,
-                order_number=order.order_number,
-                user_id=user_id,
-                order_status=order.order_status,
-                payment_status=order.payment_status,
-                fulfillment_status=order.fulfillment_status,
-                total_amount=float(order.total_amount),
-                subtotal=float(order.subtotal or 0),
-                tax_amount=float(order.tax_amount or 0),
-                shipping_cost=float(order.shipping_cost or 0),
-                discount_amount=float(getattr(order, 'discount_amount', 0) or 0),
-                currency=order.currency,
-                tracking_number=getattr(order, 'tracking_number', None),
-                estimated_delivery=None,
-                shipping_address=order.shipping_address,
-                billing_address=order.billing_address,
-                items=[
-                    OrderItemResponse(
-                        id=item.id,
-                        variant_id=item.variant_id,
-                        quantity=item.quantity,
-                        price_per_unit=float(item.price_per_unit),
-                        total_price=float(item.total_price),
-                        variant=None
-                    ) for item in order_items_list
-                ],
-                created_at=datetime.now(timezone.utc),
-                updated_at=None
-            )
-            
-        except HTTPException:
-            # Preserve intentional status codes raised above (e.g. 400 on a
-            # declined payment) instead of masking them as a 500 below.
-            raise
         except Exception as e:
-            logger.exception(f"Order creation failed for user {user_id}: {e}\nTraceback: {traceback.format_exc()}")
-            # Session will auto-rollback on exception due to the context manager
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "message": "Order creation failed due to system error",
-                    "traceback": traceback.format_exc()
-                }
+            # The charge can commit part-way (e.g. a new Stripe customer), so undo what reached the database too.
+            await self.db.rollback()
+            persisted = await self.db.get(Order, order_id)
+            if persisted:
+                await self._release_unpaid_order(persisted, "payment failed")
+            if isinstance(e, HTTPException):
+                raise
+            logger.exception(f"Checkout payment error for order {order_number}: {e}")
+            raise HTTPException(status_code=500, detail="We couldn't take your payment right now. Please try again.")
+
+        if payment["status"] == "succeeded":
+            await self._mark_order_paid(order)
+            if background_tasks:
+                background_tasks.add_task(self._send_confirmation_email, order.id)
+            else:
+                await self._send_confirmation_email(order.id)
+        elif payment["status"] == "requires_action":
+            await self.db.commit()
+            logger.info(f"Order {order_number} is waiting for the customer's bank verification")
+        else:
+            await self._release_unpaid_order(order, f"payment {payment['status']}")
+            raise HTTPException(status_code=400, detail="Your payment was not completed. Please try another card.")
+
+        response = OrderResponse(
+            id=order.id,
+            order_number=order.order_number,
+            user_id=user_id,
+            order_status=order.order_status,
+            payment_status=order.payment_status,
+            fulfillment_status=order.fulfillment_status,
+            total_amount=float(order.total_amount),
+            subtotal=float(order.subtotal or 0),
+            tax_amount=float(order.tax_amount or 0),
+            tax_rate=float(order.tax_rate or 0),
+            shipping_cost=float(order.shipping_cost or 0),
+            discount_amount=float(order.discount_amount or 0),
+            currency=order.currency,
+            shipping_method=order.shipping_method,
+            shipping_address=order.shipping_address,
+            billing_address=order.billing_address,
+            customer_notes=order.customer_notes,
+            items=[
+                OrderItemResponse(
+                    id=item.id, variant_id=item.variant_id, quantity=item.quantity,
+                    price_per_unit=float(item.price_per_unit), total_price=float(item.total_price), variant=None
+                ) for item in order_items
+            ],
+            created_at=datetime.now(timezone.utc),
+            requires_action=payment["status"] == "requires_action",
+            client_secret=payment.get("client_secret") if payment["status"] == "requires_action" else None,
+        )
+        logger.info("Order placed", metadata={
+            "order_id": str(order.id), "order_number": order_number, "user_id": str(user_id),
+            "total_amount": float(order.total_amount), "payment_status": payment["status"], "milestone": "revenue"
+        })
+        return response
+
+    async def _mark_order_paid(self, order: Order) -> None:
+        """Confirm a paid order and clear its items from the customer's cart. Idempotent."""
+        if order.payment_status == PaymentStatus.PAID:
+            return
+        order.order_status = OrderStatus.CONFIRMED
+        order.payment_status = PaymentStatus.PAID
+        order.confirmed_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        # Best-effort: the payment is taken, so a failed cart cleanup must never undo the order.
+        try:
+            variant_ids = select(OrderItem.variant_id).where(OrderItem.order_id == order.id)
+            cart_ids = select(Cart.id).where(Cart.user_id == order.user_id)
+            await self.db.execute(delete(CartItem).where(CartItem.cart_id.in_(cart_ids), CartItem.variant_id.in_(variant_ids)))
+            await self.db.commit()
+        except Exception as e:
+            logger.error(f"Failed to clear ordered items from cart for order {order.order_number}: {e}")
+
+    async def _release_unpaid_order(self, order: Order, reason: str) -> None:
+        """Cancel an order whose payment didn't complete: return its stock and promo redemption. Idempotent."""
+        if order.payment_status != PaymentStatus.PENDING:
+            return
+        await self.db.flush()  # the stock lock re-reads rows, so pending reservations must be written first
+        items = (await self.db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+        for item in items:
+            await self.inventory_service.adjust_stock(
+                StockAdjustmentCreate(
+                    variant_id=item.variant_id, quantity_change=item.quantity,
+                    reason=f"Order not paid: {order.order_number}", notes=reason
+                ),
+                commit=False
             )
+            variant = await self.db.get(ProductVariant, item.variant_id)
+            if variant:
+                variant.purchase_count = max((variant.purchase_count or 0) - item.quantity, 0)
+        if order.promocode_id:
+            promocode = await self.db.get(Promocode, order.promocode_id)
+            if promocode:
+                promocode.used_count = max((promocode.used_count or 0) - 1, 0)
+        order.order_status = OrderStatus.CANCELLED
+        order.payment_status = PaymentStatus.FAILED
+        order.cancelled_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        logger.info(f"Released unpaid order {order.order_number}: {reason}")
+
+    async def complete_payment(self, order_id: UUID, user_id: UUID) -> OrderResponse:
+        """After the customer finishes their bank's verification, settle the order from Stripe's final answer."""
+        order = (await self.db.execute(
+            select(Order).where(Order.id == order_id, Order.user_id == user_id).with_for_update()
+        )).scalar_one_or_none()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.payment_status == PaymentStatus.PENDING:
+            try:
+                status = await PaymentService(self.db).refresh_order_payment(order.id)
+            except stripe.error.StripeError:
+                # Nothing is lost: the order stays pending until this is retried, the webhook arrives or it expires.
+                raise HTTPException(status_code=503, detail="We couldn't reach the payment provider. Please try again in a moment.")
+            if status == "succeeded":
+                await self._mark_order_paid(order)
+                await self._send_confirmation_email(order.id)
+            elif status in ("requires_payment_method", "canceled"):
+                await self._release_unpaid_order(order, "bank verification failed")
+                raise HTTPException(status_code=400, detail="Your bank didn't approve this payment. Please try another card.")
+            else:
+                raise HTTPException(status_code=409, detail="Your bank is still verifying this payment. Please try again in a moment.")
+        elif order.payment_status != PaymentStatus.PAID:
+            raise HTTPException(status_code=400, detail="This order's payment was not completed.")
+        return await self.get(order.id, user_id)
+
+    async def expire_unverified_orders(self, older_than_minutes: int = 30) -> int:
+        """Release orders whose bank verification was abandoned; returns how many were released."""
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+        orders = (await self.db.execute(
+            select(Order).where(Order.payment_status == PaymentStatus.PENDING, Order.created_at < cutoff)
+        )).scalars().all()
+        payments = PaymentService(self.db)
+        for order in orders:
+            status = await payments.refresh_order_payment(order.id, cancel_if_unfinished=True)
+            if status == "succeeded":
+                await self._mark_order_paid(order)
+            else:
+                await self._release_unpaid_order(order, "bank verification abandoned")
+        return len(orders)
+
+    async def _send_confirmation_email(self, order_id: UUID) -> None:
+        """Best-effort order confirmation email; never affects the order itself."""
+        try:
+            order = (await self.db.execute(
+                select(Order).where(Order.id == order_id).options(
+                    selectinload(Order.user), selectinload(Order.items).selectinload(OrderItem.variant)
+                )
+            )).scalar_one()
+            if not order.user or not order.user.email:
+                return
+            await EmailService(self.db).send_order_confirmation_email(
+                recipient_email=order.user.email,
+                customer_name=getattr(order.user, "full_name", None) or "Customer",
+                order_number=order.order_number,
+                order_date=order.created_at or datetime.now(timezone.utc),
+                total_amount=order.total_amount,
+                items=[
+                    {"name": item.variant.name if item.variant else "Item", "quantity": item.quantity, "price": float(item.price_per_unit)}
+                    for item in order.items
+                ],
+                shipping_address=order.shipping_address
+            )
+        except Exception as e:
+            logger.error(f"Failed to send confirmation email for order {order_id}: {e}")
 
     async def list(
         self,
@@ -1327,6 +1122,7 @@ class OrderService:
             updated_at=order.updated_at
         )
 
+
     async def _validate_and_recalculate_prices(self, cart) -> Dict[str, Any]:
         """Security-critical: validate all prices against the DB; never trust frontend prices."""
         try:
@@ -1491,6 +1287,7 @@ class OrderService:
         except Exception as e:
             logger.error(f"Failed to publish order events using new event system: {e}")
             raise
+
     async def tracking(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Get order tracking information for authenticated user"""
         try:
@@ -1541,11 +1338,11 @@ class OrderService:
                 message="Failed to retrieve tracking information"
             )
 
-    async def payments(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
-        """Get payment intents and transactions for an order (authenticated, owner only)"""
+    async def payments(self, order_id: UUID, user_id: UUID, is_admin: bool = False) -> Dict[str, Any]:
+        """An order's payment attempts and transactions: the owner's order, or any order for staff."""
         try:
             query = select(Order).where(
-                and_(Order.id == order_id, Order.user_id == user_id)
+                Order.id == order_id if is_admin else and_(Order.id == order_id, Order.user_id == user_id)
             ).options(
                 selectinload(Order.payment_intents),
                 selectinload(Order.transactions)
@@ -1561,7 +1358,8 @@ class OrderService:
                 "order_id": str(order.id),
                 "order_number": order.order_number,
                 "payment_status": order.payment_status,
-                "payment_intents": [intent.to_dict() for intent in order.payment_intents],
+                # The client secret only matters while a payment is being made, never on a record view.
+                "payment_intents": [{**intent.to_dict(), "client_secret": None} for intent in order.payment_intents],
                 "transactions": [txn.to_dict() for txn in order.transactions],
             }
 
@@ -1701,12 +1499,11 @@ class OrderService:
                 detail="Failed to create reorder"
             )
 
-    async def invoice(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
-        """Generate invoice for an order"""
+    async def invoice(self, order_id: UUID, user_id: UUID, is_admin: bool = False) -> Dict[str, Any]:
+        """Generate the invoice PDF for an order; customers get their own orders, admins any order."""
         try:
-            # Get order with items
             query = select(Order).where(
-                and_(Order.id == order_id, Order.user_id == user_id)
+                Order.id == order_id if is_admin else and_(Order.id == order_id, Order.user_id == user_id)
             ).options(
                 selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
                 selectinload(Order.user)
@@ -1753,6 +1550,7 @@ class OrderService:
                     for item in order.items
                 ],
                 "subtotal": order.subtotal,
+                "tax_rate": order.tax_rate,
                 "tax_amount": order.tax_amount,
                 "shipping_amount": order.shipping_cost,
                 "discount_amount": order.discount_amount,
@@ -1785,174 +1583,43 @@ class OrderService:
                 detail=f"Failed to generate invoice: {str(e)}"
             )
 
-    async def add_note(self, order_id: UUID, user_id: UUID, note: str) -> Dict[str, Any]:
-        """Add a customer note to an order"""
-        try:
-            # Get order
-            query = select(Order).where(
-                and_(Order.id == order_id, Order.user_id == user_id)
-            )
-            
-            result = await self.db.execute(query)
-            order = result.scalar_one_or_none()
-            
-            if not order:
-                raise HTTPException(status_code=404, detail="Order not found")
-            
-            # Add note to customer_notes (append if existing)
-            if order.customer_notes:
-                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                order.customer_notes += f"\n\n[{timestamp}] {note}"
-            else:
-                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                order.customer_notes = f"[{timestamp}] {note}"
-            
-            await self.db.commit()
-            await self.db.refresh(order)
-            
-            return {
-                "order_id": str(order.id),
-                "note_added": note,
-                "timestamp": timestamp,
-                "all_notes": order.customer_notes
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to add note to order {order_id}: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to add order note"
-            )
+    async def add_note(self, order_id: UUID, user_id: UUID, note: str, is_admin: bool = False) -> Dict[str, List[Dict[str, str]]]:
+        """Append a timestamped note: customers to their own order's customer notes, staff to any order's internal notes."""
+        query = select(Order).where(Order.id == order_id)
+        if not is_admin:
+            query = query.where(Order.user_id == user_id)
+        order = (await self.db.execute(query)).scalar_one_or_none()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        entry = f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}] {note.strip()}"
+        field = "internal_notes" if is_admin else "customer_notes"
+        current = getattr(order, field)
+        setattr(order, field, f"{current}\n\n{entry}" if current else entry)
+        await self.db.commit()
+        return {
+            "customer": self._parse_notes(order.customer_notes),
+            "internal": self._parse_notes(order.internal_notes) if is_admin else [],
+        }
 
-    async def notes(self, order_id: UUID, user_id: UUID) -> Dict[str, Any]:
-        """Get all customer notes for an order"""
-        try:
-            # Get order
-            query = select(Order).where(
-                and_(Order.id == order_id, Order.user_id == user_id)
-            )
-            
-            result = await self.db.execute(query)
-            order = result.scalar_one_or_none()
-            
-            if not order:
-                raise HTTPException(status_code=404, detail="Order not found")
-            
-            # Parse notes if they exist
-            notes = []
-            if order.customer_notes:
-                # Split notes by timestamp pattern
-                note_pattern = r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (.*?)(?=\n\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]|$)'
-                matches = re.findall(note_pattern, order.customer_notes, re.DOTALL)
-                
-                for timestamp_str, note_text in matches:
-                    notes.append({
-                        "timestamp": timestamp_str,
-                        "note": note_text.strip()
-                    })
-            
-            return {
-                "order_id": str(order.id),
-                "notes": notes,
-                "total_notes": len(notes)
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to get notes for order {order_id}: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve order notes"
-            )
+    @staticmethod
+    def _parse_notes(text: Optional[str]) -> List[Dict[str, str]]:
+        """'[YYYY-MM-DD HH:MM] text' blocks -> [{timestamp, note}], oldest first."""
+        entries = re.findall(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})(?::\d{2})?\] (.*?)(?=\n\n\[\d{4}-\d{2}-\d{2} |\Z)", text or "", re.DOTALL)
+        return [{"timestamp": ts, "note": body.strip()} for ts, body in entries]
 
-    async def get_note(self, order_id: UUID, user_id: UUID, note_index: int) -> Optional[Dict[str, Any]]:
-        """Get a specific note by index"""
-        try:
-            notes_result = await self.notes(order_id, user_id)
-            notes = notes_result.get("notes", [])
-            if 0 <= note_index < len(notes):
-                return {
-                    "order_id": str(order_id),
-                    "note_index": note_index,
-                    **notes[note_index]
-                }
-            return None
-        except Exception as e:
-            logger.error(f"Failed to get note {note_index} for order {order_id}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to retrieve note")
+    async def notes(self, order_id: UUID, user_id: UUID, is_admin: bool = False) -> Dict[str, List[Dict[str, str]]]:
+        """An order's notes as entries; internal (staff) notes only for staff."""
+        query = select(Order).where(Order.id == order_id)
+        if not is_admin:
+            query = query.where(Order.user_id == user_id)
+        order = (await self.db.execute(query)).scalar_one_or_none()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        return {
+            "customer": self._parse_notes(order.customer_notes),
+            "internal": self._parse_notes(order.internal_notes) if is_admin else [],
+        }
 
-    async def update_note(self, order_id: UUID, user_id: UUID, note_index: int, new_note: str) -> Dict[str, Any]:
-        """Update a specific note by index"""
-        try:
-            query = select(Order).where(Order.id == order_id, Order.user_id == user_id)
-            result = await self.db.execute(query)
-            order = result.scalar_one_or_none()
-            if not order:
-                raise HTTPException(status_code=404, detail="Order not found")
-            
-            notes_result = await self.notes(order_id, user_id)
-            notes = notes_result.get("notes", [])
-            if not (0 <= note_index < len(notes)):
-                raise HTTPException(status_code=404, detail="Note not found")
-            
-            # Rebuild notes with updated one
-            updated_notes = []
-            for i, note in enumerate(notes):
-                if i == note_index:
-                    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                    updated_notes.append(f"[{timestamp}] {new_note}")
-                else:
-                    updated_notes.append(f"[{note['timestamp']}] {note['note']}")
-            
-            order.customer_notes = "\n\n".join(updated_notes)
-            await self.db.commit()
-            await self.db.refresh(order)
-            
-            return {
-                "order_id": str(order_id),
-                "note_index": note_index,
-                "updated_note": new_note,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to update note {note_index} for order {order_id}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to update note")
-
-    async def delete_note(self, order_id: UUID, user_id: UUID, note_index: int) -> bool:
-        """Delete a specific note by index"""
-        try:
-            query = select(Order).where(Order.id == order_id, Order.user_id == user_id)
-            result = await self.db.execute(query)
-            order = result.scalar_one_or_none()
-            if not order:
-                raise HTTPException(status_code=404, detail="Order not found")
-            
-            notes_result = await self.notes(order_id, user_id)
-            notes = notes_result.get("notes", [])
-            if not (0 <= note_index < len(notes)):
-                return False
-            
-            # Rebuild notes without deleted one
-            updated_notes = []
-            for i, note in enumerate(notes):
-                if i != note_index:
-                    updated_notes.append(f"[{note['timestamp']}] {note['note']}")
-            
-            order.customer_notes = "\n\n".join(updated_notes) if updated_notes else None
-            await self.db.commit()
-            await self.db.refresh(order)
-            
-            return True
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to delete note {note_index} for order {order_id}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to delete note")
 
     def _calculate_estimated_delivery(self, order: Order) -> Optional[str]:
         """Calculate estimated delivery date based on order status and shipping method"""
@@ -1991,8 +1658,6 @@ class OrderService:
         except Exception as e:
             logger.error(f"Failed to calculate estimated delivery for order {order.id}: {e}")
             return None
-
-    
     async def deliver(self, order_id: str, notes: Optional[str] = None) -> dict:
         """Mark order as delivered (admin only)."""
         return await self.update_status(
@@ -2000,7 +1665,6 @@ class OrderService:
             status="delivered",
             description=notes
         )
-
     async def ship(self, order_id: str, carrier: Optional[str], tracking_number: Optional[str]) -> dict:
         """Ship order (admin only)."""
         return await self.update_status(
@@ -2009,7 +1673,6 @@ class OrderService:
             carrier_name=carrier,
             tracking_number=tracking_number
         )
-
     async def get_statistics(self, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
         """Get order statistics (admin only)."""
 
@@ -2093,3 +1756,7 @@ class OrderService:
                 "to": date_to
             }
         }
+
+
+    
+

@@ -31,6 +31,12 @@ class PricingCalculationResult(TypedDict, total=False):
 
 # --- Discount Service Types ---
 
+
+# --- Export Service Types ---
+
+
+# --- Template Service Types ---
+
 class DiscountValidationResult(TypedDict, total=False):
     """Result of discount validation"""
     is_valid: bool
@@ -44,8 +50,6 @@ class DiscountCalculationResult(TypedDict, total=False):
     final_total: Decimal
     discount_type: str
 
-
-# --- Export Service Types ---
 
 class ExportFilters(TypedDict, total=False):
     """Filters for export data"""
@@ -65,8 +69,6 @@ class ExportResult(TypedDict, total=False):
     format_type: str
     generated_at: datetime
 
-
-# --- Template Service Types ---
 
 class RenderedTemplate(TypedDict, total=False):
     """Result of template rendering"""

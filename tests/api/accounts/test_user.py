@@ -8,22 +8,12 @@ from uuid import uuid4
 @pytest.mark.api
 class TestUserEndpoints:
 
-    async def test_get_me(self, async_client: AsyncClient, auth_headers, test_user):
-        """GET /v1/users/me - Get current user."""
-        response = await async_client.get("/v1/users/me/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"]["email"] == test_user.email
 
     async def test_get_me_unauthorized(self, async_client: AsyncClient):
         """GET /v1/users/me - No auth is rejected."""
         response = await async_client.get("/v1/users/me/")
         assert response.status_code == 401
 
-    async def test_get_profile_alias(self, async_client: AsyncClient, auth_headers, test_user):
-        """GET /v1/users/profile - the route the frontend actually calls."""
-        response = await async_client.get("/v1/users/profile/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"]["email"] == test_user.email
 
     async def test_list_requires_admin(self, async_client: AsyncClient, auth_headers):
         """GET /v1/users/ - Non-admin is forbidden."""

@@ -24,19 +24,6 @@ class TestAddressEndpoints:
         assert response.status_code in [200, 201]
         assert response.json()["data"]["city"] == sample_address_data["city"]
 
-    async def test_get_by_id(self, async_client: AsyncClient, auth_headers, sample_address_data):
-        """GET /v1/addresses/{id} - Get a single address."""
-        create_resp = await async_client.post("/v1/addresses/", headers=auth_headers, json=sample_address_data)
-        address_id = create_resp.json()["data"]["id"]
-
-        response = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"]["id"] == address_id
-
-    async def test_get_by_id_not_found(self, async_client: AsyncClient, auth_headers):
-        """GET /v1/addresses/{id} - Unknown ID returns 404."""
-        response = await async_client.get(f"/v1/addresses/{uuid4()}/", headers=auth_headers)
-        assert response.status_code == 404
 
     async def test_update(self, async_client: AsyncClient, auth_headers, sample_address_data):
         """PATCH /v1/addresses/{id} - Update address."""
@@ -49,25 +36,6 @@ class TestAddressEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["city"] == "Updated City"
 
-    async def test_delete(self, async_client: AsyncClient, auth_headers, sample_address_data):
-        """DELETE /v1/addresses/{id} - Delete address."""
-        create_resp = await async_client.post("/v1/addresses/", headers=auth_headers, json=sample_address_data)
-        address_id = create_resp.json()["data"]["id"]
-
-        response = await async_client.delete(f"/v1/addresses/{address_id}/", headers=auth_headers)
-        assert response.status_code == 200
-
-        get_resp = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
-        assert get_resp.status_code == 404
-
-    async def test_cannot_access_another_users_address(self, async_client: AsyncClient, auth_headers,
-                                                          admin_headers, sample_address_data):
-        """GET /v1/addresses/{id} - Another user's address is not visible."""
-        create_resp = await async_client.post("/v1/addresses/", headers=admin_headers, json=sample_address_data)
-        address_id = create_resp.json()["data"]["id"]
-
-        response = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
-        assert response.status_code == 404
 
     async def test_cannot_update_another_users_address(self, async_client: AsyncClient, auth_headers,
                                                           admin_headers, sample_address_data):
@@ -126,3 +94,37 @@ class TestAddressEndpoints:
             headers=auth_headers, json={"city": "x" * 150}
         )
         assert response.status_code == 500
+
+    async def test_get_by_id(self, async_client: AsyncClient, auth_headers, sample_address_data):
+        """GET /v1/addresses/{id} - Get a single address."""
+        create_resp = await async_client.post("/v1/addresses/", headers=auth_headers, json=sample_address_data)
+        address_id = create_resp.json()["data"]["id"]
+
+        response = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == address_id
+
+    async def test_get_by_id_not_found(self, async_client: AsyncClient, auth_headers):
+        """GET /v1/addresses/{id} - Unknown ID returns 404."""
+        response = await async_client.get(f"/v1/addresses/{uuid4()}/", headers=auth_headers)
+        assert response.status_code == 404
+
+    async def test_delete(self, async_client: AsyncClient, auth_headers, sample_address_data):
+        """DELETE /v1/addresses/{id} - Delete address."""
+        create_resp = await async_client.post("/v1/addresses/", headers=auth_headers, json=sample_address_data)
+        address_id = create_resp.json()["data"]["id"]
+
+        response = await async_client.delete(f"/v1/addresses/{address_id}/", headers=auth_headers)
+        assert response.status_code == 200
+
+        get_resp = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
+        assert get_resp.status_code == 404
+
+    async def test_cannot_access_another_users_address(self, async_client: AsyncClient, auth_headers,
+                                                          admin_headers, sample_address_data):
+        """GET /v1/addresses/{id} - Another user's address is not visible."""
+        create_resp = await async_client.post("/v1/addresses/", headers=admin_headers, json=sample_address_data)
+        address_id = create_resp.json()["data"]["id"]
+
+        response = await async_client.get(f"/v1/addresses/{address_id}/", headers=auth_headers)
+        assert response.status_code == 404

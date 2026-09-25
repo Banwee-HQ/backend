@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -7,10 +8,10 @@ from core.utils.response import Response
 from core.exceptions import APIException
 from schemas.commerce.promos import Create, Update, ValidateRequest
 from services.commerce.promocode import PromocodeService
-from services.commerce.promocode_scheduler import PromoCodeScheduler
 from models.accounts.user import User, UserRole
 from core.dependencies import require_admin, require_auth
 from core.logging import get_structured_logger
+from services.commerce.promocode_scheduler import PromoCodeScheduler
 
 logger = get_structured_logger(__name__)
 
@@ -78,36 +79,17 @@ async def validate(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Validate a promocode."""
-    try:
-        promocode_service = PromocodeService(db)
-        is_valid, error_message, promocode = await promocode_service.validate(request.code)
-        
-        if is_valid and promocode:
-            return Response.success(data={
-                "valid": True,
-                "code": promocode.code,
-                "discount_type": promocode.discount_type,
-                "value": promocode.value,
-                "minimum_order_amount": promocode.minimum_order_amount,
-                "maximum_discount_amount": promocode.maximum_discount_amount,
-                "message": "Promocode is valid"
-            })
-        else:
-            return Response.success(data={
-                "valid": False,
-                "code": request.code,
-                "message": error_message or "Invalid promocode"
-            }, status_code=status.HTTP_200_OK)
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to validate promocode: {str(e)}"
-        )
+    """Check a code before applying it; the reason is returned as a 400 when it can't be used."""
+    subtotal = Decimal(str(request.subtotal)) if request.subtotal is not None else None
+    is_valid, error_message, promocode = await PromocodeService(db).validate(request.code, subtotal)
+    if not is_valid:
+        raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message=error_message or "Invalid promocode")
+    return Response.success(data={
+        "code": promocode.code,
+        "discount_type": promocode.discount_type,
+        "value": float(promocode.value),
+        "discount_amount": float(PromocodeService.amount(promocode, subtotal)) if subtotal is not None else None,
+    })
 
 
 @router.get("/{promocode_id}/")

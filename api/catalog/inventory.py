@@ -1,19 +1,21 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-from uuid import UUID, UUID as UUIDType
+from uuid import UUID
 
 from core.db import get_db
 from core.dependencies import require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
+from schemas.catalog.inventory import LocationCreate, LocationUpdate, Create, Update, AdjustmentCreate
+from services.catalog.inventory import InventoryService
+from models.accounts.user import User
+from uuid import UUID, UUID as UUIDType
 from schemas.catalog.inventory import (
     LocationCreate, LocationUpdate, Create,
     Update, Response as InventoryResponse, AdjustmentCreate
 )
-from services.catalog.inventory import InventoryService
-from models.accounts.user import User
 
 logger = get_logger(__name__)
 
@@ -124,23 +126,6 @@ async def delete_location(
 
 
 # --- INVENTORY - 5 Standard APIs ---
-@router.post("/")
-async def create(
-    inventory_data: Create,
-    current_user = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> InventoryResponse:
-    """Create a new inventory item (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        item = await inventory_service.create(inventory_data)
-        return Response.success(data=item, message="Inventory item created successfully", status_code=status.HTTP_201_CREATED)
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create inventory item: {e}")
 
 
 # --- ADJUSTMENTS - 5 Standard APIs ---
@@ -164,27 +149,6 @@ async def create_adj(
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to adjust stock: {e}")
-
-
-@router.get("/adjustments/{adjustment_id}/")
-async def get_adj(
-    adjustment_id: UUID,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> Response:
-    """Get a specific stock adjustment by ID (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        adjustment = await inventory_service.get_adjustment(adjustment_id)
-        if not adjustment:
-            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Stock adjustment not found")
-        return Response.success(data=adjustment, message="Stock adjustment retrieved successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch stock adjustment: {e}")
 
 
 @router.get("/adjustments/")
@@ -299,25 +263,6 @@ async def patch(
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update inventory item: {e}")
-
-
-@router.delete("/{inventory_id}/")
-async def delete(
-    inventory_id: UUID,
-    current_user = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-) -> Response:
-    """Delete an inventory item (Admin access)."""
-    try:
-        inventory_service = InventoryService(db)
-        await inventory_service.delete(inventory_id)
-        return Response.success(message="Inventory item deleted successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete inventory item: {e}")
 
 
 # --- INVENTORY SYNC ENDPOINTS - Moved from admin.py ---

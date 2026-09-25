@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from core.utils.uuid_utils import uuid7
 from services.commerce.subscriptions import SubscriptionService
-from services.commerce.subscriptions_scheduler import SubscriptionScheduler, process_subscription_shipments
+from services.commerce.subscriptions_scheduler import SubscriptionScheduler
 from models.commerce.subscriptions import Subscription, SubscriptionStatus
 from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
 from models.catalog.category import Category
@@ -382,29 +382,3 @@ class TestUpdateBillingDates:
         await scheduler._update_billing_dates(subscription)
         assert subscription.subscription_metadata["orders_created_count"] == 3
 
-
-class TestProcessSubscriptionShipmentsTask:
-    """Tests for the standalone process_subscription_shipments() background-task
-    wrapper, which pulls its own session from core.db.get_db() rather than
-    receiving one - substitute get_db with a fake generator yielding the test's
-    own db_session so it runs against the real, rolled-back-at-teardown DB."""
-
-    async def test_runs_the_scheduler_and_returns_its_result(self, db_session, test_user, variant, payment_method, subscription, mocker):
-        async def fake_get_db():
-            yield db_session
-        mocker.patch("services.commerce.subscriptions_scheduler.get_db", fake_get_db)
-
-        result = await process_subscription_shipments()
-        assert result["total_due"] >= 1
-
-    async def test_propagates_and_logs_scheduler_failure(self, db_session, mocker):
-        async def fake_get_db():
-            yield db_session
-        mocker.patch("services.commerce.subscriptions_scheduler.get_db", fake_get_db)
-        mocker.patch.object(
-            SubscriptionScheduler, "process_due_subscriptions",
-            side_effect=Exception("scheduler blew up"),
-        )
-
-        with pytest.raises(Exception, match="scheduler blew up"):
-            await process_subscription_shipments()

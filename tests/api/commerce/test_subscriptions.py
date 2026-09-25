@@ -16,8 +16,8 @@ async def subscription_variant(async_client: AsyncClient, admin_headers, sample_
     )
     sample_product_data["category_id"] = cat.json()["data"]["id"]
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
-    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
-    return variants.json()["data"][0]
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/")
+    return variants.json()["data"]["variants"][0]
 
 
 @pytest.fixture
@@ -29,8 +29,8 @@ async def second_variant(async_client: AsyncClient, admin_headers, sample_produc
     )
     sample_product_data["category_id"] = cat.json()["data"]["id"]
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
-    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
-    return variants.json()["data"][0]
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/")
+    return variants.json()["data"]["variants"][0]
 
 
 @pytest.fixture
@@ -97,19 +97,6 @@ class TestSubscriptionEndpoints:
         response = await async_client.get("/v1/subscriptions/")
         assert response.status_code == 401
 
-    async def test_plans_is_public(self, async_client: AsyncClient):
-        response = await async_client.get("/v1/subscriptions/plans/")
-        assert response.status_code == 200
-        ids = [p["id"] for p in response.json()["data"]]
-        assert {"monthly", "quarterly", "yearly"} <= set(ids)
-
-    async def test_trigger_notifications_requires_admin(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_trigger_notifications_as_admin(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
-        assert response.status_code == 200
 
     async def test_list_returns_own_subscription(self, async_client: AsyncClient, auth_headers, created_subscription):
         response = await async_client.get("/v1/subscriptions/", headers=auth_headers)
@@ -165,28 +152,6 @@ class TestSubscriptionEndpoints:
         variant_ids = [p["variant_id"] for p in removed.json()["data"]["products"]]
         assert second_variant["id"] not in variant_ids
 
-    async def test_calculate_cost(self, async_client: AsyncClient, auth_headers, subscription_variant):
-        response = await async_client.post("/v1/subscriptions/calculate-cost/",
-            headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
-        assert response.status_code == 200
-        assert "cost_breakdown" in response.json()["data"]
-
-    async def test_trigger_processing_requires_admin(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_trigger_processing_as_admin(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
-        assert response.status_code == 200
-
-    async def test_list_due_requires_admin(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.get("/v1/subscriptions/due/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_list_due_as_admin(self, async_client: AsyncClient, admin_headers):
-        response = await async_client.get("/v1/subscriptions/due/", headers=admin_headers)
-        assert response.status_code == 200
-        assert isinstance(response.json()["data"], list)
 
     async def test_change_frequency(self, async_client: AsyncClient, auth_headers, created_subscription):
         response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/frequency/",
@@ -223,20 +188,6 @@ class TestSubscriptionEndpoints:
             headers=auth_headers, json={})
         assert response.status_code == 400
 
-    async def test_set_and_get_quantities(self, async_client: AsyncClient, auth_headers, created_subscription, subscription_variant):
-        updated = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/quantity/",
-            headers=auth_headers, json={"variant_id": subscription_variant["id"], "quantity": 5})
-        assert updated.status_code == 200
-
-        quantities = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/products/quantities/",
-            headers=auth_headers)
-        assert quantities.status_code == 200
-        assert quantities.json()["data"]["variant_quantities"][subscription_variant["id"]] == 5
-
-    async def test_adjust_quantity(self, async_client: AsyncClient, auth_headers, created_subscription, subscription_variant):
-        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/adjust-quantity/",
-            headers=auth_headers, json={"variant_id": subscription_variant["id"], "change": 2})
-        assert response.status_code == 200
 
     async def test_quantity_change_refreshes_displayed_pricing(self, async_client: AsyncClient, auth_headers,
                                                                created_subscription, subscription_variant):
@@ -271,13 +222,6 @@ class TestSubscriptionEndpoints:
         unskipped = await async_client.post(f"{url}/unskip/", headers=auth_headers, json={})
         assert unskipped.json()["data"]["next_billing_date"] == original_date
 
-    async def test_toggle_auto_renew(self, async_client: AsyncClient, auth_headers, created_subscription):
-        response = await async_client.patch(
-            f"/v1/subscriptions/{created_subscription['id']}/auto-renew/?auto_renew=false",
-            headers=auth_headers
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["auto_renew"] is False
 
     async def test_apply_and_remove_discount(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
         promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:6].upper()}", discount_type=DiscountType.PERCENTAGE, value=10, is_active=True)
@@ -304,23 +248,6 @@ class TestSubscriptionEndpoints:
         response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/orders/", headers=auth_headers)
         assert response.status_code == 200
 
-    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, test_user, db_session: AsyncSession, mocker):
-        from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
-        payment_method = PaymentMethod(
-            id=uuid7(), user_id=test_user.id, type=PaymentType.CARD, provider=PaymentProvider.STRIPE,
-            last_four="4242", expiry_month=12, expiry_year=2099, brand=CardBrand.VISA,
-            stripe_payment_method_id=f"pm_test_{uuid4().hex[:16]}", is_default=True, is_active=True,
-        )
-        db_session.add(payment_method)
-        await db_session.commit()
-
-        mocker.patch(
-            "services.commerce.payments.PaymentService.process_idempotent",
-            return_value={"status": "succeeded"},
-        )
-        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["data"]["subscription_id"] == created_subscription["id"]
 
     async def test_delete(self, async_client: AsyncClient, auth_headers, created_subscription):
         response = await async_client.delete(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)
@@ -359,18 +286,6 @@ class TestSubscriptionEndpoints:
 
     # -- calculate-cost branches -------------------------------------------------
 
-    async def test_calculate_cost_unknown_variant_is_rejected(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.post("/v1/subscriptions/calculate-cost/",
-            headers=auth_headers, json={"variant_ids": [str(uuid4())]})
-        assert response.status_code == 400
-
-    async def test_calculate_cost_with_delivery_address(self, async_client: AsyncClient, auth_headers, subscription_variant, subscription_address):
-        response = await async_client.post("/v1/subscriptions/calculate-cost/",
-            headers=auth_headers, json={
-                "variant_ids": [subscription_variant["id"]], "delivery_address_id": subscription_address["id"],
-            })
-        assert response.status_code == 200
-        assert "cost_breakdown" in response.json()["data"]
 
     # -- 404s for endpoints that weren't exercised against an unknown id --------
 
@@ -389,20 +304,6 @@ class TestSubscriptionEndpoints:
             headers=auth_headers, json={"variant_id": second_variant["id"], "quantity": 2})
         assert response.status_code == 404
 
-    async def test_adjust_quantity_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
-        response = await async_client.patch(f"/v1/subscriptions/{uuid4()}/products/adjust-quantity/",
-            headers=auth_headers, json={"variant_id": second_variant["id"], "change": 1})
-        assert response.status_code == 404
-
-    async def test_get_quantities_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.get(f"/v1/subscriptions/{uuid4()}/products/quantities/", headers=auth_headers)
-        assert response.status_code == 404
-
-    async def test_toggle_auto_renew_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.patch(
-            f"/v1/subscriptions/{uuid4()}/auto-renew/?auto_renew=false", headers=auth_headers
-        )
-        assert response.status_code == 404
 
     async def test_pause_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post(f"/v1/subscriptions/{uuid4()}/pause/", headers=auth_headers)
@@ -503,7 +404,73 @@ class TestSubscriptionEndpoints:
         response = await async_client.get(f"/v1/subscriptions/{uuid4()}/orders/", headers=auth_headers)
         assert response.status_code == 404
 
-    # -- process-shipment branches -----------------------------------------------
+    async def test_plans_is_public(self, async_client: AsyncClient):
+        response = await async_client.get("/v1/subscriptions/plans/")
+        assert response.status_code == 200
+        ids = [p["id"] for p in response.json()["data"]]
+        assert {"monthly", "quarterly", "yearly"} <= set(ids)
+
+    async def test_trigger_notifications_requires_admin(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_trigger_notifications_as_admin(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
+        assert response.status_code == 200
+
+    async def test_calculate_cost(self, async_client: AsyncClient, auth_headers, subscription_variant):
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
+        assert response.status_code == 200
+        assert {"subtotal", "tax", "total", "currency"} <= set(response.json()["data"])
+
+    async def test_trigger_processing_requires_admin(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_trigger_processing_as_admin(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
+        assert response.status_code == 200
+
+    async def test_list_due_requires_admin(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get("/v1/subscriptions/due/", headers=auth_headers)
+        assert response.status_code == 403
+
+    async def test_list_due_as_admin(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.get("/v1/subscriptions/due/", headers=admin_headers)
+        assert response.status_code == 200
+        assert isinstance(response.json()["data"], list)
+
+    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, test_user, db_session: AsyncSession, mocker):
+        from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
+        payment_method = PaymentMethod(
+            id=uuid7(), user_id=test_user.id, type=PaymentType.CARD, provider=PaymentProvider.STRIPE,
+            last_four="4242", expiry_month=12, expiry_year=2099, brand=CardBrand.VISA,
+            stripe_payment_method_id=f"pm_test_{uuid4().hex[:16]}", is_default=True, is_active=True,
+        )
+        db_session.add(payment_method)
+        await db_session.commit()
+
+        mocker.patch(
+            "services.commerce.payments.PaymentService.process_idempotent",
+            return_value={"status": "succeeded"},
+        )
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["data"]["subscription_id"] == created_subscription["id"]
+
+    async def test_calculate_cost_unknown_variant_is_rejected(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={"variant_ids": [str(uuid4())]})
+        assert response.status_code == 400
+
+    async def test_calculate_cost_with_delivery_address(self, async_client: AsyncClient, auth_headers, subscription_variant, subscription_address):
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={
+                "variant_ids": [subscription_variant["id"]], "delivery_address_id": subscription_address["id"],
+            })
+        assert response.status_code == 200
+        assert {"subtotal", "tax", "total", "currency"} <= set(response.json()["data"])
 
     async def test_process_shipment_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post(f"/v1/subscriptions/{uuid4()}/process-shipment/", headers=auth_headers)
@@ -521,6 +488,8 @@ class TestSubscriptionEndpoints:
         response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
         assert response.status_code == 500
 
+    # -- process-shipment branches -----------------------------------------------
+
 
 @pytest.mark.api
 @pytest.mark.subscriptions
@@ -533,38 +502,6 @@ class TestUnexpectedErrorsBecomeSafe500s:
     the final safety net turns it into a clean 500 rather than leaking a raw
     traceback or crashing the request."""
 
-    async def test_trigger_order_processing(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch(
-            "services.commerce.subscriptions_scheduler.SubscriptionScheduler.process_due_subscriptions",
-            side_effect=Exception("boom"),
-        )
-        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
-        assert response.status_code == 500
-
-    async def test_trigger_notifications(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch("core.utils.response.Response.success", side_effect=Exception("boom"))
-        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
-        assert response.status_code == 500
-
-    async def test_plans(self, async_client: AsyncClient, mocker):
-        mocker.patch("core.utils.response.Response.success", side_effect=Exception("boom"))
-        response = await async_client.get("/v1/subscriptions/plans/")
-        assert response.status_code == 500
-
-    async def test_list_due(self, async_client: AsyncClient, admin_headers, mocker):
-        mocker.patch(
-            "services.commerce.subscriptions.SubscriptionService.list_due", side_effect=Exception("boom"),
-        )
-        response = await async_client.get("/v1/subscriptions/due/", headers=admin_headers)
-        assert response.status_code == 500
-
-    async def test_calculate_cost(self, async_client: AsyncClient, auth_headers, subscription_variant, mocker):
-        mocker.patch(
-            "services.commerce.subscriptions.SubscriptionService._calc_cost", side_effect=Exception("boom"),
-        )
-        response = await async_client.post("/v1/subscriptions/calculate-cost/",
-            headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
-        assert response.status_code == 400
 
     async def test_create(self, async_client: AsyncClient, auth_headers, subscription_variant, mocker):
         mocker.patch(
@@ -618,28 +555,6 @@ class TestUnexpectedErrorsBecomeSafe500s:
             headers=auth_headers, json={"variant_id": subscription_variant["id"], "quantity": 2})
         assert response.status_code == 500
 
-    async def test_adjust_quantity(self, async_client: AsyncClient, auth_headers, created_subscription, subscription_variant, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.adjust_quantity", side_effect=Exception("boom"))
-        response = await async_client.patch(f"/v1/subscriptions/{created_subscription['id']}/products/adjust-quantity/",
-            headers=auth_headers, json={"variant_id": subscription_variant["id"], "change": 1})
-        assert response.status_code == 500
-
-    async def test_get_quantities(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.get_quantities", side_effect=Exception("boom"))
-        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/products/quantities/", headers=auth_headers)
-        assert response.status_code == 500
-
-    async def test_toggle_auto_renew(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
-        response = await async_client.patch(
-            f"/v1/subscriptions/{created_subscription['id']}/auto-renew/?auto_renew=false", headers=auth_headers
-        )
-        assert response.status_code == 500
-
-    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
-        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
-        assert response.status_code == 500
 
     async def test_pause(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
         mocker.patch("services.commerce.subscriptions.SubscriptionService.pause", side_effect=Exception("boom"))
@@ -695,4 +610,42 @@ class TestUnexpectedErrorsBecomeSafe500s:
     async def test_orders(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
         mocker.patch("services.commerce.subscriptions.SubscriptionService.get_orders", side_effect=Exception("boom"))
         response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/orders/", headers=auth_headers)
+        assert response.status_code == 500
+
+    async def test_trigger_order_processing(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions_scheduler.SubscriptionScheduler.process_due_subscriptions",
+            side_effect=Exception("boom"),
+        )
+        response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_trigger_notifications(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("core.utils.response.Response.success", side_effect=Exception("boom"))
+        response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_plans(self, async_client: AsyncClient, mocker):
+        mocker.patch("core.utils.response.Response.success", side_effect=Exception("boom"))
+        response = await async_client.get("/v1/subscriptions/plans/")
+        assert response.status_code == 500
+
+    async def test_list_due(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions.SubscriptionService.list_due", side_effect=Exception("boom"),
+        )
+        response = await async_client.get("/v1/subscriptions/due/", headers=admin_headers)
+        assert response.status_code == 500
+
+    async def test_calculate_cost(self, async_client: AsyncClient, auth_headers, subscription_variant, mocker):
+        mocker.patch(
+            "services.commerce.subscriptions.SubscriptionService._calculate_pricing", side_effect=Exception("boom"),
+        )
+        response = await async_client.post("/v1/subscriptions/calculate-cost/",
+            headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
+        assert response.status_code == 400
+
+    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
         assert response.status_code == 500

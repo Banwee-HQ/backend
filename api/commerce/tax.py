@@ -156,8 +156,6 @@ async def _list_tax_rates_internal(
         )
 
 
-
-
 @router.get("/countries/")
 async def countries(
     db: AsyncSession = Depends(get_db)

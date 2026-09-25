@@ -14,9 +14,10 @@ from models.commerce.cart import Cart, CartItem
 from models.catalog.product import ProductVariant
 from models.commerce.shipping import ShippingMethod
 from services.commerce.tax import TaxService
-from services.commerce.promocode import PromocodeService
 from services.catalog.inventory import InventoryService
 from schemas.common.service_types import CartValidationResult
+from core.config import settings
+from services.commerce.promocode import PromocodeService
 
 logger = get_structured_logger(__name__)
 
@@ -90,7 +91,7 @@ class CartService:
             "country_code": country_code,
             "province_code": province_code,
             "item_count": len(cart.items),
-            "currency": "USD"
+            "currency": settings.STORE_CURRENCY
         }
         
         # Add detailed item information using eagerly loaded data
@@ -446,7 +447,7 @@ class CartService:
             "country_code": country_code,
             "province_code": province_code,
             "item_count": 0,
-            "currency": "USD"
+            "currency": settings.STORE_CURRENCY
         }
 
     async def add_to_cart(
@@ -672,6 +673,7 @@ class CartService:
         
         return checkout_summary
 
+
     async def apply_promo(self, user_id: UUID, code: Optional[str] = None) -> Dict[str, Any]:
         """Validate a promocode and apply it to the user's cart."""
         if not code:
@@ -787,6 +789,7 @@ class CartService:
                 ]
             }
 
+
     async def calc_totals(
         self,
         user_id: UUID,
@@ -815,7 +818,6 @@ class CartService:
             "total_amount": total_amount,
             "calculation_timestamp": datetime.now(timezone.utc).isoformat()
         }
-
 
     async def save_later(
         self,

@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
 from datetime import datetime, timezone
-from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment, atomic_bulk_stock_update
+from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment
 from models.catalog.product import ProductVariant, Product
 from schemas.catalog.inventory import (
     LocationCreate as WarehouseLocationCreate,
@@ -22,6 +22,8 @@ from schemas.catalog.inventory import (
 )
 from core.exceptions import APIException
 from core.logging import get_structured_logger
+from core.utils.cache import invalidate_variant
+from models.catalog.inventories import Inventory, WarehouseLocation, StockAdjustment, atomic_bulk_stock_update
 from core.utils.cache import invalidate_variant, invalidate_all
 
 logger = get_structured_logger(__name__)
@@ -619,6 +621,7 @@ class InventoryService:
             }
         }
 
+
     async def get_adjustment(self, adjustment_id: UUID) -> Optional[StockAdjustmentResponse]:
         """Get a specific stock adjustment by ID"""
         result = await self.db.execute(
@@ -677,6 +680,7 @@ class InventoryService:
             })
         
         return stock_levels
+
 
     async def predict_demand(
         self,
@@ -745,6 +749,8 @@ class InventoryService:
         
         return reorder_suggestions
 
+        
+
     async def batch_update_inventory_from_warehouse_data(
         self,
         warehouse_data: List[Dict[str, Any]]
@@ -809,7 +815,7 @@ class InventoryService:
                 status_code=500,
                 message=f"Failed to update inventory from warehouse data: {str(e)}"
             )
-        
+
     async def check_stock_batch(
         self,
         requests: List[Dict[str, Any]]
@@ -1016,6 +1022,9 @@ class InventoryService:
                 message=f"Failed to increment stock: {str(e)}"
             )
 
+    
+
+
     async def bulk_stock_update(
         self,
         stock_changes: List[Dict],
@@ -1048,8 +1057,6 @@ class InventoryService:
                 status_code=500,
                 message=f"Failed to update bulk stock: {str(e)}"
             )
-    
-
 
     async def sync(self, product_id: Optional[UUID] = None) -> Dict[str, Any]:
         """Sync availability_status from inventory levels, for one product or all."""

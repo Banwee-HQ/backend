@@ -79,13 +79,9 @@ class ShippingService:
             "limit": limit
         }
 
-    async def calc_cost(
-        self, 
-        cart_subtotal: float, 
-        address: dict, 
-        shipping_method_id: Optional[UUID] = None
-    ) -> float:
-        """Calculate shipping cost; simply returns the selected method's price."""
+
+    async def calc_cost(self, shipping_method_id: Optional[UUID] = None) -> float:
+        """The selected method's price, or the cheapest active method's."""
         if shipping_method_id:
             method = await self.get(shipping_method_id)
             if method and method.is_active:

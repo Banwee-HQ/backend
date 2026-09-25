@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional, Tuple
 from uuid import UUID
 from datetime import datetime, timezone
@@ -109,9 +110,9 @@ class PromocodeService:
         await self.db.refresh(promocode)
         return promocode
     
-    async def validate(self, code: str) -> tuple[bool, Optional[str], Optional[Promocode]]:
-        """Validate a promocode and return (is_valid, error_message, promocode)."""
-        promocode = await self.get(code=code, active_only=True)
+    async def validate(self, code: str, subtotal: Optional[Decimal] = None) -> tuple[bool, Optional[str], Optional[Promocode]]:
+        """Validate a promocode (optionally against an order subtotal) and return (is_valid, error_message, promocode)."""
+        promocode = await self.get(code=code.strip().upper(), active_only=True)
         
         if not promocode:
             return False, "Promocode not found", None
@@ -132,5 +133,21 @@ class PromocodeService:
         # Check usage limit
         if promocode.usage_limit and promocode.used_count >= promocode.usage_limit:
             return False, "Promocode usage limit reached", None
-        
+
+        minimum = promocode.minimum_order_amount
+        if subtotal is not None and minimum and subtotal < Decimal(str(minimum)):
+            return False, f"This code needs an order of at least {Decimal(str(minimum)):.2f}", None
+
         return True, None, promocode
+
+    @staticmethod
+    def amount(promocode: Promocode, subtotal: Decimal) -> Decimal:
+        """Discount on a subtotal: a percentage (capped by maximum_discount_amount) or a fixed amount, never above the subtotal."""
+        value = Decimal(str(promocode.value))
+        if promocode.discount_type == "percentage":
+            discount = (subtotal * value / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if promocode.maximum_discount_amount:
+                discount = min(discount, Decimal(str(promocode.maximum_discount_amount)))
+        else:
+            discount = value
+        return min(discount, subtotal)

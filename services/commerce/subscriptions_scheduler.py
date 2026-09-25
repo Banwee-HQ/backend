@@ -19,7 +19,7 @@ from services.commerce.subscriptions import SubscriptionService, compute_period_
 from services.commerce.payments import PaymentService
 from services.accounts.email import EmailService
 from services.catalog.inventory import InventoryService
-from core.db import get_db
+from core.config import settings
 
 logger = get_structured_logger(__name__)
 
@@ -204,7 +204,7 @@ class SubscriptionScheduler:
                 tax_amount=0,
                 shipping_cost=0,
                 total_amount=0,
-                currency=subscription.currency or "USD",
+                currency=subscription.currency or settings.STORE_CURRENCY,
                 shipping_address=shipping_address,
                 billing_address=shipping_address,
                 subscription_id=subscription.id
@@ -441,16 +441,3 @@ class SubscriptionScheduler:
 
 
 # Standalone function for background task
-async def process_subscription_shipments():
-    """Background task function to process subscription shipments"""
-    async for db in get_db():
-        try:
-            scheduler = SubscriptionScheduler(db)
-            result = await scheduler.process_due_subscriptions()
-            logger.info(f"Processed subscription shipments: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"Error processing subscription shipments: {e}")
-            raise
-        finally:
-            await db.close()

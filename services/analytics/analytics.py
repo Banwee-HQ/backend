@@ -1,6 +1,6 @@
 """Business analytics: conversion rates, cart abandonment, refund rates, repeat customers."""
 from datetime import datetime, timezone, timedelta, date
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from uuid import UUID
 import secrets
 from core.utils.uuid_utils import uuid7
@@ -11,14 +11,17 @@ from fastapi import HTTPException
 
 from models.accounts import UserSession, TrafficSource
 from models.system import AnalyticsEvent, ConversionFunnel, EventType
-from models.commerce.orders import Order, OrderItem, OrderStatus
+from models.commerce.orders import Order, OrderStatus
 from models.accounts.user import User
 from models.commerce.refunds import Refund, RefundStatus
 from models.commerce.subscriptions import Subscription
+from models.catalog.product import Product, ProductStatus
+from core.logging import get_structured_logger
+from typing import Dict, Any, List, Optional
+from models.commerce.orders import Order, OrderItem, OrderStatus
 from models.catalog.product import Product, ProductVariant, ProductStatus
 from models.catalog.category import Category
 from models.catalog.inventories import Inventory
-from core.logging import get_structured_logger
 
 logger = get_structured_logger(__name__)
 
@@ -622,6 +625,7 @@ class AnalyticsService:
         except Exception as e:
             logger.error(f"Failed to get sales trend data: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve sales trend data")
+
 
     async def get_revenue_metrics(
         self,

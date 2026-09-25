@@ -10,6 +10,7 @@ from core.config import settings
 logger = get_structured_logger(__name__)
 
 
+from schemas.common.service_types import RenderedTemplate
 from schemas.common.service_types import RenderedTemplate, RenderedExport, TemplateValidationResult
 
 
@@ -84,7 +85,6 @@ class JinjaTemplateService:
         except Exception as e:
             logger.error(f"Unexpected error rendering template {template_name}: {e}")
             raise TemplateError(f"Failed to render template {template_name}: {e}")
-
     async def render_export(self, template_name: str, context: Dict[str, Any]) -> RenderedExport:
         """Render an export template with the provided context"""
         try:
@@ -114,7 +114,6 @@ class JinjaTemplateService:
         except Exception as e:
             logger.error(f"Unexpected error rendering template {template_name}: {e}")
             raise TemplateError(f"Failed to render template {template_name}: {e}")
-    
     async def validate_template(
         self,
         template_content: str
@@ -148,7 +147,6 @@ class JinjaTemplateService:
             errors=errors,
             warnings=warnings
         )
-    
     def create_template_file(self, template_name: str, content: str) -> bool:
         """Create a new template file; returns True on success."""
         try:
@@ -164,7 +162,6 @@ class JinjaTemplateService:
         except Exception as e:
             logger.error(f"Failed to create template file {template_name}: {e}")
             return False
-    
     def list_templates(self) -> list[str]:
         """List all available template file names."""
         try:
@@ -176,8 +173,13 @@ class JinjaTemplateService:
         except Exception as e:
             logger.error(f"Failed to list templates: {e}")
             return []
-    
     def template_exists(self, template_name: str) -> bool:
         """Check if a template file exists."""
         template_path = self.template_dir / template_name
         return template_path.exists()
+
+
+    
+    
+    
+    

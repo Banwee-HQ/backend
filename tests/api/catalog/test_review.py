@@ -39,28 +39,6 @@ async def created_review(async_client: AsyncClient, auth_headers, created_produc
 @pytest.mark.api
 class TestReviewEndpoints:
 
-    async def test_list(self, async_client: AsyncClient, created_review):
-        """GET /v1/reviews/ - List reviews."""
-        response = await async_client.get("/v1/reviews/?limit=10")
-        assert response.status_code == 200
-        assert response.json()["success"] is True
-
-    async def test_list_by_product(self, async_client: AsyncClient, created_product, created_review):
-        """GET /v1/reviews/?product_id={id} - Filter by product."""
-        response = await async_client.get(f"/v1/reviews/?product_id={created_product['id']}")
-        assert response.status_code == 200
-        assert len(response.json()["data"]) == 1
-
-    async def test_get_by_id(self, async_client: AsyncClient, created_review):
-        """GET /v1/reviews/{id} - Get review by ID."""
-        response = await async_client.get(f"/v1/reviews/{created_review['id']}/")
-        assert response.status_code == 200
-        assert response.json()["data"]["id"] == created_review["id"]
-
-    async def test_get_by_id_not_found(self, async_client: AsyncClient):
-        """GET /v1/reviews/{id} - Unknown ID returns 404."""
-        response = await async_client.get(f"/v1/reviews/{uuid4()}/")
-        assert response.status_code == 404
 
     async def test_for_product(self, async_client: AsyncClient, created_product, created_review):
         """GET /v1/reviews/product/{id} - Get product reviews."""
@@ -118,18 +96,18 @@ class TestReviewEndpoints:
         )
         assert response.status_code == 403
 
-    async def test_delete_as_owner(self, async_client: AsyncClient, auth_headers, created_review):
-        """DELETE /v1/reviews/{id} - Owner deletes their review."""
-        response = await async_client.delete(f"/v1/reviews/{created_review['id']}/", headers=auth_headers)
+
+    async def test_admin_can_remove_any_review(self, async_client: AsyncClient, admin_headers, created_review):
+        """DELETE /v1/reviews/{id} - Staff can take a review down."""
+        response = await async_client.delete(f"/v1/reviews/{created_review['id']}/", headers=admin_headers)
         assert response.status_code == 200
 
-        get_resp = await async_client.get(f"/v1/reviews/{created_review['id']}/")
-        assert get_resp.status_code == 404
-
-    async def test_delete_not_owner_forbidden(self, async_client: AsyncClient, admin_headers, created_review):
-        """DELETE /v1/reviews/{id} - Non-owner is forbidden."""
-        response = await async_client.delete(f"/v1/reviews/{created_review['id']}/", headers=admin_headers)
-        assert response.status_code == 403
+    async def test_get_includes_author_and_product(self, async_client: AsyncClient, created_review):
+        response = await async_client.get(f"/v1/reviews/{created_review['id']}/")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["product"]["name"]
+        assert "user" in data
 
     async def test_create_unauthenticated(self, async_client: AsyncClient, created_product):
         response = await async_client.post("/v1/reviews/", json={"product_id": created_product["id"], "rating": 5})
@@ -147,32 +125,6 @@ class TestReviewEndpoints:
         response = await async_client.delete(f"/v1/reviews/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
 
-    async def test_list_filters_by_rating(self, async_client: AsyncClient, created_review):
-        response = await async_client.get("/v1/reviews/?min_rating=5&max_rating=5")
-        assert response.status_code == 200
-        assert all(r["rating"] == 5 for r in response.json()["data"])
-
-        excluded = await async_client.get("/v1/reviews/?min_rating=1&max_rating=1")
-        assert response.json()["data"] != [] and created_review["id"] not in [r["id"] for r in excluded.json()["data"]]
-
-    async def test_list_sort_by_rating_asc(self, async_client: AsyncClient, created_review):
-        response = await async_client.get("/v1/reviews/?sort_by=rating_asc")
-        assert response.status_code == 200
-
-    async def test_list_wraps_api_exception(self, async_client: AsyncClient, monkeypatch):
-        monkeypatch.setattr(ReviewService, "list", _async_raiser(APIException(status_code=418, message="teapot")))
-        response = await async_client.get("/v1/reviews/")
-        assert response.status_code == 418
-
-    async def test_list_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
-        monkeypatch.setattr(ReviewService, "list", _async_raiser(HTTPException(status_code=403, detail="nope")))
-        response = await async_client.get("/v1/reviews/")
-        assert response.status_code == 403
-
-    async def test_list_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
-        monkeypatch.setattr(ReviewService, "list", _async_raiser(RuntimeError("boom")))
-        response = await async_client.get("/v1/reviews/")
-        assert response.status_code == 500
 
     async def test_create_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, auth_headers, created_product, monkeypatch):
         monkeypatch.setattr(ReviewService, "create", _async_raiser(RuntimeError("boom")))
@@ -181,15 +133,6 @@ class TestReviewEndpoints:
         })
         assert response.status_code == 500
 
-    async def test_get_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
-        monkeypatch.setattr(ReviewService, "get", _async_raiser(HTTPException(status_code=403, detail="nope")))
-        response = await async_client.get(f"/v1/reviews/{uuid4()}/")
-        assert response.status_code == 403
-
-    async def test_get_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
-        monkeypatch.setattr(ReviewService, "get", _async_raiser(RuntimeError("boom")))
-        response = await async_client.get(f"/v1/reviews/{uuid4()}/")
-        assert response.status_code == 500
 
     async def test_update_wraps_http_exception(self, async_client: AsyncClient, auth_headers, monkeypatch):
         monkeypatch.setattr(ReviewService, "update", _async_raiser(HTTPException(status_code=403, detail="nope")))
@@ -224,4 +167,72 @@ class TestReviewEndpoints:
     async def test_for_product_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
         monkeypatch.setattr(ReviewService, "list", _async_raiser(RuntimeError("boom")))
         response = await async_client.get(f"/v1/reviews/product/{uuid4()}/")
+        assert response.status_code == 500
+
+    async def test_list(self, async_client: AsyncClient, created_review):
+        """GET /v1/reviews/ - List reviews."""
+        response = await async_client.get("/v1/reviews/?limit=10")
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+    async def test_list_by_product(self, async_client: AsyncClient, created_product, created_review):
+        """GET /v1/reviews/?product_id={id} - Filter by product."""
+        response = await async_client.get(f"/v1/reviews/?product_id={created_product['id']}")
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 1
+
+    async def test_get_by_id(self, async_client: AsyncClient, created_review):
+        """GET /v1/reviews/{id} - Get review by ID."""
+        response = await async_client.get(f"/v1/reviews/{created_review['id']}/")
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == created_review["id"]
+
+    async def test_get_by_id_not_found(self, async_client: AsyncClient):
+        """GET /v1/reviews/{id} - Unknown ID returns 404."""
+        response = await async_client.get(f"/v1/reviews/{uuid4()}/")
+        assert response.status_code == 404
+
+    async def test_delete_as_owner(self, async_client: AsyncClient, auth_headers, created_review):
+        """DELETE /v1/reviews/{id} - Owner deletes their review."""
+        response = await async_client.delete(f"/v1/reviews/{created_review['id']}/", headers=auth_headers)
+        assert response.status_code == 200
+
+        get_resp = await async_client.get(f"/v1/reviews/{created_review['id']}/")
+        assert get_resp.status_code == 404
+
+    async def test_list_filters_by_rating(self, async_client: AsyncClient, created_review):
+        response = await async_client.get("/v1/reviews/?min_rating=5&max_rating=5")
+        assert response.status_code == 200
+        assert all(r["rating"] == 5 for r in response.json()["data"])
+
+        excluded = await async_client.get("/v1/reviews/?min_rating=1&max_rating=1")
+        assert response.json()["data"] != [] and created_review["id"] not in [r["id"] for r in excluded.json()["data"]]
+
+    async def test_list_sort_by_rating_asc(self, async_client: AsyncClient, created_review):
+        response = await async_client.get("/v1/reviews/?sort_by=rating_asc")
+        assert response.status_code == 200
+
+    async def test_list_wraps_api_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ReviewService, "list", _async_raiser(APIException(status_code=418, message="teapot")))
+        response = await async_client.get("/v1/reviews/")
+        assert response.status_code == 418
+
+    async def test_list_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ReviewService, "list", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get("/v1/reviews/")
+        assert response.status_code == 403
+
+    async def test_list_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ReviewService, "list", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get("/v1/reviews/")
+        assert response.status_code == 500
+
+    async def test_get_wraps_http_exception(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ReviewService, "get", _async_raiser(HTTPException(status_code=403, detail="nope")))
+        response = await async_client.get(f"/v1/reviews/{uuid4()}/")
+        assert response.status_code == 403
+
+    async def test_get_wraps_unexpected_exception_as_500(self, async_client: AsyncClient, monkeypatch):
+        monkeypatch.setattr(ReviewService, "get", _async_raiser(RuntimeError("boom")))
+        response = await async_client.get(f"/v1/reviews/{uuid4()}/")
         assert response.status_code == 500

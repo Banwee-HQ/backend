@@ -86,6 +86,7 @@ class Order(Base):
     subtotal: Mapped[float] = mapped_column(Numeric(10, 2))  # Sum of all product variant prices
     shipping_cost: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)  # Shipping cost (renamed from shipping_amount)
     discount_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)  # Discount amount applied to order
+    promocode_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.promocodes.id", ondelete="SET NULL"), nullable=True)
     tax_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)  # Tax amount
     tax_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0.0)  # Tax rate applied (e.g., 0.08 for 8%)
     total_amount: Mapped[float] = mapped_column(Numeric(10, 2))  # Final total

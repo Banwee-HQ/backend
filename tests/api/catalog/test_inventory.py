@@ -20,8 +20,8 @@ async def created_variant(async_client: AsyncClient, admin_headers, sample_produ
     )
     sample_product_data["category_id"] = cat.json()["data"]["id"]
     product = await async_client.post("/v1/products/", headers=admin_headers, json=sample_product_data)
-    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/variants/")
-    return variants.json()["data"][0]
+    variants = await async_client.get(f"/v1/products/{product.json()['data']['id']}/")
+    return variants.json()["data"]["variants"][0]
 
 
 @pytest.mark.api
@@ -141,19 +141,6 @@ class TestInventoryItemEndpoints:
         response = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
         assert response.status_code == 200
 
-    async def test_create_requires_admin(self, async_client: AsyncClient, auth_headers, created_variant, created_location):
-        """POST /v1/inventory/ - Non-admin is forbidden."""
-        response = await async_client.post("/v1/inventory/", headers=auth_headers, json={
-            "variant_id": created_variant["id"], "location_id": created_location["id"], "quantity": 50
-        })
-        assert response.status_code == 403
-
-    async def test_create_duplicate_rejected(self, async_client: AsyncClient, admin_headers, created_variant, created_location):
-        """POST /v1/inventory/ - A variant already has inventory from creation, so this is rejected."""
-        response = await async_client.post("/v1/inventory/", headers=admin_headers, json={
-            "variant_id": created_variant["id"], "location_id": created_location["id"], "quantity": 50
-        })
-        assert response.status_code == 400
 
     async def test_list(self, async_client: AsyncClient, admin_headers, created_variant):
         """GET /v1/inventory/ - List inventory items."""
@@ -197,54 +184,6 @@ class TestInventoryItemEndpoints:
             headers=auth_headers, json={"quantity": 1})
         assert response.status_code == 403
 
-    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, created_variant):
-        """DELETE /v1/inventory/{id} - Delete an inventory row (admin)."""
-        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
-        inventory_id = listed.json()["data"][0]["id"]
-
-        response = await async_client.delete(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
-        assert response.status_code == 200
-
-        get_after = await async_client.get(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
-        assert get_after.status_code == 404
-
-    async def test_delete_not_found(self, async_client: AsyncClient, admin_headers):
-        """DELETE /v1/inventory/{id} - Unknown ID returns 404."""
-        response = await async_client.delete(f"/v1/inventory/{uuid4()}/", headers=admin_headers)
-        assert response.status_code == 404
-
-    async def test_create_fresh_inventory(self, async_client: AsyncClient, admin_headers, created_variant, created_location):
-        """POST /v1/inventory/ - Creating inventory for a variant with none yet succeeds."""
-        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
-        inventory_id = listed.json()["data"][0]["id"]
-        await async_client.delete(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
-
-        response = await async_client.post("/v1/inventory/", headers=admin_headers, json={
-            "variant_id": created_variant["id"], "location_id": created_location["id"], "quantity": 33
-        })
-        assert response.status_code == 201
-        assert response.json()["data"]["quantity_available"] == 33
-        assert response.json()["data"]["location"]["id"] == created_location["id"]
-
-    async def test_create_unknown_variant_returns_404(self, async_client: AsyncClient, admin_headers, created_location):
-        """POST /v1/inventory/ - Unknown variant_id returns 404."""
-        response = await async_client.post("/v1/inventory/", headers=admin_headers, json={
-            "variant_id": str(uuid4()), "location_id": created_location["id"], "quantity": 10
-        })
-        assert response.status_code == 404
-
-    async def test_create_unknown_location_is_a_server_error(self, async_client: AsyncClient, admin_headers, created_variant):
-        """POST /v1/inventory/ - The service validates variant_id but not location_id; a
-        location_id with no matching row is a real (un-mocked) way to trigger a foreign-key
-        violation on commit, exercising the endpoint's generic exception handler."""
-        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
-        inventory_id = listed.json()["data"][0]["id"]
-        await async_client.delete(f"/v1/inventory/{inventory_id}/", headers=admin_headers)
-
-        response = await async_client.post("/v1/inventory/", headers=admin_headers, json={
-            "variant_id": created_variant["id"], "location_id": str(uuid4()), "quantity": 5
-        })
-        assert response.status_code == 500
 
     async def test_update_not_found(self, async_client: AsyncClient, admin_headers):
         """PATCH /v1/inventory/{id} - Unknown ID returns 404."""
@@ -316,26 +255,6 @@ class TestAdjustmentEndpoints:
         response = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
         assert response.status_code == 200
 
-    async def test_get_by_id(self, async_client: AsyncClient, admin_headers, created_variant):
-        """GET /v1/inventory/adjustments/{id} - Get a specific adjustment."""
-        await async_client.post("/v1/inventory/adjustments/", headers=admin_headers, json={
-            "variant_id": created_variant["id"], "quantity_change": 5, "reason": "Restock"
-        })
-        listed = await async_client.get("/v1/inventory/adjustments/", headers=admin_headers)
-        adjustment_id = listed.json()["data"][0]["id"]
-
-        response = await async_client.get(f"/v1/inventory/adjustments/{adjustment_id}/", headers=admin_headers)
-        assert response.status_code == 200
-
-    async def test_get_by_id_not_found(self, async_client: AsyncClient, admin_headers):
-        """GET /v1/inventory/adjustments/{id} - Unknown ID returns 404."""
-        response = await async_client.get(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
-        assert response.status_code == 404
-
-    async def test_get_requires_admin(self, async_client: AsyncClient, auth_headers):
-        """GET /v1/inventory/adjustments/{id} - Non-admin is forbidden."""
-        response = await async_client.get(f"/v1/inventory/adjustments/{uuid4()}/", headers=auth_headers)
-        assert response.status_code == 403
 
     async def test_list_filtered_by_inventory_id(self, async_client: AsyncClient, admin_headers, created_variant):
         """GET /v1/inventory/adjustments/?inventory_id= - Filter adjustments to one inventory row."""
@@ -359,6 +278,12 @@ class TestSyncEndpoints:
         response = await async_client.post("/v1/inventory/sync-all/", headers=admin_headers)
         assert response.status_code == 200
 
+
+    async def test_sync_all_requires_admin(self, async_client: AsyncClient, auth_headers):
+        """POST /v1/inventory/sync-all/ - Non-admin is forbidden."""
+        response = await async_client.post("/v1/inventory/sync-all/", headers=auth_headers)
+        assert response.status_code == 403
+
     async def test_sync_product(self, async_client: AsyncClient, admin_headers, created_variant):
         """POST /v1/inventory/sync/product/{id}/ - Resync a single product."""
         response = await async_client.post(
@@ -371,11 +296,6 @@ class TestSyncEndpoints:
         response = await async_client.post("/v1/inventory/sync/product/not-a-uuid/", headers=admin_headers)
         assert response.status_code == 400
 
-    async def test_sync_all_requires_admin(self, async_client: AsyncClient, auth_headers):
-        """POST /v1/inventory/sync-all/ - Non-admin is forbidden."""
-        response = await async_client.post("/v1/inventory/sync-all/", headers=auth_headers)
-        assert response.status_code == 403
-
     async def test_sync_product_requires_admin(self, async_client: AsyncClient, auth_headers, created_variant):
         """POST /v1/inventory/sync/product/{id}/ - Non-admin is forbidden."""
         response = await async_client.post(
@@ -384,10 +304,3 @@ class TestSyncEndpoints:
         assert response.status_code == 403
 
 
-@pytest.mark.api
-class TestAdjustmentLedgerIsAppendOnly:
-
-    async def test_adjustments_cannot_be_deleted(self, async_client: AsyncClient, admin_headers):
-        """Deleting a ledger entry would erase history while its stock change stayed; the route is gone."""
-        response = await async_client.delete(f"/v1/inventory/adjustments/{uuid4()}/", headers=admin_headers)
-        assert response.status_code == 405

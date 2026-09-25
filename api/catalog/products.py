@@ -8,11 +8,12 @@ from core.dependencies import require_admin
 from core.utils.response import Response
 from core.exceptions import APIException
 from core.logging import get_structured_logger as get_logger
-from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
+from schemas.catalog.product import Create, Update
 from services.catalog.products import ProductService
-from services.catalog.category import CategoryService
 from models.accounts.user import User
 from models.catalog.product import ProductStatus
+from schemas.catalog.product import Create, Update, ImageCreate, ImageUpdate, VariantCreate as ProductVariantCreate, VariantUpdate as ProductVariantUpdate
+from services.catalog.category import CategoryService
 
 logger = get_logger(__name__)
 
@@ -21,71 +22,13 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 
 @router.get("/home/")
-async def get_home_data(
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all data needed for the home page in one request."""
-    try:
-        product_service = ProductService(db)
-
-        categories, _ = await CategoryService(db).list(limit=50, active_only=True)
-        categories = [c.to_dict() for c in categories]
-
-        # Fetch featured products (4 items)
-        featured = await product_service.featured(limit=4)
-        
-        # Fetch popular/recent products (8 items)
-        try:
-            popular_result = await product_service.list(
-                page=1,
-                limit=8,
-                filters={},
-                sort_by="created_at",
-                sort_order="desc"
-            )
-            popular_products = popular_result.get("data", [])
-        except Exception as e:
-            logger.warning(f"Failed to fetch popular products: {e}")
-            popular_products = []
-        
-        # Fetch products on sale for deals section (4 items)
-        try:
-            deals_result = await product_service.list(
-                page=1,
-                limit=4,
-                filters={"sale": True},
-                sort_by="created_at",
-                sort_order="desc"
-            )
-            deals_products = deals_result.get("data", [])
-        except Exception as e:
-            logger.warning(f"Failed to fetch deals: {e}")
-            deals_products = []
-
-        # Fallbacks if featured/deals are empty
-        if not featured:
-            featured = popular_products[:4]
-
-        if not deals_products:
-            # Use recent products as deals fallback
-            deals_products = popular_products[:4] if popular_products else featured[:4]
-        
-        return Response.success(
-            data={
-                "categories": categories,
-                "featured": featured,
-                "popular": popular_products,
-                "deals": deals_products
-            }
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error fetching home data")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to fetch home data: {str(e)}"
-        )
+async def get_home_data(db: AsyncSession = Depends(get_db)):
+    """Home page sections in one request; a section is empty when nothing qualifies (no filler products)."""
+    service = ProductService(db)
+    featured = await service.list(limit=4, filters={"is_featured": True})
+    popular = await service.list(limit=8, sort_by="popular")
+    deals = await service.list(limit=4, filters={"sale": True})
+    return Response.success(data={"featured": featured["data"], "popular": popular["data"], "deals": deals["data"]})
 
 
 @router.get("/")
@@ -98,15 +41,12 @@ async def list(
     max_price: Optional[float] = Query(None, ge=0, description="Maximum price filter"),
     min_rating: Optional[int] = Query(None, ge=1, le=5),
     max_rating: Optional[int] = Query(None, ge=1, le=5),
-    sort_by: Optional[str] = Query("created_at"),
+    sort_by: Optional[str] = Query("created_at", description="created_at, name, price, rating_average or popular"),
     sort_order: Optional[str] = Query("desc"),
     availability: Optional[bool] = None,
-    featured: Optional[bool] = None,
     is_featured: Optional[bool] = None,
     is_bestseller: Optional[bool] = None,
-    popular: Optional[bool] = None,
     sale: Optional[bool] = None,
-    search_mode: Optional[str] = Query("basic", regex="^(basic|advanced)$", description="Search mode: basic or advanced"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get products with optional filtering and pagination."""
@@ -122,10 +62,8 @@ async def list(
             "min_rating": min_rating,
             "max_rating": max_rating,
             "availability": availability,
-            "featured": featured,
             "is_featured": is_featured,
             "is_bestseller": is_bestseller,
-            "popular": popular,
             "sale": sale
         }
 
@@ -354,6 +292,11 @@ async def delete(
 
 
 # --- VARIANTS - 5 Standard APIs ---
+
+
+# --- VARIANT IMAGES - 5 Standard APIs ---
+
+
 @router.post("/{product_id}/variants/")
 async def create_variant(
     product_id: UUID,
@@ -451,7 +394,6 @@ async def delete_variant(
         raise APIException(status_code=500, message=f"Failed to delete variant: {str(e)}")
 
 
-# --- VARIANT IMAGES - 5 Standard APIs ---
 @router.post("/variants/{variant_id}/images/")
 async def create_image(
     variant_id: UUID,
