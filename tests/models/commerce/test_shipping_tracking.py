@@ -54,9 +54,15 @@ class TestShipmentTrackingGetTrackingUrl:
         shipment = make_shipment(provider=make_provider())
         assert shipment.get_tracking_url() == "https://example.com/track/TRACK123"
 
-    def test_returns_none_without_provider(self):
+    def test_returns_none_without_provider_or_carrier_template(self):
         shipment = make_shipment(provider=None)
+        shipment.carrier.tracking_url_template = None
         assert shipment.get_tracking_url() is None
+
+    def test_falls_back_to_carrier_template(self):
+        shipment = make_shipment(provider=None)
+        shipment.carrier.tracking_url_template = "https://carrier.example.com/{tracking_number}"
+        assert shipment.get_tracking_url() == "https://carrier.example.com/TRACK123"
 
     def test_returns_none_without_tracking_number(self):
         shipment = make_shipment(provider=make_provider())

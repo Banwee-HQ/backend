@@ -274,11 +274,12 @@ class TestProviderEndpoints:
         response = await async_client.delete(f"/v1/shipping-tracking/providers/{uuid4()}/", headers=admin_headers)
         assert response.status_code == 404
 
-    async def test_delete_referenced_by_shipment_returns_500(self, async_client: AsyncClient, admin_headers, created_shipment, created_provider):
-        """A provider still referenced by a shipment is a real FK violation on delete,
-        not a mocked failure - it must be reported, not corrupt referential integrity."""
+    async def test_delete_referenced_by_shipment_keeps_the_shipment(self, async_client: AsyncClient, admin_headers, created_shipment, created_provider):
+        """Deleting a provider detaches its shipments instead of deleting them."""
         response = await async_client.delete(f"/v1/shipping-tracking/providers/{created_provider['id']}/", headers=admin_headers)
-        assert response.status_code == 500
+        assert response.status_code == 200
+        shipment = await async_client.get(f"/v1/shipping-tracking/shipments/{created_shipment['id']}/", headers=admin_headers)
+        assert shipment.status_code == 200
 
 
 @pytest.mark.api
@@ -293,6 +294,14 @@ class TestShipmentEndpoints:
         })
         assert response.status_code == 200
         assert response.json()["data"]["order_id"] == str(own_order.id)
+
+    async def test_create_without_provider(self, async_client: AsyncClient, admin_headers, created_carrier, own_order):
+        """A carrier with no API account still takes manual shipments."""
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
+            "order_id": str(own_order.id), "carrier": created_carrier["code"],
+            "tracking_number": f"TRACK{uuid4().hex[:8]}",
+        })
+        assert response.status_code == 200
 
     async def test_create_unknown_carrier(self, async_client: AsyncClient, admin_headers, own_order):
         """POST /v1/shipping-tracking/shipments - Unknown carrier is rejected."""

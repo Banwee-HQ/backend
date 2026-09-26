@@ -52,8 +52,7 @@ class ShippingTrackingService:
         try:
             carrier = await self._get_active_carrier(shipment_data['carrier'])
 
-            # Get provider - a carrier may have more than one configured provider
-            # (e.g. separate accounts per region), so just take the first active one.
+            # The carrier's first active API account, if any; without one the shipment is tracked by hand.
             provider_result = await self.db.execute(
                 select(ShippingProvider).where(
                     and_(
@@ -64,16 +63,11 @@ class ShippingTrackingService:
             )
             provider = provider_result.scalars().first()
 
-            if not provider:
-                raise APIException(
-                    message=f"Shipping provider {shipment_data['carrier']} not found or inactive"
-                )
-
             # Create shipment
             shipment = ShipmentTracking(
                 order_id=shipment_data['order_id'],
                 order_item_id=shipment_data.get('order_item_id'),
-                provider_id=provider.id,
+                provider_id=provider.id if provider else None,
                 tracking_number=shipment_data['tracking_number'],
                 carrier_id=carrier.id,
                 shipment_type=shipment_data.get('shipment_type', ShipmentType.STANDARD),

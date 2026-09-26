@@ -96,14 +96,15 @@ class TestCreate:
             })
         assert exc_info.value.status_code == 400
 
-    async def test_no_active_provider_raises_error(self, db_session, carrier, provider, order):
+    async def test_without_active_provider_records_manual_shipment(self, db_session, carrier, provider, order):
         provider.is_active = False
         await db_session.commit()
         service = ShippingTrackingService(db_session)
-        with pytest.raises(APIException):
-            await service.create({
-                "order_id": order.id, "carrier": carrier.code, "tracking_number": "TRACK123",
-            })
+        shipment = await service.create({
+            "order_id": order.id, "carrier": carrier.code, "tracking_number": "TRACK123",
+        })
+        assert shipment.provider_id is None
+        assert shipment.carrier_id == carrier.id
 
 
 class TestGet:

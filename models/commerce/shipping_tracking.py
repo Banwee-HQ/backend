@@ -118,7 +118,8 @@ class ShipmentTracking(Base):
     # Core shipment information
     order_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.orders.id"))
     order_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.order_items.id"), nullable=True)  # For multi-item shipments
-    provider_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("commerce.shipping_providers.id"))
+    # Only set when a carrier API account tracks it; manual shipments have none.
+    provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(GUID(), ForeignKey("commerce.shipping_providers.id", ondelete="SET NULL"), nullable=True)
 
     # Tracking details
     tracking_number: Mapped[str] = mapped_column(String(100), unique=True)
@@ -193,14 +194,10 @@ class ShipmentTracking(Base):
         }
 
     def get_tracking_url(self) -> Optional[str]:
-        """Generate carrier-specific tracking URL"""
-        if not self.provider or not self.tracking_number:
+        """The provider's tracking link, else the carrier's."""
+        template = (self.provider and self.provider.tracking_url_template) or (self.carrier and self.carrier.tracking_url_template)
+        if not template or not self.tracking_number:
             return None
-            
-        template = self.provider.tracking_url_template
-        if not template:
-            return None
-            
         return template.replace("{tracking_number}", self.tracking_number)
 
 class ShipmentTrackingEvent(Base):
