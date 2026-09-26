@@ -399,26 +399,10 @@ class OrderService:
 
         # Reserve stock (and the promo redemption) BEFORE charging, so a losing race for the last unit fails
         # cleanly instead of charging the card; _release_unpaid_order gives both back if payment doesn't complete.
-        order_items = []
-        for cart_item in orderable_items:
-            price = cart_item.variant.sale_price or cart_item.variant.base_price
-            order_item = OrderItem(
-                id=uuid7(), order_id=order_id, variant_id=cart_item.variant_id, quantity=cart_item.quantity,
-                price_per_unit=price, total_price=price * cart_item.quantity
-            )
-            self.db.add(order_item)
-            order_items.append(order_item)
-            cart_item.variant.purchase_count = (cart_item.variant.purchase_count or 0) + cart_item.quantity
-            await self.inventory_service.adjust_stock(
-                StockAdjustmentCreate(
-                    variant_id=cart_item.variant_id,
-                    quantity_change=-cart_item.quantity,
-                    reason=f"Order placed: {order_number}",
-                    notes=f"Reserved for order {order_number}"
-                ),
-                adjusted_by_user_id=user_id,
-                commit=False
-            )
+        order_items = [
+            await self._reserve_line(order, item.variant, item.quantity, item.variant.sale_price or item.variant.base_price)
+            for item in orderable_items
+        ]
         if order.promocode_id:
             promocode = await self.db.get(Promocode, order.promocode_id)
             promocode.used_count = (promocode.used_count or 0) + 1
@@ -491,6 +475,24 @@ class OrderService:
         })
         return response
 
+    async def _reserve_line(self, order: Order, variant: ProductVariant, quantity: int, price) -> OrderItem:
+        """Add an order line and take its stock; _release_unpaid_order gives it back."""
+        item = OrderItem(
+            id=uuid7(), order_id=order.id, variant_id=variant.id, quantity=quantity,
+            price_per_unit=price, total_price=price * quantity
+        )
+        self.db.add(item)
+        variant.purchase_count = (variant.purchase_count or 0) + quantity
+        await self.inventory_service.adjust_stock(
+            StockAdjustmentCreate(
+                variant_id=variant.id, quantity_change=-quantity,
+                reason=f"Order placed: {order.order_number}", notes=f"Reserved for order {order.order_number}"
+            ),
+            adjusted_by_user_id=order.user_id,
+            commit=False
+        )
+        return item
+
     async def _mark_order_paid(self, order: Order) -> None:
         """Confirm a paid order and clear its items from the customer's cart. Idempotent."""
         if order.payment_status == PaymentStatus.PAID:
@@ -498,6 +500,12 @@ class OrderService:
         order.order_status = OrderStatus.CONFIRMED
         order.payment_status = PaymentStatus.PAID
         order.confirmed_at = datetime.now(timezone.utc)
+        if order.subscription_id:
+            # A paid renewal moves its subscription to the next delivery; the scheduler module imports this one.
+            from services.commerce.subscriptions_scheduler import renewal_paid
+            await renewal_paid(self.db, order)
+            await self.db.commit()
+            return
         await self.db.commit()
         # Best-effort: the payment is taken, so a failed cart cleanup must never undo the order.
         try:
@@ -564,7 +572,10 @@ class OrderService:
         """Release orders whose bank verification was abandoned; returns how many were released."""
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
         orders = (await self.db.execute(
-            select(Order).where(Order.payment_status == PaymentStatus.PENDING, Order.created_at < cutoff)
+            # Unpaid renewals belong to the subscription scheduler, which retries them.
+            select(Order).where(
+                Order.payment_status == PaymentStatus.PENDING, Order.created_at < cutoff, Order.subscription_id.is_(None)
+            )
         )).scalars().all()
         payments = PaymentService(self.db)
         for order in orders:

@@ -95,7 +95,7 @@ class SubscriptionService:
             discount_code
         )
 
-        # Calculate billing period
+        # The first delivery is on the chosen start date, or on the scheduler's next run.
         now = self._period_start(current_period_start) if current_period_start else datetime.now(timezone.utc)
 
         period_end = compute_period_end(now, billing_cycle)
@@ -110,7 +110,7 @@ class SubscriptionService:
             auto_renew=True,
             current_period_start=now,
             current_period_end=period_end,
-            next_billing_date=period_end,
+            next_billing_date=now,
             delivery_address_id=delivery_address_id,
             shipping_method_id=shipping_method_id,
             variant_ids=variant_ids,
@@ -181,11 +181,6 @@ class SubscriptionService:
         for variant in variants:
             qty = variant_quantities.get(str(variant.id), 1)
             price = Decimal(str(variant.current_price or 0))
-            
-            if price <= 0:
-                logger.warning(f"Variant {variant.id} has zero price, using minimum")
-                price = Decimal('9.99')
-            
             line_total = price * qty
             subtotal += line_total
             
@@ -248,12 +243,9 @@ class SubscriptionService:
         )
         methods = result.scalars().all()
 
-        if methods:
-            cheapest = min(methods, key=lambda m: m.price)
-            return Decimal(str(cheapest.price))
-
-        # Final fallback
-        return Decimal('8.99')
+        if not methods:
+            raise HTTPException(status_code=400, detail="No delivery methods are set up yet, so this can't be delivered.")
+        return Decimal(str(min(methods, key=lambda m: m.price).price))
 
     async def get(self, subscription_id: UUID, user_id: Optional[UUID] = None) -> Optional[Subscription]:
         """Get subscription by ID"""
@@ -435,11 +427,9 @@ class SubscriptionService:
             new_period_start = self._period_start(current_period_start)
             subscription.current_period_start = new_period_start
 
-            # Recalculate period end and next billing date
-            new_period_end = compute_period_end(new_period_start, subscription.billing_cycle)
-
-            subscription.current_period_end = new_period_end
-            subscription.next_billing_date = new_period_end
+            # The next delivery moves to the new start date.
+            subscription.current_period_end = compute_period_end(new_period_start, subscription.billing_cycle)
+            subscription.next_billing_date = new_period_start
 
         if variant_ids:
             subscription.variant_ids = variant_ids
@@ -487,11 +477,12 @@ class SubscriptionService:
         subscription.status = SubscriptionStatus.CANCELLED.value
         subscription.cancelled_at = datetime.now(timezone.utc)
         subscription.auto_renew = False
-        
+        subscription.next_retry_date = None
+
         if reason:
             subscription.pause_reason = f"Cancelled: {reason}"
-        
-        await self.db.commit()
+
+        await self._close_open_renewal(subscription, "subscription cancelled")
         return await self.get(subscription.id)
 
     async def pause(self, subscription_id: UUID, user_id: UUID, reason: Optional[str] = None) -> Subscription:
@@ -501,15 +492,24 @@ class SubscriptionService:
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
         
-        if subscription.status != "active":
+        if subscription.status not in (SubscriptionStatus.ACTIVE.value, SubscriptionStatus.PAYMENT_FAILED.value):
             raise HTTPException(status_code=400, detail="Can only pause active subscriptions")
-        
+
         subscription.status = SubscriptionStatus.PAUSED.value
         subscription.paused_at = datetime.now(timezone.utc)
         subscription.pause_reason = reason
-        
-        await self.db.commit()
+        subscription.next_retry_date = None
+
+        await self._close_open_renewal(subscription, "subscription paused")
         return await self.get(subscription.id)
+
+    async def _close_open_renewal(self, subscription: Subscription, reason: str) -> None:
+        """Save the change and drop any renewal still waiting for payment. Commits."""
+        # The scheduler module imports this one.
+        from services.commerce.subscriptions_scheduler import close_open_renewal
+        await self.db.flush()
+        await close_open_renewal(self.db, subscription.id, reason)
+        await self.db.commit()
 
     async def resume(self, subscription_id: UUID, user_id: UUID) -> Subscription:
         """Resume subscription"""
@@ -521,12 +521,18 @@ class SubscriptionService:
         if subscription.status not in ["paused", "cancelled"]:
             raise HTTPException(status_code=400, detail="Can only resume paused or cancelled subscriptions")
 
+        now = datetime.now(timezone.utc)
         subscription.status = SubscriptionStatus.ACTIVE.value
         subscription.paused_at = None
         subscription.pause_reason = None
         subscription.cancelled_at = None
         subscription.auto_renew = True
-        subscription.next_billing_date = datetime.now(timezone.utc) + timedelta(days=30)
+        subscription.payment_retry_count = 0
+        subscription.next_retry_date = None
+        subscription.last_payment_error = None
+        # Keep a future delivery date; a missed one is delivered on the scheduler's next run.
+        if not subscription.next_billing_date or subscription.next_billing_date < now:
+            subscription.next_billing_date = now
 
         await self.db.commit()
         return await self.get(subscription.id)
@@ -536,6 +542,12 @@ class SubscriptionService:
         """List active subscriptions currently due for billing (admin)."""
         result = await self.db.execute(
             select(Subscription)
+            .options(
+                selectinload(Subscription.products).selectinload(ProductVariant.product),
+                selectinload(Subscription.products).selectinload(ProductVariant.images),
+                selectinload(Subscription.delivery_address),
+                selectinload(Subscription.shipping_method),
+            )
             .where(
                 and_(
                     Subscription.status == "active",
@@ -549,16 +561,14 @@ class SubscriptionService:
         return result.scalars().all()
 
     async def change_frequency(self, subscription_id: UUID, user_id: UUID, frequency: str) -> Subscription:
-        """Change billing cycle and recompute the current period end from its existing start."""
+        """Change the billing cycle; the next delivery keeps its date and later ones follow the new cycle."""
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
 
         subscription.billing_cycle = frequency
         period_start = subscription.current_period_start or datetime.now(timezone.utc)
-        period_end = compute_period_end(period_start, frequency)
-        subscription.current_period_end = period_end
-        subscription.next_billing_date = period_end
+        subscription.current_period_end = compute_period_end(period_start, frequency)
 
         await self.db.commit()
         return await self.get(subscription.id)
@@ -721,7 +731,7 @@ class SubscriptionService:
         subscription = result.scalar_one_or_none()
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
-
+        await self._close_open_renewal(subscription, "subscription deleted")
 
         # Delete all child rows that lack DB-level CASCADE
         await self.db.execute(

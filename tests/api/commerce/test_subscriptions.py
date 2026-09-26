@@ -438,9 +438,11 @@ class TestSubscriptionEndpoints:
         response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=auth_headers)
         assert response.status_code == 403
 
-    async def test_trigger_notifications_as_admin(self, async_client: AsyncClient, admin_headers):
+    async def test_trigger_notifications_as_admin(self, async_client: AsyncClient, admin_headers, mocker):
+        mocker.patch("services.accounts.email.EmailService.send_subscription_reminder", return_value=None)
         response = await async_client.post("/v1/subscriptions/trigger-notifications/", headers=admin_headers)
         assert response.status_code == 200
+        assert isinstance(response.json()["data"]["sent"], int)
 
     async def test_calculate_cost(self, async_client: AsyncClient, auth_headers, subscription_variant):
         response = await async_client.post("/v1/subscriptions/calculate-cost/",
@@ -452,9 +454,22 @@ class TestSubscriptionEndpoints:
         response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=auth_headers)
         assert response.status_code == 403
 
-    async def test_trigger_processing_as_admin(self, async_client: AsyncClient, admin_headers):
+    async def test_trigger_processing_as_admin(self, async_client: AsyncClient, admin_headers, mocker):
+        # The test database holds other data too; don't bill it.
+        batch = mocker.patch(
+            "services.commerce.subscriptions_scheduler.SubscriptionScheduler.process_due_subscriptions",
+            return_value={"processed_count": 0, "failed_count": 0, "total_due": 0},
+        )
         response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
         assert response.status_code == 200
+        batch.assert_awaited_once()
+
+    async def test_trigger_processing_while_renewals_run_is_409(self, async_client: AsyncClient, admin_headers, db_session: AsyncSession):
+        from services.commerce.subscriptions_scheduler import renewal_lock
+        async with renewal_lock(db_session) as acquired:
+            assert acquired
+            response = await async_client.post("/v1/subscriptions/trigger-order-processing/", headers=admin_headers)
+        assert response.status_code == 409
 
     async def test_list_due_requires_admin(self, async_client: AsyncClient, auth_headers):
         response = await async_client.get("/v1/subscriptions/due/", headers=auth_headers)
@@ -465,23 +480,27 @@ class TestSubscriptionEndpoints:
         assert response.status_code == 200
         assert isinstance(response.json()["data"], list)
 
-    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, test_user, db_session: AsyncSession, mocker):
+    async def test_process_shipment(self, async_client: AsyncClient, admin_headers, created_subscription, test_user, db_session: AsyncSession, mocker):
+        """An admin bills a customer's subscription now with the customer's saved card (Stripe test mode)."""
+        import stripe
         from models.commerce.payments import PaymentMethod, PaymentType, PaymentProvider, CardBrand
-        payment_method = PaymentMethod(
+        mocker.patch("services.commerce.orders.OrderService._send_confirmation_email", return_value=None)
+        db_session.add(PaymentMethod(
             id=uuid7(), user_id=test_user.id, type=PaymentType.CARD, provider=PaymentProvider.STRIPE,
             last_four="4242", expiry_month=12, expiry_year=2099, brand=CardBrand.VISA,
-            stripe_payment_method_id=f"pm_test_{uuid4().hex[:16]}", is_default=True, is_active=True,
-        )
-        db_session.add(payment_method)
+            stripe_payment_method_id=stripe.PaymentMethod.create(type="card", card={"token": "tok_visa"}).id,
+            is_default=True, is_active=True,
+        ))
         await db_session.commit()
 
-        mocker.patch(
-            "services.commerce.payments.PaymentService.process_idempotent",
-            return_value={"status": "succeeded"},
-        )
-        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=admin_headers)
         assert response.status_code == 200
         assert response.json()["data"]["subscription_id"] == created_subscription["id"]
+        assert response.json()["data"]["order_number"].startswith("SUB-")
+
+    async def test_process_shipment_is_admin_only(self, async_client: AsyncClient, auth_headers, created_subscription):
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        assert response.status_code == 403
 
     async def test_calculate_cost_unknown_variant_is_rejected(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post("/v1/subscriptions/calculate-cost/",
@@ -496,21 +515,20 @@ class TestSubscriptionEndpoints:
         assert response.status_code == 200
         assert {"subtotal", "tax", "total", "currency"} <= set(response.json()["data"])
 
-    async def test_process_shipment_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/process-shipment/", headers=auth_headers)
+    async def test_process_shipment_unknown_subscription_is_404(self, async_client: AsyncClient, admin_headers):
+        response = await async_client.post(f"/v1/subscriptions/{uuid4()}/process-shipment/", headers=admin_headers)
         assert response.status_code == 404
 
-    async def test_process_shipment_paused_subscription_is_400(self, async_client: AsyncClient, auth_headers, created_subscription):
+    async def test_process_shipment_paused_subscription_is_400(self, async_client: AsyncClient, auth_headers, admin_headers, created_subscription):
         await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/pause/", headers=auth_headers)
-        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=admin_headers)
         assert response.status_code == 400
 
-    async def test_process_shipment_without_a_payment_method_is_500(self, async_client: AsyncClient, auth_headers, created_subscription):
-        """No default payment method on the account -> the scheduler's
-        process_subscription() reports a failure dict, which this endpoint
-        must translate into an error response instead of pretending success."""
-        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
-        assert response.status_code == 500
+    async def test_process_shipment_without_a_payment_method_explains_the_decline(self, async_client: AsyncClient, admin_headers, created_subscription, mocker):
+        mocker.patch("services.accounts.email.EmailService.send_subscription_payment_failed", return_value=None)
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=admin_headers)
+        assert response.status_code == 400
+        assert "no saved card" in response.json()["message"]
 
     # -- process-shipment branches -----------------------------------------------
 
@@ -657,7 +675,7 @@ class TestUnexpectedErrorsBecomeSafe500s:
             headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
         assert response.status_code == 400
 
-    async def test_process_shipment(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
-        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=auth_headers)
+    async def test_process_shipment(self, async_client: AsyncClient, admin_headers, created_subscription, mocker):
+        mocker.patch("services.commerce.subscriptions_scheduler.SubscriptionScheduler.process_subscription", side_effect=Exception("boom"))
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/process-shipment/", headers=admin_headers)
         assert response.status_code == 500

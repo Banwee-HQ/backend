@@ -568,20 +568,18 @@ class TestCreateMethodStripeDeclineAtAttach:
             await service.create_method(user_id=uuid4(), stripe_payment_method_id=fresh_stripe_payment_method_id())
         assert exc_info.value.status_code == 404
 
-    async def test_attach_failure_other_than_already_attached_is_raised(self, db_session, test_user):
-        """A customer that retrieve() still returns (Stripe returns deleted customers
-        without erroring) but that attach() itself refuses (deleted customers are
-        rejected there) - the attach except's `if 'already' not in message: raise`
-        branch, as opposed to the 'already attached elsewhere' tolerance branch above."""
+    async def test_recovers_from_a_deleted_customer(self, db_session, test_user):
+        """Stripe still returns a deleted customer from retrieve(); saving a card
+        gives the user a fresh customer instead of failing."""
         deleted_customer = stripe.Customer.create(email=f"del-{uuid4().hex[:8]}@example.com")
         stripe.Customer.delete(deleted_customer.id)
         test_user.stripe_customer_id = deleted_customer.id
         await db_session.commit()
 
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
-        assert exc_info.value.status_code == 400
+        pm = await PaymentService(db_session).create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
+        assert pm is not None
+        await db_session.refresh(test_user)
+        assert test_user.stripe_customer_id != deleted_customer.id
 
 # --------------------------------------------------------------------------- update() / set_default() - additional edge cases ---------------------------------------------------------------------------
 

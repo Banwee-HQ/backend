@@ -281,6 +281,17 @@ class EmailService:
         )
         print(f"📧 Order delivered email sent to {recipient_email}")
 
+    async def send_subscription_reminder(
+        self, user_email: str, customer_name: str, subscription_id: str, subscription_name: str, delivery_date: str, amount: str
+    ):
+        """Tell a subscriber their next delivery (and charge) is coming up."""
+        html_content = await self.render_email_with_template("account/subscription_reminder.html", {
+            "customer_name": customer_name, "subscription_name": subscription_name,
+            "delivery_date": delivery_date, "amount": amount,
+            "subscription_url": f"{settings.FRONTEND_URL}/account/subscriptions/{subscription_id}",
+        })
+        await send_email_brevo(to_email=user_email, subject=f"Your next {subscription_name} delivery is on {delivery_date}", html_content=html_content)
+
     async def send_subscription_payment_failed(
         self,
         user_email: str,
@@ -295,7 +306,8 @@ class EmailService:
             "subscription_id": subscription_id,
             "error_message": error_message,
             "retry_count": retry_count,
-            "update_payment_url": f"{settings.FRONTEND_URL}/account/subscriptions/{subscription_id}/payment",
+            # Before the pause the renewal can still be paid; after it, the customer fixes their card and resumes.
+            "update_payment_url": f"{settings.FRONTEND_URL}/account/{'payment-methods' if retry_count >= 3 else 'payments'}",
             "subscription_url": f"{settings.FRONTEND_URL}/account/subscriptions/{subscription_id}",
             "company_name": "Banwee",
             "support_email": "support@banwee.com",

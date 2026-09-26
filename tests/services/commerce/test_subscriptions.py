@@ -128,17 +128,6 @@ class TestCreate:
             await service.create(user_id=test_user.id, name="Theirs", variant_ids=[str(variant.id)], delivery_address_id=address.id)
         assert exc_info.value.status_code == 400
 
-    async def test_zero_priced_variant_falls_back_to_minimum_price(self, db_session, test_user):
-        category = Category(id=uuid7(), name="FreeCat", slug=f"freecat-{uuid4().hex[:8]}")
-        product = Product(id=uuid7(), name="Freebie", slug=f"freebie-{uuid4().hex[:8]}", category_id=category.id)
-        free_variant = ProductVariant(id=uuid7(), product_id=product.id, sku=f"FREE-{uuid4().hex[:8]}", name="Free", base_price=Decimal("0.00"))
-        db_session.add_all([category, product, free_variant])
-        await db_session.commit()
-
-        service = SubscriptionService(db_session)
-        sub = await service.create(user_id=test_user.id, name="Free Sub", variant_ids=[str(free_variant.id)])
-        assert sub.variant_prices_at_creation[0]["price"] == pytest.approx(9.99)
-
 
 class TestGetShippingCost:
 
@@ -152,12 +141,13 @@ class TestGetShippingCost:
         cost = await service._get_shipping_cost(None)
         assert cost <= Decimal("10.00")
 
-    async def test_falls_back_to_flat_rate_when_no_methods_exist(self, db_session):
-        service = SubscriptionService(db_session)
-        cost = await service._get_shipping_cost(uuid4())
-        # Either the 8.99 hardcoded fallback, or a cheapest-active-method from
-        # other tests' leaked data (commits aren't rolled back mid-suite).
-        assert cost > Decimal("0.00")
+    async def test_no_active_delivery_method_is_an_error(self, db_session, mocker):
+        empty = mocker.Mock()
+        empty.scalars.return_value.all.return_value = []
+        mocker.patch.object(db_session, "execute", mocker.AsyncMock(return_value=empty))
+        with pytest.raises(HTTPException) as exc_info:
+            await SubscriptionService(db_session)._get_shipping_cost(None)
+        assert exc_info.value.status_code == 400
 
 
 class TestGet:
@@ -267,13 +257,13 @@ class TestUpdate:
         assert updated.shipping_method_id == shipping_method.id
         assert updated.auto_renew is False
 
-    async def test_updates_current_period_start_and_recomputes_period_end(self, db_session, test_user, subscription):
+    async def test_moving_the_start_date_moves_the_next_delivery(self, db_session, test_user, subscription):
         service = SubscriptionService(db_session)
         start = datetime.now(timezone.utc) + timedelta(days=3)
         updated = await service.update(subscription.id, test_user.id, current_period_start=start.isoformat())
         assert updated.current_period_start.date() == start.date()
         assert updated.current_period_end > updated.current_period_start
-        assert updated.next_billing_date == updated.current_period_end
+        assert updated.next_billing_date == updated.current_period_start
 
     async def test_updates_variant_ids_and_associations(self, db_session, test_user, subscription, variant):
         category = Category(id=uuid7(), name="Cat2", slug=f"cat2-{uuid4().hex[:8]}")

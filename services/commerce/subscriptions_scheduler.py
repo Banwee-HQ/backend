@@ -1,443 +1,301 @@
-"""Subscription scheduler: automatic order creation for periodic shipments."""
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
-from sqlalchemy.orm import selectinload
+"""Subscription renewals: each due subscription gets a delivery order, paid with the customer's saved card."""
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from dateutil.relativedelta import relativedelta
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 from uuid import UUID
-from core.utils.uuid_utils import uuid7
-from core.logging import get_structured_logger
 
-from models.commerce.subscriptions import Subscription, SubscriptionStatus
-from models.commerce.orders import Order, OrderItem, OrderStatus, PaymentStatus, FulfillmentStatus, OrderSource
-from models.catalog.product import ProductVariant
-from models.accounts.user import User, Address
-from models.commerce.payments import PaymentMethod
-from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
-from services.commerce.subscriptions import SubscriptionService, compute_period_end
-from services.commerce.payments import PaymentService
-from services.accounts.email import EmailService
-from services.catalog.inventory import InventoryService
+import stripe
+from sqlalchemy import and_, or_, select, text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import selectinload
+
 from core.config import settings
+from core.logging import get_structured_logger
+from core.utils.uuid_utils import uuid7
+from models.accounts.user import Address, User
+from models.catalog.product import ProductVariant
+from models.commerce.orders import FulfillmentStatus, Order, OrderSource, OrderStatus, PaymentStatus
+from models.commerce.payments import PaymentFailureReason, PaymentIntent, PaymentMethod
+from models.commerce.subscriptions import Subscription, SubscriptionStatus
+from services.accounts.email import EmailService
+from services.commerce.orders import OrderService
+from services.commerce.payments import PaymentService
+from services.commerce.subscriptions import SubscriptionService, compute_period_end
 
 logger = get_structured_logger(__name__)
 
+# A declined renewal is tried again after these delays; the next decline pauses the subscription.
+RETRY_DELAYS = (timedelta(hours=6), timedelta(hours=24))
+# Subscribers hear about a delivery (and its charge) this long before it.
+REMINDER_LEAD = timedelta(days=3)
+# Held while renewals run, so two app processes never bill at the same time.
+RENEWAL_LOCK_ID = 7_214_001
+ACTIVE = SubscriptionStatus.ACTIVE.value
+PAYMENT_FAILED = SubscriptionStatus.PAYMENT_FAILED.value
+
+
+@asynccontextmanager
+async def renewal_lock(db: AsyncSession):
+    """Yield True if this process may run renewals now. A session-level advisory lock on its own
+    connection, so the commits made while billing don't release it."""
+    engine = db.bind if isinstance(db.bind, AsyncEngine) else db.bind.engine
+    async with engine.connect() as conn:
+        acquired = await conn.scalar(text("SELECT pg_try_advisory_lock(:id)"), {"id": RENEWAL_LOCK_ID})
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                await conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": RENEWAL_LOCK_ID})
+
+
+def _due(now: datetime):
+    return and_(
+        Subscription.auto_renew.is_(True),
+        or_(
+            and_(Subscription.status == ACTIVE, Subscription.next_billing_date <= now),
+            and_(Subscription.status == PAYMENT_FAILED, Subscription.next_retry_date <= now),
+        ),
+    )
+
+
+def _advance(subscription: Subscription, now: datetime, delivered: bool) -> None:
+    """Move to the next delivery date on the subscription's own schedule, never into the past."""
+    start = subscription.next_billing_date or now
+    end = compute_period_end(start, subscription.billing_cycle)
+    while end <= now:
+        end = compute_period_end(end, subscription.billing_cycle)
+    subscription.current_period_start = start
+    subscription.current_period_end = end
+    subscription.next_billing_date = end
+    metadata = dict(subscription.subscription_metadata or {})
+    metadata.pop("skipped_from_date", None)
+    if delivered:
+        metadata["orders_created_count"] = metadata.get("orders_created_count", 0) + 1
+        metadata["last_order_created"] = now.isoformat()
+    subscription.subscription_metadata = metadata
+
+
+async def renewal_paid(db: AsyncSession, order: Order) -> None:
+    """A renewal order was paid (by the scheduler, the customer or a webhook): reactivate and schedule the next one."""
+    subscription = await db.get(Subscription, order.subscription_id)
+    if not subscription or subscription.status == SubscriptionStatus.CANCELLED.value:
+        return
+    now = datetime.now(timezone.utc)
+    subscription.status = ACTIVE
+    subscription.payment_retry_count = 0
+    subscription.next_retry_date = None
+    subscription.last_payment_error = None
+    subscription.last_payment_attempt = now
+    subscription.paused_at = subscription.pause_reason = None
+    _advance(subscription, now, delivered=True)
+
+
+async def open_renewal(db: AsyncSession, subscription_id: UUID) -> Optional[Order]:
+    """The subscription's renewal order that is still waiting for payment, if any."""
+    return (await db.execute(
+        select(Order).where(Order.subscription_id == subscription_id, Order.payment_status == PaymentStatus.PENDING)
+        .order_by(Order.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+
+async def close_open_renewal(db: AsyncSession, subscription_id: UUID, reason: str) -> None:
+    """Drop an unpaid renewal: stop offering it for payment and give its stock back. Commits."""
+    order = await open_renewal(db, subscription_id)
+    if not order:
+        return
+    intents = (await db.execute(select(PaymentIntent).where(PaymentIntent.order_id == order.id))).scalars().all()
+    for intent in intents:
+        intent.status = "canceled"
+        try:
+            await asyncio.to_thread(stripe.PaymentIntent.cancel, intent.stripe_payment_intent_id)
+        except stripe.error.StripeError as e:
+            # Already final at Stripe (e.g. canceled); our row is what the customer sees.
+            logger.warning(f"Could not cancel Stripe intent {intent.stripe_payment_intent_id}: {e}")
+    await OrderService(db)._release_unpaid_order(order, reason)
+
 
 class SubscriptionScheduler:
-    """Service for managing subscription billing and order creation"""
-    
+    """Bills due subscriptions and retries declined renewals."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
-    
+        self.orders = OrderService(db)
+
     async def process_due_subscriptions(self) -> Dict[str, Any]:
-        """Process all subscriptions that are due for billing"""
-        current_time = datetime.now(timezone.utc)
-        
-        # Find active subscriptions due for billing OR due for retry
-        result = await self.db.execute(
-            select(Subscription).options(
-                selectinload(Subscription.shipping_method),
-                selectinload(Subscription.delivery_address),
-            ).where(
-                and_(
-                    Subscription.status.in_(["active", "payment_failed"]),
-                    or_(
-                        # Regular billing
-                        and_(
-                            Subscription.next_billing_date <= current_time,
-                            Subscription.auto_renew == True,
-                            Subscription.status == "active"
-                        ),
-                        # Payment retry
-                        and_(
-                            Subscription.next_retry_date <= current_time,
-                            Subscription.status == "payment_failed",
-                            Subscription.payment_retry_count < 3
-                        )
-                    )
-                )
-            ).options(selectinload(Subscription.products))
-        )
-        
-        due_subscriptions = result.scalars().all()
-        # Captured now: a sibling's rollback later in the loop expires every
-        # attribute on every object in this shared session, including .id.
-        due_ids = [s.id for s in due_subscriptions]
-
-        processed_count = 0
-        failed_count = 0
-        results = []
-
-        for subscription_id in due_ids:
+        """Renew every due subscription; one failure never stops the rest."""
+        now = datetime.now(timezone.utc)
+        ids = (await self.db.execute(select(Subscription.id).where(_due(now)))).scalars().all()
+        counts = {"paid": 0, "declined": 0, "pending": 0, "skipped": 0, "error": 0}
+        for subscription_id in ids:
             try:
-                result = await self.process_subscription(subscription_id)
-                if result["success"]:
-                    processed_count += 1
-                    results.append({
-                        "subscription_id": str(subscription_id),
-                        "order_id": result["order_id"],
-                        "order_number": result["order_number"],
-                        "user_email": result["user_email"],
-                        "status": "success"
-                    })
-                else:
-                    failed_count += 1
-                    results.append({
-                        "subscription_id": str(subscription_id),
-                        "status": "failed",
-                        "reason": result.get("error", "Unknown error"),
-                        "retry_count": result.get("retry_count")
-                    })
+                outcome = await self.process_subscription(subscription_id)
             except Exception as e:
-                failed_count += 1
-                results.append({
-                    "subscription_id": str(subscription_id),
-                    "status": "failed",
-                    "reason": str(e)
-                })
-                logger.error(f"Failed to process subscription {subscription_id}: {e}")
-
-        return {
-            "processed_count": processed_count,
-            "failed_count": failed_count,
-            "total_due": len(due_subscriptions),
-            "results": results
-        }
-
-    async def process_subscription(self, subscription_id: UUID) -> Dict[str, Any]:
-        """Process a single subscription - payment first, then order"""
-        try:
-            # Always fetch fresh: in the batch loop, a sibling's rollback expires
-            # every attribute on every object already loaded in this session.
-            result = await self.db.execute(
-                select(Subscription).where(Subscription.id == subscription_id).options(
-                    selectinload(Subscription.shipping_method),
-                    selectinload(Subscription.delivery_address),
-                )
-            )
-            subscription = result.scalar_one_or_none()
-            if not subscription:
-                return {
-                    "success": False,
-                    "subscription_id": str(subscription_id),
-                    "message": "Subscription not found"
-                }
-
-            # Check subscription status before processing
-            if subscription.status not in ["active"]:
-                logger.info(f"Skipping subscription {subscription.id} - status is {subscription.status}, not active")
-                return {
-                    "success": False,
-                    "subscription_id": str(subscription.id),
-                    "message": f"Subscription is not active (status: {subscription.status})"
-                }
-
-            # Check auto-renew is enabled
-            if not subscription.auto_renew:
-                logger.info(f"Skipping subscription {subscription.id} - auto-renew is disabled")
-                return {
-                    "success": False,
-                    "subscription_id": str(subscription.id),
-                    "message": "Auto-renew is disabled"
-                }
-
-            # Get user
-            user_result = await self.db.execute(
-                select(User).where(User.id == subscription.user_id)
-            )
-            user = user_result.scalar_one_or_none()
-            if not user:
-                raise Exception(f"User not found for subscription {subscription.id}")
-            
-            # Get variants
-            if not subscription.variant_ids:
-                raise Exception(f"No products in subscription {subscription.id}")
-            
-            variant_uuids = [UUID(vid) for vid in subscription.variant_ids]
-            variant_result = await self.db.execute(
-                select(ProductVariant).where(
-                    ProductVariant.id.in_(variant_uuids)
-                ).options(selectinload(ProductVariant.product))
-            )
-            variants = variant_result.scalars().all()
-            
-            if not variants:
-                raise Exception(f"No valid variants found for subscription {subscription.id}")
-            
-            # Recalculate current pricing
-            subscription_service = SubscriptionService(self.db)
-            # Use the implemented method name to recalculate pricing
-            pricing = await subscription_service.recalc_pricing(subscription)
-            
-            # --- STEP 1: PROCESS PAYMENT FIRST ---
-            # Get user's default payment method
-            payment_method_result = await self.db.execute(
-                select(PaymentMethod).where(
-                    and_(
-                        PaymentMethod.user_id == subscription.user_id,
-                        PaymentMethod.is_default == True
-                    )
-                )
-            )
-            payment_method = payment_method_result.scalar_one_or_none()
-            
-            if not payment_method:
-                raise Exception(f"No default payment method found for user {subscription.user_id}")
-            
-            # Generate order number and ID
-            order_number = await self._generate_order_number()
-            order_id = uuid7()
-
-            # PaymentIntent.order_id is a real FK, so insert a placeholder order now
-            # (same pattern as OrderService.create()) and fill in totals after payment.
-            shipping_address = await self._get_shipping_address(subscription)
-            order = Order(
-                id=order_id,
-                user_id=subscription.user_id,
-                order_number=order_number,
-                order_status=OrderStatus.PENDING,
-                payment_status=PaymentStatus.PENDING,
-                fulfillment_status=FulfillmentStatus.UNFULFILLED,
-                source=OrderSource.API,
-                subtotal=0,
-                tax_amount=0,
-                shipping_cost=0,
-                total_amount=0,
-                currency=subscription.currency or settings.STORE_CURRENCY,
-                shipping_address=shipping_address,
-                billing_address=shipping_address,
-                subscription_id=subscription.id
-            )
-            self.db.add(order)
-            await self.db.flush()
-
-            payment_service = PaymentService(self.db)
-            payment_result = await payment_service.process_idempotent(
-                user_id=subscription.user_id,
-                order_id=order_id,
-                amount=pricing["total"],
-                payment_method_id=payment_method.id,
-                idempotency_key=f"subscription_{subscription.id}_{order_id}",
-                request_id=str(order_id)
-            )
-
-            # Check payment status
-            if payment_result.get("status") != "succeeded":
-                error_message = payment_result.get("error", "Payment processing failed")
-
-                order.order_status = OrderStatus.CANCELLED
-                order.payment_status = PaymentStatus.FAILED
-
-                # Update retry tracking
-                subscription.payment_retry_count = (subscription.payment_retry_count or 0) + 1
-                subscription.last_payment_attempt = datetime.now(timezone.utc)
-                subscription.last_payment_error = error_message
-                
-                # Determine retry schedule
-                if subscription.payment_retry_count == 1:
-                    # First failure: retry in 6 hours
-                    subscription.next_retry_date = datetime.now(timezone.utc) + timedelta(hours=6)
-                    subscription.status = SubscriptionStatus.PAYMENT_FAILED.value
-                    
-                    logger.warning(f"Payment failed for subscription {subscription.id} (attempt 1/3). Retry in 6 hours.")
-                    
-                elif subscription.payment_retry_count == 2:
-                    # Second failure: retry in 24 hours (next day)
-                    subscription.next_retry_date = datetime.now(timezone.utc) + timedelta(hours=24)
-                    subscription.status = SubscriptionStatus.PAYMENT_FAILED.value
-                    
-                    logger.warning(f"Payment failed for subscription {subscription.id} (attempt 2/3). Retry in 24 hours.")
-                    
-                else:
-                    # Third failure: pause subscription
-                    subscription.status = SubscriptionStatus.PAUSED.value
-                    subscription.paused_at = datetime.now(timezone.utc)
-                    subscription.pause_reason = f"Payment failed after 3 attempts: {error_message}"
-                    subscription.next_retry_date = None
-                    
-                    logger.error(f"Payment failed for subscription {subscription.id} (attempt 3/3). Subscription paused.")
-                    
-                    # Send email notification about paused subscription
-                    try:
-                        # Note: This needs BackgroundTasks, but scheduler runs in background
-                        # For now, send directly via EmailService (already handled)
-                        email_service = EmailService(self.db)
-                        await email_service.send_subscription_payment_failed(
-                            user_email=user.email,
-                            subscription_id=str(subscription.id),
-                            subscription_name=subscription.name,
-                            error_message=error_message,
-                            retry_count=subscription.payment_retry_count
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to send payment failure email: {e}")
-                
-                await self.db.commit()
-                
-                return {
-                    "success": False,
-                    "error": error_message,
-                    "retry_count": subscription.payment_retry_count,
-                    "next_retry": subscription.next_retry_date.isoformat() if subscription.next_retry_date else None
-                }
-            
-            logger.info(f"✅ Payment succeeded for subscription {subscription.id}, creating order...")
-
-            # --- STEP 2 onward: FINALIZE ORDER (only after successful payment) --- Stripe has already been charged and that Transaction record is durably committed (process_idempotent() commits it internally). Everything from here on is its own failure domain: if any of it raises, we must NOT let the generic except below roll back to a state where next_billing_date was never advanced - that would leave this subscription "due" again on the next scheduler run with a fresh idempotency key, charging the customer a second time for the same period. On failure here we pause the subscription instead, so it stops being auto-billed until a human reconciles the already-successful charge with its stuck order.
-            try:
-                # Fill in the placeholder order created before payment with its real totals/status.
-                order.order_status = OrderStatus.CONFIRMED
-                order.payment_status = PaymentStatus.PAID
-                order.subtotal = pricing["subtotal"]
-                order.tax_amount = pricing["tax"]
-                order.shipping_cost = pricing["shipping"]
-                order.discount_amount = pricing.get("discount", 0.0)
-                order.total_amount = pricing["total"]
-                order.shipping_method = subscription.shipping_method.name if subscription.shipping_method else "standard"
-                await self.db.flush()
-
-                # --- CREATE ORDER ITEMS ---
-                for variant_price in pricing["variant_prices"]:
-                    variant_id = UUID(variant_price["id"])
-                    variant = next((v for v in variants if v.id == variant_id), None)
-
-                    if variant:
-                        qty = variant_price["qty"]
-                        price = variant_price["price"]
-
-                        order_item = OrderItem(
-                            order_id=order.id,
-                            variant_id=variant.id,
-                            quantity=qty,
-                            price_per_unit=price,
-                            total_price=price * qty
-                        )
-
-                        self.db.add(order_item)
-
-                await self.db.flush()
-
-                # --- UPDATE INVENTORY ---
-                inventory_service = InventoryService(self.db, None)
-
-                for variant_price in pricing["variant_prices"]:
-                    variant_id = UUID(variant_price["id"])
-                    qty = variant_price["qty"]
-
-                    adjustment = StockAdjustmentCreate(
-                        variant_id=variant_id,
-                        quantity_change=-qty,
-                        reason=f"Subscription order: {order.order_number}",
-                        notes=f"Auto-adjusted for subscription {subscription.id}"
-                    )
-
-                    await inventory_service.adjust_stock(
-                        adjustment,
-                        adjusted_by_user_id=subscription.user_id,
-                        commit=False
-                    )
-
-                # --- UPDATE SUBSCRIPTION ---
-                subscription.status = SubscriptionStatus.ACTIVE.value
-                subscription.last_payment_error = None
-                subscription.payment_retry_count = 0  # Reset retry count on success
-                subscription.last_payment_attempt = datetime.now(timezone.utc)
-                subscription.next_retry_date = None
-
-                # Update billing dates
-                await self._update_billing_dates(subscription)
-
-                await self.db.commit()
-
-                logger.info(f"✅ Successfully created subscription order {order.order_number}")
-
-                return {
-                    "success": True,
-                    "order_id": str(order.id),
-                    "order_number": order.order_number,
-                    "user_email": user.email
-                }
-            except Exception as finalize_error:
                 await self.db.rollback()
-                logger.critical(
-                    f"Subscription {subscription_id} was charged successfully but order "
-                    f"finalization failed - pausing to prevent a duplicate charge on retry: {finalize_error}"
-                )
-                # Re-fetch by the original subscription_id param: the rollback above expired every attribute on the (now stale) `subscription` object, so reading subscription.id here would itself crash.
-                sub_result = await self.db.execute(select(Subscription).where(Subscription.id == subscription_id))
-                subscription = sub_result.scalar_one()
-                subscription.status = SubscriptionStatus.PAUSED.value
-                subscription.paused_at = datetime.now(timezone.utc)
-                subscription.pause_reason = (
-                    f"Payment succeeded but order finalization failed: {finalize_error}. "
-                    "Needs manual reconciliation before resuming."
-                )
-                await self.db.commit()
-                return {
-                    "success": False,
-                    "error": f"Payment succeeded but order finalization failed: {finalize_error}",
-                    "needs_manual_reconciliation": True
-                }
-
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Failed to process subscription {subscription_id}: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-    
-    async def _generate_order_number(self) -> str:
-        """Generate unique order number"""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-        # The first 8 chars of a UUID7 are its timestamp, not random, so a batch
-        # run would produce near-identical prefixes; use the random tail instead.
-        short_uuid = str(uuid7()).replace('-', '')[-8:].upper()
-        return f"SUB-{timestamp}-{short_uuid}"
-    
-    async def _get_shipping_address(self, subscription: Subscription) -> Dict[str, Any]:
-        """Get shipping address for subscription order"""
-        if subscription.delivery_address_id:
-            address_result = await self.db.execute(
-                select(Address).where(Address.id == subscription.delivery_address_id)
-            )
-            address = address_result.scalar_one_or_none()
-            if address:
-                return {
-                    "street": address.street,
-                    "city": address.city,
-                    "state": address.state,
-                    "country": address.country,
-                    "post_code": address.post_code,
-                    "type": "shipping",
-                    "delivery_type": subscription.shipping_method.name if subscription.shipping_method else "standard"
-                }
-
+                logger.exception(f"Renewal of subscription {subscription_id} failed: {e}")
+                outcome = "error"
+            counts[outcome] += 1
         return {
-            "type": "shipping",
-            "delivery_type": subscription.shipping_method.name if subscription.shipping_method else "standard"
+            "processed_count": counts["paid"],
+            "failed_count": counts["declined"] + counts["error"],
+            "total_due": len(ids),
+            **counts,
         }
-    
-    async def _update_billing_dates(self, subscription: Subscription):
-        """Update subscription billing dates, using relativedelta so month/year-end dates roll over correctly."""
-        current_period_end = subscription.current_period_end or datetime.now(timezone.utc)
-        next_period_end = compute_period_end(current_period_end, subscription.billing_cycle)
 
-        subscription.current_period_start = current_period_end
-        subscription.current_period_end = next_period_end
-        subscription.next_billing_date = next_period_end
-        
-        # Update metadata - reassign a new dict, since mutating the existing one in
-        # place doesn't register as a change on a plain JSON column.
-        metadata = dict(subscription.subscription_metadata or {})
-        metadata.update({
-            "last_order_created": datetime.now(timezone.utc).isoformat(),
-            "orders_created_count": metadata.get("orders_created_count", 0) + 1
-        })
-        subscription.subscription_metadata = metadata
-        
-        logger.info(f"Updated billing dates for subscription {subscription.id}: next billing on {next_period_end.date()}")
+    async def send_upcoming_reminders(self) -> int:
+        """Email each subscriber once before their next delivery; returns how many were sent."""
+        now = datetime.now(timezone.utc)
+        subscriptions = (await self.db.execute(select(Subscription).where(
+            Subscription.status == ACTIVE, Subscription.auto_renew.is_(True),
+            Subscription.next_billing_date > now, Subscription.next_billing_date <= now + REMINDER_LEAD,
+        ))).scalars().all()
+        sent = 0
+        for subscription in subscriptions:
+            metadata = dict(subscription.subscription_metadata or {})
+            delivery = subscription.next_billing_date.isoformat()
+            if metadata.get("reminded_for") == delivery:
+                continue
+            user = await self.db.get(User, subscription.user_id)
+            try:
+                await EmailService(self.db).send_subscription_reminder(
+                    user_email=user.email, customer_name=user.firstname or "", subscription_id=str(subscription.id),
+                    subscription_name=subscription.name, delivery_date=subscription.next_billing_date.strftime("%B %d, %Y"),
+                    amount=f"{subscription.currency} {float(subscription.current_total or 0):.2f}",
+                )
+            except Exception as e:
+                logger.error(f"Failed to send renewal reminder for subscription {subscription.id}: {e}")
+                continue
+            metadata["reminded_for"] = delivery
+            subscription.subscription_metadata = metadata
+            await self.db.commit()
+            sent += 1
+        return sent
 
+    async def process_subscription(self, subscription_id: UUID) -> str:
+        """Renew one subscription: 'paid', 'declined', 'pending' (bank still processing), 'skipped' or 'error'."""
+        now = datetime.now(timezone.utc)
+        subscription = (await self.db.execute(
+            select(Subscription).where(Subscription.id == subscription_id, _due(now))
+            .options(selectinload(Subscription.shipping_method)).with_for_update(skip_locked=True)
+        )).scalar_one_or_none()
+        if not subscription:
+            return "skipped"
 
-# Standalone function for background task
+        order = await open_renewal(self.db, subscription.id) or await self._new_order(subscription)
+        if not order:
+            _advance(subscription, now, delivered=False)
+            await self.db.commit()
+            logger.warning(f"Subscription {subscription.id} skipped a delivery: nothing in stock")
+            return "skipped"
+
+        # The default card, else the newest one (older accounts may have none marked default).
+        card = await self.db.scalar(select(PaymentMethod).where(
+            PaymentMethod.user_id == subscription.user_id, PaymentMethod.is_active.is_(True)
+        ).order_by(PaymentMethod.is_default.desc(), PaymentMethod.created_at.desc()).limit(1))
+        if not card:
+            return await self._declined(subscription, "There's no saved card to charge. Add a card to keep your deliveries coming.")
+
+        try:
+            intent = await PaymentService(self.db).charge_saved_card(order, card, subscription.payment_retry_count or 0)
+        except stripe.error.StripeError as e:
+            # Not a decline (e.g. Stripe unreachable): keep the order and try again on the next run.
+            await self.db.commit()
+            logger.error(f"Could not charge renewal {order.order_number}: {e}")
+            return "error"
+
+        if intent.status == "succeeded":
+            await PaymentService(self.db)._settle(intent)
+            await self.orders._send_confirmation_email(order.id)
+            logger.info(f"Subscription {subscription.id} renewed with order {order.order_number}")
+            return "paid"
+        if intent.status == "processing":
+            # The bank settles later and the webhook finishes the renewal; until then each run just re-checks it.
+            await self.db.commit()
+            return "pending"
+        reason = PaymentFailureReason(intent.failure_reason or PaymentFailureReason.UNKNOWN.value)
+        return await self._declined(subscription, PaymentService(self.db)._get_user_friendly_message(reason))
+
+    async def _new_order(self, subscription: Subscription) -> Optional[Order]:
+        """Create this period's delivery order with everything in stock and reserve that stock. Commits."""
+        quantities = (subscription.subscription_metadata or {}).get("variant_quantities", {})
+        variants = (await self.db.execute(
+            select(ProductVariant).where(ProductVariant.id.in_([UUID(v) for v in subscription.variant_ids or []]))
+            .options(selectinload(ProductVariant.product), selectinload(ProductVariant.inventory))
+        )).scalars().all()
+        lines = [
+            (v, int(quantities.get(str(v.id), 1))) for v in variants
+            if v.is_active and v.product and v.product.is_active
+            and v.inventory and v.inventory.quantity_available >= int(quantities.get(str(v.id), 1))
+        ]
+        if not lines:
+            return None
+
+        address = await self.db.get(Address, subscription.delivery_address_id) if subscription.delivery_address_id else None
+        address_dict = {
+            "street": address.street, "city": address.city, "state": address.state,
+            "country": address.country, "post_code": address.post_code,
+        } if address else {}
+        pricing = await SubscriptionService(self.db)._calculate_pricing(
+            [v for v, _ in lines], quantities, address_dict or None, subscription.currency or settings.STORE_CURRENCY,
+            subscription.user_id, subscription.shipping_method_id, subscription.discount_code,
+        )
+        prices = {p["id"]: p["price"] for p in pricing["variant_prices"]}
+
+        order_id = uuid7()
+        order = Order(
+            id=order_id,
+            order_number=f"SUB-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{order_id.hex[-12:].upper()}",
+            user_id=subscription.user_id,
+            subscription_id=subscription.id,
+            order_status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            fulfillment_status=FulfillmentStatus.UNFULFILLED,
+            source=OrderSource.API,
+            subtotal=pricing["subtotal"],
+            shipping_cost=pricing["shipping"],
+            tax_amount=pricing["tax"],
+            tax_rate=pricing["tax_rate"],
+            discount_amount=pricing["discount"],
+            total_amount=pricing["total"],
+            currency=subscription.currency or settings.STORE_CURRENCY,
+            shipping_method=subscription.shipping_method.name if subscription.shipping_method else "standard",
+            shipping_address=dict(address_dict),
+            billing_address=dict(address_dict),
+        )
+        self.db.add(order)
+        await self.db.flush()
+        for variant, quantity in lines:
+            await self.orders._reserve_line(order, variant, quantity, prices[str(variant.id)])
+        # Committed before charging, so a crash mid-charge finds this order (and its Stripe intent) again.
+        await self.db.commit()
+        return order
+
+    async def _declined(self, subscription: Subscription, message: str) -> str:
+        """Record a failed renewal attempt: retry later, or pause after the last retry. Emails the customer."""
+        now = datetime.now(timezone.utc)
+        attempt = (subscription.payment_retry_count or 0) + 1
+        subscription.payment_retry_count = attempt
+        subscription.last_payment_attempt = now
+        subscription.last_payment_error = message
+        if attempt <= len(RETRY_DELAYS):
+            subscription.status = PAYMENT_FAILED
+            subscription.next_retry_date = now + RETRY_DELAYS[attempt - 1]
+            await self.db.commit()
+        else:
+            subscription.status = SubscriptionStatus.PAUSED.value
+            subscription.paused_at = now
+            subscription.pause_reason = f"Payment failed {attempt} times: {message}"
+            subscription.next_retry_date = None
+            await self.db.flush()
+            await close_open_renewal(self.db, subscription.id, "subscription paused after failed payments")
+        logger.warning(f"Renewal payment for subscription {subscription.id} failed (attempt {attempt}): {message}")
+
+        try:
+            user = await self.db.get(User, subscription.user_id)
+            await EmailService(self.db).send_subscription_payment_failed(
+                user_email=user.email, subscription_id=str(subscription.id), subscription_name=subscription.name,
+                error_message=message, retry_count=attempt,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send payment failure email for subscription {subscription.id}: {e}")
+        return "declined"

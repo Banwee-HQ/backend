@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, status, BackgroundTasks, HTTPExce
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
+from datetime import datetime, timezone
 from typing import Optional
 from core.db import get_db, logger
 from core.dependencies import require_auth
@@ -12,10 +13,11 @@ from services.commerce.subscriptions import SubscriptionService
 from models.accounts.user import User, UserRole, Address
 from models.catalog.product import ProductVariant
 from models.commerce.subscriptions import Subscription
+from models.commerce.orders import Order
 from sqlalchemy import select, and_
 from core.dependencies import require_admin, require_auth
 from schemas.commerce.subscriptions import Create, Update, CostCalculation, AddProducts, RemoveProducts, UpdateQuantity, DiscountApplication, ChangeFrequency, SkipShipment
-from services.commerce.subscriptions_scheduler import SubscriptionScheduler
+from services.commerce.subscriptions_scheduler import SubscriptionScheduler, renewal_lock
 from core.config import settings
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
@@ -26,10 +28,12 @@ async def trigger_order_processing(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Manually trigger subscription order processing (admin only)."""
+    """Run the renewal job now; it also runs every hour (admin only)."""
     try:
-        scheduler = SubscriptionScheduler(db)
-        result = await scheduler.process_due_subscriptions()
+        async with renewal_lock(db) as acquired:
+            if not acquired:
+                raise APIException(status_code=status.HTTP_409_CONFLICT, message="Renewals are already running. Try again in a minute.")
+            result = await SubscriptionScheduler(db).process_due_subscriptions()
         return Response.success(data=result, message="Subscription order processing triggered successfully")
     except APIException:
         raise
@@ -48,9 +52,10 @@ async def trigger_notifications(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Manually trigger subscription order notifications (admin only)."""
+    """Send the upcoming-delivery reminders now (they also go out automatically) (admin only)."""
     try:
-        return Response.success(message="Subscription order notifications triggered successfully")
+        sent = await SubscriptionScheduler(db).send_upcoming_reminders()
+        return Response.success(data={"sent": sent}, message=f"Sent {sent} reminder email{'' if sent == 1 else 's'}")
     except Exception as e:
         logger.error(f"Error triggering subscription notifications: {e}")
         raise APIException(
@@ -488,40 +493,43 @@ async def delete(
 @router.post("/{subscription_id}/process-shipment/")
 async def process_shipment(
     subscription_id: UUID,
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Manually trigger shipment processing for a subscription."""
+    """Bill one active subscription and create its delivery order now; its schedule restarts from today (admin only)."""
     try:
-        subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.get(subscription_id, current_user.id)
+        subscription = await db.get(Subscription, subscription_id)
         if not subscription:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Subscription not found"
-            )
+            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="Subscription not found")
         if subscription.status != "active":
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="Can only process shipments for active subscriptions"
-            )
-        # Create order from subscription
-        scheduler = SubscriptionScheduler(db)
-        result = await scheduler.process_subscription(subscription_id)
-        if result.get("success"):
+            raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="Can only process shipments for active subscriptions")
+        now = datetime.now(timezone.utc)
+        if not subscription.next_billing_date or subscription.next_billing_date > now:
+            subscription.next_billing_date = now
+            await db.commit()
+
+        async with renewal_lock(db) as acquired:
+            if not acquired:
+                raise APIException(status_code=status.HTTP_409_CONFLICT, message="Renewals are already running. Try again in a minute.")
+            outcome = await SubscriptionScheduler(db).process_subscription(subscription_id)
+        order = (await db.execute(
+            select(Order).where(Order.subscription_id == subscription_id).order_by(Order.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        if outcome == "paid":
             return Response.success(
-                data={
-                    "subscription_id": str(subscription_id),
-                    "order_id": result["order_id"],
-                    "order_number": result["order_number"]
-                },
+                data={"subscription_id": str(subscription_id), "order_id": str(order.id), "order_number": order.order_number},
                 message="Subscription shipment processed successfully"
             )
-        else:
-            raise APIException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=f"Failed to create order from subscription: {result.get('error', 'unknown error')}"
-            )
+        await db.refresh(subscription)
+        reasons = {
+            "declined": f"The payment didn't go through: {subscription.last_payment_error}",
+            "pending": "The payment is still processing; the order is confirmed when it clears.",
+            "skipped": "Nothing in this subscription is in stock, so this delivery was skipped.",
+        }
+        raise APIException(
+            status_code=status.HTTP_400_BAD_REQUEST if outcome in reasons else status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=reasons.get(outcome, "We couldn't reach the payment provider. Please try again in a moment.")
+        )
     except APIException:
         raise
     except HTTPException:

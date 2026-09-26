@@ -189,6 +189,13 @@ class WebhookService:
                 "order_id": str(transaction.order_id) if transaction.order_id else None
             }
         
+        intent = (await self.db.execute(
+            select(PaymentIntent).where(PaymentIntent.stripe_payment_intent_id == stripe_payment_intent_id)
+        )).scalar_one_or_none()
+        if intent:
+            # E.g. a renewal that settled after the scheduler saw it "processing".
+            await PaymentService(self.db)._settle(intent)
+            return {"action": "payment_confirmed", "order_id": str(intent.order_id) if intent.order_id else None}
         else:
             logger.warning(f"Transaction not found for payment intent {stripe_payment_intent_id}")
             return {
@@ -224,7 +231,8 @@ class WebhookService:
                     select(Order).where(Order.id == transaction.order_id).with_for_update()
                 )
                 order = order_result.scalar_one_or_none()
-                if order:
+                # Unpaid renewals stay open: the subscription scheduler retries them.
+                if order and not order.subscription_id:
                     await OrderService(self.db)._release_unpaid_order(order, "payment failed")
 
             await self.db.commit()

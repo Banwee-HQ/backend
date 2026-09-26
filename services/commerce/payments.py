@@ -19,7 +19,7 @@ from decimal import Decimal
 import time
 import asyncio
 from models.commerce.payments import CardBrand
-from models.commerce.subscriptions import Subscription, SubscriptionStatus
+from models.commerce.orders import Order
 from services.commerce.payment_failure_handler import PaymentFailureHandler
 from typing import Optional, List, Dict, Any
 
@@ -69,46 +69,11 @@ class PaymentService:
                 # Get payment method details from Stripe
                 stripe_pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, stripe_payment_method_id)
 
-                # Ensure user has a Stripe customer and attach payment method
-                user_result = await self.db.execute(select(User).where(User.id == user_id))
-                user = user_result.scalar_one_or_none()
+                user = await self.db.get(User, user_id)
                 if not user:
                     raise HTTPException(status_code=404, detail="User not found")
+                await self._attach_card(user, stripe_payment_method_id)
 
-                if user.stripe_customer_id:
-                    try:
-                        await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)
-                    except stripe.error.InvalidRequestError as retrieve_error:
-                        if "No such customer" in str(retrieve_error):
-                            customer = await asyncio.to_thread(
-                                stripe.Customer.create,
-                                email=getattr(user, "email", None),
-                                name=getattr(user, "full_name", None)
-                            )
-                            user.stripe_customer_id = customer.id
-                            await self.db.commit()
-                        else:
-                            raise
-                else:
-                    customer = await asyncio.to_thread(
-                        stripe.Customer.create,
-                        email=getattr(user, "email", None),
-                        name=getattr(user, "full_name", None)
-                    )
-                    user.stripe_customer_id = customer.id
-                    await self.db.commit()
-
-                try:
-                    await asyncio.to_thread(
-                        stripe.PaymentMethod.attach,
-                        stripe_payment_method_id,
-                        customer=user.stripe_customer_id
-                    )
-                except stripe.error.InvalidRequestError as attach_error:
-                    message = str(attach_error).lower()
-                    if "already" not in message:
-                        raise
-                
                 # A customer's first card becomes their default, so renewals always have a card to charge.
                 if not is_default:
                     has_default = await self.db.scalar(select(PaymentMethod.id).where(
@@ -406,9 +371,8 @@ class PaymentService:
         self,
         payment_intent_id: UUID,
         payment_method_id: str,
-        commit: bool = True
     ) -> PaymentIntent:
-        """Confirm a payment intent with optional transaction control"""
+        """Confirm a payment intent on-session (the customer is present for any bank check)."""
         result = await self.db.execute(
             select(PaymentIntent).where(PaymentIntent.id == payment_intent_id).with_for_update()
         )
@@ -438,34 +402,13 @@ class PaymentService:
             payment_intent.payment_method_id = payment_method_id
             
             if stripe_intent.status == "succeeded":
-                payment_intent.confirmed_at = datetime.now(timezone.utc)
-                if payment_intent.subscription_id:
-                    subscription = await self.db.get(Subscription, payment_intent.subscription_id)
-                    if subscription and subscription.status == SubscriptionStatus.PAYMENT_FAILED:
-                        subscription.status = SubscriptionStatus.ACTIVE
-                
-                # Create transaction record
-                transaction = Transaction(
-                    user_id=payment_intent.user_id,
-                    order_id=payment_intent.order_id,
-                    payment_intent_id=payment_intent.id,
-                    stripe_payment_intent_id=payment_intent.stripe_payment_intent_id,
-                    amount=payment_intent.amount_breakdown.get("total", 0),
-                    currency=payment_intent.currency,
-                    status="succeeded",
-                    transaction_type="payment",
-                    description="Payment processed successfully"
-                )
-                self.db.add(transaction)
-
-            elif stripe_intent.status == "requires_action":
-                payment_intent.requires_action = True
-                payment_intent.client_secret = stripe_intent.client_secret
-            
-            if commit:
+                await self._settle(payment_intent)
+            else:
+                if stripe_intent.status == "requires_action":
+                    payment_intent.requires_action = True
+                    payment_intent.client_secret = stripe_intent.client_secret
                 await self.db.commit()
-                await self.db.refresh(payment_intent)
-            
+            await self.db.refresh(payment_intent)
             return payment_intent
             
         except stripe.error.StripeError as e:
@@ -477,32 +420,30 @@ class PaymentService:
             payment_intent.failed_at = datetime.now(timezone.utc)
             payment_intent.failure_reason = str(e)
             
-            if commit:
-                await self.db.commit()
+            await self.db.commit()
+            # Handle failure comprehensively
+            try:
+                stripe_error_details = {
+                    "code": getattr(e, 'code', None),
+                    "decline_code": getattr(e, 'decline_code', None),
+                    "type": getattr(e, 'type', None),
+                    "message": str(e),
+                    "param": getattr(e, 'param', None)
+                }
                 
-                # Handle failure comprehensively
-                try:
-                    stripe_error_details = {
-                        "code": getattr(e, 'code', None),
-                        "decline_code": getattr(e, 'decline_code', None),
-                        "type": getattr(e, 'type', None),
-                        "message": str(e),
-                        "param": getattr(e, 'param', None)
+                failure_result = await failure_handler.handle_failure(
+                    payment_intent_id=payment_intent.id,
+                    stripe_error=stripe_error_details,
+                    failure_context={
+                        "payment_method_id": payment_method_id,
+                        "amount": payment_intent.amount_breakdown.get("total", 0),
+                        "currency": payment_intent.currency
                     }
-                    
-                    failure_result = await failure_handler.handle_failure(
-                        payment_intent_id=payment_intent.id,
-                        stripe_error=stripe_error_details,
-                        failure_context={
-                            "payment_method_id": payment_method_id,
-                            "amount": payment_intent.amount_breakdown.get("total", 0),
-                            "currency": payment_intent.currency
-                        }
-                    )
+                )
 
-                except Exception as handler_error:
-                    logger.error(f"Error in failure handler: {handler_error}")
-            
+            except Exception as handler_error:
+                logger.error(f"Error in failure handler: {handler_error}")
+
             raise HTTPException(status_code=400, detail=f"Payment failed: {str(e)}")
 
 
@@ -546,12 +487,9 @@ class PaymentService:
         intent.status = stripe_intent.status
         intent.requires_action = stripe_intent.status == "requires_action"
         if stripe_intent.status == "succeeded":
-            intent.confirmed_at = intent.confirmed_at or datetime.now(timezone.utc)
-            if intent.subscription_id:
-                subscription = await self.db.get(Subscription, intent.subscription_id)
-                if subscription and subscription.status == SubscriptionStatus.PAYMENT_FAILED:
-                    subscription.status = SubscriptionStatus.ACTIVE
-        await self.db.commit()
+            await self._settle(intent)
+        else:
+            await self.db.commit()
         await self.db.refresh(intent)
         return intent
 
@@ -577,6 +515,126 @@ class PaymentService:
             transaction.status = stripe_intent.status
         await self.db.flush()
         return stripe_intent.status
+
+    async def _attach_card(self, user: User, stripe_payment_method_id: str) -> str:
+        """Make sure the user has a Stripe customer holding this card; returns the customer id."""
+        async def new_customer() -> None:
+            customer = await asyncio.to_thread(
+                stripe.Customer.create, email=getattr(user, "email", None), name=getattr(user, "full_name", None)
+            )
+            user.stripe_customer_id = customer.id
+            await self.db.commit()
+
+        if user.stripe_customer_id:
+            try:
+                # Stripe still returns a deleted customer, flagged "deleted", instead of erroring.
+                if (await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)).get("deleted"):
+                    await new_customer()
+            except stripe.error.InvalidRequestError as e:
+                if "No such customer" not in str(e):
+                    raise
+                await new_customer()
+        else:
+            await new_customer()
+
+        try:
+            await asyncio.to_thread(stripe.PaymentMethod.attach, stripe_payment_method_id, customer=user.stripe_customer_id)
+        except stripe.error.InvalidRequestError as e:
+            # Stripe refuses to re-attach a card the customer already holds; that's fine.
+            message = str(e).lower()
+            if "no such customer" in message:
+                await new_customer()
+                await asyncio.to_thread(stripe.PaymentMethod.attach, stripe_payment_method_id, customer=user.stripe_customer_id)
+            elif "already" not in message:
+                raise
+        return user.stripe_customer_id
+
+    async def charge_saved_card(self, order: Order, card: PaymentMethod, attempt: int) -> PaymentIntent:
+        """Charge a saved card while the customer is away (subscription renewals); retries reuse the order's Stripe intent.
+        Returns our intent row: 'succeeded', 'processing' or 'failed'. Other Stripe errors are raised. The caller commits."""
+        intent = (await self.db.execute(
+            select(PaymentIntent).where(PaymentIntent.order_id == order.id).order_by(PaymentIntent.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        if intent:
+            # An earlier run may have been charged already (e.g. it stopped before saving the result).
+            current = await asyncio.to_thread(stripe.PaymentIntent.retrieve, intent.stripe_payment_intent_id)
+            if current.status in ("succeeded", "processing"):
+                intent.status = current.status
+                return intent
+
+        user = await self.db.get(User, order.user_id)
+        customer_id = await self._attach_card(user, card.stripe_payment_method_id)
+        key = f"renewal_{order.id}_{attempt}"
+        error = None
+        try:
+            if intent:
+                stripe_intent = await asyncio.to_thread(
+                    stripe.PaymentIntent.confirm, intent.stripe_payment_intent_id,
+                    payment_method=card.stripe_payment_method_id, off_session=True, idempotency_key=key,
+                )
+            else:
+                stripe_intent = await asyncio.to_thread(
+                    stripe.PaymentIntent.create,
+                    amount=int((Decimal(str(order.total_amount)) * 100).quantize(Decimal("1"))),
+                    currency=order.currency.lower(), customer=customer_id,
+                    payment_method=card.stripe_payment_method_id, off_session=True, confirm=True,
+                    # Cards only, no redirects: the customer's "Pay again" confirms this same intent later.
+                    automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+                    metadata={"order_id": str(order.id), "subscription_id": str(order.subscription_id)},
+                    idempotency_key=key,
+                )
+        except stripe.error.CardError as e:
+            if not e.error or not e.error.payment_intent:
+                raise
+            stripe_intent, error = e.error.payment_intent, e
+
+        if not intent:
+            intent = PaymentIntent(
+                id=uuid7(), stripe_payment_intent_id=stripe_intent["id"], user_id=order.user_id,
+                order_id=order.id, subscription_id=order.subscription_id,
+                amount_breakdown={"total": float(order.total_amount), "currency": order.currency}, currency=order.currency,
+            )
+            self.db.add(intent)
+        intent.payment_method_id = card.stripe_payment_method_id
+        intent.payment_method_type = getattr(card.type, "value", card.type)
+        if error:
+            reason = PaymentFailureHandler(self.db)._map_failure_reason(
+                {"code": error.code, "decline_code": getattr(error, "decline_code", None), "message": error.user_message or str(error)}
+            )
+            intent.status = "failed"
+            intent.failed_at = datetime.now(timezone.utc)
+            intent.failure_reason = reason.value
+            intent.requires_action = reason == PaymentFailureReason.AUTHENTICATION_REQUIRED
+        else:
+            intent.status = stripe_intent["status"]
+            intent.failed_at = intent.failure_reason = None
+            intent.requires_action = False
+        return intent
+
+    async def _settle(self, intent: PaymentIntent) -> None:
+        """Record a succeeded intent's payment once and confirm its order (a renewal also moves its subscription on). Commits."""
+        # orders.py imports this module, so import it here.
+        from services.commerce.orders import OrderService
+        intent.status = "succeeded"
+        intent.requires_action = False
+        intent.confirmed_at = intent.confirmed_at or datetime.now(timezone.utc)
+        payments = (await self.db.execute(select(Transaction).where(
+            Transaction.stripe_payment_intent_id == intent.stripe_payment_intent_id, Transaction.transaction_type == "payment"
+        ))).scalars().all()
+        for transaction in payments:
+            transaction.status = "succeeded"
+        if not payments:
+            self.db.add(Transaction(
+                user_id=intent.user_id, order_id=intent.order_id, payment_intent_id=intent.id,
+                stripe_payment_intent_id=intent.stripe_payment_intent_id,
+                amount=intent.amount_breakdown.get("total", 0), currency=intent.currency,
+                status="succeeded", transaction_type="payment", description="Payment processed successfully",
+            ))
+        order = await self.db.get(Order, intent.order_id) if intent.order_id else None
+        if order:
+            await OrderService(self.db)._mark_order_paid(order)
+        else:
+            await self.db.commit()
 
     async def process_idempotent(
         self,
@@ -636,60 +694,10 @@ class PaymentService:
             if not payment_method:
                 raise HTTPException(status_code=404, detail="Payment method not found")
 
-            # Ensure user has a Stripe customer and attach payment method
-            user_result = await self.db.execute(select(User).where(User.id == user_id))
-            user = user_result.scalar_one_or_none()
+            user = await self.db.get(User, user_id)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
-
-            if user.stripe_customer_id:
-                try:
-                    await asyncio.to_thread(stripe.Customer.retrieve, user.stripe_customer_id)
-                except stripe.error.InvalidRequestError as retrieve_error:
-                    if "No such customer" in str(retrieve_error):
-                        customer = await asyncio.to_thread(
-                            stripe.Customer.create,
-                            email=getattr(user, "email", None),
-                            name=getattr(user, "full_name", None)
-                        )
-                        user.stripe_customer_id = customer.id
-                        await self.db.commit()
-                    else:
-                        raise
-            else:
-                customer = await asyncio.to_thread(
-                    stripe.Customer.create,
-                    email=getattr(user, "email", None),
-                    name=getattr(user, "full_name", None)
-                )
-                user.stripe_customer_id = customer.id
-                await self.db.commit()
-
-            # Attach payment method to customer if needed
-            try:
-                await asyncio.to_thread(
-                    stripe.PaymentMethod.attach,
-                    payment_method.stripe_payment_method_id,
-                    customer=user.stripe_customer_id
-                )
-            except stripe.error.InvalidRequestError as attach_error:
-                # If already attached, Stripe returns an error; safe to ignore
-                message = str(attach_error).lower()
-                if "no such customer" in message:
-                    customer = await asyncio.to_thread(
-                        stripe.Customer.create,
-                        email=getattr(user, "email", None),
-                        name=getattr(user, "full_name", None)
-                    )
-                    user.stripe_customer_id = customer.id
-                    await self.db.commit()
-                    await asyncio.to_thread(
-                        stripe.PaymentMethod.attach,
-                        payment_method.stripe_payment_method_id,
-                        customer=user.stripe_customer_id
-                    )
-                elif "already" not in message:
-                    raise
+            await self._attach_card(user, payment_method.stripe_payment_method_id)
 
             # Create Stripe payment intent with idempotency key
             stripe_intent = await asyncio.to_thread(
@@ -1192,15 +1200,15 @@ class PaymentService:
                     status_code=400,
                     detail="Can only retry failed payments"
                 )
-            if payment_intent.order_id:
+            if payment_intent.order_id and not payment_intent.subscription_id:
                 # A failed checkout already cancelled its order and released the stock.
                 raise HTTPException(status_code=400, detail="This order was cancelled. Please place it again.")
-            
-            # Check if retry is allowed
+
+            # A renewal can be paid with any card while its order is open; other payments follow the retry rules.
             failure_reason = PaymentFailureReason(payment_intent.failure_reason) if payment_intent.failure_reason else PaymentFailureReason.UNKNOWN
             retry_strategy = self._determine_retry_strategy(failure_reason, payment_intent)
-            
-            if not retry_strategy["should_retry"]:
+
+            if not payment_intent.subscription_id and not retry_strategy["should_retry"]:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Payment retry not allowed: {retry_strategy['reason']}"
@@ -1349,7 +1357,7 @@ class PaymentService:
                     "failed_at": payment.failed_at.isoformat() if payment.failed_at else None,
                     "retry_strategy": retry_strategy,
                     "user_message": self._get_user_friendly_message(failure_reason),
-                    "can_retry": retry_strategy["should_retry"] and not payment.order_id,
+                    "can_retry": bool(payment.subscription_id) or (retry_strategy["should_retry"] and not payment.order_id),
                     "retry_count": payment.failure_metadata.get("retry_count", 0) if payment.failure_metadata else 0
                 })
             
