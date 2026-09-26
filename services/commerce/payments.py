@@ -15,6 +15,7 @@ from core.config import settings
 from core.logging import get_structured_logger
 import stripe
 import json
+from decimal import Decimal
 import time
 import asyncio
 from models.commerce.payments import CardBrand
@@ -108,6 +109,13 @@ class PaymentService:
                     if "already" not in message:
                         raise
                 
+                # A customer's first card becomes their default, so renewals always have a card to charge.
+                if not is_default:
+                    has_default = await self.db.scalar(select(PaymentMethod.id).where(
+                        PaymentMethod.user_id == user_id, PaymentMethod.is_default == True, PaymentMethod.is_active == True
+                    ).limit(1))
+                    is_default = has_default is None
+
                 # If this is set as default, unset other defaults atomically
                 if is_default:
                     # Get existing default payment methods with lock
@@ -339,9 +347,19 @@ class PaymentService:
                         raise
             
             payment_method.is_active = False
+            if payment_method.is_default:
+                # The newest remaining card takes over as default.
+                payment_method.is_default = False
+                successor = await self.db.scalar(
+                    select(PaymentMethod).where(
+                        PaymentMethod.user_id == user_id, PaymentMethod.is_active == True, PaymentMethod.id != payment_method.id
+                    ).order_by(PaymentMethod.created_at.desc()).limit(1)
+                )
+                if successor:
+                    successor.is_default = True
             await self.db.commit()
             return True
-            
+
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
@@ -971,59 +989,56 @@ class PaymentService:
         return result.scalar_one_or_none()
 
 
-    async def refund(
-        self,
-        payment_intent_id: UUID,
-        amount: Optional[float] = None,
-        reason: str = "requested_by_customer"
-    ) -> Transaction:
-        """Create a refund for a payment"""
-        result = await self.db.execute(
-            select(PaymentIntent).where(PaymentIntent.id == payment_intent_id)
-        )
-        payment_intent = result.scalar_one_or_none()
-        
-        if not payment_intent:
-            raise HTTPException(status_code=404, detail="Payment intent not found")
-        
-        if payment_intent.status != "succeeded":
-            raise HTTPException(status_code=400, detail="Cannot refund unsuccessful payment")
-        
+    async def refund_order(self, order, amount: Decimal, idempotency_key: str, description: str) -> str:
+        """Refund part or all of an order's payment through Stripe, record it, and return Stripe's refund id.
+        Raises 400 with Stripe's reason when the refund can't be made; nothing is recorded then."""
+        payment = (await self.db.execute(
+            select(Transaction).where(
+                Transaction.order_id == order.id,
+                Transaction.transaction_type == "payment",
+                Transaction.status == "succeeded",
+            )
+        )).scalars().first()
+        if not payment or not payment.stripe_payment_intent_id:
+            raise HTTPException(status_code=400, detail="This order has no card payment to refund")
+        amount = Decimal(str(amount)).quantize(Decimal("0.01"))
         try:
-            # Create refund in Stripe
-            refund_amount = amount or payment_intent.amount_breakdown.get("total", 0)
             stripe_refund = await asyncio.to_thread(
                 stripe.Refund.create,
-                payment_intent=payment_intent.stripe_payment_intent_id,
-                amount=int(refund_amount * 100),  # Convert to cents
-                reason=reason
+                payment_intent=payment.stripe_payment_intent_id,
+                amount=int(amount * 100),
+                reason="requested_by_customer",
+                metadata={"order_id": str(order.id)},
+                idempotency_key=idempotency_key,
             )
-            
-            # Create transaction record
-            transaction = Transaction(
-                user_id=payment_intent.user_id,
-                order_id=payment_intent.order_id,
-                payment_intent_id=payment_intent.id,
-                stripe_payment_intent_id=payment_intent.stripe_payment_intent_id,
-                amount=-refund_amount,  # Negative for refund
-                currency=payment_intent.currency,
-                status="succeeded",
-                transaction_type="refund",
-                description=f"Refund processed: {reason}",
-                transaction_metadata=json.dumps({"stripe_refund_id": stripe_refund.id})
-            )
-            
-            self.db.add(transaction)
-            await self.db.commit()
-            await self.db.refresh(transaction)
-            
-            return transaction
-            
         except stripe.error.StripeError as e:
-            raise HTTPException(status_code=400, detail=f"Refund failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Refund failed: {e.user_message or str(e)}")
+        transaction = Transaction(
+            user_id=order.user_id,
+            order_id=order.id,
+            payment_intent_id=payment.payment_intent_id,
+            stripe_payment_intent_id=payment.stripe_payment_intent_id,
+            amount=-amount,
+            currency=payment.currency,
+            status="succeeded",
+            transaction_type="refund",
+            description=description,
+            transaction_metadata=json.dumps({"stripe_refund_id": stripe_refund.id}),
+        )
+        self.db.add(transaction)
+        return stripe_refund.id
 
+    async def refunded_total(self, order_id) -> Decimal:
+        """How much of an order has been refunded so far."""
+        total = await self.db.scalar(
+            select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(
+                Transaction.order_id == order_id,
+                Transaction.transaction_type == "refund",
+                Transaction.status == "succeeded",
+            )
+        )
+        return Decimal(str(total or 0))
 
-    
     # --- Payment failure handling methods ---
 
 

@@ -473,18 +473,16 @@ class InventoryService:
         await self.db.refresh(new_inventory, attribute_names=["location"])
         return InventoryResponse.model_validate(new_inventory)
 
-    async def update(self, inventory_id: UUID, inventory_data: InventoryUpdate) -> InventoryResponse:
+    async def update(self, inventory_id: UUID, inventory_data: InventoryUpdate, user_id: Optional[UUID] = None) -> InventoryResponse:
         inventory_item = await self.get(inventory_id)
         if not inventory_item:
             raise APIException(status_code=404, message="Inventory item not found")
 
         update_data = inventory_data.model_dump(exclude_unset=True)
         location_name = update_data.pop("location_name", None)
-
-        if "quantity" in update_data:
-            quantity_value = update_data.pop("quantity")
-            inventory_item.quantity_available = quantity_value
-            inventory_item.last_restocked_at = datetime.now(timezone.utc)
+        quantity = update_data.pop("quantity", None)
+        if quantity is not None:
+            await self.set_stock(inventory_item.variant_id, quantity, user_id, commit=False)
 
         if location_name:
             normalized_name = location_name.strip()
@@ -505,6 +503,8 @@ class InventoryService:
 
         inventory_item.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
+        if quantity is not None:
+            await self._after_stock_change(inventory_item.variant_id)
         await self.db.refresh(inventory_item)
         return InventoryResponse.model_validate(inventory_item)
 
@@ -561,22 +561,7 @@ class InventoryService:
             
             if commit:
                 await self.db.commit()
-            
-            # Sync product availability status after stock change
-            # Get product_id from variant
-            variant_result = await self.db.execute(
-                select(ProductVariant).where(ProductVariant.id == adjustment_data.variant_id)
-            )
-            variant = variant_result.scalar_one_or_none()
-
-            if variant and variant.product_id:
-                invalidate_variant(adjustment_data.variant_id, variant.product_id)
-                # Sync availability status (don't fail if this fails)
-                try:
-                    await self.sync(variant.product_id)
-                except Exception as e:
-                    logger.warning("Failed to sync product availability after stock adjustment", exception=e)
-            
+            await self._after_stock_change(adjustment_data.variant_id)
             return inventory
 
         except APIException:
@@ -589,6 +574,33 @@ class InventoryService:
                 status_code=500,
                 message=f"Failed to adjust stock: {str(e)}"
             )
+
+    async def set_stock(self, variant_id: UUID, quantity: int, user_id: Optional[UUID] = None, commit: bool = True) -> Inventory:
+        """Set a variant's stock to a counted number; the difference is recorded in the adjustment history."""
+        inventory = await Inventory.get_with_lock(self.db, variant_id)
+        if not inventory:
+            raise APIException(status_code=404, message=f"Inventory not found for variant {variant_id}")
+        change = quantity - inventory.quantity_available
+        if change:
+            await inventory.atomic_update_stock(
+                db=self.db, quantity_change=change, reason="Stock count", user_id=user_id, notes=f"Set to {quantity}"
+            )
+            if change > 0:
+                inventory.last_restocked_at = datetime.now(timezone.utc)
+        if commit:
+            await self.db.commit()
+        await self._after_stock_change(variant_id)
+        return inventory
+
+    async def _after_stock_change(self, variant_id: UUID) -> None:
+        """Clear cached prices/stock and recompute the product's availability (best-effort)."""
+        variant = await self.db.scalar(select(ProductVariant).where(ProductVariant.id == variant_id))
+        if variant and variant.product_id:
+            invalidate_variant(variant_id, variant.product_id)
+            try:
+                await self.sync(variant.product_id)
+            except Exception as e:
+                logger.warning("Failed to sync product availability after stock change", exception=e)
 
     async def adjustments(self, inventory_id: Optional[UUID] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
         """Get stock adjustments with pagination. If inventory_id provided, filters by inventory item."""

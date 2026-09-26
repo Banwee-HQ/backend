@@ -1,5 +1,6 @@
-"""Painless refund service with automatic processing and intelligent approval."""
+"""Refunds: customers request them, staff approve or reject, and approval pays the money back through Stripe."""
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Dict, Any, List, Optional
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
@@ -8,19 +9,43 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
-from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason
-from models.commerce.orders import Order
+from models.commerce.refunds import Refund, RefundItem, RefundStatus, RefundReason, RefundType
+from models.commerce.orders import Order, OrderItem, PaymentStatus
+from models.catalog.product import ProductVariant
 from schemas.commerce.refunds import Request as RefundRequest, Response as RefundResponse, ItemRequest as RefundItemRequest
 from core.logging import get_structured_logger
 from services.catalog.inventory import InventoryService
+from services.commerce.payments import PaymentService
 import random
 import string
 
 logger = get_structured_logger(__name__)
 
 
+# Everything a refund response shows: its items (with product names), customer and order.
+REFUND_DETAILS = (
+    selectinload(Refund.refund_items).selectinload(RefundItem.order_item).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+    selectinload(Refund.user),
+    selectinload(Refund.order),
+)
+
+# Staff decisions allowed from each status; a failed Stripe refund can be approved again.
+DECISIONS = {
+    RefundStatus.REQUESTED: {RefundStatus.APPROVED, RefundStatus.REJECTED},
+    RefundStatus.PENDING_REVIEW: {RefundStatus.APPROVED, RefundStatus.REJECTED},
+    RefundStatus.FAILED: {RefundStatus.APPROVED, RefundStatus.REJECTED},
+}
+
+
+def _item_name(order_item: Optional[OrderItem]) -> str:
+    variant = order_item.variant if order_item else None
+    if not variant:
+        return "Item"
+    product = variant.product.name if variant.product else variant.name
+    return product if variant.name in (None, "", product) else f"{product} ({variant.name})"
+
+
 class RefundService:
-    """Painless refund service with intelligent automation"""
     
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -59,7 +84,7 @@ class RefundService:
                 user_id=user_id,
                 refund_number=refund_number,
                 status=RefundStatus.REQUESTED,
-                refund_type=refund_request.refund_type,
+                refund_type=refund_calculation["refund_type"],
                 reason=refund_request.reason,
                 requested_amount=refund_calculation["total_amount"],
                 currency=order.currency,
@@ -88,21 +113,13 @@ class RefundService:
                 )
                 self.db.add(refund_item)
             
-            # Check for automatic approval
-            if refund.is_eligible_for_auto_approval:
-                await self._auto_approve_refund(refund)
-
             await self.db.commit()
-            # refresh() only reloads columns; _format_refund_response also needs
-            # refund_items, so re-fetch with the same eager-loading get() uses.
-            refund = await self.db.execute(
-                select(Refund).where(Refund.id == refund.id).options(
-                    selectinload(Refund.refund_items)
-                )
-            )
-            refund = refund.scalar_one()
-
-            return await self._format_refund_response(refund)
+            # Clear-cut cases (e.g. a defective item) are approved and paid straight away.
+            refund = await self._load(refund.id)
+            if refund.is_eligible_for_auto_approval:
+                refund.auto_approved = True
+                await self._approve(refund, raise_on_failure=False)
+            return await self._format_refund_response(await self._load(refund.id))
             
         except HTTPException:
             raise
@@ -126,13 +143,11 @@ class RefundService:
             offset = (page - 1) * limit
             
             # Build base query
+            base_query = select(Refund)
+            count_query = select(func.count()).select_from(Refund)
             if user_id:
-                base_query = select(Refund).where(Refund.user_id == user_id)
-                count_query = select(func.count()).select_from(Refund).where(Refund.user_id == user_id)
-            else:
-                # Admin query - all refunds with user info
-                base_query = select(Refund).options(selectinload(Refund.user))
-                count_query = select(func.count()).select_from(Refund)
+                base_query = base_query.where(Refund.user_id == user_id)
+                count_query = count_query.where(Refund.user_id == user_id)
             
             if status:
                 base_query = base_query.where(Refund.status == status)
@@ -153,21 +168,13 @@ class RefundService:
             total = total_result.scalar() or 0
             
             # Get paginated results
-            query = base_query.options(
-                selectinload(Refund.order),
-                selectinload(Refund.refund_items).selectinload(RefundItem.order_item)
-            ).limit(limit).offset(offset)
+            query = base_query.options(*REFUND_DETAILS).limit(limit).offset(offset)
             
             result = await self.db.execute(query)
             refunds = result.scalars().all()
             
             # Format response
-            items = []
-            for refund in refunds:
-                refund_data = await self._format_refund_response(refund)
-                if not user_id and refund.user:
-                    refund_data.customer_name = refund.user.full_name
-                items.append(refund_data)
+            items = [await self._format_refund_response(refund, is_admin=user_id is None) for refund in refunds]
             
             return {
                 "items": items,
@@ -184,11 +191,7 @@ class RefundService:
     async def get(self, refund_id: UUID, user_id: Optional[UUID] = None) -> RefundResponse:
         """Get detailed refund information. If user_id is None, admin access (no user filter)."""
         try:
-            query = select(Refund).where(Refund.id == refund_id).options(
-                selectinload(Refund.order),
-                selectinload(Refund.refund_items).selectinload(RefundItem.order_item),
-                selectinload(Refund.user)
-            )
+            query = select(Refund).where(Refund.id == refund_id).options(*REFUND_DETAILS)
             
             # Apply user filter if provided (user access)
             if user_id:
@@ -200,17 +203,7 @@ class RefundService:
             if not refund:
                 raise HTTPException(status_code=404, detail="Refund not found")
             
-            refund_data = await self._format_refund_response(refund)
-            
-            # Include user info for admin access
-            if not user_id and refund.user:
-                refund_data.customer = {
-                    "id": str(refund.user.id),
-                    "name": refund.user.full_name,
-                    "email": refund.user.email
-                }
-            
-            return refund_data
+            return await self._format_refund_response(refund, is_admin=user_id is None)
             
         except HTTPException:
             raise
@@ -218,121 +211,69 @@ class RefundService:
             logger.error(f"Failed to get refund details: {e}")
             raise HTTPException(status_code=500, detail="Failed to retrieve refund details")
     
-    async def cancel(self, user_id: UUID, refund_id: UUID) -> RefundResponse:
-        """Cancel a pending refund request"""
+    async def update_status(self, refund_id: UUID, status: str, admin_notes: Optional[str] = None, staff_id: Optional[UUID] = None) -> RefundResponse:
+        """Staff decision: approve (pays the refund through Stripe) or reject."""
+        refund = await self._load(refund_id)
+        if not refund:
+            raise HTTPException(status_code=404, detail="Refund not found")
         try:
-            refund = await self.db.execute(
-                select(Refund)
-                .where(and_(Refund.id == refund_id, Refund.user_id == user_id))
-                .options(selectinload(Refund.order))
-            )
-            refund = refund.scalar_one_or_none()
-            
-            if not refund:
-                raise HTTPException(status_code=404, detail="Refund not found")
-            
-            if refund.status not in [RefundStatus.REQUESTED, RefundStatus.PENDING_REVIEW]:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot cancel refund in current status"
-                )
-            
-            refund.status = RefundStatus.CANCELLED
+            decision = RefundStatus(status.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid refund status: {status}")
+        if decision not in DECISIONS.get(refund.status, set()):
+            raise HTTPException(status_code=400, detail=f"A {refund.status.value.replace('_', ' ')} refund can't be {decision.value}")
+
+        if admin_notes:
+            refund.admin_notes = admin_notes
+        refund.reviewed_by = staff_id
+        refund.reviewed_at = datetime.now(timezone.utc)
+        if decision == RefundStatus.REJECTED:
+            refund.status = RefundStatus.REJECTED
             await self.db.commit()
+        else:
+            await self._approve(refund, raise_on_failure=True, staff_id=staff_id)
+        return await self._format_refund_response(await self._load(refund.id), is_admin=True)
 
-            # Send notification
-            await self._send_refund_notifications(refund, "cancelled")
-
-            # refund_items was never loaded on this query and can't be lazy-loaded
-            # here, so re-fetch with the same eager-loading get()/request() use.
-            result = await self.db.execute(
-                select(Refund).where(Refund.id == refund.id).options(selectinload(Refund.refund_items))
-            )
-            refund = result.scalar_one()
-
-            return await self._format_refund_response(refund)
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to cancel refund: {e}")
-            raise HTTPException(status_code=500, detail="Failed to cancel refund")
-
-    async def update_status(
-        self,
-        refund_id: UUID,
-        status: str,
-        admin_notes: Optional[str] = None
-    ) -> RefundResponse:
-        """Update a refund's status (admin only) - approve, reject, or otherwise transition it."""
+    async def _approve(self, refund: Refund, raise_on_failure: bool, staff_id: Optional[UUID] = None) -> None:
+        """Pay the approved amount back to the customer's card and complete the refund.
+        If Stripe refuses, the refund is marked failed with the reason so staff can try again."""
+        order = await self.db.get(Order, refund.order_id)
+        payments = PaymentService(self.db)
+        remaining = Decimal(str(order.total_amount)) - await payments.refunded_total(order.id)
+        amount = min(Decimal(str(refund.approved_amount or refund.requested_amount)), remaining)
+        now = datetime.now(timezone.utc)
+        refund.approved_amount = amount
+        refund.approved_at = refund.approved_at or now
         try:
-            result = await self.db.execute(
-                select(Refund).where(Refund.id == refund_id).options(selectinload(Refund.refund_items))
+            if amount <= 0:
+                raise HTTPException(status_code=400, detail="This order has already been refunded in full")
+            refund.stripe_refund_id = await payments.refund_order(
+                order, amount, f"refund-{refund.id}-{refund.approved_at.timestamp():.0f}", f"Refund {refund.refund_number}"
             )
-            refund = result.scalar_one_or_none()
-            if not refund:
-                raise HTTPException(status_code=404, detail="Refund not found")
-
-            try:
-                new_status = RefundStatus(status.lower())
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid refund status: {status}")
-
-            refund.status = new_status
-            if admin_notes:
-                refund.admin_notes = admin_notes
-
-            now = datetime.now(timezone.utc)
-            if new_status == RefundStatus.APPROVED and not refund.approved_at:
-                refund.approved_amount = refund.approved_amount or refund.requested_amount
-                refund.approved_at = now
-                await self._restore_inventory_for_refund(refund)
-            elif new_status == RefundStatus.COMPLETED and not refund.completed_at:
-                refund.completed_at = now
-
+        except HTTPException as e:
+            refund.status = RefundStatus.FAILED
+            refund.stripe_status = "failed"
+            refund.admin_notes = "\n".join(filter(None, [refund.admin_notes, str(e.detail)]))
             await self.db.commit()
+            if raise_on_failure:
+                raise
+            return
+        refund.status = RefundStatus.COMPLETED
+        refund.stripe_status = "succeeded"
+        refund.processed_amount = amount
+        refund.processed_by = staff_id
+        refund.processed_at = refund.completed_at = now
+        if remaining - amount <= 0:
+            order.payment_status = PaymentStatus.REFUNDED
+        await self._restore_inventory_for_refund(refund)
+        await self.db.commit()
 
-            await self._send_refund_notifications(refund, new_status.value)
-
-            return await self._format_refund_response(refund)
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to update refund status: {e}")
-            raise HTTPException(status_code=500, detail="Failed to update refund status")
-
-    async def patch(self, refund_id: UUID, payload: dict) -> RefundResponse:
-        """Partially update a refund (admin only) - status, admin notes, or approved amount."""
-        try:
-            result = await self.db.execute(
-                select(Refund).where(Refund.id == refund_id).options(selectinload(Refund.refund_items))
-            )
-            refund = result.scalar_one_or_none()
-            if not refund:
-                raise HTTPException(status_code=404, detail="Refund not found")
-
-            if payload.get("status"):
-                try:
-                    refund.status = RefundStatus(str(payload["status"]).lower())
-                except ValueError:
-                    raise HTTPException(status_code=400, detail=f"Invalid refund status: {payload['status']}")
-            if "admin_notes" in payload:
-                refund.admin_notes = payload["admin_notes"]
-            if payload.get("approved_amount") is not None:
-                refund.approved_amount = payload["approved_amount"]
-                if not refund.approved_at:
-                    refund.approved_at = datetime.now(timezone.utc)
-
-            await self.db.commit()
-
-            return await self._format_refund_response(refund)
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to patch refund: {e}")
-            raise HTTPException(status_code=500, detail="Failed to update refund")
+    async def _load(self, refund_id: UUID) -> Optional[Refund]:
+        result = await self.db.execute(
+            select(Refund).where(Refund.id == refund_id).options(*REFUND_DETAILS)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
 
     async def _get_user_order(self, user_id: UUID, order_id: UUID) -> Order:
         """Get and validate user's order"""
@@ -357,6 +298,9 @@ class RefundService:
                 "reason": "Order must be confirmed, shipped, or delivered to request refund"
             }
         
+        if order.payment_status != PaymentStatus.PAID:
+            return {"eligible": False, "reason": "Only paid orders that haven't been refunded in full can be refunded"}
+
         # Check if order is too old (90 days limit)
         order_age = (datetime.now(timezone.utc) - order.created_at).days
         if order_age > 90:
@@ -375,7 +319,8 @@ class RefundService:
                         RefundStatus.REQUESTED,
                         RefundStatus.PENDING_REVIEW,
                         RefundStatus.APPROVED,
-                        RefundStatus.PROCESSING
+                        RefundStatus.PROCESSING,
+                        RefundStatus.FAILED,
                     ])
                 )
             )
@@ -389,69 +334,43 @@ class RefundService:
         
         return {"eligible": True, "reason": None}
     
-    async def _calculate_refund_amounts(
-        self,
-        order: Order,
-        refund_items: List[RefundItemRequest]
-    ) -> Dict[str, Any]:
-        """Calculate refund amounts for requested items"""
-        calculation = {
-            "items": {},
-            "total_amount": 0.0,
-            "shipping_refund": 0.0,
-            "tax_refund": 0.0
-        }
-        
-        # Get order items
-        order_items_map = {str(item.id): item for item in order.items}
-        
-        for refund_item in refund_items:
-            order_item_id = str(refund_item.order_item_id)
-            
-            if order_item_id not in order_items_map:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Order item {order_item_id} not found"
-                )
-            
-            order_item = order_items_map[order_item_id]
-            
-            # Validate quantity
-            if refund_item.quantity > order_item.quantity:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot refund more items than ordered"
-                )
-            
-            # Calculate refund amount
-            unit_price = float(order_item.price_per_unit)
-            total_amount = unit_price * refund_item.quantity
-            
-            calculation["items"][order_item_id] = {
-                "unit_price": unit_price,
-                "quantity": refund_item.quantity,
-                "total_amount": total_amount
+    async def _calculate_refund_amounts(self, order: Order, refund_items: List[RefundItemRequest]) -> Dict[str, Any]:
+        """What the customer gets back, from what they actually paid (after any promo, with tax).
+        Every item returned: whatever hasn't been refunded yet. Some items: their share of the paid goods."""
+        order_items = {str(item.id): item for item in order.items}
+        items: Dict[str, Dict[str, float]] = {}
+        for request in refund_items:
+            order_item = order_items.get(str(request.order_item_id))
+            if not order_item:
+                raise HTTPException(status_code=400, detail=f"Order item {request.order_item_id} not found")
+            if request.quantity > order_item.quantity:
+                raise HTTPException(status_code=400, detail="Cannot refund more items than ordered")
+            items[str(request.order_item_id)] = {
+                "unit_price": float(order_item.price_per_unit),
+                "total_amount": float(order_item.price_per_unit) * request.quantity,
             }
-            
-            calculation["total_amount"] += total_amount
-        
-        # Calculate proportional shipping refund (if full order refund)
-        total_order_items = sum(item.quantity for item in order.items)
-        total_refund_items = sum(item.quantity for item in refund_items)
-        
-        if total_refund_items == total_order_items:
-            # Full refund - include shipping
-            calculation["shipping_refund"] = float(order.shipping_cost or 0)
-            calculation["total_amount"] += calculation["shipping_refund"]
-        
-        # Calculate proportional tax refund
-        if order.tax_amount:
-            tax_rate = float(order.tax_amount) / float(order.subtotal)
-            calculation["tax_refund"] = calculation["total_amount"] * tax_rate
-            calculation["total_amount"] += calculation["tax_refund"]
-        
-        return calculation
-    
+
+        cent = Decimal("0.01")
+        paid = Decimal(str(order.total_amount))
+        remaining = paid - await PaymentService(self.db).refunded_total(order.id)
+        if remaining <= 0:
+            raise HTTPException(status_code=400, detail="This order has already been refunded in full")
+
+        everything = len(items) == len(order.items) and all(
+            r.quantity == order_items[str(r.order_item_id)].quantity for r in refund_items
+        )
+        if everything:
+            amount = remaining
+        else:
+            goods_paid = paid - Decimal(str(order.shipping_cost or 0))
+            share = Decimal(str(sum(i["total_amount"] for i in items.values()))) / Decimal(str(order.subtotal))
+            amount = min((goods_paid * share).quantize(cent), remaining)
+        return {
+            "items": items,
+            "total_amount": float(amount),
+            "refund_type": RefundType.FULL_REFUND if everything else RefundType.PARTIAL_REFUND,
+        }
+
     async def _generate_refund_number(self) -> str:
         """Generate unique refund number"""
         while True:
@@ -476,18 +395,6 @@ class RefundService:
             RefundReason.MISSING_PARTS
         ]
         return reason not in no_return_reasons
-    
-    async def _auto_approve_refund(self, refund: Refund):
-        """Automatically approve eligible refunds with inventory restoration"""
-        refund.status = RefundStatus.APPROVED
-        refund.auto_approved = True
-        refund.approved_amount = refund.requested_amount
-        refund.approved_at = datetime.now(timezone.utc)
-        
-        # Restore inventory for refunded items
-        await self._restore_inventory_for_refund(refund)
-        
-        logger.info(f"Auto-approved refund {refund.refund_number} for ${refund.requested_amount}")
     
     async def _restore_inventory_for_refund(self, refund: Refund):
         """Restore inventory when refund is confirmed"""
@@ -525,10 +432,7 @@ class RefundService:
     
     
 
-    async def _send_refund_notifications(self, refund: Refund, event_type: str):
-        """Send refund notifications to customer. Not yet implemented (ARQ notification integration was removed)."""
-    
-    async def _format_refund_response(self, refund: Refund) -> RefundResponse:
+    async def _format_refund_response(self, refund: Refund, is_admin: bool = False) -> RefundResponse:
         """Format refund for API response"""
         return RefundResponse(
             id=refund.id,
@@ -553,6 +457,7 @@ class RefundService:
             items=[
                 {
                     "order_item_id": item.order_item_id,
+                    "name": _item_name(item.order_item),
                     "quantity": item.quantity_to_refund,
                     "amount": item.total_refund_amount,
                     "condition_notes": item.condition_notes
@@ -560,98 +465,11 @@ class RefundService:
                 for item in refund.refund_items
             ] if refund.refund_items else [],
             timeline=self._generate_refund_timeline(refund),
-            admin_notes=refund.admin_notes
+            # Staff-only: who asked, and internal notes.
+            customer=({"name": f"{refund.user.firstname} {refund.user.lastname}".strip(), "email": refund.user.email}
+                      if is_admin and refund.user else None),
+            admin_notes=refund.admin_notes if is_admin else None,
         )
-    
-    async def count(
-        self,
-        user_id: UUID,
-        status: Optional[RefundStatus] = None
-    ) -> int:
-        """Get count of user's refunds"""
-        try:
-            query = select(func.count()).select_from(Refund).where(Refund.user_id == user_id)
-
-            if status:
-                query = query.where(Refund.status == status)
-
-            result = await self.db.execute(query)
-
-            return result.scalar() or 0
-            
-        except Exception as e:
-            logger.error(f"Failed to get user refunds count: {e}")
-            return 0
-    
-    async def stats(self, user_id: UUID) -> Dict[str, Any]:
-        """Get user's refund statistics"""
-        try:
-            # Get all user refunds via the paginated method
-            result = await self.list(user_id, page=1, limit=1000)
-            refunds = result.get("items", [])
-
-            processing_hours = [
-                (r.completed_at - r.requested_at).total_seconds() / 3600
-                for r in refunds if r.completed_at and r.requested_at
-            ]
-
-            return {
-                "total_refunds": result.get("total", 0),
-                "total_amount": sum(r.requested_amount for r in refunds),
-                "auto_approved_count": sum(1 for r in refunds if r.auto_approved),
-                "pending_count": sum(
-                    1 for r in refunds if r.status in [RefundStatus.REQUESTED, RefundStatus.PENDING_REVIEW]
-                ),
-                "completed_count": sum(1 for r in refunds if r.status == RefundStatus.COMPLETED),
-                "average_processing_time_hours": (
-                    sum(processing_hours) / len(processing_hours) if processing_hours else None
-                )
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get user refund stats: {e}")
-            return {
-                "total_refunds": 0,
-                "total_amount": 0.0,
-                "auto_approved_count": 0,
-                "pending_count": 0,
-                "completed_count": 0,
-                "average_processing_time_hours": None
-            }
-    
-    async def eligibility(
-        self,
-        user_id: UUID,
-        order_id: UUID
-    ) -> Dict[str, Any]:
-        """Check if order is eligible for refund"""
-        try:
-            order = await self._get_user_order(user_id, order_id)
-            eligibility = await self._check_refund_eligibility(order)
-            
-            return {
-                "eligible": eligibility["eligible"],
-                "reason": eligibility["reason"],
-                "order_id": str(order_id),
-                "order_date": order.created_at.isoformat(),
-                "order_amount": float(order.total_amount),
-                "refund_window_days": 90,
-                "days_remaining": max(0, 90 - (datetime.now(timezone.utc) - order.created_at).days)
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to check order refund eligibility: {e}")
-            return {
-                "eligible": False,
-                "reason": "Unable to check eligibility",
-                "order_id": str(order_id),
-                "order_date": None,
-                "order_amount": 0.0,
-                "refund_window_days": 90,
-                "days_remaining": 0
-            }
     
     def _generate_refund_timeline(self, refund: Refund) -> List[Dict[str, Any]]:
         """Generate refund timeline for customer"""
@@ -687,7 +505,7 @@ class RefundService:
             timeline.append({
                 "status": "processing",
                 "title": "Processing Refund",
-                "description": f"Refund of ${refund.processed_amount:.2f} is being processed",
+                "description": f"Refund of {refund.processed_amount:.2f} {refund.currency} sent to your card",
                 "timestamp": refund.processed_at.isoformat(),
                 "completed": True
             })

@@ -77,6 +77,18 @@ class TestSubscriptionEndpoints:
         assert created_subscription["status"] == "active"
         assert created_subscription["billing_cycle"] == "monthly"
 
+    async def test_create_applies_a_promo_code(self, async_client: AsyncClient, auth_headers, subscription_variant, db_session: AsyncSession):
+        promo = Promocode(id=uuid7(), code=f"NEW{uuid4().hex[:6].upper()}", discount_type=DiscountType.FIXED, value=2, is_active=True)
+        db_session.add(promo)
+        await db_session.commit()
+        response = await async_client.post("/v1/subscriptions/", headers=auth_headers, json={
+            "name": "With code", "variant_ids": [subscription_variant["id"]], "discount_code": promo.code,
+        })
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["discount"]["code"] == promo.code
+        assert data["current_discount_amount"] == 2.0
+
     async def test_create_unknown_variant_is_rejected(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post("/v1/subscriptions/", headers=auth_headers, json={
             "name": "Bad Sub", "variant_ids": [str(uuid4())],
@@ -239,10 +251,15 @@ class TestSubscriptionEndpoints:
         assert removed.status_code == 200
         assert removed.json()["data"]["discount"] is None
 
-    async def test_details(self, async_client: AsyncClient, auth_headers, created_subscription):
-        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
+    async def test_get_includes_products_and_totals(self, async_client: AsyncClient, auth_headers, created_subscription):
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json()["data"]["subscription"]["id"] == created_subscription["id"]
+        data = response.json()["data"]
+        assert data["id"] == created_subscription["id"]
+        assert len(data["products"]) == 1
+        assert data["current_total"] == pytest.approx(
+            data["current_subtotal"] + data["current_shipping_amount"] + data["current_tax_amount"] - data["current_discount_amount"]
+        )
 
     async def test_orders_list_is_empty_for_a_new_subscription(self, async_client: AsyncClient, auth_headers, created_subscription):
         response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/orders/", headers=auth_headers)
@@ -273,16 +290,30 @@ class TestSubscriptionEndpoints:
             headers=admin_headers, json={"name": "Hacked"})
         assert response.status_code == 404
 
-    async def test_remove_single_product(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant):
-        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/products/",
+    async def test_adding_a_product_reprices_the_subscription(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant):
+        before = (await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)).json()["data"]
+        added = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/products/",
             headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+        assert added.status_code == 200
+        after = added.json()["data"]
+        assert after["current_subtotal"] > before["current_subtotal"]
+        assert len(after["current_variant_prices"]) == 2
 
-        response = await async_client.delete(
-            f"/v1/subscriptions/{created_subscription['id']}/products/{second_variant['id']}/", headers=auth_headers
-        )
-        assert response.status_code == 200
-        variant_ids = [p["variant_id"] for p in response.json()["data"]["products"]]
-        assert second_variant["id"] not in variant_ids
+    async def test_the_last_product_cannot_be_removed(self, async_client: AsyncClient, auth_headers, created_subscription, subscription_variant):
+        response = await async_client.request("DELETE", f"/v1/subscriptions/{created_subscription['id']}/products/",
+            headers=auth_headers, json={"variant_ids": [subscription_variant["id"]]})
+        assert response.status_code == 400
+
+    async def test_an_unknown_product_cannot_be_added(self, async_client: AsyncClient, auth_headers, created_subscription):
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/products/",
+            headers=auth_headers, json={"variant_ids": [str(uuid4())]})
+        assert response.status_code == 400
+
+    async def test_a_cancelled_subscription_cannot_be_changed(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant):
+        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/cancel/", headers=auth_headers)
+        response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/products/",
+            headers=auth_headers, json={"variant_ids": [second_variant["id"]]})
+        assert response.status_code == 400
 
     # -- calculate-cost branches -------------------------------------------------
 
@@ -334,15 +365,6 @@ class TestSubscriptionEndpoints:
         response = await async_client.post(f"/v1/subscriptions/{uuid4()}/unskip/", headers=auth_headers, json={})
         assert response.status_code == 404
 
-    async def test_remove_single_product_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers, second_variant):
-        """remove_product() converts the service's HTTPException into an
-        APIException carrying the same status/detail - distinct conversion
-        logic from the plain re-raise other endpoints use."""
-        response = await async_client.delete(
-            f"/v1/subscriptions/{uuid4()}/products/{second_variant['id']}/", headers=auth_headers
-        )
-        assert response.status_code == 404
-
     async def test_apply_discount_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
         response = await async_client.post(f"/v1/subscriptions/{uuid4()}/discounts/",
             headers=auth_headers, json={"discount_code": "WHATEVER"})
@@ -371,34 +393,36 @@ class TestSubscriptionEndpoints:
         )
         assert response.status_code == 404
 
-    async def test_details_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
-        response = await async_client.get(f"/v1/subscriptions/{uuid4()}/details/", headers=auth_headers)
+    async def test_get_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
+        response = await async_client.get(f"/v1/subscriptions/{uuid4()}/", headers=auth_headers)
         assert response.status_code == 404
 
-    async def test_details_reflects_applied_discount(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
+    async def test_applied_discount_is_priced_and_removable_by_its_id(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
         promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:6].upper()}", discount_type=DiscountType.PERCENTAGE, value=10, is_active=True)
         db_session.add(promo)
         await db_session.commit()
-        await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
+        applied = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
             headers=auth_headers, json={"discount_code": promo.code})
+        data = applied.json()["data"]
+        assert data["discount"]["id"] == str(promo.id)
+        assert data["current_discount_amount"] > 0
+        assert len(data["products"]) == 1
 
-        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
-        assert response.status_code == 200
-        data = response.json()["data"]
-        assert data["discounts"][0]["code"] == promo.code
-        assert data["subscription"]["discount_amount"] > 0
+        removed = await async_client.delete(
+            f"/v1/subscriptions/{created_subscription['id']}/discounts/{data['discount']['id']}/", headers=auth_headers
+        )
+        assert removed.json()["data"]["current_discount_amount"] == 0
 
-    async def test_details_reflects_fixed_amount_discount(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
+    async def test_fixed_amount_discount(self, async_client: AsyncClient, auth_headers, created_subscription, db_session: AsyncSession):
         promo = Promocode(id=uuid7(), code=f"SUB{uuid4().hex[:6].upper()}", discount_type=DiscountType.FIXED, value=5, is_active=True)
         db_session.add(promo)
         await db_session.commit()
         await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
             headers=auth_headers, json={"discount_code": promo.code})
 
-        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
+        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()["data"]
-        assert data["subscription"]["discount_amount"] == 5.0
+        assert response.json()["data"]["current_discount_amount"] == 5.0
 
     async def test_orders_unknown_subscription_is_404(self, async_client: AsyncClient, auth_headers):
         response = await async_client.get(f"/v1/subscriptions/{uuid4()}/orders/", headers=auth_headers)
@@ -582,13 +606,6 @@ class TestUnexpectedErrorsBecomeSafe500s:
         response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/unskip/", headers=auth_headers, json={})
         assert response.status_code == 500
 
-    async def test_remove_product(self, async_client: AsyncClient, auth_headers, created_subscription, second_variant, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.remove_products", side_effect=Exception("boom"))
-        response = await async_client.delete(
-            f"/v1/subscriptions/{created_subscription['id']}/products/{second_variant['id']}/", headers=auth_headers
-        )
-        assert response.status_code == 500
-
     async def test_apply_discount(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
         mocker.patch("services.commerce.subscriptions.SubscriptionService.apply_discount", side_effect=Exception("boom"))
         response = await async_client.post(f"/v1/subscriptions/{created_subscription['id']}/discounts/",
@@ -600,11 +617,6 @@ class TestUnexpectedErrorsBecomeSafe500s:
         response = await async_client.delete(
             f"/v1/subscriptions/{created_subscription['id']}/discounts/{uuid4()}/", headers=auth_headers
         )
-        assert response.status_code == 500
-
-    async def test_details(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):
-        mocker.patch("services.commerce.subscriptions.SubscriptionService.get", side_effect=Exception("boom"))
-        response = await async_client.get(f"/v1/subscriptions/{created_subscription['id']}/details/", headers=auth_headers)
         assert response.status_code == 500
 
     async def test_orders(self, async_client: AsyncClient, auth_headers, created_subscription, mocker):

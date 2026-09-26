@@ -255,7 +255,7 @@ async def patch(
     """Partially update an inventory item (Admin access)."""
     try:
         inventory_service = InventoryService(db)
-        item = await inventory_service.update(inventory_id, inventory_data)
+        item = await inventory_service.update(inventory_id, inventory_data, user_id=current_user.id)
         return Response.success(data=item, message="Inventory item updated successfully")
     except APIException:
         raise

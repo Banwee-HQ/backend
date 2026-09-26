@@ -453,7 +453,9 @@ class CartService:
         self,
         user_id: UUID,
         variant_id: UUID,
-        quantity: int = 1
+        quantity: int = 1,
+        country_code: str = 'US',
+        province_code: Optional[str] = None
     ) -> Dict[str, Any]:
         """Add item to cart. Out-of-stock quantities are capped to what's available (0 if
         none), not rejected - the item stays in the cart so the customer can see it."""
@@ -519,13 +521,15 @@ class CartService:
         await self.db.commit()
         
         # Return updated cart
-        return await self.get_cart(user_id=user_id)
+        return await self.get_cart(user_id=user_id, country_code=country_code, province_code=province_code)
 
     async def update_item(
         self,
         user_id: UUID,
         cart_item_id: UUID,
-        quantity: int = 1
+        quantity: int = 1,
+        country_code: str = 'US',
+        province_code: Optional[str] = None
     ) -> Dict[str, Any]:
         """Update cart item quantity"""
         if not user_id:
@@ -568,12 +572,14 @@ class CartService:
         await self.db.commit()
         
         # Return updated cart
-        return await self.get_cart(user_id=user_id)
+        return await self.get_cart(user_id=user_id, country_code=country_code, province_code=province_code)
 
     async def remove_item(
         self,
         user_id: UUID,
-        cart_item_id: UUID
+        cart_item_id: UUID,
+        country_code: str = 'US',
+        province_code: Optional[str] = None
     ) -> Dict[str, Any]:
         """Remove item from cart by item ID"""
         
@@ -602,7 +608,7 @@ class CartService:
         self.db.expire_all()
 
         # Return updated cart
-        return await self.get_cart(user_id=user_id)
+        return await self.get_cart(user_id=user_id, country_code=country_code, province_code=province_code)
 
     async def clear_cart(
         self,

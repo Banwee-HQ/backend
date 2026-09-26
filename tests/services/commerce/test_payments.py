@@ -10,6 +10,7 @@ named token pm_card_visa.
 import os
 import json
 import pytest
+from types import SimpleNamespace
 import stripe
 from uuid import uuid4
 from decimal import Decimal
@@ -180,6 +181,24 @@ class TestSetDefault:
         assert await service.set_default(uuid4(), test_user.id) is False
 
 
+class TestDefaultCard:
+
+    async def test_first_card_becomes_the_default(self, db_session, test_user):
+        service = PaymentService(db_session)
+        first = await service.create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
+        second = await service.create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
+        assert first.is_default is True
+        assert second.is_default is False
+
+    async def test_deleting_the_default_promotes_another_card(self, db_session, test_user):
+        service = PaymentService(db_session)
+        first = await service.create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
+        second = await service.create_method(user_id=test_user.id, stripe_payment_method_id=fresh_stripe_payment_method_id())
+        await service.delete(first.id, test_user.id)
+        await db_session.refresh(second)
+        assert second.is_default is True
+
+
 class TestDelete:
 
     async def test_soft_deletes(self, db_session, test_user, payment_method):
@@ -322,20 +341,16 @@ class TestTransactions:
 
 # --------------------------------------------------------------------------- Refunds ---------------------------------------------------------------------------
 
-class TestRefund:
+class TestRefundOrder:
 
-
-    async def test_not_found_raises_404(self, db_session):
-        service = PaymentService(db_session)
+    async def test_order_without_a_card_payment_is_refused(self, db_session, test_user):
+        order = SimpleNamespace(id=uuid4(), user_id=test_user.id)
         with pytest.raises(HTTPException) as exc_info:
-            await service.refund(uuid4())
-        assert exc_info.value.status_code == 404
-
-    async def test_cannot_refund_unsuccessful_payment(self, db_session, test_user, payment_intent):
-        service = PaymentService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.refund(payment_intent.id)
+            await PaymentService(db_session).refund_order(order, Decimal("5.00"), "key", "Refund")
         assert exc_info.value.status_code == 400
+
+    async def test_nothing_refunded_yet_is_zero(self, db_session):
+        assert await PaymentService(db_session).refunded_total(uuid4()) == 0
 
 
 # --------------------------------------------------------------------------- Failure handling - retry / failure_status / failed_payments ---------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import Optional
 from core.db import get_db, logger
@@ -11,24 +10,11 @@ from core.exceptions import APIException
 from schemas.commerce.subscriptions import Create, Update, AddProducts, RemoveProducts, UpdateQuantity, DiscountApplication, ChangeFrequency, SkipShipment
 from services.commerce.subscriptions import SubscriptionService
 from models.accounts.user import User, UserRole, Address
-from models.commerce.shipping import ShippingMethod
 from models.catalog.product import ProductVariant
 from models.commerce.subscriptions import Subscription
-from datetime import datetime, timezone
 from sqlalchemy import select, and_
 from core.dependencies import require_admin, require_auth
-from schemas.commerce.subscriptions import (
-    Create,
-    Update,
-    CostCalculation,
-    AddProducts,
-    RemoveProducts,
-    UpdateQuantity,
-    QuantityChange,
-    DiscountApplication,
-    ChangeFrequency,
-    SkipShipment
-)
+from schemas.commerce.subscriptions import Create, Update, CostCalculation, AddProducts, RemoveProducts, UpdateQuantity, DiscountApplication, ChangeFrequency, SkipShipment
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler
 from core.config import settings
 
@@ -200,6 +186,7 @@ async def calculate(
             currency=settings.STORE_CURRENCY,
             user_id=current_user.id,
             shipping_method_id=cost_request.shipping_method_id,
+            discount_code=cost_request.discount_code,
         )
         return Response.success(data={**pricing, "currency": settings.STORE_CURRENCY})
 
@@ -245,7 +232,8 @@ async def create(
             delivery_address_id=subscription_data.delivery_address_id,
             billing_cycle=subscription_data.billing_cycle,
             current_period_start=subscription_data.current_period_start,
-            shipping_method_id=subscription_data.shipping_method_id
+            shipping_method_id=subscription_data.shipping_method_id,
+            discount_code=subscription_data.discount_code,
         )
         return Response.success(
             data=subscription.to_dict(include_products=True),
@@ -316,15 +304,8 @@ async def add_products(
         subscription = await subscription_service.add_products(
             subscription_id, request.variant_ids, current_user.id
         )
-        # Load the products relationship properly for the response
-        await db.refresh(subscription)
-        subscription_result = await db.execute(
-        select(Subscription).where(Subscription.id == subscription_id)
-        .options(selectinload(Subscription.products).selectinload(ProductVariant.product))
-        )
-        subscription_with_products = subscription_result.scalar_one_or_none()
         return Response.success(
-            data=subscription_with_products.to_dict(include_products=True) if subscription_with_products else subscription.to_dict(), 
+            data=subscription.to_dict(include_products=True),
             message="Products added to subscription successfully"
         )
     except APIException as e:
@@ -350,15 +331,8 @@ async def remove_products(
         subscription = await subscription_service.remove_products(
             subscription_id, request.variant_ids, current_user.id
         )
-        # Load the products relationship properly for the response
-        await db.refresh(subscription)
-        subscription_result = await db.execute(
-        select(Subscription).where(Subscription.id == subscription_id)
-        .options(selectinload(Subscription.products).selectinload(ProductVariant.product))
-        )
-        subscription_with_products = subscription_result.scalar_one_or_none()
         return Response.success(
-            data=subscription_with_products.to_dict(include_products=True) if subscription_with_products else subscription.to_dict(), 
+            data=subscription.to_dict(include_products=True),
             message="Products removed from subscription successfully"
         )
     except APIException:
@@ -421,33 +395,6 @@ async def get(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Subscription not found"
             )
-
-        # Load variants based on variant_ids directly (more robust than relying on association table)
-        # Also load delivery_address and shipping_method
-        if subscription.variant_ids and len(subscription.variant_ids) > 0:
-            variant_uuids = [UUID(vid) for vid in subscription.variant_ids]
-            variants_result = await db.execute(
-                select(ProductVariant).where(ProductVariant.id.in_(variant_uuids))
-                .options(selectinload(ProductVariant.product), selectinload(ProductVariant.images))
-            )
-            variants = variants_result.scalars().all()
-            # Manually set products for serialization
-            subscription.products = list(variants)
-
-        # Load delivery_address and shipping_method if not already loaded
-        if not hasattr(subscription, 'delivery_address') or subscription.delivery_address is None:
-            if subscription.delivery_address_id:
-                address_result = await db.execute(
-                    select(Address).where(Address.id == subscription.delivery_address_id)
-                )
-                subscription.delivery_address = address_result.scalar_one_or_none()
-
-        if not hasattr(subscription, 'shipping_method') or subscription.shipping_method is None:
-            if subscription.shipping_method_id:
-                method_result = await db.execute(
-                    select(ShippingMethod).where(ShippingMethod.id == subscription.shipping_method_id)
-                )
-                subscription.shipping_method = method_result.scalar_one_or_none()
 
         return Response.success(data=subscription.to_dict(include_products=True))
     except APIException:
@@ -725,34 +672,6 @@ async def unskip(
         )
 
 
-@router.delete("/{subscription_id}/products/{product_id}/")
-async def remove_product(
-    subscription_id: UUID,
-    product_id: UUID,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Remove a specific product from a subscription."""
-    try:
-        subscription_service = SubscriptionService(db)
-        subscription = await subscription_service.remove_products(
-            subscription_id, [product_id], current_user.id
-        )
-        return Response.success(
-            data=subscription.to_dict(include_products=True),
-            message="Product removed from subscription successfully"
-        )
-    except HTTPException as e:
-        raise APIException(
-            status_code=e.status_code,
-            message=e.detail
-        )
-    except Exception as e:
-        logger.error(f"Error removing product from subscription: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to remove product from subscription: {str(e)}"
-        )
 @router.post("/{subscription_id}/discounts/")
 async def apply_discount(
     subscription_id: UUID,
@@ -768,7 +687,7 @@ async def apply_discount(
             user_id=current_user.id,
             discount_code=discount_request.discount_code
         )
-        return Response.success(data=subscription.to_dict(), message="Discount applied successfully")
+        return Response.success(data=subscription.to_dict(include_products=True), message="Discount applied successfully")
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
@@ -795,7 +714,7 @@ async def remove_discount(
             user_id=current_user.id,
             discount_id=discount_id
         )
-        return Response.success(data=subscription.to_dict(), message="Discount removed successfully")
+        return Response.success(data=subscription.to_dict(include_products=True), message="Discount removed successfully")
     except HTTPException as e:
         raise APIException(
             status_code=e.status_code,
@@ -806,109 +725,6 @@ async def remove_discount(
         raise APIException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to remove discount: {str(e)}"
-        )
-@router.get("/{subscription_id}/details/")
-async def details(
-    subscription_id: UUID,
-    current_user: User = Depends(require_auth),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get detailed subscription information for modal display."""
-    # Fixed: Using SubscriptionService instead of non-existent EnhancedSubscriptionService
-    try:
-        subscription_service = SubscriptionService(db)
-        # Get subscription with all related data
-        subscription = await subscription_service.get(
-            subscription_id=subscription_id,
-            user_id=current_user.id
-        )
-        if not subscription:
-            raise APIException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Subscription not found"
-            )
-        # Get subscription products/variants
-        variant_quantities = (subscription.subscription_metadata or {}).get("variant_quantities", {})
-        products = []
-        if variant_quantities:
-            # Fetch variant details
-            variant_ids = list(variant_quantities.keys())
-            result = await db.execute(
-                select(ProductVariant)
-                .options(selectinload(ProductVariant.product), selectinload(ProductVariant.images))
-                .where(ProductVariant.id.in_(variant_ids))
-            )
-            variants = result.scalars().all()
-            for variant in variants:
-                quantity = variant_quantities.get(str(variant.id), 0)
-                products.append({
-                    "id": str(variant.id),
-                    "subscription_id": str(subscription.id),
-                    "product_id": str(variant.product_id),
-                    "name": variant.product.name,
-                    "quantity": quantity,
-                    "unit_price": float(variant.current_price),
-                    "total_price": float(variant.current_price * quantity),
-                    "image": variant.images[0].url if variant.images else None,
-                    "added_at": subscription.created_at.isoformat()
-                })
-
-        subtotal = sum(p["total_price"] for p in products)
-        shipping_cost = float(subscription.current_shipping_amount or subscription.shipping_amount_at_creation or 0.0)
-        tax_amount = float(subscription.current_tax_amount or subscription.tax_amount_at_creation or 0.0)
-        discount_amount = 0.0
-        if subscription.discount_value:
-            if subscription.discount_type == "percentage":
-                discount_amount = subtotal * (float(subscription.discount_value) / 100)
-            else:
-                discount_amount = float(subscription.discount_value)
-        total = max(0.0, subtotal + shipping_cost + tax_amount - discount_amount)
-
-        # Build response
-        details = {
-            "subscription": {
-                "id": str(subscription.id),
-                "name": subscription.name,
-                "status": subscription.status,
-                "currency": subscription.currency,
-                "billing_cycle": subscription.billing_cycle,
-                "auto_renew": subscription.auto_renew,
-                "next_billing_date": subscription.next_billing_date.isoformat() if subscription.next_billing_date else None,
-                "created_at": subscription.created_at.isoformat(),
-                "updated_at": subscription.updated_at.isoformat() if subscription.updated_at else None,
-                "subtotal": subtotal,
-                "shipping_cost": shipping_cost,
-                "tax_amount": tax_amount,
-                "discount_amount": discount_amount,
-                "total": total,
-            },
-            "products": products,
-            "discounts": [{
-                "id": str(subscription.discount_id),
-                "code": subscription.discount_code,
-                "type": subscription.discount_type,
-                "value": subscription.discount_value,
-                "amount": discount_amount,
-            }] if subscription.discount_id else []
-        }
-        return Response.success(
-            data=details,
-            message="Subscription details retrieved successfully"
-        )
-    except HTTPException as e:
-        raise APIException(
-            status_code=e.status_code,
-            message=e.detail
-        )
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting subscription details: {e}")
-        raise APIException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to get subscription details: {str(e)}"
         )
 @router.get("/{subscription_id}/orders/")
 async def orders(

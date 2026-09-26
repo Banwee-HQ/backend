@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from core.utils.uuid_utils import uuid7
+from services.catalog.inventory import InventoryService
 from models.catalog.product import Product, ProductVariant, ProductStatus, ProductImage
 from models.catalog.category import Category
 from models.catalog.inventories import Inventory, WarehouseLocation
@@ -23,6 +24,13 @@ from datetime import datetime, timezone, date
 
 logger = get_structured_logger(__name__)
 
+
+
+def sale_price_or_none(base_price, sale_price):
+    """A sale only counts when it's below the base price; zero or a "sale" at/above base means no sale."""
+    if sale_price is None or sale_price <= 0 or sale_price >= base_price:
+        return None
+    return sale_price
 
 class ProductService:
     def __init__(self, db: AsyncSession):
@@ -448,7 +456,7 @@ class ProductService:
             sku=sku,
             name=variant_data.name,
             base_price=variant_data.base_price,
-            sale_price=variant_data.sale_price,
+            sale_price=sale_price_or_none(variant_data.base_price, variant_data.sale_price),
             attributes=variant_data.attributes or {},
             specifications=variant_data.specifications,
             dietary_tags=variant_data.dietary_tags or [],
@@ -489,16 +497,17 @@ class ProductService:
 
         # Stock lives on the related Inventory row; sale_price may be cleared (None ends a sale).
         data = update_data.model_dump(exclude_unset=True, exclude={"id", "stock"})
+        if "sale_price" in data:
+            data["sale_price"] = sale_price_or_none(data.get("base_price", variant.base_price), data["sale_price"])
         for field, value in data.items():
             if hasattr(variant, field) and (value is not None or field == "sale_price"):
                 setattr(variant, field, value)
 
         if update_data.stock is not None:
-            # Query directly rather than the variant.inventory relationship, which can hold a stale (pre-existence) cached value if this session touched the variant earlier in the same request.
-            inventory_result = await self.db.execute(select(Inventory).where(Inventory.variant_id == variant.id))
-            inventory = inventory_result.scalar_one_or_none()
-            if inventory:
-                inventory.quantity_available = update_data.stock
+            # Stock changes go through the adjustment history, like any other count.
+            has_inventory = await self.db.scalar(select(Inventory.id).where(Inventory.variant_id == variant.id))
+            if has_inventory:
+                await InventoryService(self.db).set_stock(variant.id, update_data.stock, commit=False)
             else:
                 self.db.add(Inventory(id=uuid7(), variant_id=variant.id, quantity_available=update_data.stock))
 
@@ -587,7 +596,7 @@ class ProductService:
                 sku=final_sku,
                 name=variant_data.name,
                 base_price=variant_data.base_price,
-                sale_price=variant_data.sale_price,
+                sale_price=sale_price_or_none(variant_data.base_price, variant_data.sale_price),
                 attributes=variant_data.attributes or {},
                 specifications=variant_data.specifications,
                 dietary_tags=variant_data.dietary_tags or [],

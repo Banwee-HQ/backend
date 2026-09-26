@@ -478,7 +478,7 @@ async def export_orders(
                 page=page,
                 limit=limit,
                 status=order_status,
-                q=q,
+                search=q,
                 date_from=date_from,
                 date_to=date_to,
                 min_price=min_price,

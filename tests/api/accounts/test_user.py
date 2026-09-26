@@ -140,29 +140,9 @@ class TestUserEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["firstname"] == "Updated"
 
-    async def test_delete_requires_admin(self, async_client: AsyncClient, auth_headers):
-        """DELETE /v1/users/{id} - Non-admin is forbidden."""
-        response = await async_client.delete(f"/v1/users/{uuid4()}/", headers=auth_headers)
-        assert response.status_code == 403
-
-    async def test_delete_self_forbidden(self, async_client: AsyncClient, admin_headers, admin_user):
-        """DELETE /v1/users/{id} - Admin cannot delete their own account here."""
-        response = await async_client.delete(f"/v1/users/{admin_user.id}/", headers=admin_headers)
+    async def test_admin_cannot_deactivate_themselves(self, async_client: AsyncClient, admin_headers, admin_user):
+        response = await async_client.post(f"/v1/users/{admin_user.id}/deactivate/", headers=admin_headers)
         assert response.status_code == 400
-
-    async def test_delete_not_found(self, async_client: AsyncClient, admin_headers):
-        """DELETE /v1/users/{id} - Unknown ID returns 404."""
-        response = await async_client.delete(f"/v1/users/{uuid4()}/", headers=admin_headers)
-        assert response.status_code == 404
-
-    async def test_delete_as_admin(self, async_client: AsyncClient, admin_headers, test_user):
-        """DELETE /v1/users/{id} - Admin can delete a different user (soft delete by default)."""
-        response = await async_client.delete(f"/v1/users/{test_user.id}/", headers=admin_headers)
-        assert response.status_code == 200
-
-        get_after = await async_client.get(f"/v1/users/{test_user.id}/", headers=admin_headers)
-        assert get_after.status_code == 200
-        assert get_after.json()["data"]["account_status"] == "inactive"
 
     async def test_reset_password(self, async_client: AsyncClient, admin_headers, test_user, mocker):
         """POST /v1/users/{id}/reset-password - Trigger password reset email (admin)."""

@@ -16,7 +16,6 @@ class Create(BaseModel):
     shipping_method_id: Optional[UUID] = None
     billing_cycle: BillingCycle = BillingCycle.MONTHLY
     discount_code: Optional[str] = None
-    payment_method_id: Optional[str] = None
     current_period_start: Optional[str] = None
 
 
@@ -37,6 +36,7 @@ class CostCalculation(BaseModel):
     variant_quantities: Optional[Dict[str, int]] = {}
     delivery_address_id: Optional[UUID] = None
     shipping_method_id: Optional[UUID] = None
+    discount_code: Optional[str] = None
 
 
 class AddProducts(BaseModel):
@@ -54,12 +54,6 @@ class UpdateQuantity(BaseModel):
     """Update variant quantity in subscription"""
     variant_id: str
     quantity: int = Field(gt=0, description="New quantity (must be greater than 0)")
-
-
-class QuantityChange(BaseModel):
-    """Change variant quantity (increment/decrement)"""
-    variant_id: str
-    change: int = Field(description="Quantity change (positive to add, negative to subtract)")
 
 
 class DiscountApplication(BaseModel):

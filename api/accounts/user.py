@@ -81,21 +81,7 @@ async def get(
         if not user:
             raise APIException(
                 status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        user_data = {
-            "id": str(user.id),
-            "email": user.email,
-            "firstname": user.firstname,
-            "lastname": user.lastname,
-            "phone": user.phone,
-            "role": user.role.value if hasattr(user.role, "value") else user.role,
-            "account_status": user.account_status,
-            "verification_status": user.verification_status,
-            "verified": user.verified,
-            "is_active": user.is_active,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
-            "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-        }
-        return Response.success(data=user_data, message="User retrieved successfully")
+        return Response.success(data=user.to_dict(), message="User retrieved successfully")
     except APIException:
         raise
     except HTTPException:
@@ -173,33 +159,6 @@ async def patch(
         )
 
 
-@router.delete("/{user_id}/")
-async def delete(
-    user_id: UUID,
-    current_user: AuthUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete a user (admin only)."""
-    try:
-        # Prevent admin from deleting themselves
-        if current_user.id == user_id:
-            raise APIException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="You cannot delete your own account through this endpoint"
-            )
-        service = UserService(db)
-        deleted = await service.delete(user_id)
-        if not deleted:
-            raise APIException(status_code=status.HTTP_404_NOT_FOUND, message="User not found")
-        return Response.success(message="User deleted successfully")
-    except APIException:
-        raise
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"Failed to delete user: {str(e)}")
-
-
 @router.post("/{user_id}/reset-password/")
 async def reset_password(
     user_id: UUID,
@@ -225,8 +184,10 @@ async def deactivate(
     current_user: AuthUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Deactivate user account (admin only)."""
+    """Deactivate user account (admin only); admins can't lock themselves out."""
     try:
+        if current_user.id == user_id:
+            raise APIException(status_code=status.HTTP_400_BAD_REQUEST, message="You can't deactivate your own account")
         service = UserService(db)
         result = await service.deactivate(user_id)
         return Response.success(data=result, message="User deactivated")

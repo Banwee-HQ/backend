@@ -1161,13 +1161,27 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/cart/",
+              "raw": "{{baseUrl}}/v1/cart/?",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "v1",
                 "cart"
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "{{country}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "province",
+                  "value": "{{province}}",
+                  "description": "",
+                  "disabled": true
+                }
               ]
             },
             "body": {
@@ -1240,7 +1254,7 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/v1/cart/{{item_id}}/",
+              "raw": "{{baseUrl}}/v1/cart/{{item_id}}/?",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1248,6 +1262,20 @@
                 "v1",
                 "cart",
                 "{{item_id}}"
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "{{country}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "province",
+                  "value": "{{province}}",
+                  "description": "",
+                  "disabled": true
+                }
               ]
             }
           },
@@ -1265,7 +1293,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/cart/{{item_id}}/",
+              "raw": "{{baseUrl}}/v1/cart/{{item_id}}/?",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1273,6 +1301,20 @@
                 "v1",
                 "cart",
                 "{{item_id}}"
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "{{country}}",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "province",
+                  "value": "{{province}}",
+                  "description": "",
+                  "disabled": true
+                }
               ]
             },
             "body": {
@@ -2946,7 +2988,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"variants\": [\n    {\n      \"sku\": null,\n      \"name\": \"string\",\n      \"base_price\": 1.0,\n      \"sale_price\": 1.0,\n      \"stock\": 0,\n      \"attributes\": {},\n      \"specifications\": null,\n      \"dietary_tags\": {},\n      \"tags\": null,\n      \"availability_status\": \"available\",\n      \"image_urls\": []\n    }\n  ],\n  \"origin\": \"string\",\n  \"is_featured\": false,\n  \"is_bestseller\": false,\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"cost_price\": 1.0,\n  \"quantity\": 0,\n  \"sku\": \"string\",\n  \"weight_kg\": 1.0,\n  \"tags\": [],\n  \"origin_country\": \"string\",\n  \"is_active\": true\n}",
+              "raw": "{\n  \"name\": \"string\",\n  \"slug\": \"string\",\n  \"description\": \"string\",\n  \"short_description\": \"string\",\n  \"category_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"variants\": [\n    {\n      \"sku\": null,\n      \"name\": \"string\",\n      \"base_price\": 1.0,\n      \"sale_price\": null,\n      \"stock\": 0,\n      \"attributes\": {},\n      \"specifications\": null,\n      \"dietary_tags\": {},\n      \"tags\": null,\n      \"availability_status\": \"available\",\n      \"image_urls\": []\n    }\n  ],\n  \"origin\": \"string\",\n  \"is_featured\": false,\n  \"is_bestseller\": false,\n  \"base_price\": 1.0,\n  \"sale_price\": 1.0,\n  \"cost_price\": 1.0,\n  \"quantity\": 0,\n  \"sku\": \"string\",\n  \"weight_kg\": 1.0,\n  \"tags\": [],\n  \"origin_country\": \"string\",\n  \"is_active\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3832,7 +3874,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refund_type\": \"full_refund\",\n  \"reason\": \"defective_product\",\n  \"customer_reason\": \"string\",\n  \"customer_notes\": \"string\",\n  \"items\": [\n    {\n      \"order_item_id\": \"00000000-0000-0000-0000-000000000000\",\n      \"quantity\": 1,\n      \"condition_notes\": \"string\"\n    }\n  ]\n}",
+              "raw": "{\n  \"reason\": \"defective_product\",\n  \"customer_reason\": \"string\",\n  \"customer_notes\": \"string\",\n  \"items\": [\n    {\n      \"order_item_id\": \"00000000-0000-0000-0000-000000000000\",\n      \"quantity\": 1,\n      \"condition_notes\": \"string\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4810,7 +4852,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"discount_code\": \"string\",\n  \"payment_method_id\": \"string\",\n  \"current_period_start\": \"string\"\n}",
+              "raw": "{\n  \"name\": \"My Subscription\",\n  \"variant_ids\": [],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"billing_cycle\": \"monthly\",\n  \"discount_code\": \"string\",\n  \"current_period_start\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4844,7 +4886,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\"\n}",
+              "raw": "{\n  \"variant_ids\": [\n    \"string\"\n  ],\n  \"variant_quantities\": {},\n  \"delivery_address_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"shipping_method_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"discount_code\": \"string\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5028,26 +5070,6 @@
                   "description": "",
                   "disabled": true
                 }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "GET /v1/subscriptions/{subscription_id}/details/",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/subscriptions/{{subscription_id}}/details/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "subscriptions",
-                "{{subscription_id}}",
-                "details"
               ]
             }
           },
@@ -5328,27 +5350,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "DELETE /v1/subscriptions/{subscription_id}/products/{product_id}/",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/subscriptions/{{subscription_id}}/products/{{product_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "subscriptions",
-                "{{subscription_id}}",
-                "products",
-                "{{product_id}}"
-              ]
             }
           },
           "response": []
@@ -5815,25 +5816,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "DELETE /v1/users/{user_id}/",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/v1/users/{{user_id}}/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "users",
-                "{{user_id}}"
-              ]
             }
           },
           "response": []

@@ -75,20 +75,14 @@ class SubscriptionService:
         # Get customer address for tax calculation
         customer_address = None
         if delivery_address_id:
-            address_result = await self.db.execute(
-                select(Address).where(
-                    and_(Address.id == delivery_address_id, Address.user_id == user_id)
-                )
-            )
-            address = address_result.scalar_one_or_none()
-            if address:
-                customer_address = {
-                    "street": address.street,
-                    "city": address.city,
-                    "state": address.state,
-                    "country": address.country,
-                    "post_code": address.post_code
-                }
+            address = await self._owned_address(delivery_address_id, user_id)
+            customer_address = {
+                "street": address.street,
+                "city": address.city,
+                "state": address.state,
+                "country": address.country,
+                "post_code": address.post_code
+            }
 
         # Calculate pricing at creation
         pricing = await self._calculate_pricing(
@@ -102,10 +96,7 @@ class SubscriptionService:
         )
 
         # Calculate billing period
-        if current_period_start:
-            now = datetime.fromisoformat(current_period_start).replace(tzinfo=timezone.utc)
-        else:
-            now = datetime.now(timezone.utc)
+        now = self._period_start(current_period_start) if current_period_start else datetime.now(timezone.utc)
 
         period_end = compute_period_end(now, billing_cycle)
 
@@ -135,6 +126,9 @@ class SubscriptionService:
             current_shipping_amount=pricing["shipping"],
             current_tax_amount=pricing["tax"],
             current_tax_rate=pricing["tax_rate"],
+            current_subtotal=pricing["subtotal"],
+            current_discount_amount=pricing["discount"],
+            current_total=pricing["total"],
             # Discount
             discount_id=pricing.get("discount_id"),
             discount_type=pricing.get("discount_type"),
@@ -422,11 +416,13 @@ class SubscriptionService:
         
         if subscription.status not in ["active", "paused"]:
             raise HTTPException(status_code=400, detail="Cannot update inactive subscription")
-        
+        reprice = bool(delivery_address_id or shipping_method_id is not None or variant_ids or variant_quantities)
+
         if name:
             subscription.name = name
 
         if delivery_address_id:
+            await self._owned_address(delivery_address_id, user_id)
             subscription.delivery_address_id = delivery_address_id
 
         if shipping_method_id is not None:
@@ -436,7 +432,7 @@ class SubscriptionService:
             subscription.auto_renew = auto_renew
 
         if current_period_start:
-            new_period_start = datetime.fromisoformat(current_period_start).replace(tzinfo=timezone.utc)
+            new_period_start = self._period_start(current_period_start)
             subscription.current_period_start = new_period_start
 
             # Recalculate period end and next billing date
@@ -473,6 +469,8 @@ class SubscriptionService:
             metadata["variant_quantities"] = variant_quantities
             subscription.subscription_metadata = metadata
 
+        if reprice:
+            await self.recalc_pricing(subscription)
         await self.db.commit()
         # products is many-to-many; once loaded, a later selectinload (inside get())
         # won't re-query it even after the association rows just changed.
@@ -660,6 +658,9 @@ class SubscriptionService:
         subscription.current_shipping_amount = pricing["shipping"]
         subscription.current_tax_amount = pricing["tax"]
         subscription.current_tax_rate = pricing["tax_rate"]
+        subscription.current_subtotal = pricing["subtotal"]
+        subscription.current_discount_amount = pricing["discount"]
+        subscription.current_total = pricing["total"]
 
         await self.db.commit()
 
@@ -750,51 +751,68 @@ class SubscriptionService:
         return True
 
     async def add_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
-        """Add products to a subscription"""
-        subscription = await self.get(subscription_id, user_id)
-        if not subscription:
-            raise HTTPException(status_code=404, detail="Subscription not found")
-
-
-        existing_ids = {str(v.id) for v in subscription.products}
-        for vid in variant_ids:
-            if str(vid) not in existing_ids:
-                association = SubscriptionProductAssociation(
-                    subscription_id=subscription.id,
-                    product_variant_id=vid
-                )
-                self.db.add(association)
-                if subscription.variant_ids is None:
-                    subscription.variant_ids = []
-                if str(vid) not in subscription.variant_ids:
-                    subscription.variant_ids = subscription.variant_ids + [str(vid)]
-        
-        await self.db.commit()
+        """Add products to a subscription and reprice it."""
+        subscription = await self._editable(subscription_id, user_id)
+        existing = {str(v) for v in (subscription.variant_ids or [])}
+        new_ids = [vid for vid in dict.fromkeys(variant_ids) if str(vid) not in existing]
+        if new_ids:
+            found = await self.db.execute(
+                select(ProductVariant.id).where(ProductVariant.id.in_(new_ids), ProductVariant.is_active.is_(True))
+            )
+            if len(found.scalars().all()) != len(new_ids):
+                raise HTTPException(status_code=400, detail="One of those products isn't available any more")
+            for vid in new_ids:
+                self.db.add(SubscriptionProductAssociation(subscription_id=subscription.id, product_variant_id=vid))
+            subscription.variant_ids = list(subscription.variant_ids or []) + [str(vid) for vid in new_ids]
+            await self.recalc_pricing(subscription)
         self.db.expire(subscription, ["products"])
         return await self.get(subscription.id)
 
     async def remove_products(self, subscription_id: UUID, variant_ids: List[UUID], user_id: UUID) -> Subscription:
-        """Remove products from a subscription"""
+        """Remove products from a subscription and reprice it; at least one product must stay."""
+        subscription = await self._editable(subscription_id, user_id)
+        removing = {str(vid) for vid in variant_ids}
+        remaining = [v for v in (subscription.variant_ids or []) if str(v) not in removing]
+        if not remaining:
+            raise HTTPException(status_code=400, detail="A subscription needs at least one product. Cancel it instead.")
+        await self.db.execute(
+            delete(SubscriptionProductAssociation).where(
+                SubscriptionProductAssociation.subscription_id == subscription.id,
+                SubscriptionProductAssociation.product_variant_id.in_(variant_ids),
+            )
+        )
+        subscription.variant_ids = remaining
+        meta = dict(subscription.subscription_metadata or {})
+        quantities = {k: q for k, q in meta.get("variant_quantities", {}).items() if k not in removing}
+        subscription.subscription_metadata = {**meta, "variant_quantities": quantities}
+        await self.recalc_pricing(subscription)
+        self.db.expire(subscription, ["products"])
+        return await self.get(subscription.id)
+
+    async def _owned_address(self, address_id: UUID, user_id: UUID) -> Address:
+        """The customer's own address; anyone else's is rejected."""
+        address = await self.db.scalar(select(Address).where(Address.id == address_id, Address.user_id == user_id))
+        if not address:
+            raise HTTPException(status_code=400, detail="Choose one of your saved addresses")
+        return address
+
+    @staticmethod
+    def _period_start(value: str) -> datetime:
+        """A chosen start date: today or later, never in the past."""
+        start = datetime.fromisoformat(value)
+        start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        if start.date() < datetime.now(timezone.utc).date():
+            raise HTTPException(status_code=400, detail="The start date can't be in the past")
+        return start
+
+    async def _editable(self, subscription_id: UUID, user_id: UUID) -> Subscription:
+        """The customer's subscription, if it can still be changed (not cancelled)."""
         subscription = await self.get(subscription_id, user_id)
         if not subscription:
             raise HTTPException(status_code=404, detail="Subscription not found")
-
-
-        for vid in variant_ids:
-            await self.db.execute(
-                delete(SubscriptionProductAssociation).where(
-                    and_(
-                        SubscriptionProductAssociation.subscription_id == subscription.id,
-                        SubscriptionProductAssociation.product_variant_id == vid
-                    )
-                )
-            )
-        if subscription.variant_ids:
-            subscription.variant_ids = [v for v in subscription.variant_ids if v not in [str(vid) for vid in variant_ids]]
-
-        await self.db.commit()
-        self.db.expire(subscription, ["products"])
-        return await self.get(subscription.id)
+        if subscription.status == SubscriptionStatus.CANCELLED.value:
+            raise HTTPException(status_code=400, detail="A cancelled subscription can't be changed")
+        return subscription
 
     async def set_quantity(self, subscription_id: UUID, variant_id: UUID, quantity: int, user_id: UUID) -> Subscription:
         subscription = await self.get(subscription_id, user_id)

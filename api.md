@@ -1,6 +1,6 @@
 # Banwee API Reference
 
-> **Source of truth:** generated from the running FastAPI application schema (`189 operations across 139 paths`).
+> **Source of truth:** generated from the running FastAPI application schema (`186 operations across 137 paths`).
 
 ## Environments
 
@@ -78,11 +78,11 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | Method | Path | Summary | Auth | Parameters | Request body | Responses |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/cart/` | Get | Yes | `query:country`, `query:province` | — | `200`, `422` |
-| `POST` | `/v1/cart/` | Create | Yes | — | `Add` (application/json) | `200`, `422` |
+| `POST` | `/v1/cart/` | Create | Yes | `query:country`, `query:province` | `Add` (application/json) | `200`, `422` |
 | `POST` | `/v1/cart/clear/` | Clear | Yes | — | — | `200` |
 | `POST` | `/v1/cart/validate/` | Validate | Yes | `query:country`, `query:province` | — | `200`, `422` |
-| `DELETE` | `/v1/cart/{item_id}/` | Delete | Yes | `path:item_id*` | — | `200`, `422` |
-| `PATCH` | `/v1/cart/{item_id}/` | Patch | Yes | `path:item_id*` | `UpdateItem` (application/json) | `200`, `422` |
+| `DELETE` | `/v1/cart/{item_id}/` | Delete | Yes | `path:item_id*`, `query:country`, `query:province` | — | `200`, `422` |
+| `PATCH` | `/v1/cart/{item_id}/` | Patch | Yes | `path:item_id*`, `query:country`, `query:province` | `UpdateItem` (application/json) | `200`, `422` |
 
 ## Categories
 
@@ -266,7 +266,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `GET` | `/v1/subscriptions/{subscription_id}/` | Get | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/subscriptions/{subscription_id}/` | Update | Yes | `path:subscription_id*` | `schemas__commerce__subscriptions__Update` (application/json) | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/cancel/` | Cancel | Yes | `path:subscription_id*`, `query:reason` | — | `200`, `422` |
-| `GET` | `/v1/subscriptions/{subscription_id}/details/` | Details | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/discounts/` | Apply Discount | Yes | `path:subscription_id*` | `DiscountApplication` (application/json) | `200`, `422` |
 | `DELETE` | `/v1/subscriptions/{subscription_id}/discounts/{discount_id}/` | Remove Discount | Yes | `path:subscription_id*`, `path:discount_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/subscriptions/{subscription_id}/frequency/` | Change Frequency | Yes | `path:subscription_id*` | `ChangeFrequency` (application/json) | `200`, `422` |
@@ -276,7 +275,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | `DELETE` | `/v1/subscriptions/{subscription_id}/products/` | Remove Products | Yes | `path:subscription_id*` | `RemoveProducts` (application/json) | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/products/` | Add Products | Yes | `path:subscription_id*` | `AddProducts` (application/json) | `200`, `422` |
 | `PATCH` | `/v1/subscriptions/{subscription_id}/products/quantity/` | Update Quantity | Yes | `path:subscription_id*` | `UpdateQuantity` (application/json) | `200`, `422` |
-| `DELETE` | `/v1/subscriptions/{subscription_id}/products/{product_id}/` | Remove Product | Yes | `path:subscription_id*`, `path:product_id*` | — | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/resume/` | Resume | Yes | `path:subscription_id*` | — | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/skip/` | Skip | Yes | `path:subscription_id*` | `SkipShipment` (application/json) | `200`, `422` |
 | `POST` | `/v1/subscriptions/{subscription_id}/unskip/` | Unskip | Yes | `path:subscription_id*` | — | `200`, `422` |
@@ -306,7 +304,6 @@ The `Auth` column below is derived from each route's actual dependencies (`requi
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET` | `/v1/users/` | List | Yes | `query:page`, `query:limit`, `query:role`, `query:q`, `query:search`, `query:status` | — | `200`, `422` |
 | `POST` | `/v1/users/` | Create | Yes | — | `schemas__accounts__user__Create` (application/json) | `200`, `422` |
-| `DELETE` | `/v1/users/{user_id}/` | Delete | Yes | `path:user_id*` | — | `200`, `422` |
 | `GET` | `/v1/users/{user_id}/` | Get | Yes | `path:user_id*` | — | `200`, `422` |
 | `PATCH` | `/v1/users/{user_id}/` | Patch | Yes | `path:user_id*` | `schemas__accounts__user__Update` (application/json) | `200`, `422` |
 | `POST` | `/v1/users/{user_id}/activate/` | Activate | Yes | `path:user_id*` | — | `200`, `422` |

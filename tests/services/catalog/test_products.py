@@ -768,3 +768,11 @@ class TestDeleteProductAssociatedData:
         assert remaining_reviews == []
         remaining_cart_items = (await db_session.execute(select(CartItem).where(CartItem.product_id == product.id))).scalars().all()
         assert remaining_cart_items == []
+
+
+@pytest.mark.parametrize("base, sale, expected", [
+    (10.0, None, None), (10.0, 0, None), (10.0, 10.0, None), (10.0, 12.0, None), (10.0, 7.5, 7.5),
+])
+def test_only_a_price_below_base_counts_as_a_sale(base, sale, expected):
+    from services.catalog.products import sale_price_or_none
+    assert sale_price_or_none(base, sale) == expected

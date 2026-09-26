@@ -16,10 +16,19 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/cart", tags=["Cart"])
 
 
+def _region(http: Request, country: Optional[str], province: Optional[str]) -> dict:
+    """Where the cart's tax estimate is for: query params first, then headers."""
+    return {"country_code": country or http.headers.get("X-Country-Code", "US"),
+            "province_code": province or http.headers.get("X-Province-Code")}
+
+
 # --- CART - 5 Standard APIs (operating on cart items) ---
 @router.post("/")
 async def create(
     request: Add,
+    http: Request,
+    country: Optional[str] = None,
+    province: Optional[str] = None,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
@@ -29,7 +38,8 @@ async def create(
         cart = await cart_service.add_to_cart(
             user_id=current_user.id,
             variant_id=request.variant_id,
-            quantity=request.quantity
+            quantity=request.quantity,
+            **_region(http, country, province),
         )
         return Response.success(data=cart, message="Item added to cart")
     except HTTPException:
@@ -48,14 +58,8 @@ async def get(
 ):
     """Get current user's cart (includes items list)."""
     try:
-        country_code = country or request.headers.get('X-Country-Code', 'US')
-        province_code = province or request.headers.get('X-Province-Code')
         cart_service = CartService(db)
-        cart = await cart_service.get_cart(
-            user_id=current_user.id,
-            country_code=country_code,
-            province_code=province_code
-        )
+        cart = await cart_service.get_cart(user_id=current_user.id, **_region(request, country, province))
         return Response.success(data=cart)
     except HTTPException:
         raise
@@ -67,18 +71,21 @@ async def get(
 async def patch(
     item_id: UUID,
     request: UpdateItem,
+    http: Request,
+    country: Optional[str] = None,
+    province: Optional[str] = None,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
     """Update cart item quantity (partial update)."""
     try:
         cart_service = CartService(db)
-        await cart_service.update_item(
+        cart = await cart_service.update_item(
             user_id=current_user.id,
             cart_item_id=item_id,
-            quantity=request.quantity
+            quantity=request.quantity,
+            **_region(http, country, province),
         )
-        cart = await cart_service.get_cart(user_id=current_user.id)
         return Response.success(data=cart, message="Cart item updated")
     except HTTPException as e:
         raise APIException(status_code=e.status_code, message=e.detail)
@@ -89,6 +96,9 @@ async def patch(
 @router.delete("/{item_id}/")
 async def delete(
     item_id: UUID,
+    http: Request,
+    country: Optional[str] = None,
+    province: Optional[str] = None,
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
@@ -97,7 +107,8 @@ async def delete(
         cart_service = CartService(db)
         cart = await cart_service.remove_item(
             user_id=current_user.id,
-            cart_item_id=item_id
+            cart_item_id=item_id,
+            **_region(http, country, province),
         )
         return Response.success(data=cart, message="Item removed from cart")
     except HTTPException as e:
@@ -124,15 +135,7 @@ async def validate(
                 message="Authentication required for cart validation"
             )
         
-        # Get location from query params or headers
-        country_code = country or request.headers.get('X-Country-Code', 'US')
-        province_code = province or request.headers.get('X-Province-Code')
-        
-        result = await cart_service.validate_cart(
-            user_id=current_user.id,
-            country_code=country_code,
-            province_code=province_code
-        )
+        result = await cart_service.validate_cart(user_id=current_user.id, **_region(request, country, province))
         
         # Convert result to dict for response
         result_dict = {

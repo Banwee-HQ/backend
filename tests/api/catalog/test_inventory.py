@@ -175,6 +175,15 @@ class TestInventoryItemEndpoints:
             headers=admin_headers, json={"quantity": 42, "low_stock_threshold": 5})
         assert response.status_code == 200
 
+    async def test_setting_the_count_is_recorded_as_an_adjustment(self, async_client: AsyncClient, admin_headers, created_variant):
+        listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)
+        item = listed.json()["data"][0]
+        await async_client.patch(f"/v1/inventory/{item['id']}/", headers=admin_headers, json={"quantity": item["quantity_available"] + 7})
+        history = await async_client.get(f"/v1/inventory/adjustments/?inventory_id={item['id']}", headers=admin_headers)
+        entries = history.json()["data"]
+        assert entries[0]["quantity_change"] == 7
+        assert entries[0]["reason"] == "Stock count"
+
     async def test_update_requires_admin(self, async_client: AsyncClient, auth_headers, admin_headers, created_variant):
         """PATCH /v1/inventory/{id} - Non-admin is forbidden."""
         listed = await async_client.get(f"/v1/inventory/?product_id={created_variant['product_id']}", headers=admin_headers)

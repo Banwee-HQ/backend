@@ -4,7 +4,10 @@ import pytest
 from uuid import uuid4
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import stripe
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -71,10 +74,26 @@ async def delivered_order(db_session, test_user, variant) -> Order:
     return order
 
 
+@pytest.fixture(autouse=True)
+async def card_payment(db_session, delivered_order):
+    """The order was paid by card, so approving a refund has something to refund."""
+    db_session.add(Transaction(
+        id=uuid7(), user_id=delivered_order.user_id, order_id=delivered_order.id,
+        stripe_payment_intent_id="pi_test", amount=Decimal("53.98"), currency="CAD",
+        status="succeeded", transaction_type="payment",
+    ))
+    await db_session.commit()
+
+
+@pytest.fixture(autouse=True)
+def stripe_refunds(mocker):
+    """Stripe accepts every refund unless a test says otherwise."""
+    return mocker.patch("services.commerce.payments.stripe.Refund.create", return_value=SimpleNamespace(id=f"re_{uuid4().hex[:8]}"))
+
+
 def make_request(order, reason=RefundReason.CHANGED_MIND, quantity=2) -> RefundRequest:
     return RefundRequest(
         order_id=order.id,
-        refund_type=RefundType.FULL_REFUND,
         reason=reason,
         items=[RefundItemRequest(order_item_id=order.item_id, quantity=quantity)],
     )
@@ -94,14 +113,29 @@ class TestRequest:
         service = RefundService(db_session)
         response = await service.request(test_user.id, delivered_order.id, make_request(delivered_order))
         assert response.status == RefundStatus.REQUESTED
-        # Full refund - includes proportional shipping and tax, not just item subtotal
-        assert response.requested_amount == pytest.approx(54.98, abs=0.01)
+        # Every item back: exactly what was paid, never more
+        assert response.requested_amount == pytest.approx(53.98, abs=0.001)
+        assert response.refund_type == RefundType.FULL_REFUND
         assert len(response.items) == 1
+
+    async def test_some_items_get_their_share_of_what_was_paid(self, db_session, test_user, delivered_order):
+        service = RefundService(db_session)
+        response = await service.request(test_user.id, delivered_order.id, make_request(delivered_order, quantity=1))
+        # Half the goods: half of (paid - shipping)
+        assert response.requested_amount == pytest.approx(21.99, abs=0.001)
+        assert response.refund_type == RefundType.PARTIAL_REFUND
+
+    async def test_unpaid_order_is_not_refundable(self, db_session, test_user, delivered_order):
+        delivered_order.payment_status = PaymentStatus.REFUNDED
+        await db_session.commit()
+        with pytest.raises(HTTPException) as exc_info:
+            await RefundService(db_session).request(test_user.id, delivered_order.id, make_request(delivered_order))
+        assert exc_info.value.status_code == 400
 
     async def test_order_not_found_raises_404(self, db_session, test_user):
         service = RefundService(db_session)
         req = RefundRequest(
-            order_id=uuid4(), refund_type=RefundType.FULL_REFUND, reason=RefundReason.CHANGED_MIND,
+            order_id=uuid4(), reason=RefundReason.CHANGED_MIND,
             items=[RefundItemRequest(order_item_id=uuid4(), quantity=1)],
         )
         with pytest.raises(HTTPException) as exc_info:
@@ -138,19 +172,19 @@ class TestRequest:
             await service.request(test_user.id, delivered_order.id, make_request(delivered_order, quantity=99))
         assert exc_info.value.status_code == 400
 
-    async def test_auto_approves_when_reason_and_amount_are_eligible(self, db_session, test_user, delivered_order):
-        """DEFECTIVE_PRODUCT + full refund + amount <= $500 + order < 30 days old auto-approves
-        immediately on request, restoring inventory - no admin action needed."""
+    async def test_auto_approves_when_reason_and_amount_are_eligible(self, db_session, test_user, delivered_order, stripe_refunds):
+        """DEFECTIVE_PRODUCT + full refund + small amount + recent order: approved and paid back at once."""
         service = RefundService(db_session)
         req = RefundRequest(
-            order_id=delivered_order.id, refund_type=RefundType.FULL_REFUND,
+            order_id=delivered_order.id,
             reason=RefundReason.DEFECTIVE_PRODUCT,
             items=[RefundItemRequest(order_item_id=delivered_order.item_id, quantity=2)],
         )
         response = await service.request(test_user.id, delivered_order.id, req)
-        assert response.status == RefundStatus.APPROVED
+        assert response.status == RefundStatus.COMPLETED
         assert response.auto_approved is True
-        assert response.approved_amount == pytest.approx(response.requested_amount, abs=0.01)
+        assert response.processed_amount == pytest.approx(53.98, abs=0.001)
+        assert stripe_refunds.call_args.kwargs["amount"] == 5398
 
     async def test_high_amount_reason_is_not_auto_approved(self, db_session, test_user, delivered_order):
         """Same eligible reason, but requested_amount > $500 must NOT auto-approve."""
@@ -165,7 +199,7 @@ class TestRequest:
 
         service = RefundService(db_session)
         req = RefundRequest(
-            order_id=delivered_order.id, refund_type=RefundType.FULL_REFUND,
+            order_id=delivered_order.id,
             reason=RefundReason.DEFECTIVE_PRODUCT,
             items=[RefundItemRequest(order_item_id=delivered_order.item_id, quantity=2)],
         )
@@ -198,7 +232,12 @@ class TestList:
         service = RefundService(db_session)
         result = await service.list(user_id=None)
         entry = next(r for r in result["items"] if str(r.id) == str(requested_refund.id))
-        assert entry.customer_name
+        assert entry.customer["email"]
+
+    async def test_customers_never_see_staff_details(self, db_session, test_user, requested_refund):
+        await RefundService(db_session).update_status(requested_refund.id, "rejected", admin_notes="internal")
+        own = await RefundService(db_session).get(requested_refund.id, test_user.id)
+        assert own.admin_notes is None and own.customer is None
 
     async def test_filters_by_status(self, db_session, test_user, requested_refund):
         service = RefundService(db_session)
@@ -251,7 +290,7 @@ class TestGet:
     async def test_admin_get_includes_customer(self, db_session, requested_refund):
         service = RefundService(db_session)
         result = await service.get(requested_refund.id)
-        assert result.customer["id"] == str(result.id) or "email" in result.customer
+        assert result.customer["email"]
 
     async def test_not_found_raises_404(self, db_session, test_user):
         service = RefundService(db_session)
@@ -267,231 +306,73 @@ class TestGet:
         assert exc_info.value.status_code == 500
 
 
-class TestCancel:
-
-    async def test_cancels_a_requested_refund(self, db_session, test_user, requested_refund):
-        service = RefundService(db_session)
-        result = await service.cancel(test_user.id, requested_refund.id)
-        assert result.status == RefundStatus.CANCELLED
-
-    async def test_not_found_raises_404(self, db_session, test_user):
-        service = RefundService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.cancel(test_user.id, uuid4())
-        assert exc_info.value.status_code == 404
-
-    async def test_cannot_cancel_a_completed_refund(self, db_session, test_user, requested_refund):
-        service = RefundService(db_session)
-        result = await db_session.execute(
-            select(Refund).where(Refund.id == requested_refund.id)
-        )
-        refund = result.scalar_one()
-        refund.status = RefundStatus.COMPLETED
-        await db_session.commit()
-
-        with pytest.raises(HTTPException) as exc_info:
-            await service.cancel(test_user.id, requested_refund.id)
-        assert exc_info.value.status_code == 400
-
-    async def test_generic_failure_raises_500(self, db_session, test_user, requested_refund):
-        service = RefundService(db_session)
-        db_session.execute = fail_after(db_session, n=0, exc=RuntimeError("query boom"))
-        with pytest.raises(HTTPException) as exc_info:
-            await service.cancel(test_user.id, requested_refund.id)
-        assert exc_info.value.status_code == 500
-
-
 class TestUpdateStatus:
 
-    async def test_approves_and_restores_inventory(self, db_session, test_user, variant, requested_refund):
-        service = RefundService(db_session)
-        result = await service.update_status(requested_refund.id, "approved", admin_notes="Looks good")
-        assert result.status == RefundStatus.APPROVED
-        # approved_amount is stored as Numeric(10,2), so it's the DB-rounded value
-        assert result.approved_amount == pytest.approx(requested_refund.requested_amount, abs=0.01)
-
-    async def test_not_found_raises_404(self, db_session):
-        service = RefundService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.update_status(uuid4(), "approved")
-        assert exc_info.value.status_code == 404
-
-    async def test_invalid_status_raises_400(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.update_status(requested_refund.id, "not-a-status")
-        assert exc_info.value.status_code == 400
-
-    async def test_rejects(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        result = await service.update_status(requested_refund.id, "rejected", admin_notes="Out of window")
-        assert result.status == RefundStatus.REJECTED
-
-    async def test_completing_sets_completed_at(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        result = await service.update_status(requested_refund.id, "completed")
+    async def test_approving_pays_the_customer_back_through_stripe(self, db_session, delivered_order, requested_refund, stripe_refunds):
+        result = await RefundService(db_session).update_status(requested_refund.id, "approved", admin_notes="Looks good")
         assert result.status == RefundStatus.COMPLETED
-        assert result.completed_at is not None
+        assert result.processed_amount == pytest.approx(53.98, abs=0.001)
+        assert stripe_refunds.call_args.kwargs["payment_intent"] == "pi_test"
+        assert stripe_refunds.call_args.kwargs["amount"] == 5398
+        await db_session.refresh(delivered_order)
+        assert delivered_order.payment_status == PaymentStatus.REFUNDED
+        refund_rows = (await db_session.execute(
+            select(Transaction).where(Transaction.order_id == delivered_order.id, Transaction.transaction_type == "refund")
+        )).scalars().all()
+        assert [float(t.amount) for t in refund_rows] == [-53.98]
 
-    async def test_completing_twice_does_not_overwrite_completed_at(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        first = await service.update_status(requested_refund.id, "completed")
-        second = await service.update_status(requested_refund.id, "completed", admin_notes="noop")
-        assert second.completed_at == first.completed_at
+    async def test_approving_restores_stock(self, db_session, variant, requested_refund):
+        await RefundService(db_session).update_status(requested_refund.id, "approved")
+        stock = (await db_session.execute(select(Inventory).where(Inventory.variant_id == variant.id))).scalar_one()
+        await db_session.refresh(stock)
+        assert stock.quantity_available == 52
 
-    async def test_generic_failure_raises_500(self, db_session, requested_refund):
+    async def test_a_refused_stripe_refund_fails_and_can_be_retried(self, db_session, requested_refund, stripe_refunds):
+        stripe_refunds.side_effect = stripe.error.InvalidRequestError("Charge already refunded", param=None)
+        with pytest.raises(HTTPException) as exc_info:
+            await RefundService(db_session).update_status(requested_refund.id, "approved")
+        assert exc_info.value.status_code == 400
+        failed = await RefundService(db_session).get(requested_refund.id)
+        assert failed.status == RefundStatus.FAILED
+        assert "already refunded" in failed.admin_notes
+
+        stripe_refunds.side_effect = None
+        retried = await RefundService(db_session).update_status(requested_refund.id, "approved")
+        assert retried.status == RefundStatus.COMPLETED
+
+    async def test_a_completed_refund_cannot_be_decided_again(self, db_session, requested_refund, stripe_refunds):
         service = RefundService(db_session)
-        db_session.execute = fail_after(db_session, n=0, exc=RuntimeError("query boom"))
+        await service.update_status(requested_refund.id, "approved")
         with pytest.raises(HTTPException) as exc_info:
             await service.update_status(requested_refund.id, "approved")
-        assert exc_info.value.status_code == 500
-
-    async def test_inventory_restore_item_failure_does_not_fail_the_approval(
-        self, db_session, requested_refund, mocker
-    ):
-        """A single item's inventory-restore failure must not block approval of the refund
-        itself - the code deliberately logs and continues (see _restore_inventory_for_refund)."""
-        mocker.patch(
-            "services.catalog.inventory.InventoryService.increment",
-            AsyncMock(side_effect=RuntimeError("inventory boom")),
-        )
-        service = RefundService(db_session)
-        result = await service.update_status(requested_refund.id, "approved")
-        assert result.status == RefundStatus.APPROVED
-
-    async def test_inventory_restore_outer_failure_does_not_fail_the_approval(
-        self, db_session, requested_refund, mocker
-    ):
-        """If restoring inventory blows up before even reaching individual items (e.g.
-        constructing InventoryService fails), the refund must still end up approved."""
-        mocker.patch(
-            "services.commerce.refunds.InventoryService",
-            side_effect=RuntimeError("ctor boom"),
-        )
-        service = RefundService(db_session)
-        result = await service.update_status(requested_refund.id, "approved")
-        assert result.status == RefundStatus.APPROVED
-
-
-class TestPatch:
-
-    async def test_updates_admin_notes(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        result = await service.patch(requested_refund.id, {"admin_notes": "Called customer"})
-        assert result.id == requested_refund.id
-
-    async def test_updates_approved_amount(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        result = await service.patch(requested_refund.id, {"approved_amount": 10.0})
-        assert result.approved_amount == 10.0
-
-    async def test_invalid_status_raises_400(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.patch(requested_refund.id, {"status": "not-a-status"})
         assert exc_info.value.status_code == 400
+        assert stripe_refunds.call_count == 1
+
+    async def test_never_refunds_more_than_was_paid(self, db_session, test_user, delivered_order, stripe_refunds):
+        service = RefundService(db_session)
+        first = await service.request(test_user.id, delivered_order.id, make_request(delivered_order, quantity=1))
+        await service.update_status(first.id, "approved")
+        second = await service.request(test_user.id, delivered_order.id, make_request(delivered_order, quantity=2))
+        assert second.requested_amount == pytest.approx(53.98 - 21.99, abs=0.001)
 
     async def test_not_found_raises_404(self, db_session):
-        service = RefundService(db_session)
         with pytest.raises(HTTPException) as exc_info:
-            await service.patch(uuid4(), {"admin_notes": "x"})
+            await RefundService(db_session).update_status(uuid4(), "approved")
         assert exc_info.value.status_code == 404
 
-    async def test_generic_failure_raises_500(self, db_session, requested_refund):
-        service = RefundService(db_session)
-        db_session.execute = fail_after(db_session, n=0, exc=RuntimeError("query boom"))
+    async def test_invalid_status_raises_400(self, db_session, requested_refund):
         with pytest.raises(HTTPException) as exc_info:
-            await service.patch(requested_refund.id, {"admin_notes": "x"})
-        assert exc_info.value.status_code == 500
+            await RefundService(db_session).update_status(requested_refund.id, "not-a-status")
+        assert exc_info.value.status_code == 400
 
+    async def test_rejects_without_touching_stripe(self, db_session, requested_refund, stripe_refunds):
+        result = await RefundService(db_session).update_status(requested_refund.id, "rejected", admin_notes="Out of window")
+        assert result.status == RefundStatus.REJECTED
+        stripe_refunds.assert_not_called()
 
-class TestCount:
-
-    async def test_counts_own_refunds(self, db_session, test_user, requested_refund):
-        service = RefundService(db_session)
-        assert await service.count(test_user.id) >= 1
-
-    async def test_filters_by_status(self, db_session, test_user, requested_refund):
-        service = RefundService(db_session)
-        assert await service.count(test_user.id, status=RefundStatus.COMPLETED) == 0
-
-    async def test_generic_failure_returns_zero(self, db_session, test_user, requested_refund):
-        """count() is used for display purposes - a DB error must not raise, just report 0."""
-        service = RefundService(db_session)
-        db_session.execute = fail_after(db_session, n=0, exc=RuntimeError("query boom"))
-        assert await service.count(test_user.id) == 0
-
-
-class TestStats:
-
-    async def test_computes_totals_from_real_refunds(self, db_session, test_user, requested_refund):
-        """Regression test: this fetched the user's refunds but never actually
-        used them - total_amount was set to the refund *count*, and every
-        per-status count was hardcoded to 0."""
-        service = RefundService(db_session)
-        stats = await service.stats(test_user.id)
-        assert stats["total_refunds"] >= 1
-        assert stats["total_amount"] == pytest.approx(float(requested_refund.requested_amount), abs=0.01)
-        assert stats["pending_count"] >= 1
-
-    async def test_no_refunds_returns_zeroed_stats(self, db_session, test_user):
-        service = RefundService(db_session)
-        stats = await service.stats(test_user.id)
-        assert stats["total_refunds"] == 0
-        assert stats["total_amount"] == 0
-        assert stats["average_processing_time_hours"] is None
-
-    async def test_generic_failure_returns_zeroed_stats(self, db_session, test_user, requested_refund):
-        """stats() delegates to list(), which itself converts DB errors into an
-        HTTPException(500) - stats()'s own except Exception must catch that too
-        (HTTPException is an Exception) and degrade to zeroed stats rather than raise."""
-        service = RefundService(db_session)
-        db_session.execute = fail_after(db_session, n=0, exc=RuntimeError("query boom"))
-        stats = await service.stats(test_user.id)
-        assert stats["total_refunds"] == 0
-        assert stats["total_amount"] == 0.0
-        assert stats["average_processing_time_hours"] is None
-
-
-class TestEligibility:
-
-    async def test_eligible_order(self, db_session, test_user, delivered_order):
-        service = RefundService(db_session)
-        result = await service.eligibility(test_user.id, delivered_order.id)
-        assert result["eligible"] is True
-        assert result["days_remaining"] <= 90
-
-    async def test_ineligible_order_status(self, db_session, test_user, delivered_order):
-        delivered_order.order_status = OrderStatus.PENDING
-        await db_session.commit()
-        service = RefundService(db_session)
-        result = await service.eligibility(test_user.id, delivered_order.id)
-        assert result["eligible"] is False
-
-    async def test_order_not_found_raises_404(self, db_session, test_user):
-        service = RefundService(db_session)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.eligibility(test_user.id, uuid4())
-        assert exc_info.value.status_code == 404
-
-    async def test_expired_refund_window(self, db_session, test_user, delivered_order):
-        delivered_order.created_at = datetime.now(timezone.utc) - timedelta(days=100)
-        await db_session.commit()
-        service = RefundService(db_session)
-        result = await service.eligibility(test_user.id, delivered_order.id)
-        assert result["eligible"] is False
-        assert "90 days" in result["reason"]
-
-    async def test_generic_failure_returns_default_response(self, db_session, test_user, delivered_order):
-        """A DB failure while checking eligibility (after the order itself was found)
-        must degrade to a safe "cannot check" response, not raise or 500."""
-        service = RefundService(db_session)
-        # Let the order-lookup query (inside _get_user_order) succeed, then fail on the
-        # next one (the existing-refund check inside _check_refund_eligibility).
-        db_session.execute = fail_after(db_session, n=1, exc=RuntimeError("query boom"))
-        result = await service.eligibility(test_user.id, delivered_order.id)
-        assert result["eligible"] is False
-        assert result["reason"] == "Unable to check eligibility"
-        assert result["order_date"] is None
+    async def test_inventory_restore_failure_does_not_fail_the_refund(self, db_session, requested_refund, mocker):
+        mocker.patch("services.catalog.inventory.InventoryService.increment", AsyncMock(side_effect=RuntimeError("inventory boom")))
+        result = await RefundService(db_session).update_status(requested_refund.id, "approved")
+        assert result.status == RefundStatus.COMPLETED
 
 

@@ -63,7 +63,7 @@ class TestSubscriptionToDict:
     def test_discount_included_when_set(self):
         sub = make_subscription(discount_type="percentage", discount_value=Decimal("10.00"), discount_code="SAVE10")
         data = sub.to_dict()
-        assert data["discount"] == {"type": "percentage", "value": Decimal("10.00"), "code": "SAVE10"}
+        assert data["discount"] == {"id": None, "type": "percentage", "value": Decimal("10.00"), "code": "SAVE10"}
 
     def test_empty_json_fields_default_to_empty_collections(self):
         sub = make_subscription()

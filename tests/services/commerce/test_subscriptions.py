@@ -17,7 +17,7 @@ from models.commerce.subscriptions import Subscription, SubscriptionStatus
 from models.catalog.category import Category
 from models.catalog.product import Product, ProductVariant
 from models.catalog.inventories import Inventory
-from models.accounts.user import Address
+from models.accounts.user import Address, User
 from models.commerce.shipping import ShippingMethod
 from models.commerce.promocode import Promocode
 from models.commerce.orders import Order, OrderStatus, PaymentStatus, FulfillmentStatus
@@ -101,14 +101,32 @@ class TestCreate:
         assert sub.discount_value == 5
 
     async def test_explicit_current_period_start_is_honored(self, db_session, test_user, variant):
+        start = (datetime.now(timezone.utc) + timedelta(days=10)).replace(microsecond=0)
         service = SubscriptionService(db_session)
         sub = await service.create(
-            user_id=test_user.id, name="Backdated", variant_ids=[str(variant.id)],
-            current_period_start="2026-01-15T00:00:00+00:00",
+            user_id=test_user.id, name="Later start", variant_ids=[str(variant.id)],
+            current_period_start=start.isoformat(),
         )
-        assert sub.current_period_start.year == 2026
-        assert sub.current_period_start.month == 1
-        assert sub.current_period_start.day == 15
+        assert sub.current_period_start.date() == start.date()
+
+    async def test_start_date_in_the_past_is_rejected(self, db_session, test_user, variant):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.create(
+                user_id=test_user.id, name="Backdated", variant_ids=[str(variant.id)],
+                current_period_start="2020-01-15T00:00:00+00:00",
+            )
+        assert exc_info.value.status_code == 400
+
+    async def test_someone_elses_address_is_rejected(self, db_session, test_user, variant):
+        stranger = User(id=uuid7(), email=f"s-{uuid4().hex[:6]}@example.com", firstname="S", lastname="T", hashed_password="x")
+        address = Address(id=uuid7(), user_id=stranger.id, street="1 Elsewhere", city="X", state="ON", country="CA", post_code="A1A1A1")
+        db_session.add_all([stranger, address])
+        await db_session.commit()
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.create(user_id=test_user.id, name="Theirs", variant_ids=[str(variant.id)], delivery_address_id=address.id)
+        assert exc_info.value.status_code == 400
 
     async def test_zero_priced_variant_falls_back_to_minimum_price(self, db_session, test_user):
         category = Category(id=uuid7(), name="FreeCat", slug=f"freecat-{uuid4().hex[:8]}")
@@ -251,11 +269,10 @@ class TestUpdate:
 
     async def test_updates_current_period_start_and_recomputes_period_end(self, db_session, test_user, subscription):
         service = SubscriptionService(db_session)
-        updated = await service.update(
-            subscription.id, test_user.id, current_period_start="2026-02-01T00:00:00+00:00",
-        )
-        assert updated.current_period_start.month == 2
-        assert updated.current_period_end.month == 3
+        start = datetime.now(timezone.utc) + timedelta(days=3)
+        updated = await service.update(subscription.id, test_user.id, current_period_start=start.isoformat())
+        assert updated.current_period_start.date() == start.date()
+        assert updated.current_period_end > updated.current_period_start
         assert updated.next_billing_date == updated.current_period_end
 
     async def test_updates_variant_ids_and_associations(self, db_session, test_user, subscription, variant):
@@ -415,10 +432,23 @@ class TestProductManagement:
         assert len(updated.products) == 2
 
     async def test_removes_a_product(self, db_session, test_user, subscription, variant):
+        category = Category(id=uuid7(), name="Cat5", slug=f"cat5-{uuid4().hex[:8]}")
+        product = Product(id=uuid7(), name="Extra3", slug=f"extra3-{uuid4().hex[:8]}", category_id=category.id)
+        extra_variant = ProductVariant(id=uuid7(), product_id=product.id, sku=f"SKU5-{uuid4().hex[:8]}", name="Extra3", base_price=Decimal("5.00"))
+        db_session.add_all([category, product, extra_variant])
+        await db_session.commit()
         service = SubscriptionService(db_session)
+        await service.add_products(subscription.id, [extra_variant.id], test_user.id)
+
         updated = await service.remove_products(subscription.id, [variant.id], test_user.id)
-        assert len(updated.products) == 0
-        assert str(variant.id) not in updated.variant_ids
+        assert [str(v.id) for v in updated.products] == [str(extra_variant.id)]
+        assert updated.variant_ids == [str(extra_variant.id)]
+
+    async def test_keeps_at_least_one_product(self, db_session, test_user, subscription, variant):
+        service = SubscriptionService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.remove_products(subscription.id, [variant.id], test_user.id)
+        assert exc_info.value.status_code == 400
 
     async def test_adds_a_product_when_variant_ids_was_none(self, db_session, test_user, subscription, variant):
         """add_products() must initialize variant_ids from scratch when it's None,

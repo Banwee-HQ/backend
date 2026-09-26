@@ -9,6 +9,7 @@ aren't reachable with enough branch coverage, from the HTTP layer alone.
 
 import asyncio
 import pytest
+from unittest.mock import AsyncMock
 from types import SimpleNamespace
 from uuid import uuid4
 from decimal import Decimal
@@ -544,15 +545,16 @@ class TestList:
         result = await service.list(user_id=test_user.id, search=existing_order.order_number[:8])
         assert any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
 
-    async def test_filters_by_q(self, db_session, test_user, existing_order):
-        service = OrderService(db_session)
-        result = await service.list(user_id=test_user.id, q=str(existing_order.id)[:8])
-        assert any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
-
     async def test_filters_by_price_range_excludes_out_of_range(self, db_session, test_user, existing_order):
         service = OrderService(db_session)
         result = await service.list(user_id=test_user.id, min_price=1000, max_price=2000)
         assert not any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
+
+    async def test_search_finds_the_customer_by_email(self, db_session, test_user, existing_order):
+        service = OrderService(db_session)
+        result = await service.list(search=test_user.email)
+        assert any(str(o["id"]) == str(existing_order.id) for o in result["orders"])
+
 
     async def test_admin_lists_all_orders(self, db_session, existing_order):
         service = OrderService(db_session)
@@ -655,6 +657,8 @@ class TestUpdateStatus:
 
     async def test_delivered_status_sends_email(self, db_session, existing_order, mocker):
         mock = mocker.patch("services.accounts.email.EmailService.send_order_delivered", return_value=None)
+        existing_order.order_status = OrderStatus.SHIPPED
+        await db_session.commit()
         service = OrderService(db_session)
         order = await service.update_status(existing_order.id, "delivered", background_tasks=BackgroundTasks())
         assert order.order_status == OrderStatus.DELIVERED
@@ -1079,14 +1083,23 @@ class TestCancelEdgeCases:
 class TestUpdateStatusEdgeCases:
 
     async def test_cancelled_status_sets_cancelled_at(self, db_session, existing_order):
+        existing_order.payment_status = PaymentStatus.PENDING  # nothing to refund
+        await db_session.commit()
         service = OrderService(db_session)
         order = await service.update_status(existing_order.id, "cancelled")
         assert order.order_status == OrderStatus.CANCELLED
         assert order.cancelled_at is not None
 
+    async def test_staff_cancelling_a_paid_order_refunds_it(self, db_session, existing_order, mocker):
+        refund = mocker.patch("services.commerce.payments.PaymentService.refund_order", AsyncMock(return_value="re_1"))
+        order = await OrderService(db_session).update_status(existing_order.id, "cancelled")
+        assert order.payment_status == PaymentStatus.REFUNDED
+        refund.assert_awaited_once()
+
     async def test_delivered_email_handles_non_dict_shipping_address(self, db_session, existing_order, mocker):
         mock = mocker.patch("services.accounts.email.EmailService.send_order_delivered", return_value=None)
         existing_order.shipping_address = "123 Main St, Somewhere"
+        existing_order.order_status = OrderStatus.SHIPPED
         await db_session.commit()
         service = OrderService(db_session)
         await service.update_status(existing_order.id, "delivered", background_tasks=BackgroundTasks())

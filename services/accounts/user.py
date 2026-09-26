@@ -115,8 +115,7 @@ class UserService:
 
         # Apply status filter if provided
         if status:
-            # Check if status is account_status (active/inactive) or verification_status
-            if status in ['active', 'inactive']:
+            if status in {v.value for v in AccountStatus}:
                 base_query = base_query.where(User.account_status == status)
             else:
                 base_query = base_query.where(User.verification_status == status)
@@ -137,8 +136,7 @@ class UserService:
         if role:
             count_query = count_query.where(User.role == role)
         if status:
-            # Check if status is account_status (active/inactive) or verification_status
-            if status in ['active', 'inactive']:
+            if status in {v.value for v in AccountStatus}:
                 count_query = count_query.where(User.account_status == status)
             else:
                 count_query = count_query.where(User.verification_status == status)
@@ -204,24 +202,6 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
         return user
-
-    async def delete(self, user_id: UUID, soft_delete: bool = True) -> bool:
-        """Delete user. Set soft_delete=False for hard delete."""
-        query = select(User).where(User.id == user_id)
-        result = await self.db.execute(query)
-        user = result.scalar_one_or_none()
-
-        if not user:
-            return False
-
-        if soft_delete:
-            user.account_status = AccountStatus.INACTIVE
-            await self.db.commit()
-            await self.db.refresh(user)
-        else:
-            await self.db.delete(user)
-            await self.db.commit()
-        return True
 
     async def search(
         self, 
@@ -421,10 +401,8 @@ class UserService:
         except APIException:
             raise
         except Exception as e:
-            raise APIException(
-                status_code=500,
-                message=f"Failed to send password reset email: {str(e)}"
-            )
+            logger.error(f"Password reset email failed for {user_id}: {e}")
+            raise APIException(status_code=502, message="The reset link was created, but the email service didn't send it. Try again later.")
 
     async def deactivate(self, user_id: UUID) -> Dict[str, Any]:
         """Deactivate user account (admin only)."""

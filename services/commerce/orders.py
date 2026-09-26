@@ -1,7 +1,5 @@
 """Order service: complete order lifecycle with backend-only price calculations."""
 import re
-import asyncio
-import json
 import traceback
 
 import stripe
@@ -16,7 +14,7 @@ from models.commerce.cart import Cart, CartItem
 from models.accounts.user import User, Address
 from models.catalog.product import ProductVariant
 from models.commerce.shipping import ShippingMethod
-from models.commerce.payments import PaymentMethod, Transaction
+from models.commerce.payments import PaymentMethod
 from schemas.commerce.orders import Response as OrderResponse, ItemResponse as OrderItemResponse, Checkout as CheckoutRequest
 from schemas.catalog.inventory import AdjustmentCreate as StockAdjustmentCreate
 from services.commerce.cart import CartService
@@ -38,6 +36,15 @@ from core.config import settings
 
 logger = get_structured_logger(__name__)
 
+
+
+# Where staff can move an order next; refunds after delivery go through the refund flow.
+NEXT_STATUSES = {
+    OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.CANCELLED},
+    OrderStatus.CONFIRMED: {OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.CANCELLED},
+    OrderStatus.PROCESSING: {OrderStatus.SHIPPED, OrderStatus.CANCELLED},
+    OrderStatus.SHIPPED: {OrderStatus.DELIVERED},
+}
 
 class OrderService:
     """Order service with backend-only pricing: TOTAL = SUM(qty×backend_price) + shipping + tax - discount.
@@ -602,7 +609,6 @@ class OrderService:
         search: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
-        q: Optional[str] = None,
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
         sort_by: Optional[str] = None,
@@ -630,21 +636,13 @@ class OrderService:
             if status:
                 conditions.append(Order.order_status == status)
 
-            if q:
-                conditions.append(
-                    or_(
-                        Order.id.cast(String).ilike(f"%{q}%"),
-                        Order.user.has(User.email.ilike(f"%{q}%"))
-                    )
-                )
-
             if search:
-                conditions.append(
-                    or_(
-                        Order.id.cast(String).ilike(f"%{search}%"),
-                        Order.order_number.ilike(f"%{search}%") if hasattr(Order, 'order_number') else text('FALSE')
-                    )
-                )
+                term = f"%{search.strip()}%"
+                conditions.append(or_(
+                    Order.id.cast(String).ilike(term),
+                    Order.order_number.ilike(term),
+                    Order.user.has(or_(User.email.ilike(term), User.firstname.ilike(term), User.lastname.ilike(term))),
+                ))
 
             if date_from:
                 try:
@@ -662,7 +660,6 @@ class OrderService:
 
             if min_price is not None:
                 conditions.append(Order.total_amount >= min_price)
-
             if max_price is not None:
                 conditions.append(Order.total_amount <= max_price)
 
@@ -746,60 +743,46 @@ class OrderService:
             raise
 
     async def cancel(self, order_id: UUID, user_id: UUID) -> OrderResponse:
-        """Cancel an order with transaction safety"""
-        query = select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).with_for_update()
-        result = await self.db.execute(query)
-        order = result.scalar_one_or_none()
-
+        """Customer cancellation: pending or confirmed orders only."""
+        order = (await self.db.execute(
+            select(Order).where(and_(Order.id == order_id, Order.user_id == user_id)).with_for_update()
+        )).scalar_one_or_none()
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-
         if order.order_status not in [OrderStatus.PENDING, OrderStatus.CONFIRMED]:
             raise HTTPException(status_code=400, detail="Order cannot be cancelled")
+        await self._cancel(order, user_id, "Order cancelled by customer")
+        return await self._format_order_response(order)
 
-        # self.db already has an auto-begun transaction from the SELECT above - an
-        # explicit self.db.begin() here raises "A transaction is already begun".
+    async def _cancel(self, order: Order, actor_id: Optional[UUID], description: str) -> None:
+        """Refund what was paid, put the stock back and close the order, all or nothing."""
         try:
-            now = datetime.now(tz=timezone.utc)
             if order.payment_status == PaymentStatus.PAID:
                 await self._refund_for_cancellation(order)
                 order.payment_status = PaymentStatus.REFUNDED
             order.order_status = OrderStatus.CANCELLED
             order.fulfillment_status = FulfillmentStatus.CANCELLED
-            order.cancelled_at = now
+            order.cancelled_at = datetime.now(tz=timezone.utc)
 
-            # Increment stock for cancelled order items
-            query_items = select(OrderItem).where(OrderItem.order_id == order.id).options(
-                selectinload(OrderItem.variant).selectinload(ProductVariant.inventory)
-            )
-            order_items_with_inventory = (await self.db.execute(query_items)).scalars().all()
-
-            for item in order_items_with_inventory:
+            items = (await self.db.execute(
+                select(OrderItem).where(OrderItem.order_id == order.id).options(
+                    selectinload(OrderItem.variant).selectinload(ProductVariant.inventory)
+                )
+            )).scalars().all()
+            for item in items:
                 if not item.variant or not item.variant.inventory:
                     logger.warning(f"No inventory found for variant {item.variant_id} during order cancellation.")
                     continue
-
-                # Use new increment stock method for cancellations
                 await self.inventory_service.increment(
                     variant_id=item.variant.id,
                     quantity=item.quantity,
                     location_id=item.variant.inventory.location_id,
                     order_id=order.id,
-                    user_id=user_id
+                    user_id=actor_id,
                 )
-
-            # Add tracking event
-            tracking_event = TrackingEvent(
-                order_id=order.id,
-                status="cancelled",
-                description="Order cancelled by customer",
-                location="System"
-            )
-            self.db.add(tracking_event)
-
+            self.db.add(TrackingEvent(order_id=order.id, status="cancelled", description=description, location="System"))
             await self.db.commit()
             await self.db.refresh(order)
-
         except HTTPException:
             await self.db.rollback()
             raise
@@ -807,42 +790,12 @@ class OrderService:
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Order cancellation failed: {str(e)}")
 
-        return await self._format_order_response(order)
-
     async def _refund_for_cancellation(self, order: Order) -> None:
-        """Refund a paid order in full via Stripe and record the refund transaction.
-        Raises 400 if the payment can't be refunded, so the order is left uncancelled."""
-        payment = (await self.db.execute(
-            select(Transaction).where(and_(
-                Transaction.order_id == order.id,
-                Transaction.transaction_type == "payment",
-                Transaction.status == "succeeded",
-            ))
-        )).scalars().first()
-        if not payment or not payment.stripe_payment_intent_id:
-            raise HTTPException(status_code=400, detail="Paid order has no refundable payment; contact support")
-        try:
-            stripe_refund = await asyncio.to_thread(
-                stripe.Refund.create,
-                payment_intent=payment.stripe_payment_intent_id,
-                reason="requested_by_customer",
-                metadata={"order_id": str(order.id), "reason": "order_cancelled"},
-                idempotency_key=f"order-cancel-{order.id}",
-            )
-        except stripe.error.StripeError as e:
-            raise HTTPException(status_code=400, detail=f"Refund failed, order not cancelled: {e.user_message or str(e)}")
-        self.db.add(Transaction(
-            user_id=order.user_id,
-            order_id=order.id,
-            payment_intent_id=payment.payment_intent_id,
-            stripe_payment_intent_id=payment.stripe_payment_intent_id,
-            amount=-abs(payment.amount),
-            currency=payment.currency,
-            status="succeeded",
-            transaction_type="refund",
-            description="Refund for cancelled order",
-            transaction_metadata=json.dumps({"stripe_refund_id": stripe_refund.id}),
-        ))
+        """Refund what's left of a paid order via Stripe; raises 400 so a failed refund leaves the order uncancelled."""
+        payments = PaymentService(self.db)
+        remaining = Decimal(str(order.total_amount)) - await payments.refunded_total(order.id)
+        if remaining > 0:
+            await payments.refund_order(order, remaining, f"order-cancel-{order.id}", "Refund for cancelled order")
 
     async def update_status(
         self, 
@@ -862,12 +815,18 @@ class OrderService:
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        # Convert string status to OrderStatus enum (enum values are lowercase)
         try:
             status_enum = OrderStatus(status.lower())
-            order.order_status = status_enum
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid order status: {status}")
+        if status_enum not in NEXT_STATUSES.get(order.order_status, set()):
+            raise HTTPException(status_code=400, detail=f"A {order.order_status.value} order can't be marked {status_enum.value}")
+        if status_enum == OrderStatus.CANCELLED:
+            await self._cancel(order, None, description or "Order cancelled by the shop")
+            return order
+        if order.payment_status != PaymentStatus.PAID:
+            raise HTTPException(status_code=400, detail="This order hasn't been paid yet")
+        order.order_status = status_enum
 
         # Set lifecycle timestamps
         now = datetime.now(tz=timezone.utc)
@@ -1410,7 +1369,7 @@ class OrderService:
             if 'libgobject' in error_msg or 'cannot load library' in error_msg or 'dyld' in error_msg or 'GTK' in error_msg:
                 raise HTTPException(
                     status_code=503,
-                    detail="PDF generation is not available on this server. System libraries (GTK+) are missing. Please install the required dependencies or use a different server configuration."
+                    detail="Invoices can't be created right now. Please try again later."
                 )
 
             raise HTTPException(

@@ -7,11 +7,12 @@ no method_id (or an inactive one) is given.
 
 import pytest
 from uuid import uuid4
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
 from core.exceptions import APIException
 from services.commerce.shipping import ShippingService
 from models.commerce.shipping import ShippingMethod
+from models.commerce.subscriptions import Subscription
 from schemas.commerce.shipping import MethodCreate as ShippingMethodCreate, MethodUpdate as ShippingMethodUpdate
 
 
@@ -21,6 +22,8 @@ async def _clean_shipping_methods(db_session):
     ShippingMethod - rows created by earlier tests (real commits, not rolled
     back) would otherwise leak into later "cheapest"/"none exist" assertions.
     No other test file uses ShippingMethod and no migration seeds it."""
+    # Subscriptions point at methods; detach them first (all of this rolls back after the test).
+    await db_session.execute(update(Subscription).values(shipping_method_id=None))
     await db_session.execute(delete(ShippingMethod))
     await db_session.commit()
     yield

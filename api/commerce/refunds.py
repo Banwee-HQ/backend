@@ -144,7 +144,8 @@ async def update_status(
         refund = await refund_service.update_status(
             refund_id=refund_id,
             status=payload.status,
-            admin_notes=payload.admin_notes
+            admin_notes=payload.admin_notes,
+            staff_id=current_user.id,
         )
         return Response.success(data=refund, message="Refund status updated successfully")
     except APIException:

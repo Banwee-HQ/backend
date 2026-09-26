@@ -170,6 +170,9 @@ class Subscription(Base):
     current_shipping_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     current_tax_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
     current_tax_rate: Mapped[Optional[float]] = mapped_column(Numeric(5, 4), nullable=True)
+    current_subtotal: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    current_discount_amount: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    current_total: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # --- Products & variants ---
     variant_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
@@ -218,6 +221,8 @@ class Subscription(Base):
             "paused_at": self.paused_at.isoformat() if self.paused_at else None,
             "pause_reason": self.pause_reason,
             "last_payment_error": self.last_payment_error,
+            "payment_retry_count": self.payment_retry_count or 0,
+            "next_retry_date": self.next_retry_date.isoformat() if self.next_retry_date else None,
             "variant_ids": self.variant_ids or [],
             "subscription_metadata": self.subscription_metadata or {},
             # At-creation prices
@@ -231,8 +236,12 @@ class Subscription(Base):
             "current_shipping_amount": self.current_shipping_amount,
             "current_tax_amount": self.current_tax_amount,
             "current_tax_rate": self.current_tax_rate,
+            "current_subtotal": self.current_subtotal,
+            "current_discount_amount": self.current_discount_amount,
+            "current_total": self.current_total,
             # Discount info
             "discount": {
+                "id": str(self.discount_id) if self.discount_id else None,
                 "type": self.discount_type,
                 "value": self.discount_value,
                 "code": self.discount_code

@@ -54,6 +54,5 @@ class TestVariantResponseDietaryTags:
 
 class TestCreate:
 
-    def test_requires_sale_price(self):
-        with pytest.raises(ValidationError):
-            Create(name="Coffee", slug="coffee", category_id="00000000-0000-0000-0000-000000000000")
+    def test_sale_price_is_optional(self):
+        assert Create(name="Coffee", slug="coffee", category_id="00000000-0000-0000-0000-000000000000").sale_price is None

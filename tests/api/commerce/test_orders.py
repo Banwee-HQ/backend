@@ -232,12 +232,29 @@ class TestOrderEndpoints:
         )
         assert response.status_code == 403
 
-    async def test_update_status_as_admin(self, async_client: AsyncClient, admin_headers, created_order):
-        """PATCH /v1/orders/{id}/status - Admin updates order status."""
+    async def test_update_status_as_admin(self, async_client: AsyncClient, admin_headers, created_order, db_session: AsyncSession):
+        """PATCH /v1/orders/{id}/status - Admin moves a paid order forward."""
+        created_order.payment_status = PaymentStatus.PAID
+        await db_session.commit()
         response = await async_client.patch(f"/v1/orders/{created_order.id}/status/",
             headers=admin_headers, json={"status": "confirmed"}
         )
         assert response.status_code == 200
+
+    async def test_unpaid_order_cannot_be_confirmed(self, async_client: AsyncClient, admin_headers, created_order):
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/status/",
+            headers=admin_headers, json={"status": "confirmed"}
+        )
+        assert response.status_code == 400
+
+    async def test_status_cannot_jump_backwards(self, async_client: AsyncClient, admin_headers, created_order, db_session: AsyncSession):
+        created_order.payment_status = PaymentStatus.PAID
+        created_order.order_status = OrderStatus.SHIPPED
+        await db_session.commit()
+        response = await async_client.patch(f"/v1/orders/{created_order.id}/status/",
+            headers=admin_headers, json={"status": "pending"}
+        )
+        assert response.status_code == 400
 
 
     async def test_update_status_unknown_order_returns_404(self, async_client: AsyncClient, admin_headers):

@@ -16,7 +16,6 @@ class ItemRequest(BaseModel):
 
 class Request(BaseModel):
     """Request schema for creating a refund"""
-    refund_type: RefundType = Field(RefundType.FULL_REFUND, description="Type of refund requested")
     reason: RefundReason = Field(..., description="Reason for refund")
     customer_reason: Optional[str] = Field(None, max_length=1000, description="Customer's detailed explanation")
     customer_notes: Optional[str] = Field(None, max_length=1000, description="Additional customer notes")
@@ -32,6 +31,7 @@ class Request(BaseModel):
 class ItemResponse(BaseModel):
     """Response schema for refund items"""
     order_item_id: UUID
+    name: str
     quantity: int
     amount: float
     condition_notes: Optional[str]
@@ -69,8 +69,7 @@ class Response(BaseModel):
     completed_at: Optional[datetime]
     items: List[ItemResponse]
     timeline: List[TimelineItem]
-    customer_name: Optional[str] = None
-    customer: Optional[dict] = None
+    customer: Optional[dict] = None  # staff only: {name, email}
     admin_notes: Optional[str] = None
 
     class Config:

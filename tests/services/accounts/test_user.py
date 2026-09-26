@@ -118,27 +118,6 @@ class TestUpdate:
         assert result is None
 
 
-class TestDelete:
-
-    async def test_soft_delete_marks_inactive_without_removing_row(self, db_session):
-        user = await make_user(db_session)
-        service = UserService(db_session)
-        assert await service.delete(user.id, soft_delete=True) is True
-        found = await service.get(user.id)
-        assert found is not None
-        assert found.account_status == AccountStatus.INACTIVE
-
-    async def test_hard_delete_removes_row(self, db_session):
-        user = await make_user(db_session)
-        service = UserService(db_session)
-        assert await service.delete(user.id, soft_delete=False) is True
-        assert await service.get(user.id) is None
-
-    async def test_unknown_id_returns_false(self, db_session):
-        service = UserService(db_session)
-        assert await service.delete(uuid4()) is False
-
-
 class TestList:
 
     async def test_lists_with_pagination_envelope(self, db_session):
@@ -306,7 +285,7 @@ class TestResetPasswordDeactivateActivate:
 
     async def test_reset_password_email_failure_hits_generic_exception(self, db_session, mocker):
         """Email-sending is the one allowed-to-mock external side effect here: a real SMTP/
-        Brevo outage after the token was already committed must surface as a 500, not crash
+        Brevo outage after the token was already committed must surface as a 502 saying the email wasn't sent, not crash
         the process - exercising reset_password()'s generic exception fallback."""
         mocker.patch(
             "services.accounts.email.EmailService.send_password_reset_email",
@@ -316,4 +295,4 @@ class TestResetPasswordDeactivateActivate:
         service = UserService(db_session)
         with pytest.raises(APIException) as exc_info:
             await service.reset_password(user.id)
-        assert exc_info.value.status_code == 500
+        assert exc_info.value.status_code == 502
