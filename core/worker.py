@@ -1,16 +1,20 @@
 """Background jobs run inside the app: subscription renewals, promocode windows and abandoned bank checks."""
 import asyncio
-import time
+from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import core.db as core_db
+from core.config import settings
 from core.logging import get_structured_logger
 from services.commerce.promocode_scheduler import PromoCodeScheduler
 from services.commerce.subscriptions_scheduler import SubscriptionScheduler, renewal_lock
 
 logger = get_structured_logger(__name__)
 
-TICK_SECONDS = 30
+STORE_TZ = ZoneInfo(settings.STORE_TIMEZONE)
+# Renewals run at these store-time hours; each run bills everything that has come due since the last one.
+SUBSCRIPTION_HOURS = (2, 8, 14, 20)
 
 
 def _get_retrying_db_session():
@@ -78,27 +82,46 @@ async def expire_unverified_orders_task() -> str:
     return await _run_scheduled_job("expire_unverified_orders", run)
 
 
-# (job, seconds between runs). Each runs once at startup, so nothing waits on missed downtime.
+def at_hours(hours):
+    """Schedule: the next of these store-time hours after a moment."""
+    def next_run(after: datetime) -> datetime:
+        local = after.astimezone(STORE_TZ)
+        return min(
+            datetime.combine(local.date() + timedelta(days=day), time(hour), STORE_TZ)
+            for day in (0, 1) for hour in hours
+            if datetime.combine(local.date() + timedelta(days=day), time(hour), STORE_TZ) > local
+        )
+    return next_run
+
+
+def every(minutes: int):
+    return lambda after: after + timedelta(minutes=minutes)
+
+
+# (job, schedule). Every job also runs once at startup, so downtime never skips a run.
 JOBS = (
-    (process_subscription_orders_task, 3600),
-    (update_promocode_statuses_task, 3600),
-    (expire_unverified_orders_task, 600),
+    (process_subscription_orders_task, at_hours(SUBSCRIPTION_HOURS)),
+    (update_promocode_statuses_task, at_hours((0,))),
+    (expire_unverified_orders_task, every(10)),
 )
 
 
-async def _run_scheduler(jobs=JOBS, tick: float = TICK_SECONDS):
-    """Run each job when its interval has passed; a failing job is logged and tried again next interval."""
+async def _run_scheduler(jobs=JOBS, now=lambda: datetime.now(timezone.utc)):
+    """Sleep until the next job is due (no polling), run what's due, repeat. A failing job is logged."""
     logger.info("Background scheduler started")
-    next_run = {job: 0.0 for job, _ in jobs}
+    next_run = {job: now() for job, _ in jobs}
     while True:
-        for job, interval in jobs:
-            if time.monotonic() >= next_run[job]:
-                next_run[job] = time.monotonic() + interval
+        current = now()
+        for job, schedule in jobs:
+            if next_run[job] <= current:
+                next_run[job] = schedule(current)
                 try:
                     logger.info(await job())
                 except Exception as e:
                     logger.error(f"Scheduled job {job.__name__} failed: {e}")
-        await asyncio.sleep(tick)
+        # Capped at an hour so a changed system clock can't strand the loop.
+        wait = (min(next_run.values()) - now()).total_seconds()
+        await asyncio.sleep(min(max(wait, 1), 3600))
 
 
 def start_scheduler():

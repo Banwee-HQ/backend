@@ -66,6 +66,8 @@ class Settings:
     STORE_CURRENCY: str = os.getenv("STORE_CURRENCY", "CAD").upper()
     # Seller details printed on invoices; lines separated by "|".
     STORE_NAME: str = os.getenv("STORE_NAME", "Banwee")
+    # The shop's clock for scheduled jobs (e.g. renewals at 2:00, 8:00, 14:00, 20:00).
+    STORE_TIMEZONE: str = os.getenv("STORE_TIMEZONE", "America/Toronto")
     STORE_ADDRESS: str = os.getenv("STORE_ADDRESS", "")
 
     STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")

@@ -1,6 +1,7 @@
 """Tests for core/worker.py - scheduled jobs and the scheduler loop."""
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 import pytest
 
 from core import worker
@@ -131,35 +132,55 @@ class TestUpdatePromocodeStatusesTask:
         assert result == "promocodes: 2 activated, 1 deactivated"
 
 
+class TestSchedules:
+
+    @pytest.mark.parametrize("local, expected", [
+        ("2026-03-10 08:30", "2026-03-10 14:00"),
+        ("2026-03-10 08:00", "2026-03-10 14:00"),
+        ("2026-03-10 21:15", "2026-03-11 02:00"),
+        ("2026-03-10 01:59", "2026-03-10 02:00"),
+    ])
+    def test_renewals_run_at_2_8_14_20_store_time(self, local, expected):
+        after = datetime.fromisoformat(local).replace(tzinfo=worker.STORE_TZ)
+        assert worker.at_hours(worker.SUBSCRIPTION_HOURS)(after) == datetime.fromisoformat(expected).replace(tzinfo=worker.STORE_TZ)
+
+    def test_every_adds_minutes(self):
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        assert worker.every(10)(start) == start + timedelta(minutes=10)
+
+
 class TestRunScheduler:
 
     @staticmethod
-    async def run_ticks(mocker, jobs, ticks, clock):
-        """Run the loop for a number of ticks, advancing a fake clock by 60s per tick."""
-        mocker.patch("core.worker.time.monotonic", side_effect=lambda: clock["now"])
-        count = {"n": 0}
-        async def fake_sleep(_):
-            count["n"] += 1
-            clock["now"] += 60
-            if count["n"] >= ticks:
+    async def run(mocker, jobs, start, until):
+        """Run the loop on a fake clock that jumps ahead by each requested sleep, until a point in time."""
+        clock = {"now": start}
+        sleeps = []
+        async def fake_sleep(seconds):
+            sleeps.append(seconds)
+            clock["now"] += timedelta(seconds=seconds)
+            if clock["now"] >= until:
                 raise asyncio.CancelledError
         mocker.patch("core.worker.asyncio.sleep", side_effect=fake_sleep)
         with pytest.raises(asyncio.CancelledError):
-            await worker._run_scheduler(jobs=jobs, tick=60)
+            await worker._run_scheduler(jobs=jobs, now=lambda: clock["now"])
+        return sleeps
 
     @pytest.mark.asyncio
-    async def test_runs_every_job_at_startup_then_on_its_interval(self, mocker):
-        hourly = mocker.AsyncMock(return_value="ok", __name__="hourly")
-        ten_min = mocker.AsyncMock(return_value="ok", __name__="ten_min")
-        await self.run_ticks(mocker, ((hourly, 3600), (ten_min, 600)), ticks=61, clock={"now": 1000.0})
-        assert hourly.await_count == 2      # at 0 and after 60 minutes
-        assert ten_min.await_count == 7     # every 10 minutes
+    async def test_runs_at_startup_then_only_at_the_set_hours(self, mocker):
+        renewals = mocker.AsyncMock(return_value="ok", __name__="renewals")
+        start = datetime(2026, 3, 10, 9, 0, tzinfo=worker.STORE_TZ)
+        sleeps = await self.run(mocker, ((renewals, worker.at_hours(worker.SUBSCRIPTION_HOURS)),), start, start + timedelta(hours=24))
+        # 09:00 startup, then 14:00, 20:00, 02:00, 08:00
+        assert renewals.await_count == 5
+        assert len(sleeps) <= 30  # sleeps until the next run instead of polling
 
     @pytest.mark.asyncio
     async def test_a_failing_job_is_logged_and_the_loop_continues(self, mocker):
         failing = mocker.AsyncMock(side_effect=RuntimeError("boom"), __name__="failing")
         other = mocker.AsyncMock(return_value="ok", __name__="other")
-        await self.run_ticks(mocker, ((failing, 60), (other, 60)), ticks=3, clock={"now": 0.0})
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        await self.run(mocker, ((failing, worker.every(10)), (other, worker.every(10))), start, start + timedelta(minutes=25))
         assert failing.await_count == 3 and other.await_count == 3
 
 

@@ -49,12 +49,18 @@ async def renewal_lock(db: AsyncSession):
                 await conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": RENEWAL_LOCK_ID})
 
 
+# Renewals run at set hours, so anything due within this window is taken now rather than a run later
+# (e.g. a retry set for 14:00:30 by the 08:00:30 run is billed by the 14:00 run).
+DUE_WINDOW = timedelta(minutes=15)
+
+
 def _due(now: datetime):
+    cutoff = now + DUE_WINDOW
     return and_(
         Subscription.auto_renew.is_(True),
         or_(
-            and_(Subscription.status == ACTIVE, Subscription.next_billing_date <= now),
-            and_(Subscription.status == PAYMENT_FAILED, Subscription.next_retry_date <= now),
+            and_(Subscription.status == ACTIVE, Subscription.next_billing_date <= cutoff),
+            and_(Subscription.status == PAYMENT_FAILED, Subscription.next_retry_date <= cutoff),
         ),
     )
 

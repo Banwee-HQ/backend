@@ -314,6 +314,14 @@ class TestBatch:
         assert any(s.id == subscription.id for s in due)
         assert all(s.to_dict()["id"] for s in due)
 
+    async def test_a_retry_due_just_after_the_run_is_taken_by_this_run(self, db_session, test_user, subscription):
+        """Runs are at set hours; a retry set 6h after the last run (a few seconds past this one) mustn't wait 6 more hours."""
+        await add_card(db_session, test_user)
+        subscription.status = "payment_failed"
+        subscription.next_retry_date = datetime.now(timezone.utc) + timedelta(seconds=30)
+        await db_session.commit()
+        assert await SubscriptionScheduler(db_session).process_subscription(subscription.id) == "paid"
+
     async def test_not_yet_due_is_left_alone(self, db_session, test_user, subscription):
         subscription.next_billing_date = datetime.now(timezone.utc) + timedelta(days=1)
         await db_session.commit()
