@@ -40,7 +40,8 @@ logger = get_structured_logger(__name__)
 
 # Where staff can move an order next; refunds after delivery go through the refund flow.
 NEXT_STATUSES = {
-    OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.PROCESSING, OrderStatus.CANCELLED},
+    # A pending order is unpaid; payment confirms it, so staff can only cancel it.
+    OrderStatus.PENDING: {OrderStatus.CANCELLED},
     OrderStatus.CONFIRMED: {OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.CANCELLED},
     OrderStatus.PROCESSING: {OrderStatus.SHIPPED, OrderStatus.CANCELLED},
     OrderStatus.SHIPPED: {OrderStatus.DELIVERED},

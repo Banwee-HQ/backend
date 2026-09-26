@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
+import calendar
 from core.logging import get_structured_logger
 from core.config import settings
 
@@ -33,6 +34,15 @@ def compute_period_end(start: datetime, billing_cycle: str) -> datetime:
     if billing_cycle == BillingCycle.YEARLY:
         return start + relativedelta(years=1)
     return start + relativedelta(months=1)  # monthly (default)
+
+
+def next_delivery(after: datetime, billing_cycle: str, day: Optional[int] = None) -> datetime:
+    """One cycle after `after`. Monthly and longer cycles keep the subscription's day of the month
+    when the month has it, so the 31st goes Jan 31 -> Feb 28 -> Mar 31 instead of drifting to the 28th."""
+    end = compute_period_end(after, billing_cycle)
+    if day and billing_cycle != BillingCycle.WEEKLY:
+        end = end.replace(day=min(day, calendar.monthrange(end.year, end.month)[1]))
+    return end
 
 
 class SubscriptionService:
@@ -114,7 +124,7 @@ class SubscriptionService:
             delivery_address_id=delivery_address_id,
             shipping_method_id=shipping_method_id,
             variant_ids=variant_ids,
-            subscription_metadata={"variant_quantities": variant_quantities or {vid: 1 for vid in variant_ids}},
+            subscription_metadata={"variant_quantities": variant_quantities or {vid: 1 for vid in variant_ids}, "billing_day": now.day},
             # Historical prices at creation
             price_at_creation=pricing["total"],
             variant_prices_at_creation=pricing["variant_prices"],
@@ -427,9 +437,10 @@ class SubscriptionService:
             new_period_start = self._period_start(current_period_start)
             subscription.current_period_start = new_period_start
 
-            # The next delivery moves to the new start date.
+            # The next delivery moves to the new start date, and later ones follow its day of the month.
             subscription.current_period_end = compute_period_end(new_period_start, subscription.billing_cycle)
             subscription.next_billing_date = new_period_start
+            subscription.subscription_metadata = {**(subscription.subscription_metadata or {}), "billing_day": new_period_start.day}
 
         if variant_ids:
             subscription.variant_ids = variant_ids
@@ -600,7 +611,7 @@ class SubscriptionService:
             subscription.next_billing_date = chosen
         else:
             base = subscription.next_billing_date or datetime.now(timezone.utc)
-            subscription.next_billing_date = compute_period_end(base, subscription.billing_cycle)
+            subscription.next_billing_date = next_delivery(base, subscription.billing_cycle, metadata.get("billing_day"))
 
         await self.db.commit()
         return await self.get(subscription.id)

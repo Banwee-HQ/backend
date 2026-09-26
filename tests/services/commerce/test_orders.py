@@ -624,14 +624,15 @@ class TestCancel:
 
 class TestUpdateStatus:
 
-    async def test_confirms_order_and_sets_timestamp(self, db_session, existing_order):
+    async def test_pending_order_can_only_be_cancelled(self, db_session, existing_order):
+        """Only a successful payment confirms an order; staff can't push an unpaid one forward."""
         existing_order.order_status = OrderStatus.PENDING
-        existing_order.confirmed_at = None
         await db_session.commit()
         service = OrderService(db_session)
-        order = await service.update_status(existing_order.id, "confirmed")
-        assert order.order_status == OrderStatus.CONFIRMED
-        assert order.confirmed_at is not None
+        for status in ("confirmed", "processing", "shipped"):
+            with pytest.raises(HTTPException) as exc_info:
+                await service.update_status(existing_order.id, status)
+            assert exc_info.value.status_code == 400
 
     async def test_invalid_status_raises_400(self, db_session, existing_order):
         service = OrderService(db_session)

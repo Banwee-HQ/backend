@@ -295,6 +295,15 @@ class TestShipmentEndpoints:
         assert response.status_code == 200
         assert response.json()["data"]["order_id"] == str(own_order.id)
 
+    async def test_unpaid_order_cannot_be_shipped(self, async_client: AsyncClient, admin_headers, created_carrier, own_order, db_session: AsyncSession):
+        own_order.payment_status = PaymentStatus.PENDING
+        own_order.order_status = OrderStatus.PENDING
+        await db_session.commit()
+        response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={
+            "order_id": str(own_order.id), "carrier": created_carrier["code"], "tracking_number": f"TRACK{uuid4().hex[:8]}",
+        })
+        assert response.status_code == 400
+
     async def test_create_without_provider(self, async_client: AsyncClient, admin_headers, created_carrier, own_order):
         """A carrier with no API account still takes manual shipments."""
         response = await async_client.post("/v1/shipping-tracking/shipments/", headers=admin_headers, json={

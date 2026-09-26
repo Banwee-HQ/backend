@@ -342,3 +342,34 @@ class TestReminders:
         await db_session.commit()
         await SubscriptionScheduler(db_session).send_upcoming_reminders()
         assert all(c.kwargs["subscription_id"] != str(subscription.id) for c in quiet_emails["reminder"].call_args_list)
+
+
+class TestSchedule:
+    """Each cycle lands on the right day, and month-end subscriptions keep their day."""
+
+    @pytest.mark.parametrize("cycle, due, expected", [
+        ("weekly", datetime(2026, 1, 5, tzinfo=timezone.utc), datetime(2026, 1, 12, tzinfo=timezone.utc)),
+        ("monthly", datetime(2026, 1, 15, tzinfo=timezone.utc), datetime(2026, 2, 15, tzinfo=timezone.utc)),
+        ("quarterly", datetime(2026, 1, 15, tzinfo=timezone.utc), datetime(2026, 4, 15, tzinfo=timezone.utc)),
+        ("yearly", datetime(2026, 1, 15, tzinfo=timezone.utc), datetime(2027, 1, 15, tzinfo=timezone.utc)),
+    ])
+    def test_each_cycle(self, cycle, due, expected):
+        sub = Subscription(billing_cycle=cycle, next_billing_date=due, subscription_metadata={})
+        _advance(sub, due, delivered=True)
+        assert sub.next_billing_date == expected
+        assert sub.current_period_start == due
+
+    def test_the_31st_stays_on_month_end_without_drifting(self):
+        sub = Subscription(billing_cycle="monthly", next_billing_date=datetime(2027, 1, 31, tzinfo=timezone.utc), subscription_metadata={"billing_day": 31})
+        dates = []
+        for _ in range(3):
+            _advance(sub, sub.next_billing_date, delivered=True)
+            dates.append(sub.next_billing_date.date().isoformat())
+        assert dates == ["2027-02-28", "2027-03-31", "2027-04-30"]
+
+    async def test_signup_remembers_the_day_of_the_month(self, db_session, test_user, variant):
+        start = (datetime.now(timezone.utc) + timedelta(days=3)).date()
+        sub = await SubscriptionService(db_session).create(
+            user_id=test_user.id, name="Anchored", variant_ids=[str(variant.id)], current_period_start=start.isoformat(),
+        )
+        assert sub.subscription_metadata["billing_day"] == start.day

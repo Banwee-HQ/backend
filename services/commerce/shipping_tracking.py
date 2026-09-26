@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
+from models.commerce.orders import Order, PaymentStatus
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
@@ -50,6 +51,12 @@ class ShippingTrackingService:
     async def create(self, shipment_data: Dict[str, Any]) -> ShipmentTracking:
         """Create a new shipment tracking record"""
         try:
+            order = await self.db.get(Order, shipment_data['order_id'])
+            if not order:
+                raise APIException(status_code=404, message="Order not found")
+            # Nothing ships until the payment has gone through.
+            if order.payment_status != PaymentStatus.PAID:
+                raise APIException(status_code=400, message="This order hasn't been paid yet, so it can't be shipped")
             carrier = await self._get_active_carrier(shipment_data['carrier'])
 
             # The carrier's first active API account, if any; without one the shipment is tracked by hand.

@@ -21,7 +21,7 @@ from models.commerce.subscriptions import Subscription, SubscriptionStatus
 from services.accounts.email import EmailService
 from services.commerce.orders import OrderService
 from services.commerce.payments import PaymentService
-from services.commerce.subscriptions import SubscriptionService, compute_period_end
+from services.commerce.subscriptions import SubscriptionService, next_delivery
 
 logger = get_structured_logger(__name__)
 
@@ -61,14 +61,15 @@ def _due(now: datetime):
 
 def _advance(subscription: Subscription, now: datetime, delivered: bool) -> None:
     """Move to the next delivery date on the subscription's own schedule, never into the past."""
+    metadata = dict(subscription.subscription_metadata or {})
     start = subscription.next_billing_date or now
-    end = compute_period_end(start, subscription.billing_cycle)
+    day = metadata.setdefault("billing_day", start.day)
+    end = next_delivery(start, subscription.billing_cycle, day)
     while end <= now:
-        end = compute_period_end(end, subscription.billing_cycle)
+        end = next_delivery(end, subscription.billing_cycle, day)
     subscription.current_period_start = start
     subscription.current_period_end = end
     subscription.next_billing_date = end
-    metadata = dict(subscription.subscription_metadata or {})
     metadata.pop("skipped_from_date", None)
     if delivered:
         metadata["orders_created_count"] = metadata.get("orders_created_count", 0) + 1
@@ -132,6 +133,8 @@ class SubscriptionScheduler:
                 outcome = await self.process_subscription(subscription_id)
             except Exception as e:
                 await self.db.rollback()
+                # A rollback leaves every loaded object stale; the next subscription starts clean.
+                self.db.expunge_all()
                 logger.exception(f"Renewal of subscription {subscription_id} failed: {e}")
                 outcome = "error"
             counts[outcome] += 1

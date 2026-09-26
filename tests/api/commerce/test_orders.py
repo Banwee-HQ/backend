@@ -235,9 +235,10 @@ class TestOrderEndpoints:
     async def test_update_status_as_admin(self, async_client: AsyncClient, admin_headers, created_order, db_session: AsyncSession):
         """PATCH /v1/orders/{id}/status - Admin moves a paid order forward."""
         created_order.payment_status = PaymentStatus.PAID
+        created_order.order_status = OrderStatus.CONFIRMED
         await db_session.commit()
         response = await async_client.patch(f"/v1/orders/{created_order.id}/status/",
-            headers=admin_headers, json={"status": "confirmed"}
+            headers=admin_headers, json={"status": "processing"}
         )
         assert response.status_code == 200
 
